@@ -24,29 +24,34 @@ const ProbePayload = "gram-key-verification-probe"
 // VerifyReason is the machine-readable outcome of a verification probe. It
 // exists so callers can tell the three cases apart that Detail alone conflates:
 // something the key's owner must fix, something that will pass on retry, and
-// something that is Gram's fault.
+// something that is Speakeasy's fault.
 type VerifyReason string
 
 const (
-	// ReasonVerified means the key signed and the signature validated.
+	// ReasonVerified means the probe passed: for a signing key, the key signed
+	// and the signature validated; for an encryption key, the key encrypted the
+	// probe payload and decrypted it again.
 	ReasonVerified VerifyReason = "verified"
 
-	// ReasonInvalidResourceName means the stored resource name is not a
-	// fully-qualified key version. Gram's own record is wrong; no call was made.
+	// ReasonInvalidResourceName means the stored resource name is malformed: not
+	// a fully-qualified key version for a signing key, or not a crypto key for
+	// an encryption key. Speakeasy's own record is wrong; no call was made.
 	ReasonInvalidResourceName VerifyReason = "invalid_resource_name"
 
-	// ReasonKeyNotFound means the key version does not exist.
+	// ReasonKeyNotFound means the key version (signing) or crypto key
+	// (encryption) does not exist.
 	ReasonKeyNotFound VerifyReason = "key_not_found"
 
 	// ReasonPermissionDenied means the credential's identity cannot use the key.
 	// Usually a missing roles/cloudkms.signerVerifier grant.
 	ReasonPermissionDenied VerifyReason = "permission_denied"
 
-	// ReasonKeyUnusable means the key version exists but cannot sign right now:
-	// DISABLED, DESTROYED, or still PENDING_GENERATION.
+	// ReasonKeyUnusable means the key exists but cannot be used right now: the
+	// version is DISABLED, DESTROYED or still PENDING_GENERATION, or an
+	// encryption key has no enabled version.
 	ReasonKeyUnusable VerifyReason = "key_unusable"
 
-	// ReasonUnsupportedAlgorithm means the key signs with an algorithm Gram does
+	// ReasonUnsupportedAlgorithm means the key signs with an algorithm Speakeasy does
 	// not publish, such as RSA-PSS.
 	ReasonUnsupportedAlgorithm VerifyReason = "unsupported_algorithm"
 
@@ -59,9 +64,15 @@ const (
 	// corruption or a provider fault rather than a configuration problem.
 	ReasonSignatureInvalid VerifyReason = "signature_invalid"
 
+	// ReasonRoundTripFailed means the key encrypted, but decrypting the result
+	// did not return the probe payload. This should not happen; treat it as
+	// corruption or a provider fault rather than a configuration problem.
+	ReasonRoundTripFailed VerifyReason = "round_trip_failed"
+
 	// ReasonUnavailable means the probe could not complete for a transient
-	// reason: a timeout, a rate limit, or KMS being briefly unreachable. It is
-	// the one reason worth retrying; every other failure is stable.
+	// reason: a timeout, a rate limit, KMS being briefly unreachable, or a
+	// response that failed its integrity checksums in transit. It is the one
+	// reason worth retrying; every other failure is stable.
 	ReasonUnavailable VerifyReason = "unavailable"
 
 	// ReasonUnexpected means the probe failed in a way this package does not
@@ -70,13 +81,14 @@ const (
 	ReasonUnexpected VerifyReason = "unexpected"
 )
 
-// VerifyResult reports whether a key is usable for signing. It is a value rather
+// VerifyResult reports whether a key is usable for signing (VerifySigningKey)
+// or for encryption (VerifyEncryptionKey). It is a value rather
 // than an error because most negative outcomes here are normal, reportable
 // states a human can act on, and callers surface them rather than treating them
 // as faults. Reason distinguishes those from the ones that are not.
 type VerifyResult struct {
-	// Verified is true only when the key produced a signature that validated
-	// against its own public half.
+	// Verified is true only when the probe passed: a signature that validated
+	// against the key's own public half, or an encrypt and decrypt round trip.
 	Verified bool
 
 	// Reason is the machine-readable outcome. Callers should branch on this
@@ -85,7 +97,8 @@ type VerifyResult struct {
 
 	// Algorithm is the JOSE algorithm the key actually signs with. It is set
 	// whenever the public key was readable, including on an algorithm mismatch,
-	// so callers can report what the key really is.
+	// so callers can report what the key really is. Always empty for an
+	// encryption key, which has no public half.
 	Algorithm jose.SignatureAlgorithm
 
 	// Detail explains a negative result in terms a human can act on. It may carry
@@ -107,7 +120,7 @@ func VerifySigningKey(ctx context.Context, client SigningClient, resourceName st
 		return failedVerify(ReasonForError(err), "", err)
 	}
 
-	// The stored algorithm drives how Gram advertises and signs with this key, so
+	// The stored algorithm drives how Speakeasy advertises and signs with this key, so
 	// a mismatch is fatal even though the key itself is perfectly healthy: signing
 	// RS256 with an RSA-PSS key mints tokens no verifier accepts.
 	if public.Algorithm != want {
@@ -157,6 +170,11 @@ func ReasonForError(err error) VerifyReason {
 		return ReasonInvalidResourceName
 	case errors.Is(err, ErrUnsupportedAlgorithm):
 		return ReasonUnsupportedAlgorithm
+	case errors.Is(err, ErrKeyVersionDisabled):
+		return ReasonKeyUnusable
+	case errors.Is(err, ErrEncryptionResponseInvalid):
+		// An integrity failure on the wire is worth retrying.
+		return ReasonUnavailable
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 		// A bare context error carries no gRPC status, so without this it would
 		// fall through to ReasonUnexpected and callers would not retry something

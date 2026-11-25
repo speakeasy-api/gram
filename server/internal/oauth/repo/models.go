@@ -10,12 +10,22 @@ import (
 )
 
 type ExternalOauthServerMetadatum struct {
-	ID        uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	ProjectID uuid.UUID
-	Slug      string
-	Metadata  []byte
+	// @access: confidential
+	Slug string
+	// @access: opaque-restricted
+	Metadata []byte
+	// @access: restricted
+	AuthorizationServerIssuer pgtype.Text
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
+	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
 	DeletedAt pgtype.Timestamptz
-	Deleted   bool
+	// @access: confidential
+	Deleted bool
 }

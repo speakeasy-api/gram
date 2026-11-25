@@ -1,11 +1,28 @@
 package risk_analysis
 
 import (
+	"context"
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/testsuite"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
+	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestScanSurfaceIncludesToolRequestArgs(t *testing.T) {
@@ -30,9 +47,292 @@ func TestScanSurfaceIncludesToolRequestArgs(t *testing.T) {
 	require.Equal(t, "content", user.scanSurface())
 }
 
-func TestMessageContentsUsesScanSurface(t *testing.T) {
+func TestNewBatchMessageBoundsScanText(t *testing.T) {
 	t.Parallel()
 
-	contents := messageContents([]batchMessage{msg(message.ToolResponse), toolReq("Bash")})
-	require.Equal(t, []string{"content", `{"command":"rm -rf /tmp/data"}`}, contents)
+	small, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "user", "hello", nil)
+	require.True(t, ok)
+	require.False(t, small.Truncated)
+	require.Equal(t, "hello", small.Content)
+
+	// A multibyte rune straddles the bound, so the cut must walk back.
+	oversized := strings.Repeat("a", batchScanMaxContentBytes-1) + "€" + strings.Repeat("b", 1024)
+	user, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "user", oversized, nil)
+	require.True(t, ok)
+	require.True(t, user.Truncated)
+	require.Equal(t, strings.Repeat("a", batchScanMaxContentBytes-1), user.Content)
+
+	args := strings.Repeat("x", batchScanMaxContentBytes)
+	raw := []byte(fmt.Sprintf(`[{"id":"1","function":{"name":"Write","arguments":%q}},{"id":"2","function":{"name":"Bash","arguments":%q}}]`, args, args))
+	req, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "running", raw)
+	require.True(t, ok)
+	require.True(t, req.Truncated)
+	require.Equal(t, "running", req.Content)
+	// Calls past the text budget keep their identity with empty arguments.
+	require.Len(t, req.ToolCalls, 2)
+	require.Equal(t, "Bash", req.ToolCalls[1].Function.Name)
+	require.Len(t, req.ToolCalls[0].Function.Arguments, batchScanMaxContentBytes-len("running"))
+	require.Empty(t, req.ToolCalls[1].Function.Arguments)
+	require.Len(t, req.RawToolCalls, batchScanMaxContentBytes)
+
+	// Escapes inflate only the raw JSON; the parsed call fits, so nothing scanned was cut.
+	escaped := strings.Repeat("\n", batchScanMaxContentBytes*2/3)
+	escapedRaw := []byte(fmt.Sprintf(`[{"id":"1","function":{"name":"Write","arguments":%q}}]`, escaped))
+	escapedReq, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "", escapedRaw)
+	require.True(t, ok)
+	require.Len(t, escapedReq.RawToolCalls, batchScanMaxContentBytes)
+	require.Len(t, escapedReq.ToolCalls, 1)
+	require.False(t, escapedReq.Truncated)
+
+	longName := strings.Repeat("n", batchToolIdentityMaxBytes+1)
+	longID := strings.Repeat("i", batchToolIdentityMaxBytes+1)
+	many := make([]string, 0, batchMaxToolCalls+1)
+	for range batchMaxToolCalls + 1 {
+		many = append(many, fmt.Sprintf(`{"id":%q,"function":{"name":%q,"arguments":""}}`, longID, longName))
+	}
+	capped, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "", []byte("["+strings.Join(many, ",")+"]"))
+	require.True(t, ok)
+	require.True(t, capped.Truncated)
+	require.Len(t, capped.ToolCalls, batchMaxToolCalls)
+	require.Len(t, capped.ToolCalls[0].Function.Name, batchToolIdentityMaxBytes)
+	require.Len(t, capped.ToolCalls[0].ID, batchToolIdentityMaxBytes)
+
+	// Blank calls fall back to the raw JSON, so cutting it counts.
+	blankRaw := []byte(fmt.Sprintf(`[{"id":"1","function":{"name":"","arguments":""},"pad":%q}]`, strings.Repeat("p", batchScanMaxContentBytes)))
+	blank, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "", blankRaw)
+	require.True(t, ok)
+	require.Len(t, blank.ToolCalls, 1)
+	require.True(t, blank.Truncated)
+}
+
+func TestBatchScanRequestIDIgnoresBatchComposition(t *testing.T) {
+	t.Parallel()
+
+	policyID := uuid.MustParse("00000000-0000-0000-0000-000000000101")
+	anchorID := uuid.MustParse("00000000-0000-0000-0000-000000000202")
+	otherID := uuid.MustParse("00000000-0000-0000-0000-000000000303")
+	message := msg(message.User)
+	message.ID = anchorID
+
+	first := AnalyzeBatchArgs{
+		ProjectID:              uuid.MustParse("00000000-0000-0000-0000-000000000404"),
+		OrganizationID:         "org",
+		RiskPolicyID:           policyID,
+		PolicyVersion:          7,
+		MessageIDs:             []uuid.UUID{anchorID},
+		ContentPartIDs:         nil,
+		Sources:                nil,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: 0,
+		CustomRuleIds:          nil,
+		ApprovedEmailDomains:   nil,
+		DetectionScopes:        nil,
+	}
+	rebatched := first
+	rebatched.MessageIDs = []uuid.UUID{otherID, anchorID}
+	bumped := first
+	bumped.PolicyVersion = 8
+
+	require.Equal(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(rebatched, scanLaneStandard, message))
+	require.NotEqual(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(first, scanLanePromptPolicy, message))
+	require.NotEqual(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(bumped, scanLaneStandard, message))
+	require.NotEqual(t, batchScanRequestID(first, scanLaneStandard, false, anchorID), batchScanRequestID(first, scanLaneStandard, true, anchorID))
+	require.NotEqual(t, batchScanRequestID(first, scanLaneStandard, false, anchorID), batchScanRequestID(first, scanLaneStandard, false, otherID))
+	require.Equal(t, batchOperationID(first, message, shadowStreamExecutionPath), batchOperationID(rebatched, message, shadowStreamExecutionPath))
+	require.NotEqual(t, batchOperationID(first, message, shadowStreamExecutionPath), batchOperationID(first, message, judgeHandlerStreamExecutionPath))
+}
+
+func TestContentPartProvenanceUsesRealParentMessage(t *testing.T) {
+	t.Parallel()
+
+	parentID := uuid.MustParse("00000000-0000-0000-0000-000000000501")
+	partID := uuid.MustParse("00000000-0000-0000-0000-000000000502")
+	chatID := uuid.MustParse("00000000-0000-0000-0000-000000000503")
+	msg := batchMessage{
+		ID:                     partID,
+		ChatID:                 chatID,
+		ParentChatMessageID:    parentID,
+		ContentPart:            true,
+		Type:                   message.PromptAttachment,
+		Content:                "attachment",
+		RawToolCalls:           nil,
+		ToolCalls:              []recordedToolCall{},
+		PriorUserRequest:       "",
+		RecentUntrustedContent: "",
+		UserID:                 "user",
+		CreatedAt:              time.Time{},
+		Source:                 "codex",
+	}
+	args := AnalyzeBatchArgs{
+		ProjectID:              uuid.MustParse("00000000-0000-0000-0000-000000000504"),
+		OrganizationID:         "org",
+		RiskPolicyID:           uuid.MustParse("00000000-0000-0000-0000-000000000505"),
+		PolicyVersion:          2,
+		MessageIDs:             nil,
+		ContentPartIDs:         []uuid.UUID{partID},
+		Sources:                nil,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: 0,
+		CustomRuleIds:          nil,
+		ApprovedEmailDomains:   nil,
+		DetectionScopes:        nil,
+	}
+
+	provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, "request")
+	require.Equal(t, chatID, provenance.ChatID)
+	require.Equal(t, parentID, provenance.ChatMessageID)
+	require.Equal(t, partID, provenance.ContentPartID)
+	require.Empty(t, provenance.MessageLinkReason)
+	require.Empty(t, provenance.PolicyLinkReason)
+
+	msg.ParentChatMessageID = uuid.Nil
+	unlinked := batchRiskProvenance(args, msg, shadowStreamExecutionPath, "request")
+	require.Equal(t, uuid.Nil, unlinked.ChatMessageID)
+	require.Equal(t, "content_part_unlinked", unlinked.MessageLinkReason)
+}
+
+func TestPublishPresidioScanRequestsCarriesMeterReading(t *testing.T) {
+	t.Parallel()
+
+	analyzer := &AnalyzeBatch{
+		logger:             testenv.NewLogger(t),
+		tracer:             nil,
+		metrics:            nil,
+		db:                 nil,
+		assetStorage:       nil,
+		stokenCodec:        stokens.NewCodec(),
+		flags:              nil,
+		presidioPub:        nil,
+		gitleaksPub:        nil,
+		promptInjectionPub: nil,
+		promptPolicyPub:    nil,
+		customRulesPub:     nil,
+		llmPub:             nil,
+		toolCallPub:        nil,
+		accountIdentityPub: nil,
+		llmAnalyzerEnabled: false,
+		celEng:             nil,
+		recommended:        RecommendedSet{},
+	}
+	chatID := uuid.MustParse("00000000-0000-0000-0000-000000000601")
+	messages := []batchMessage{msg(message.User), toolReq("Bash"), msg(message.User), msg(message.Assistant)}
+	for i := range messages {
+		messages[i].ID = uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0000-%012d", i+1))
+		messages[i].ChatID = chatID
+	}
+	args := AnalyzeBatchArgs{
+		ProjectID:              uuid.MustParse("00000000-0000-0000-0000-000000000602"),
+		OrganizationID:         "org",
+		RiskPolicyID:           uuid.MustParse("00000000-0000-0000-0000-000000000603"),
+		PolicyVersion:          4,
+		MessageIDs:             nil,
+		ContentPartIDs:         nil,
+		Sources:                nil,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: 0,
+		CustomRuleIds:          nil,
+		ApprovedEmailDomains:   nil,
+		DetectionScopes:        nil,
+	}
+	presidioPublisher := gcp.NewMockPublisher[*riskv1.PresidioAnalysis]()
+	var request *riskv1.PresidioAnalysis
+	presidioPublisher.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(call mock.Arguments) {
+			var ok bool
+			request, ok = call.Get(1).(*riskv1.PresidioAnalysis)
+			require.True(t, ok)
+		})
+	analyzer.presidioPub = presidioPublisher
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	publish := func(ctx context.Context) error {
+		return analyzer.publishPresidioScanRequests(ctx, args, messages[1:2], DefaultPresidioScoreThreshold)
+	}
+	env.RegisterActivity(publish)
+	_, err := env.ExecuteActivity(publish)
+	require.NoError(t, err)
+	require.NotNil(t, request)
+	require.Equal(t, messages[1].scanSurface(), request.GetContent())
+	require.Equal(t, "scan_surface", request.GetFindingSurface())
+	require.Equal(t, messageScanRequestID(args, scanLaneStandard, messages[1]), request.GetRequestId())
+	require.Equal(t, messages[1].ChatID.String(), request.GetChatId())
+	require.Equal(t, messages[1].UserID, request.GetUserId())
+	require.Equal(t, shadowStreamExecutionPath, request.GetExecutionPath())
+	require.Equal(t, args.RiskPolicyID.String(), request.GetOriginRiskPolicyId())
+	require.Equal(t, args.PolicyVersion, request.GetOriginRiskPolicyVersion())
+
+	var envelope meteringv1.MeterReading
+	require.NoError(t, proto.Unmarshal(request.GetMeterReading(), &envelope))
+	expected, err := stokens.NewCodec().Count(t.Context(), request.GetContent())
+	require.NoError(t, err)
+	require.Equal(t, int64(expected), envelope.GetValue())
+	require.Equal(t, request.GetChatMessageId(), envelope.GetAttributes()[metering.AttributeChatMessageID])
+}
+
+func TestBatchJudgeParentlessPartHasNoLiveHistory(t *testing.T) {
+	t.Parallel()
+	var msg batchMessage
+	msg.ContentPart = true
+	msg.ChatID = uuid.New()
+	msg.Content = "persisted part"
+	target := batchJudgeMessage(msg)
+	require.Equal(t, uuid.Nil, target.AnchorID)
+	require.Equal(t, uuid.Nil, target.ChatID)
+	msg.ParentChatMessageID = uuid.New()
+	target = batchJudgeMessage(msg)
+	require.Equal(t, msg.ParentChatMessageID, target.AnchorID)
+	require.Equal(t, msg.ChatID, target.ChatID)
+}
+
+func TestPublishToolCallScanRequestsAppliesCategoryScopes(t *testing.T) {
+	t.Parallel()
+
+	pub := gcp.NewMockPublisher[*riskv1.ToolCallAnalysis]()
+	var published []*riskv1.ToolCallAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			request, ok := args.Get(1).(*riskv1.ToolCallAnalysis)
+			require.True(t, ok)
+			published = append(published, request)
+		})
+	analyzer := &AnalyzeBatch{toolCallPub: pub}
+	message := toolReq("mcp__rogue__delete")
+	args := AnalyzeBatchArgs{
+		ProjectID:              uuid.MustParse("00000000-0000-0000-0000-000000000601"),
+		OrganizationID:         "org",
+		RiskPolicyID:           uuid.MustParse("00000000-0000-0000-0000-000000000602"),
+		PolicyVersion:          2,
+		MessageIDs:             []uuid.UUID{message.ID},
+		ContentPartIDs:         nil,
+		Sources:                nil,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: 0,
+		CustomRuleIds:          nil,
+		ApprovedEmailDomains:   nil,
+		DetectionScopes:        nil,
+	}
+	categoryOut := make(map[categories.Category][]bool)
+	categoryOut[categories.CategoryCLIDestructive] = []bool{true}
+	masks := CategoryScopeMasks{categoryOut: categoryOut}
+
+	publish := func(ctx context.Context) error {
+		return analyzer.publishToolCallScanRequests(
+			ctx,
+			args,
+			[]batchMessage{message},
+			newSourceSet([]string{shadowmcp.SourceShadowMCP, clidestructive.Source}),
+			masks,
+			true,
+			true,
+		)
+	}
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(publish)
+	_, err := env.ExecuteActivity(publish)
+	require.NoError(t, err)
+	require.Len(t, published, 1)
+	require.Equal(t, []string{shadowmcp.SourceShadowMCP}, published[0].GetSources())
 }

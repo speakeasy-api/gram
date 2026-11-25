@@ -1,50 +1,67 @@
+import { useIconDither } from "@/components/icon-dither";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
-import { mcpServerRouteParam } from "@/lib/sources";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Badge } from "@/components/ui/Badge";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Package } from "lucide-react";
 import { Link } from "react-router";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
-import { MCPStatusIndicator } from "./MCPStatusIndicator";
-import { MCPActivityIndicator } from "./MCPActivityIndicator";
-import type { McpActivityStatus } from "./mcp-activity";
+import {
+  hostedToolCountLabel,
+  mcpServerDisplayName,
+  mcpServerHref,
+  type McpServerKind,
+} from "./mcp-server-kind";
+import { McpKindBadge } from "./McpKindBadge";
 
-// MCPServerCard renders an mcp_servers row inside the /mcp listing grid.
-// Today only Remote-MCP-backed servers reach this component (filtered upstream
-// by the remoteMcpServerId filter); after the AGE-1902/AGE-1880 cutover,
-// toolset-backed mcp_servers will render through the same card alongside Hosted
-// MCPCard.
-//
-// TODO(AGE-1902): collapse with MCPCard once Hosted (toolset-backed) cards
-// also source from mcp_servers and the per-card data shape no longer branches
-// on backend kind.
+/** Same wording as the MCP list's Status filter. */
+function statusLabel(server: McpServer): string {
+  if (server.visibility === "public") return "Public";
+  if (server.visibility === "private") return "Private";
+  return "Disabled";
+}
+
+/** One card per mcp_servers row in the /mcp grid, whatever its backend. */
 export function MCPServerCard({
   server,
-  endpointCount,
-  activityStatus,
-  recentWindowDays,
+  kind,
+  showAddressAndStatus = false,
 }: {
   server: McpServer;
-  endpointCount: number;
-  activityStatus?: McpActivityStatus | null;
-  recentWindowDays?: number;
+  kind: McpServerKind;
+  /** Show the server's URL (else slug) and status instead of its description. */
+  showAddressAndStatus?: boolean;
 }): JSX.Element {
   const routes = useRoutes();
-
-  const mcpEnabled = server.visibility !== "disabled";
-  const mcpIsPublic = server.visibility === "public";
-  // Unproxied servers are never proxied, so an endpoint count would always
-  // read 0 and imply something's broken. Surface the backend kind instead.
-  const isUnproxied = !!server.unproxiedMcpServerId;
+  const { canvasRef, start, stop } = useIconDither();
+  const hosted = kind === "hosted";
+  const toolset = hosted ? server.toolset : undefined;
+  const name = mcpServerDisplayName(server);
+  const installSourceTooltip = toolset?.registrySpecifier
+    ? `Installed from ${toolset.registrySpecifier}`
+    : undefined;
 
   return (
     <Link
-      to={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
-      className="focus-visible:ring-ring block no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      to={mcpServerHref(routes, server)}
+      onMouseEnter={start}
+      onMouseLeave={stop}
+      className="focus-visible:ring-ring block h-full no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <Card.Entity
+        iconRailClassName="isolate"
+        iconTileClassName="icon-hover-pulse"
+        overlay={
+          <>
+            <canvas
+              ref={canvasRef}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 -z-10 size-full"
+            />
+          </>
+        }
         icon={
           <SourceMcpIcon
             mcpServerId={server.id}
@@ -52,37 +69,67 @@ export function MCPServerCard({
           />
         }
       >
-        {/* Header row with name */}
         <div className="mb-2 flex items-start justify-between gap-2">
           <Text
             variant="subheading"
             as="div"
             className="text-md group-hover:text-primary flex-1 truncate transition-colors"
-            title={server.name ?? undefined}
+            title={name}
           >
-            {server.name || "MCP Server"}
+            {name}
           </Text>
-          <Badge variant="neutral" className="bg-card">
-            <Badge.Text>
-              {isUnproxied
-                ? "Not proxied"
-                : `${endpointCount} ${endpointCount === 1 ? "endpoint" : "endpoints"}`}
-            </Badge.Text>
-          </Badge>
+          {installSourceTooltip && (
+            <SimpleTooltip tooltip={installSourceTooltip}>
+              <span
+                role="img"
+                aria-label={installSourceTooltip}
+                className="p-1"
+              >
+                <Package className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
+              </span>
+            </SimpleTooltip>
+          )}
         </div>
 
-        {/* Footer row with status indicator and open link */}
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+        {/* Description, else origin or tool count; the slug when there is no summary. */}
+        {showAddressAndStatus ? (
+          <Text
+            small
+            muted
+            className="mt-1 truncate font-mono"
+            title={server.primaryEndpointUrl ?? server.slug}
+          >
+            {server.primaryEndpointUrl?.replace(/^https?:\/\//, "") ??
+              server.slug ??
+              "No slug yet"}
+          </Text>
+        ) : toolset ? (
+          <Text small muted className="mt-1 line-clamp-2">
+            {toolset.description?.trim() ||
+              (toolset.registrySpecifier
+                ? `From ${toolset.registrySpecifier}`
+                : hostedToolCountLabel(toolset))}
+          </Text>
+        ) : (
+          <Text small muted className="mt-1 truncate font-mono">
+            {server.slug ?? "No slug yet"}
+          </Text>
+        )}
+
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
           <div className="flex items-center gap-2">
-            <MCPStatusIndicator
-              mcpEnabled={mcpEnabled}
-              mcpIsPublic={mcpIsPublic}
-            />
-            {activityStatus && (
-              <MCPActivityIndicator
-                status={activityStatus}
-                recentWindowDays={recentWindowDays}
-              />
+            <McpKindBadge kind={kind} />
+            {showAddressAndStatus && (
+              <Badge
+                variant={
+                  server.visibility === "public" ||
+                  server.visibility === "private"
+                    ? "neutral"
+                    : "warning"
+                }
+              >
+                <Badge.Text>{statusLabel(server)}</Badge.Text>
+              </Badge>
             )}
           </div>
           <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
@@ -92,5 +139,23 @@ export function MCPServerCard({
         </div>
       </Card.Entity>
     </Link>
+  );
+}
+
+export function MCPServerCardSkeleton(): JSX.Element {
+  return (
+    <Card.Entity>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="bg-muted h-5 w-2/3 animate-pulse" />
+        <div className="bg-muted h-5 w-10 animate-pulse rounded-full" />
+      </div>
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
+        <div className="flex items-center gap-2">
+          <div className="bg-muted h-2.5 w-2.5 animate-pulse rounded-full" />
+          <div className="bg-muted h-3.5 w-12 animate-pulse" />
+        </div>
+        <div className="bg-muted h-3.5 w-10 animate-pulse" />
+      </div>
+    </Card.Entity>
   );
 }

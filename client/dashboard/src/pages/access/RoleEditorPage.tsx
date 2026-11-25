@@ -1,0 +1,106 @@
+import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { Text } from "@/components/ui/Text";
+import { useOrgRoutes } from "@/routes";
+import type { Role } from "@gram/client/models/components/role.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
+import { type JSX, useRef } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router";
+import {
+  completeCreateRoleFlow,
+  isCreateRoleFlow,
+  suggestedRoleName,
+} from "../org/identity-provider/directoryMappingFlow";
+import { CreateRoleDialog } from "./CreateRoleDialog";
+
+/**
+ * Create or edit one role on its own page. The same editor still opens as a
+ * sheet from other surfaces; only the chrome differs, so the two cannot drift.
+ *
+ * Opened from a directory role mapping, it hides member and agent assignment
+ * (the mapping grants the role) and returns to the mapping with the new role.
+ */
+export function RoleEditorPage(): JSX.Element {
+  const { roleId } = useParams();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const orgRoutes = useOrgRoutes();
+  const { data, isLoading } = useRoles();
+
+  const fromMapping = !roleId && isCreateRoleFlow(params);
+  // Creating a role also closes the editor; the close must not undo the
+  // navigation to the new role's page, or back to the mapping.
+  const created = useRef(false);
+
+  const role = roleId
+    ? (data?.roles ?? []).find((candidate) => candidate.id === roleId)
+    : undefined;
+  const leave = () => {
+    if (fromMapping) void navigate(orgRoutes.identity.href());
+    else void navigate(orgRoutes.access.roles.href());
+  };
+  const onRoleCreated = (createdRole: Role) => {
+    created.current = true;
+    if (!fromMapping) {
+      // Stay with the new role rather than drop back to the list.
+      void navigate(`${orgRoutes.access.roles.href()}/${createdRole.id}/edit`);
+      return;
+    }
+    const back = completeCreateRoleFlow(params, createdRole.principalUrn);
+    void navigate(`${orgRoutes.identity.href()}?${back.toString()}`);
+  };
+
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope="org:admin" level="page">
+          <Page.Section>
+            {/* Eyebrow says what you are doing, title says to what — the
+                same shape every other detail page uses. */}
+            <Page.Section.Title area={roleId ? "Edit role" : "Roles"}>
+              {roleId ? (role?.name ?? "Role") : "Create role"}
+            </Page.Section.Title>
+            <Page.Section.Description>
+              Roles carry permissions, enabling access to different features in
+              the product. MCP access is set per project or server, and platform
+              access per area. Some of it can be narrowed to certain projects.
+            </Page.Section.Description>
+            <Page.Section.Body>
+              {isLoading && roleId ? (
+                <SkeletonTable />
+              ) : roleId && !role ? (
+                <Text muted small>
+                  This role no longer exists.
+                </Text>
+              ) : (
+                <CreateRoleDialog
+                  open
+                  presentation="page"
+                  editingRole={role ?? null}
+                  templateRoles={data?.roles}
+                  hideAssignments={fromMapping}
+                  defaultName={fromMapping ? suggestedRoleName(params) : ""}
+                  onOpenChange={(open) => {
+                    if (open) return;
+                    // The close that follows a create is the editor resetting
+                    // for the new role's page, not the user leaving.
+                    if (created.current) {
+                      created.current = false;
+                      return;
+                    }
+                    leave();
+                  }}
+                  onRoleCreated={onRoleCreated}
+                />
+              )}
+            </Page.Section.Body>
+          </Page.Section>
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}

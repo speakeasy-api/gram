@@ -1,5 +1,9 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { buildUpdateIssuerForm } from "./issuerSettingsForm";
+import {
+  buildCreateIssuerForm,
+  buildUpdateIssuerForm,
+} from "./issuerSettingsForm";
 
 const snapshot = {
   url: "https://idp.example.com",
@@ -9,6 +13,9 @@ const snapshot = {
   jwksUri: "https://idp.example.com/jwks.json",
   scopesSupported: ["openid", "profile"],
   grantTypesSupported: ["authorization_code"],
+  authorizationGrantProfilesSupported: [
+    "urn:ietf:params:oauth:grant-profile:id-jag",
+  ],
   responseTypesSupported: ["code"],
   tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
   codeChallengeMethodsSupported: ["S256"],
@@ -17,7 +24,24 @@ const snapshot = {
   serviceDocumentation: "https://docs.example.com",
   opPolicyUri: "https://example.com/policy",
   opTosUri: "https://example.com/tos",
+  userinfoEndpoint: "https://idp.example.com/userinfo",
+  introspectionEndpoint: "https://idp.example.com/introspect",
+  introspectionEndpointAuthMethodsSupported: ["client_secret_basic"],
+  idTokenSigningAlgValuesSupported: ["RS256"],
+  claimsSupported: ["sub", "email"],
+  backchannelLogoutSupported: true,
+  authorizationResponseIssParameterSupported: false,
 };
+
+const DISCOVERY_ONLY_CAPABILITY_FIELDS = [
+  "userinfoEndpoint",
+  "introspectionEndpoint",
+  "introspectionEndpointAuthMethodsSupported",
+  "idTokenSigningAlgValuesSupported",
+  "claimsSupported",
+  "backchannelLogoutSupported",
+  "authorizationResponseIssParameterSupported",
+] as const;
 
 const baseState = {
   id: "issuer-1",
@@ -65,13 +89,69 @@ describe("buildUpdateIssuerForm", () => {
     expect(form).toHaveProperty("logoAssetId", "");
   });
 
+  it("omits the platform-admin tunnel field unless the caller supplies it", () => {
+    expect(buildUpdateIssuerForm(baseState)).not.toHaveProperty(
+      "tunneledMcpServerId",
+    );
+  });
+
+  it("sets and clears the issuer tunnel binding", () => {
+    expect(
+      buildUpdateIssuerForm({
+        ...baseState,
+        tunneledMcpServerId: " 019c001e-b43d-7000-8000-000000000001 ",
+      }).tunneledMcpServerId,
+    ).toBe("019c001e-b43d-7000-8000-000000000001");
+    expect(
+      buildUpdateIssuerForm({
+        ...baseState,
+        tunneledMcpServerId: "",
+      }).tunneledMcpServerId,
+    ).toBe("");
+  });
+
   // Without a discovery for the current URL the server must keep the metadata
   // it already has (COALESCE narg semantics), so the arrays are omitted.
+  it("omits the scope override unless the caller supplies it", () => {
+    const form = buildUpdateIssuerForm(baseState);
+
+    expect("scopeOverride" in form).toBe(false);
+  });
+
+  it("sets the scope override from the picked scopes, trimmed", () => {
+    const form = buildUpdateIssuerForm({
+      ...baseState,
+      scopeOverride: [" openid", "mcp_api ", " ", "refresh_token"],
+    });
+
+    expect(form.scopeOverride).toEqual(["openid", "mcp_api", "refresh_token"]);
+  });
+
+  it("clears the scope override with an empty array when emptied", () => {
+    const form = buildUpdateIssuerForm({ ...baseState, scopeOverride: [] });
+
+    expect(form.scopeOverride).toEqual([]);
+  });
+
+  // Omitted keeps the stored value; an explicit boolean sets it either way.
+  it("omits the omit-scope-fallback switch unless the caller supplies it", () => {
+    expect("omitScopeFallback" in buildUpdateIssuerForm(baseState)).toBe(false);
+    expect(
+      buildUpdateIssuerForm({ ...baseState, omitScopeFallback: true })
+        .omitScopeFallback,
+    ).toBe(true);
+    expect(
+      buildUpdateIssuerForm({ ...baseState, omitScopeFallback: false })
+        .omitScopeFallback,
+    ).toBe(false);
+  });
+
   it("omits the RFC 8414 arrays when no discovery has run", () => {
     const form = buildUpdateIssuerForm(baseState);
 
     expect(form.scopesSupported).toBeUndefined();
     expect(form.grantTypesSupported).toBeUndefined();
+    expect(form.authorizationGrantProfilesSupported).toBeUndefined();
     expect(form.responseTypesSupported).toBeUndefined();
     expect(form.tokenEndpointAuthMethodsSupported).toBeUndefined();
     expect(form.codeChallengeMethodsSupported).toBeUndefined();
@@ -82,6 +162,21 @@ describe("buildUpdateIssuerForm", () => {
     expect(form.opTosUri).toBeUndefined();
   });
 
+  it("clears grant profiles when the issuer URL changes without rediscovery", () => {
+    const moved = buildUpdateIssuerForm({
+      ...baseState,
+      issuerUrl: "https://other.example.com",
+      savedIssuerUrl: "https://idp.example.com",
+    });
+    expect(moved.authorizationGrantProfilesSupported).toEqual([]);
+
+    const unchanged = buildUpdateIssuerForm({
+      ...baseState,
+      savedIssuerUrl: "https://idp.example.com",
+    });
+    expect(unchanged.authorizationGrantProfilesSupported).toBeUndefined();
+  });
+
   it("forwards the discovered metadata when the snapshot matches the URL", () => {
     const form = buildUpdateIssuerForm({
       ...baseState,
@@ -89,6 +184,9 @@ describe("buildUpdateIssuerForm", () => {
     });
 
     expect(form.scopesSupported).toEqual(["openid", "profile"]);
+    expect(form.authorizationGrantProfilesSupported).toEqual([
+      "urn:ietf:params:oauth:grant-profile:id-jag",
+    ]);
     expect(form.codeChallengeMethodsSupported).toEqual(["S256"]);
     expect(form.clientIdMetadataDocumentSupported).toBe(true);
     expect(form.revocationEndpoint).toBe("https://idp.example.com/revoke");
@@ -132,5 +230,159 @@ describe("buildUpdateIssuerForm", () => {
     expect(form.issuer).toBe("https://other-idp.example.com");
     expect(form.scopesSupported).toBeUndefined();
     expect(form.clientIdMetadataDocumentSupported).toBeUndefined();
+  });
+
+  // Discover-then-Save on an existing issuer must repoint the capability
+  // columns too, not just the endpoints.
+  it("forwards the discovery-only capabilities from a matching snapshot", () => {
+    const form = buildUpdateIssuerForm({
+      ...baseState,
+      discoveredSnapshot: snapshot,
+    });
+
+    expect(form.userinfoEndpoint).toBe("https://idp.example.com/userinfo");
+    expect(form.introspectionEndpoint).toBe(
+      "https://idp.example.com/introspect",
+    );
+    expect(form.introspectionEndpointAuthMethodsSupported).toEqual([
+      "client_secret_basic",
+    ]);
+    expect(form.idTokenSigningAlgValuesSupported).toEqual(["RS256"]);
+    expect(form.claimsSupported).toEqual(["sub", "email"]);
+    expect(form.backchannelLogoutSupported).toBe(true);
+    expect(form.authorizationResponseIssParameterSupported).toBe(false);
+  });
+
+  // A seeded snapshot holds null for never-captured arrays/booleans; those go
+  // out as undefined so the server keeps NULL rather than recording a value.
+  it("omits never-captured capabilities from a seeded snapshot", () => {
+    const form = buildUpdateIssuerForm({
+      ...baseState,
+      discoveredSnapshot: {
+        ...snapshot,
+        introspectionEndpointAuthMethodsSupported: null,
+        idTokenSigningAlgValuesSupported: null,
+        claimsSupported: null,
+        backchannelLogoutSupported: null,
+        authorizationResponseIssParameterSupported: null,
+      },
+    });
+
+    expect(form.introspectionEndpointAuthMethodsSupported).toBeUndefined();
+    expect(form.idTokenSigningAlgValuesSupported).toBeUndefined();
+    expect(form.claimsSupported).toBeUndefined();
+    expect(form.backchannelLogoutSupported).toBeUndefined();
+    expect(form.authorizationResponseIssParameterSupported).toBeUndefined();
+  });
+
+  // "" is the "clear to NULL" sentinel for a URL the issuer stopped
+  // advertising, so it is sent through verbatim, not collapsed to undefined.
+  it("sends emptied capability endpoints through verbatim", () => {
+    const form = buildUpdateIssuerForm({
+      ...baseState,
+      discoveredSnapshot: {
+        ...snapshot,
+        userinfoEndpoint: "",
+        introspectionEndpoint: "",
+        claimsSupported: [],
+      },
+    });
+
+    expect(form).toHaveProperty("userinfoEndpoint", "");
+    expect(form).toHaveProperty("introspectionEndpoint", "");
+    expect(form.claimsSupported).toEqual([]);
+  });
+
+  it("omits the discovery-only capabilities for a mismatched-URL snapshot", () => {
+    const form = buildUpdateIssuerForm({
+      ...baseState,
+      issuerUrl: "https://other-idp.example.com",
+      discoveredSnapshot: snapshot,
+    });
+
+    for (const field of DISCOVERY_ONLY_CAPABILITY_FIELDS) {
+      expect(form[field]).toBeUndefined();
+    }
+  });
+});
+
+describe("buildCreateIssuerForm", () => {
+  const { id: _id, ...createState } = baseState;
+
+  it("forwards the omit-scope-fallback switch only when set", () => {
+    expect(
+      buildCreateIssuerForm(createState).omitScopeFallback,
+    ).toBeUndefined();
+    expect(
+      buildCreateIssuerForm({ ...createState, omitScopeFallback: true })
+        .omitScopeFallback,
+    ).toBe(true);
+  });
+
+  it("forwards the discovery-only capabilities from a matching snapshot", () => {
+    const form = buildCreateIssuerForm({
+      ...createState,
+      discoveredSnapshot: snapshot,
+    });
+
+    expect(form.authorizationGrantProfilesSupported).toEqual([
+      "urn:ietf:params:oauth:grant-profile:id-jag",
+    ]);
+    expect(form.codeChallengeMethodsSupported).toEqual(["S256"]);
+    expect(form.userinfoEndpoint).toBe("https://idp.example.com/userinfo");
+    expect(form.introspectionEndpoint).toBe(
+      "https://idp.example.com/introspect",
+    );
+    expect(form.introspectionEndpointAuthMethodsSupported).toEqual([
+      "client_secret_basic",
+    ]);
+    expect(form.idTokenSigningAlgValuesSupported).toEqual(["RS256"]);
+    expect(form.claimsSupported).toEqual(["sub", "email"]);
+    expect(form.backchannelLogoutSupported).toBe(true);
+    expect(form.authorizationResponseIssParameterSupported).toBe(false);
+  });
+
+  // A captured-empty array means "advertises none" and must survive; an
+  // unadvertised endpoint is omitted so the server stores NULL.
+  it("forwards captured-empty arrays and omits unadvertised endpoints", () => {
+    const form = buildCreateIssuerForm({
+      ...createState,
+      discoveredSnapshot: {
+        ...snapshot,
+        userinfoEndpoint: "",
+        introspectionEndpoint: "",
+        claimsSupported: [],
+        idTokenSigningAlgValuesSupported: [],
+        introspectionEndpointAuthMethodsSupported: [],
+      },
+    });
+
+    expect(form.userinfoEndpoint).toBeUndefined();
+    expect(form.introspectionEndpoint).toBeUndefined();
+    expect(form.claimsSupported).toEqual([]);
+    expect(form.idTokenSigningAlgValuesSupported).toEqual([]);
+    expect(form.introspectionEndpointAuthMethodsSupported).toEqual([]);
+  });
+
+  it("omits the discovery-only capabilities when no discovery has run", () => {
+    const form = buildCreateIssuerForm(createState);
+
+    expect(form.authorizationGrantProfilesSupported).toBeUndefined();
+    expect(form.codeChallengeMethodsSupported).toBeUndefined();
+    for (const field of DISCOVERY_ONLY_CAPABILITY_FIELDS) {
+      expect(form[field]).toBeUndefined();
+    }
+  });
+
+  it("drops a snapshot discovered against a different URL", () => {
+    const form = buildCreateIssuerForm({
+      ...createState,
+      issuerUrl: "https://other-idp.example.com",
+      discoveredSnapshot: snapshot,
+    });
+
+    for (const field of DISCOVERY_ONLY_CAPABILITY_FIELDS) {
+      expect(form[field]).toBeUndefined();
+    }
   });
 });

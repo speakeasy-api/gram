@@ -25,9 +25,17 @@ export type PromptGuardrailEvalResult = {
    */
   flagged: boolean;
   /**
+   * Total number of messages matching the guardrail scope before the replay limit.
+   */
+  inScopeMessageCount: number;
+  /**
    * Number of in-scope messages the judge evaluated.
    */
   judgedCount: number;
+  /**
+   * True when the replay judged only the first 200 in-scope messages.
+   */
+  messageLimitHit: boolean;
   /**
    * Total OpenRouter cost across in-scope judge calls, in USD.
    */
@@ -50,7 +58,9 @@ export const PromptGuardrailEvalResult$inboundSchema: z.ZodMiniType<
   z.object({
     chat_id: z.string(),
     flagged: z.boolean(),
+    in_scope_message_count: z.int(),
     judged_count: z.int(),
+    message_limit_hit: z.boolean(),
     total_cost_usd: z.number(),
     total_latency_ms: z.int(),
     verdicts: z.array(PromptGuardrailMessageVerdict$inboundSchema),
@@ -58,7 +68,9 @@ export const PromptGuardrailEvalResult$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "chat_id": "chatId",
+      "in_scope_message_count": "inScopeMessageCount",
       "judged_count": "judgedCount",
+      "message_limit_hit": "messageLimitHit",
       "total_cost_usd": "totalCostUsd",
       "total_latency_ms": "totalLatencyMs",
     });

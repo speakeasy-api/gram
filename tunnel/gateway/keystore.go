@@ -65,4 +65,12 @@ func (k *StaticKeyStore) Resolve(_ context.Context, bearer string) (string, bool
 	return tunnelID, true, nil
 }
 
+func (k *StaticKeyStore) IsActive(_ context.Context, tunnelID, keyHash string) (bool, error) {
+	k.mu.RLock()
+	defer k.mu.RUnlock()
+	resolvedTunnelID, ok := k.byHash[keyHash]
+	return ok && resolvedTunnelID == tunnelID && !k.revoked[tunnelID], nil
+}
+
 var _ KeyResolver = (*StaticKeyStore)(nil)
+var _ ActiveTunnelChecker = (*StaticKeyStore)(nil)

@@ -3,9 +3,8 @@ package risk_analysis
 import "github.com/speakeasy-api/gram/server/internal/scanners"
 
 // DisabledRuleSet is a lookup set of canonical rule_ids the policy author has
-// unchecked within otherwise-enabled categories. The scanner pipeline calls
-// FilterFindings after each scanner returns to drop matching findings before
-// they reach the dedup/write path. Empty set is a no-op.
+// unchecked within otherwise-enabled categories. Scanners call FilterFindings
+// to drop matching findings before they are stored. Empty set is a no-op.
 type DisabledRuleSet struct {
 	rules map[string]struct{}
 }

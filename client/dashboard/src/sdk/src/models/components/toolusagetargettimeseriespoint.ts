@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const ToolUsageTargetTimeSeriesPointTargetKind = {
 /**
  * Tool usage aggregation target kind
  */
-export type ToolUsageTargetTimeSeriesPointTargetKind = ClosedEnum<
+export type ToolUsageTargetTimeSeriesPointTargetKind = OpenEnum<
   typeof ToolUsageTargetTimeSeriesPointTargetKind
 >;
 
@@ -30,6 +31,7 @@ export type ToolUsageTargetTimeSeriesPointTargetKind = ClosedEnum<
 export const ToolUsageTargetTimeSeriesPointTargetType = {
   HostedMcpServer: "hosted_mcp_server",
   TunneledMcpServer: "tunneled_mcp_server",
+  MetaMcpServer: "meta_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
   LocalTool: "local_tool",
   Skill: "skill",
@@ -37,7 +39,7 @@ export const ToolUsageTargetTimeSeriesPointTargetType = {
 /**
  * Tool usage target type
  */
-export type ToolUsageTargetTimeSeriesPointTargetType = ClosedEnum<
+export type ToolUsageTargetTimeSeriesPointTargetType = OpenEnum<
   typeof ToolUsageTargetTimeSeriesPointTargetType
 >;
 
@@ -45,6 +47,10 @@ export type ToolUsageTargetTimeSeriesPointTargetType = ClosedEnum<
  * A time-series bucket for one tool usage target
  */
 export type ToolUsageTargetTimeSeriesPoint = {
+  /**
+   * Number of tool usage events denied by a hook in the bucket
+   */
+  blockedCount: number;
   /**
    * Bucket start time in Unix nanoseconds as a string for JavaScript integer safety
    */
@@ -57,6 +63,10 @@ export type ToolUsageTargetTimeSeriesPoint = {
    * Number of failed tool usage events in the bucket
    */
   failureCount: number;
+  /**
+   * Number of tool usage events observed starting but never finishing in the bucket
+   */
+  pendingCount: number;
   /**
    * Stable target identifier used by filters and chart grouping
    */
@@ -77,15 +87,13 @@ export type ToolUsageTargetTimeSeriesPoint = {
 
 /** @internal */
 export const ToolUsageTargetTimeSeriesPointTargetKind$inboundSchema:
-  z.ZodMiniEnum<typeof ToolUsageTargetTimeSeriesPointTargetKind> = z.enum(
-    ToolUsageTargetTimeSeriesPointTargetKind,
-  );
+  z.ZodMiniType<ToolUsageTargetTimeSeriesPointTargetKind, unknown> = openEnums
+    .inboundSchema(ToolUsageTargetTimeSeriesPointTargetKind);
 
 /** @internal */
 export const ToolUsageTargetTimeSeriesPointTargetType$inboundSchema:
-  z.ZodMiniEnum<typeof ToolUsageTargetTimeSeriesPointTargetType> = z.enum(
-    ToolUsageTargetTimeSeriesPointTargetType,
-  );
+  z.ZodMiniType<ToolUsageTargetTimeSeriesPointTargetType, unknown> = openEnums
+    .inboundSchema(ToolUsageTargetTimeSeriesPointTargetType);
 
 /** @internal */
 export const ToolUsageTargetTimeSeriesPoint$inboundSchema: z.ZodMiniType<
@@ -93,9 +101,11 @@ export const ToolUsageTargetTimeSeriesPoint$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    blocked_count: z.int(),
     bucket_start_ns: z.string(),
     event_count: z.int(),
     failure_count: z.int(),
+    pending_count: z.int(),
     target_id: z.string(),
     target_kind: ToolUsageTargetTimeSeriesPointTargetKind$inboundSchema,
     target_label: z.string(),
@@ -103,9 +113,11 @@ export const ToolUsageTargetTimeSeriesPoint$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "blocked_count": "blockedCount",
       "bucket_start_ns": "bucketStartNs",
       "event_count": "eventCount",
       "failure_count": "failureCount",
+      "pending_count": "pendingCount",
       "target_id": "targetId",
       "target_kind": "targetKind",
       "target_label": "targetLabel",

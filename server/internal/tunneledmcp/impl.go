@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -31,15 +32,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/tunnelmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 type Service struct {
+	Metrics       *tunnelmetrics.Store
 	tracer        trace.Tracer
 	logger        *slog.Logger
 	db            *pgxpool.Pool
@@ -69,6 +73,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("tunneledmcp"))
 
 	return &Service{
+		Metrics:       nil,
 		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/tunneledmcp"),
 		logger:        logger,
 		db:            db,
@@ -94,13 +99,36 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
+// normalizeResourceIdentifier trims surrounding whitespace and validates an
+// absolute http(s) URI without a fragment. The identifier is otherwise preserved
+// for exact JWT audience matching. Blank input unsets or clears the identifier.
+// Speakeasy never dials this address, so private hosts are allowed.
+func normalizeResourceIdentifier(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", nil
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("parse resource identifier: %w", err)
+	}
+	// A bare "#" parses to an empty Fragment, so the raw string decides.
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.Contains(trimmed, "#") {
+		return "", errors.New("resource identifier must be an absolute http(s) URI without a fragment")
+	}
+	if u.String() != trimmed || strings.ContainsAny(trimmed, " \t\r\n") {
+		return "", errors.New("resource identifier must be a percent-encoded URI")
+	}
+	return trimmed, nil
+}
+
 func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPayload) (*gen.CreateTunneledMcpServerResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -108,6 +136,16 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
+	}
+
+	// Optional at create; blank stays unset — most operators record it later.
+	var resourceIdentifier pgtype.Text
+	if payload.ResourceIdentifier != nil {
+		normalized, nerr := normalizeResourceIdentifier(*payload.ResourceIdentifier)
+		if nerr != nil {
+			return nil, oops.E(oops.CodeBadRequest, nerr, "invalid resource identifier").LogWarn(ctx, logger)
+		}
+		resourceIdentifier = conv.ToPGTextEmpty(normalized)
 	}
 
 	serverID, err := uuid.NewV7()
@@ -125,6 +163,9 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 	if err := txRepo.LockOrganizationTunneledMcpLimit(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -144,11 +185,12 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	}
 
 	server, err := txRepo.CreateServer(ctx, repo.CreateServerParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      name,
-		KeyHash:   issuedKey.Hash,
-		KeyPrefix: issuedKey.Prefix,
+		ID:                 serverID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               name,
+		KeyHash:            issuedKey.Hash,
+		KeyPrefix:          issuedKey.Prefix,
+		ResourceIdentifier: resourceIdentifier,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -170,6 +212,12 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "log tunneled mcp server creation").LogError(ctx, logger)
 	}
 
+	if err := authclientbackfill.SyncEMASources(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{server.ID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync tunneled EMA reach").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.SyncTunneledSource(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync tunneled source auth clients").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -186,7 +234,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -204,7 +252,7 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -233,7 +281,7 @@ func (s *Service) ListServerConnections(ctx context.Context, payload *gen.ListSe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -262,14 +310,20 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
-	name := strings.TrimSpace(payload.Name)
-	if name == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
+
+	// Tri-state: omitted leaves the stored name.
+	var name pgtype.Text
+	if payload.Name != nil {
+		trimmed := strings.TrimSpace(*payload.Name)
+		if trimmed == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
+		}
+		name = conv.ToPGText(trimmed)
 	}
 
 	serverID, err := uuid.Parse(payload.ID)
@@ -277,11 +331,39 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogWarn(ctx, logger)
 	}
 
+	// With every field tri-state, an empty form would otherwise still run the
+	// transaction, churn updated_at, and log a no-op audit event.
+	if payload.Name == nil && payload.AllowPublic == nil && payload.ResourceIdentifier == nil &&
+		payload.PublicRequestRatePerSecond == nil && payload.PublicRequestBurst == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "no fields to update").LogWarn(ctx, logger)
+	}
+
+	// The design bounds the limits too, but that validation is generated into
+	// the HTTP decoder only; repeating it keeps an in-process caller honest and
+	// turns a CHECK violation into a 400 before the transaction opens. 0 is
+	// the clear sentinel and sits below the column minimum on purpose.
+	if err := validatePublicRateLimits(payload); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, logger)
+	}
+
+	// Tri-state: omitted leaves the stored value, empty string clears it.
+	var resourceIdentifier pgtype.Text
+	if payload.ResourceIdentifier != nil {
+		normalized, nerr := normalizeResourceIdentifier(*payload.ResourceIdentifier)
+		if nerr != nil {
+			return nil, oops.E(oops.CodeBadRequest, nerr, "invalid resource identifier").LogWarn(ctx, logger)
+		}
+		resourceIdentifier = conv.ToPGText(normalized)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 	// Row-lock so a concurrent update cannot race the allow_public
@@ -300,15 +382,21 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	beforeView := s.tunnelManager.serverView(ctx, s.logger, existing)
 
 	updated, err := txRepo.UpdateServer(ctx, repo.UpdateServerParams{
-		ID:          serverID,
-		ProjectID:   *authCtx.ProjectID,
-		Name:        name,
-		AllowPublic: conv.PtrToPGBool(payload.AllowPublic),
+		ID:                         serverID,
+		ProjectID:                  *authCtx.ProjectID,
+		Name:                       name,
+		AllowPublic:                conv.PtrToPGBool(payload.AllowPublic),
+		ResourceIdentifier:         resourceIdentifier,
+		PublicRequestRatePerSecond: optionalPGInt4(payload.PublicRequestRatePerSecond),
+		PublicRequestBurst:         optionalPGInt4(payload.PublicRequestBurst),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, oops.E(oops.CodeConflict, err, "tunneled mcp server name already in use").LogWarn(ctx, logger)
+		}
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.CheckViolation {
+			return nil, oops.E(oops.CodeBadRequest, err, "public rate limits out of range").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update tunneled mcp server").LogError(ctx, logger)
 	}
@@ -328,6 +416,12 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "log tunneled mcp server update").LogError(ctx, logger)
 	}
 
+	if err := authclientbackfill.SyncEMASources(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{updated.ID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync tunneled EMA reach").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.SyncTunneledSource(ctx, dbtx, authCtx.ActiveOrganizationID, updated.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync tunneled source auth clients").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -360,7 +454,7 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -380,6 +474,9 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 	existing, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
@@ -438,7 +535,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -453,8 +550,12 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
-	deleted, err := repo.New(dbtx).DeleteServer(ctx, repo.DeleteServerParams{
+	txRepo := repo.New(dbtx)
+	deleted, err := txRepo.DeleteServer(ctx, repo.DeleteServerParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -463,6 +564,17 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server").LogError(ctx, logger)
+	}
+
+	// Retire the typed auth clients, server links and header copies derived
+	// from the deleted source's credential headers. Nothing else does: the
+	// headers stay on the tombstoned source, so only its liveness says they
+	// are gone.
+	if err := authclientbackfill.SyncEMASources(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{deleted.ID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync tunneled EMA reach").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.SyncTunneledSource(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync tunneled mcp server auth clients").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogTunneledMcpServerDelete(ctx, dbtx, audit.LogTunneledMcpServerDeleteEvent{

@@ -19,16 +19,18 @@ func TestPrime(t *testing.T) {
 	// Priming again warms an extra slot (not a no-op) and still succeeds; the
 	// scanner remains usable afterward.
 	require.NoError(t, s.Prime())
-	findings, err := s.Scan(t.Context(), "hello world, this is a normal message")
+	result, err := s.Scan(t.Context(), "hello world, this is a normal message")
 	require.NoError(t, err)
-	assert.Empty(t, findings)
+	assert.Empty(t, result.Findings)
 }
 
 func TestScan_NoSecrets(t *testing.T) {
 	t.Parallel()
-	findings, err := gitleaks.NewScanner().Scan(t.Context(), "hello world, this is a normal message")
+	result, err := gitleaks.NewScanner().Scan(t.Context(), "hello world, this is a normal message")
 	require.NoError(t, err)
-	assert.Empty(t, findings)
+	assert.Empty(t, result.Findings)
+	require.True(t, result.Completed)
+	require.Positive(t, result.STokens)
 }
 
 func TestScan_DetectsAWSKey(t *testing.T) {
@@ -37,10 +39,10 @@ func TestScan_DetectsAWSKey(t *testing.T) {
 	// secret access key is the flagged finding. ("EXAMPLE" values are globally
 	// allowlisted by gitleaks, so the fixtures avoid them.)
 	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
-	findings, err := gitleaks.NewScanner().Scan(t.Context(), content)
+	result, err := gitleaks.NewScanner().Scan(t.Context(), content)
 	require.NoError(t, err)
-	assert.NotEmpty(t, findings, "expected at least one finding for AWS credentials")
-	for _, f := range findings {
+	assert.NotEmpty(t, result.Findings, "expected at least one finding for AWS credentials")
+	for _, f := range result.Findings {
 		assert.NotEmpty(t, f.RuleID)
 		assert.NotEmpty(t, f.Description)
 		assert.NotEqual(t, gitleaks.AccessKeyIDRuleID, f.RuleID,
@@ -51,16 +53,18 @@ func TestScan_DetectsAWSKey(t *testing.T) {
 func TestScan_DetectsGitHubToken(t *testing.T) {
 	t.Parallel()
 	content := `export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab`
-	findings, err := gitleaks.NewScanner().Scan(t.Context(), content)
+	result, err := gitleaks.NewScanner().Scan(t.Context(), content)
 	require.NoError(t, err)
-	assert.NotEmpty(t, findings, "expected at least one finding for GitHub token")
+	assert.NotEmpty(t, result.Findings, "expected at least one finding for GitHub token")
 }
 
 func TestScan_EmptyContent(t *testing.T) {
 	t.Parallel()
-	findings, err := gitleaks.NewScanner().Scan(t.Context(), "")
+	result, err := gitleaks.NewScanner().Scan(t.Context(), "")
 	require.NoError(t, err)
-	assert.Empty(t, findings)
+	assert.Empty(t, result.Findings)
+	require.True(t, result.Completed)
+	require.Zero(t, result.STokens)
 }
 
 // TestScan_BytePositions verifies the line/column-to-byte-offset conversion
@@ -104,11 +108,11 @@ GITHUB_TOKEN=ghp_1234567890abcdefghijklmnopqrstuvwxyz`,
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			findings, err := gitleaks.NewScanner().Scan(t.Context(), tc.content)
+			result, err := gitleaks.NewScanner().Scan(t.Context(), tc.content)
 			require.NoError(t, err)
 
 			// For each finding, verify we can extract the correct match using byte positions
-			for _, finding := range findings {
+			for _, finding := range result.Findings {
 				if finding.StartPos < 0 || finding.EndPos > len(tc.content) {
 					t.Errorf("Invalid byte positions: start=%d, end=%d, content_len=%d",
 						finding.StartPos, finding.EndPos, len(tc.content))

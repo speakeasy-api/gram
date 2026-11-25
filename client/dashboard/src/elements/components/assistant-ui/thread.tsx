@@ -17,12 +17,12 @@ import {
   Wrench,
 } from "lucide-react";
 
+import type { ImageMessagePartProps } from "@assistant-ui/react";
 import {
   ActionBarPrimitive,
   BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
-  ImageMessagePartProps,
   MessagePrimitive,
   TextMessagePartProvider,
   ThreadPrimitive,
@@ -327,7 +327,7 @@ const ThreadScrollToBottom: FC = () => {
   );
 };
 
-const ThreadWelcome: FC = () => {
+export const ThreadWelcome: FC = () => {
   const { config } = useElements();
   const d = useDensity();
   const { logo, title, subtitle } = config.welcome ?? {};

@@ -16,12 +16,13 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -30,6 +31,28 @@ import (
 // ErrChatNotFound indicates the chat (conversation) does not exist.
 var ErrChatNotFound = errors.New("chat not found")
 
+// errChatProjectMismatch is returned when a hook write names a chat that
+// already exists under a different project. Session ids hash to chat ids with
+// no project in the derivation, so an org-scoped key can otherwise stamp
+// messages onto a sibling project's chat.
+var errChatProjectMismatch = errors.New("chat belongs to another project")
+
+// logHookPersistFailure reports a failed hook write for one of the async
+// ingest paths. A cross-project refusal is a deliberate outcome rather than a
+// server fault — an org-scoped key can name a session that already lives in a
+// sibling project — so it is logged as a warning under one event every adapter
+// shares, instead of as an error indistinguishable from a database failure.
+func (s *Service) logHookPersistFailure(ctx context.Context, subject string, err error, attrs ...any) {
+	if errors.Is(err, errChatProjectMismatch) {
+		s.logger.WarnContext(ctx, "refusing to persist "+subject+" for a session bound to another project",
+			append([]any{attr.SlogEvent("hooks_ingest_chat_project_mismatch"), attr.SlogError(err)}, attrs...)...)
+		return
+	}
+
+	s.logger.ErrorContext(ctx, "failed to persist "+subject,
+		append([]any{attr.SlogError(err)}, attrs...)...)
+}
+
 // isForeignKeyViolation checks if the error is a PostgreSQL foreign key constraint violation.
 // This indicates that the referenced chat does not exist.
 func isForeignKeyViolation(err error) bool {
@@ -37,6 +60,89 @@ func isForeignKeyViolation(err error) bool {
 		return pgErr.Code == pgerrcode.ForeignKeyViolation
 	}
 	return false
+}
+
+func (s *Service) ensureHookChat(
+	ctx context.Context,
+	queries *repo.Queries,
+	metadata *SessionMetadata,
+	chatID uuid.UUID,
+	projectID uuid.UUID,
+	title string,
+) error {
+	if queries == nil {
+		queries = s.repo
+	}
+
+	existing, err := queries.GetChatProjectID(ctx, chatID)
+	switch {
+	case err == nil:
+		if existing != projectID {
+			return errChatProjectMismatch
+		}
+		if metadata.SessionID != "" && sessionIDToUUID(metadata.SessionID) == chatID {
+			if err := queries.RecordCapturedSessionID(ctx, repo.RecordCapturedSessionIDParams{ChatID: chatID, ProjectID: projectID, SessionID: metadata.SessionID}); err != nil {
+				return fmt.Errorf("record captured session id: %w", err)
+			}
+		}
+		if err := s.linkActingAgent(ctx, queries, chatID, projectID); err != nil {
+			return err
+		}
+		return nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("get chat project: %w", err)
+	}
+
+	_, err = queries.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      projectID,
+		OrganizationID: metadata.GramOrgID,
+		UserID:         conv.ToPGTextEmpty(metadata.UserID),
+		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
+		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
+		Title:          conv.ToPGText(title),
+		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return errChatProjectMismatch
+	case err != nil:
+		return fmt.Errorf("upsert claude code session: %w", err)
+	}
+	if metadata.SessionID != "" && sessionIDToUUID(metadata.SessionID) == chatID {
+		if err := queries.RecordCapturedSessionID(ctx, repo.RecordCapturedSessionIDParams{ChatID: chatID, ProjectID: projectID, SessionID: metadata.SessionID}); err != nil {
+			return fmt.Errorf("record captured session id: %w", err)
+		}
+	}
+	if err := s.linkActingAgent(ctx, queries, chatID, projectID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// linkActingAgent records the agent principal this delivery acts for on the
+// session's chat row, so a session list can name the agent that made the calls.
+// It runs on both the create and the already-exists paths of ensureHookChat: a
+// chat is created on the session's first persisted message and reused for every
+// later delivery, so stamping only at creation would leave every session that
+// started before this landed permanently unattributed. The underlying statement
+// is fill-once and verifies the agent against the chat's own organization, so
+// repeating it per delivery is a no-op after the first success.
+//
+// A human-driven session simply has no agent to record, which is not a failure.
+func (s *Service) linkActingAgent(ctx context.Context, queries *repo.Queries, chatID, projectID uuid.UUID) error {
+	agentID, ok := contextvalues.EffectiveAgentID(ctx)
+	if !ok {
+		return nil
+	}
+	if _, err := queries.LinkChatActingAgent(ctx, repo.LinkChatActingAgentParams{
+		AgentID:   uuid.NullUUID{UUID: agentID, Valid: true},
+		ID:        chatID,
+		ProjectID: projectID,
+	}); err != nil {
+		return fmt.Errorf("link chat acting agent: %w", err)
+	}
+	return nil
 }
 
 // isConversationEvent returns true if the event is a conversation capture event (not a tool call).
@@ -58,11 +164,11 @@ func isConversationEvent(eventName string) bool {
 func (s *Service) defaultChatTitleForSession(ctx context.Context, metadata *SessionMetadata) string {
 	switch s.claudeSessionSurface(ctx, metadata) {
 	case agentVariantCowork:
-		return activities.DefaultCoworkChatTitle
+		return chat.DefaultCoworkChatTitle
 	case agentVariantClaudeCode, surfaceClaudeCodeDesktop:
-		return activities.DefaultClaudeChatTitle
+		return chat.DefaultClaudeChatTitle
 	default:
-		return activities.DefaultClaudeAmbiguous
+		return chat.DefaultClaudeAmbiguous
 	}
 }
 
@@ -75,6 +181,8 @@ func (s *Service) defaultChatTitleForSession(ctx context.Context, metadata *Sess
 // Claude surface (Cursor, Codex, unknown adapters).
 func claudeSurfaceFromServiceName(name string) string {
 	switch n := strings.ToLower(strings.TrimSpace(name)); {
+	case n == "claude-tag":
+		return "claude-tag"
 	case strings.Contains(n, "cowork"):
 		return agentVariantCowork
 	case n == surfaceClaudeCodeDesktop:
@@ -94,6 +202,8 @@ func claudeSurfaceFromServiceName(name string) string {
 // all. Non-Claude values rank zero.
 func claudeServiceNameSpecificity(name string) int {
 	switch claudeSurfaceFromServiceName(name) {
+	case "claude-tag":
+		return 5
 	case agentVariantCowork:
 		return 4
 	case surfaceClaudeCodeDesktop:
@@ -149,7 +259,7 @@ func preferClaudeServiceName(incoming, cached string) string {
 // through unchanged so non-Claude senders keep their reported name.
 func (s *Service) claudeSessionSurface(ctx context.Context, metadata *SessionMetadata) string {
 	surface := claudeSurfaceFromServiceName(metadata.ServiceName)
-	if surface == agentVariantCowork {
+	if surface == agentVariantCowork || surface == "claude-tag" {
 		return surface
 	}
 	variant := s.sessionAgentVariant(ctx, metadata.SessionID)
@@ -183,8 +293,12 @@ func (s *Service) sessionAgentVariant(ctx context.Context, sessionID string) str
 	if sessionID == "" {
 		return ""
 	}
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if projectID == "" {
+		return ""
+	}
 	var variant string
-	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
+	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(projectID, sessionID), &variant); err != nil {
 		return ""
 	}
 	return variant
@@ -309,11 +423,11 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 			// a native [y/n] confirmation at PreToolUse, not at prompt submit.
 			// Never hard-block a warn here — let the prompt through so the
 			// follow-on tool call carrying the match gets challenged instead.
-			if scanResult.Action == "warn" {
+			if scanResult.IsWarnChallenge() {
 				return makeHookResult(ev.RawEventType), nil
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			userReason := renderUserBlockReason(scanResult, auditReason)
 			// ClickHouse always gets the technical reason; the user_message
 			// override only changes what the agent / end user sees.
 			if s.claimBlockedPromptTelemetry(ctx, payload) {
@@ -374,22 +488,40 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return false, err
 	}
 
+	write := chat.MessageWrite{
+		Params:            msgParams,
+		BillingUserID:     metadata.UserID,
+		AssistantID:       uuid.Nil,
+		WorkloadSource:    metering.WorkloadSourceHook,
+		UserEmail:         metadata.UserEmail,
+		Provider:          metadata.Provider,
+		InferenceProvider: "",
+		Lineage:           nil,
+		HookHostname:      metadata.Hostname,
+		AccountType:       metadata.AccountType,
+		BillingMode:       metadata.BillingMode,
+	}
 	writeMessage := func() (int64, error) {
 		if msgParams.MessageID.Valid && strings.HasPrefix(msgParams.MessageID.String, agentPromptCorrelationPrefix) {
-			n, writeErr := s.writer.WriteCorrelated(ctx, projectID, msgParams, msgParams.MessageID.String)
+			n, writeErr := s.writer.WriteCorrelated(ctx, projectID, write, msgParams.MessageID.String)
 			if writeErr != nil {
 				return 0, fmt.Errorf("write correlated chat message: %w", writeErr)
 			}
 			return n, nil
 		}
-		n, writeErr := s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
+		n, writeErr := s.writer.Write(ctx, projectID, []chat.MessageWrite{write})
 		if writeErr != nil {
 			return 0, fmt.Errorf("write chat message: %w", writeErr)
 		}
 		return n, nil
 	}
 
-	// Try to insert the message (the writer handles notification on success).
+	// Pin the session to this project (or create the chat) before writing so a
+	// sibling-project header cannot stamp messages onto an existing chat.
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, defaultTitle); err != nil {
+		return false, err
+	}
+
 	n, err := writeMessage()
 	if err == nil {
 		return n > 0, nil
@@ -403,19 +535,10 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return false, fmt.Errorf("insert chat message: %w", err)
 	}
 
-	// Create the chat and retry.
-	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-		ID:             chatID,
-		ProjectID:      projectID,
-		OrganizationID: metadata.GramOrgID,
-		UserID:         conv.ToPGTextEmpty(metadata.UserID),
-		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
-		Title:          conv.ToPGText(defaultTitle),
-		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
-	})
-	if upsertErr != nil {
-		return false, fmt.Errorf("upsert claude code session after missing chat: %w", upsertErr)
+	// Create the chat and retry. A concurrent first-writer in another project
+	// loses here the same way UpsertChat does: no returned row.
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, defaultTitle); err != nil {
+		return false, fmt.Errorf("upsert claude code session after missing chat: %w", err)
 	}
 
 	n, err = writeMessage()
@@ -495,6 +618,19 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		}
 	}
 
+	writes := []chat.MessageWrite{{
+		Params:            msgParams,
+		BillingUserID:     metadata.UserID,
+		AssistantID:       uuid.Nil,
+		WorkloadSource:    metering.WorkloadSourceHook,
+		UserEmail:         metadata.UserEmail,
+		Provider:          metadata.Provider,
+		InferenceProvider: "",
+		Lineage:           nil,
+		HookHostname:      metadata.Hostname,
+		AccountType:       metadata.AccountType,
+		BillingMode:       metadata.BillingMode,
+	}}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin prompt correlation transaction: %w", err)
@@ -523,21 +659,10 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	// lock, keep both rows rather than guessing from prompt text and losing or
 	// misattributing a legitimate repeated native turn.
 
-	_, err = repo.New(tx).UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-		ID:             msgParams.ChatID,
-		ProjectID:      projectID,
-		OrganizationID: metadata.GramOrgID,
-		UserID:         conv.ToPGTextEmpty(metadata.UserID),
-		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
-		Title:          conv.ToPGText(defaultTitle),
-		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
-	})
-	if err != nil {
-		return false, fmt.Errorf("upsert claude code session: %w", err)
+	if err := s.ensureHookChat(ctx, repo.New(tx), metadata, msgParams.ChatID, projectID, defaultTitle); err != nil {
+		return false, err
 	}
-	params := []chatRepo.CreateChatMessageParams{msgParams}
-	n, err := s.writer.WriteInTx(ctx, tx, params)
+	n, err := s.writer.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return false, fmt.Errorf("insert uncorrelated agent prompt: %w", err)
 	}
@@ -545,7 +670,7 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		return false, fmt.Errorf("commit uncorrelated agent prompt: %w", err)
 	}
 	if n > 0 {
-		s.writer.NotifyStoredRows(ctx, projectID, params)
+		s.writer.NotifyStoredRows(ctx, projectID, writes)
 	}
 	return n > 0, nil
 }

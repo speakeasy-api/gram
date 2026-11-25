@@ -12,8 +12,8 @@ export const useFetcher = (): {
     fetch(`${getServerURL()}${endpoint}`, {
       ...opts,
       headers: {
-        ...(opts.headers as Record<string, string> | undefined),
         "gram-project": project.slug,
+        ...(opts.headers as Record<string, string> | undefined),
         "gram-session": session,
       },
     });

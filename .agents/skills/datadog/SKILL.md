@@ -1,21 +1,21 @@
 ---
 name: datadog
-description: Use Datadog MCP tools to investigate logs, metrics, traces, and incidents for the Gram project. Activate when the user asks about errors, performance issues, incidents, latency, or wants to search telemetry data.
+description: Use Datadog MCP tools to investigate logs, metrics, traces, and incidents for the Speakeasy project. Activate when the user asks about errors, performance issues, incidents, latency, or wants to search telemetry data.
 ---
 
-# Datadog Observability — Gram Project
+# Datadog Observability — Speakeasy Project
 
-## Gram Services
+## Speakeasy Services
 
 Always filter by the relevant service(s) when querying Datadog:
 
-| Service          | Description                                      |
-| ---------------- | ------------------------------------------------ |
-| `gram`           | Dashboard frontend (RUM)                         |
-| `gram-dashboard` | Dashboard backend                                |
-| `gram-server`    | Main backend API server                          |
-| `gram-worker`    | Temporal worker                                  |
-| `fly`            | Fly.io — where Gram Functions logs are collected |
+| Service          | Description                                           |
+| ---------------- | ----------------------------------------------------- |
+| `gram`           | Dashboard frontend (RUM)                              |
+| `gram-dashboard` | Dashboard backend                                     |
+| `gram-server`    | Main backend API server                               |
+| `gram-worker`    | Temporal worker                                       |
+| `fly`            | Fly.io — where Speakeasy Functions logs are collected |
 
 ## Available Tools
 
@@ -36,6 +36,7 @@ Use only the following Datadog MCP tools unless the user explicitly asks for oth
 
 - `mcp__datadog-mcp__get_datadog_trace` — Get a specific trace by ID
 - `mcp__datadog-mcp__search_datadog_spans` — Search spans (useful for latency investigation)
+- `mcp__datadog-mcp__aggregate_spans` — Aggregate spans (counts, percentiles) grouped by tags such as `resource_name` or `@http.status_code`
 
 ### Incidents & Monitors
 
@@ -55,7 +56,7 @@ Use only the following Datadog MCP tools unless the user explicitly asks for oth
 
 ## Guidelines
 
-- **Always scope queries** to one or more Gram services using the service filter when available.
+- **Always scope queries** to one or more Speakeasy services using the service filter when available.
 - **Start narrow, expand if needed**: Query a 15–30 minute window first, then widen.
 - **For error investigations**: start with `search_datadog_logs`, filter by `status:error`, then follow trace IDs with `get_datadog_trace`.
 - **For latency issues**: use `search_datadog_spans` with `service:<name>` and sort by duration.

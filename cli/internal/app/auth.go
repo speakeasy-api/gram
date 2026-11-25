@@ -5,16 +5,21 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/auth"
+	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
+	"github.com/speakeasy-api/gram/server/gen/cli_auth"
 	"github.com/speakeasy-api/gram/server/gen/keys"
 )
 
@@ -58,6 +63,7 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 
 	profileName := profileNameFromURL(apiURL.String())
 	keysClient := api.NewKeysClientFromURL(apiURL)
+	cliAuthClient := api.NewCliAuthClientFromURL(apiURL)
 
 	prof := opts.Profile
 	if prof == nil {
@@ -89,7 +95,9 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 		apiURL.String(),
 		dashboardURL,
 		keysClient,
+		cliAuthClient,
 		opts.ProfilePath,
+		auth.OpenSystemBrowser,
 	); err != nil {
 		return nil, err
 	}
@@ -112,17 +120,17 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 func newAuthCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "auth",
-		Usage: "Authenticate with Gram",
+		Usage: "Authenticate with the Speakeasy AI Control Plane",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "api-url",
-				Usage:   "URL of the Gram API server",
-				EnvVars: []string{"GRAM_API_URL"},
+				Usage:   "URL of the API server",
+				EnvVars: flags.EnvVars("API_URL"),
 			},
 			&cli.StringFlag{
 				Name:    "dashboard-url",
-				Usage:   "URL of the Gram dashboard for authentication",
-				EnvVars: []string{"GRAM_SITE_URL"},
+				Usage:   "URL of the dashboard to authenticate with",
+				EnvVars: flags.EnvVars("SITE_URL"),
 			},
 		},
 		Subcommands: []*cli.Command{
@@ -141,7 +149,7 @@ func newAuthSwitchCommand() *cli.Command {
 Switch the default project for the current profile.
 
 The project slug must be one of the projects available in your current profile.
-Use 'gram status' to see your current project.`,
+Use 'speakeasy status' to see your current project.`[1:],
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "project",
@@ -175,7 +183,7 @@ func newAuthClearCommand() *cli.Command {
 Clear all authentication profiles from the profile configuration file.
 
 This will remove all stored API keys and profile information.
-You will need to run 'gram auth' again to authenticate.`,
+You will need to run 'speakeasy auth' again to authenticate.`[1:],
 		Action: func(c *cli.Context) error {
 			profilePath, err := profile.DefaultProfilePath()
 			if err != nil {
@@ -216,13 +224,33 @@ func canRefreshProfile(prof *profile.Profile) bool {
 	return prof != nil && prof.Secret != ""
 }
 
+// keyRedeemer exchanges a login's one-time code for its API key.
+type keyRedeemer interface {
+	Redeem(ctx context.Context, code, codeVerifier string) (*cliauth.RedeemResult, error)
+}
+
 // mintKey starts a local HTTP listener while the user authenticates in the web
-// app. The user's new API key is returned to the listener as a query param.
+// app. Only a callback carrying this attempt's state token is accepted, and it
+// carries a one-time code rather than a key: the key is minted when this
+// process redeems the code with the PKCE verifier only it holds, so neither a
+// forged callback nor a process that reads the real one gets a usable key.
 func mintKey(
 	ctx context.Context,
 	logger *slog.Logger,
 	apiURL string,
-) (*auth.CallbackResult, error) {
+	redeemer keyRedeemer,
+	openBrowser auth.BrowserOpener,
+) (*cliauth.RedeemResult, error) {
+	// Ctrl+C cancels the wait instead of exiting outright, so the deferred
+	// cleanup still removes the redirect file holding the sign-in URL.
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	pkce, err := auth.NewPKCE()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate login proof key: %w", err)
+	}
+
 	listener, err := auth.NewListener()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create callback listener: %w", err)
@@ -239,12 +267,19 @@ func mintKey(
 	callbackURL := listener.URL()
 	listener.Start()
 
-	dispatcher := auth.NewDispatcher(logger)
-	if err := dispatcher.Dispatch(ctx, apiURL, callbackURL); err != nil {
+	dispatcher := auth.NewDispatcher(logger, openBrowser)
+	cleanup, err := dispatcher.Dispatch(ctx, apiURL, callbackURL, pkce.Challenge)
+	if err != nil {
 		return nil, fmt.Errorf("failed to dispatch auth request: %w", err)
 	}
+	defer cleanup()
 
-	result, err := listener.Wait(ctx)
+	callback, err := listener.Wait(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("authentication failed: %w", err)
+	}
+
+	result, err := redeemer.Redeem(ctx, callback.Code, pkce.Verifier)
 	if err != nil {
 		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
@@ -312,19 +347,21 @@ func authenticateNewProfile(
 	apiURL string,
 	dashboardURL string,
 	keysClient *api.KeysClient,
+	redeemer keyRedeemer,
 	profilePath string,
+	openBrowser auth.BrowserOpener,
 ) error {
-	callbackResult, err := mintKey(ctx, logger, dashboardURL)
+	minted, err := mintKey(ctx, logger, dashboardURL, redeemer, openBrowser)
 	if err != nil {
 		return err
 	}
 
-	result, err := keysClient.Verify(ctx, secret.Secret(callbackResult.APIKey))
+	result, err := keysClient.Verify(ctx, secret.Secret(minted.AccessToken))
 	if err != nil {
 		return fmt.Errorf("failed to authenticate profile: %w", err)
 	}
 
-	return saveProfile(ctx, logger, callbackResult.APIKey, apiURL, result, profilePath, profileName, callbackResult.Project)
+	return saveProfile(ctx, logger, minted.AccessToken, apiURL, result, profilePath, profileName, minted.ProjectSlug)
 }
 
 func doAuth(c *cli.Context) error {

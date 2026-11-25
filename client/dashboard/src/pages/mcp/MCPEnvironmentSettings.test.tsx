@@ -1,0 +1,248 @@
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/contexts/Auth", () => ({
+  useSession: () => ({ activeOrganizationId: "org-1" }),
+}));
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ capture: vi.fn() }),
+}));
+vi.mock("@/hooks/useMissingEnvironmentVariables", () => ({
+  useMissingRequiredEnvVars: () => 0,
+}));
+vi.mock("@/hooks/useToolsetUrl", () => ({
+  useMcpUrl: () => ({ url: "https://gram.example/mcp/server" }),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
+vi.mock("@gram/client/react-query/createEnvironment.js", () => ({
+  useCreateEnvironmentMutation: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
+  useGetMcpMetadata: () => ({ data: {} }),
+  invalidateAllGetMcpMetadata: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
+  useListEnvironments: () => ({ data: { environments: [] } }),
+  invalidateAllListEnvironments: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/mcpMetadataSet.js", () => ({
+  useMcpMetadataSetMutation: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
+  useRemoteSessionIssuers: () => ({ data: { result: { items: [] } } }),
+}));
+vi.mock("@gram/client/react-query/toolset.js", () => ({
+  invalidateAllToolset: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/updateEnvironment.js", () => ({
+  useUpdateEnvironmentMutation: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+}));
+const loadedVars = vi.hoisted(() => ({ current: [] as unknown[] }));
+vi.mock("./useEnvironmentVariables", () => ({
+  useEnvironmentVariables: () => loadedVars.current,
+}));
+vi.mock("./PageSection", () => ({
+  PageSection: ({
+    children,
+    action,
+  }: {
+    children: ReactNode;
+    action?: ReactNode;
+  }) => (
+    <section>
+      {action}
+      {children}
+    </section>
+  ),
+}));
+vi.mock("./OAuthDetailsModal", () => ({
+  OAuthDetailsModal: ({
+    isOpen,
+    onManageMetadata,
+  }: {
+    isOpen: boolean;
+    onManageMetadata?: () => void;
+  }) =>
+    isOpen ? (
+      <button onClick={onManageMetadata}>Manage metadata source</button>
+    ) : null,
+}));
+vi.mock("./oauth-wizard", () => ({
+  ConnectOAuthModal: ({
+    isOpen,
+    existingConfig,
+  }: {
+    isOpen: boolean;
+    existingConfig?: { issuer: string };
+  }) =>
+    isOpen ? (
+      <div data-testid="oauth-review-dialog">{existingConfig?.issuer}</div>
+    ) : null,
+}));
+vi.mock("./x/tabs/settings/sections/authentication/authTarget", () => ({
+  useToolsetAuthTarget: () => ({}),
+}));
+vi.mock(
+  "./x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet",
+  () => ({
+    AttachRemoteIdentityProviderSheet: () => null,
+  }),
+);
+
+vi.mock(
+  "./x/tabs/settings/sections/authentication/AuthenticationSection",
+  () => ({
+    AuthenticationSectionBody: ({
+      additionalSetupAction,
+    }: {
+      additionalSetupAction?: ReactNode;
+    }) => (
+      <div data-testid="authentication-section-body">
+        {additionalSetupAction}
+      </div>
+    ),
+  }),
+);
+
+import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
+
+afterEach(() => {
+  cleanup();
+  loadedVars.current = [];
+});
+
+describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
+  it("renders the eligible recommendation and opens its review entry point", () => {
+    const queryClient = new QueryClient();
+    const toolset = {
+      slug: "server",
+      mcpSlug: "server",
+      mcpEnabled: true,
+      mcpIsPublic: true,
+      oauthEnablementMetadata: { oauth2SecurityCount: 1 },
+      externalOauthServer: {
+        metadata: { issuer: "https://auth.example.com" },
+      },
+    } as unknown as Parameters<typeof MCPAuthenticationTab>[0]["toolset"];
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <MCPAuthenticationTab toolset={toolset} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+      { wrapper: MemoryRouter },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Review update" }));
+
+    expect(screen.getByTestId("oauth-review-dialog").textContent).toBe(
+      "https://auth.example.com",
+    );
+  });
+
+  it("keeps management available for an existing config that is no longer eligible", () => {
+    const queryClient = new QueryClient();
+    const toolset = {
+      slug: "server",
+      mcpSlug: "server",
+      mcpEnabled: true,
+      mcpIsPublic: true,
+      oauthEnablementMetadata: { oauth2SecurityCount: 0 },
+      externalOauthServer: {
+        authorizationServerIssuer: "https://current.example.com",
+      },
+    } as unknown as Parameters<typeof MCPAuthenticationTab>[0]["toolset"];
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <MCPAuthenticationTab toolset={toolset} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(screen.getByRole("button", { name: "Manage" })).toBeTruthy();
+  });
+
+  it("opens metadata management for an existing provider-hosted config", () => {
+    const queryClient = new QueryClient();
+    const toolset = {
+      slug: "server",
+      mcpSlug: "server",
+      mcpEnabled: true,
+      mcpIsPublic: true,
+      oauthEnablementMetadata: { oauth2SecurityCount: 1 },
+      externalOauthServer: {
+        authorizationServerIssuer: "https://current.example.com",
+      },
+    } as unknown as Parameters<typeof MCPAuthenticationTab>[0]["toolset"];
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <MCPAuthenticationTab toolset={toolset} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+      { wrapper: MemoryRouter },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Manage metadata source" }),
+    );
+
+    expect(screen.getByTestId("oauth-review-dialog").textContent).toBe(
+      "https://current.example.com",
+    );
+  });
+});
+
+describe("environment variables on load", () => {
+  it("reports no unsaved changes before any edit, even for an unmapped required variable", () => {
+    const required = [
+      {
+        id: "var-1",
+        key: "ACME_SERVER_URL",
+        environmentValues: [],
+        state: "system",
+        isRequired: true,
+      },
+    ];
+    loadedVars.current = required;
+    const toolset = {
+      slug: "server",
+      mcpSlug: "server",
+      mcpEnabled: true,
+      mcpIsPublic: true,
+      oauthEnablementMetadata: { oauth2SecurityCount: 0 },
+    } as unknown as Parameters<typeof MCPAuthenticationTab>[0]["toolset"];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <MCPAuthenticationTab toolset={toolset} showOAuth={false} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(screen.getByText("ACME_SERVER_URL")).toBeTruthy();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+});

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const AllowedFor = {
 /**
  * Reach of explicit allow grants: everyone when every deny-by-default policy's audience is covered (an all-users grant, or grants naming the policy's whole audience), selected when grants free only part of an audience, none without grants. A role grant whose membership happens to span the organization still reads selected — reach compares principal sets, not expanded memberships.
  */
-export type AllowedFor = ClosedEnum<typeof AllowedFor>;
+export type AllowedFor = OpenEnum<typeof AllowedFor>;
 
 /**
  * Reach of explicit block mechanisms: an everyone-audience block rule, a targeted rule or targeted deny-by-default policy, or none.
@@ -33,7 +34,7 @@ export const BlockedFor = {
 /**
  * Reach of explicit block mechanisms: an everyone-audience block rule, a targeted rule or targeted deny-by-default policy, or none.
  */
-export type BlockedFor = ClosedEnum<typeof BlockedFor>;
+export type BlockedFor = OpenEnum<typeof BlockedFor>;
 
 /**
  * What happens to a user no rule names: deny under an everyone-audience deny-by-default policy, allow when blocking exists without one, none when no blocking policy is enabled.
@@ -46,7 +47,7 @@ export const BlockingDefault = {
 /**
  * What happens to a user no rule names: deny under an everyone-audience deny-by-default policy, allow when blocking exists without one, none when no blocking policy is enabled.
  */
-export type BlockingDefault = ClosedEnum<typeof BlockingDefault>;
+export type BlockingDefault = OpenEnum<typeof BlockingDefault>;
 
 /**
  * The recorded review decision, when one exists.
@@ -58,7 +59,7 @@ export const Decision = {
 /**
  * The recorded review decision, when one exists.
  */
-export type Decision = ClosedEnum<typeof Decision>;
+export type Decision = OpenEnum<typeof Decision>;
 
 /**
  * How much of the recorded decision enforcement delivers. full: the decision's own writes are intact — an approval's grants survive unoverridden (a scoped blast radius is the decision as recorded, not a shortfall), or a denial lands as a project-wide block. partial: something carries the decision but not all of it, such as a denial only a targeted policy enforces, or an approval whose grants were later removed or overridden. none: nothing carries it — no blocking policy exists, the target is a local command (stdio decisions are recorded without writing enforcement), or no decision is recorded at all.
@@ -71,7 +72,7 @@ export const DecisionCoverage = {
 /**
  * How much of the recorded decision enforcement delivers. full: the decision's own writes are intact — an approval's grants survive unoverridden (a scoped blast radius is the decision as recorded, not a shortfall), or a denial lands as a project-wide block. partial: something carries the decision but not all of it, such as a denial only a targeted policy enforces, or an approval whose grants were later removed or overridden. none: nothing carries it — no blocking policy exists, the target is a local command (stdio decisions are recorded without writing enforcement), or no decision is recorded at all.
  */
-export type DecisionCoverage = ClosedEnum<typeof DecisionCoverage>;
+export type DecisionCoverage = OpenEnum<typeof DecisionCoverage>;
 
 /**
  * The shape of the user-to-access function: allowed and blocked are uniform, restricted varies by user, unenforced means no blocking policy applies.
@@ -85,7 +86,7 @@ export const State = {
 /**
  * The shape of the user-to-access function: allowed and blocked are uniform, restricted varies by user, unenforced means no blocking policy applies.
  */
-export type State = ClosedEnum<typeof State>;
+export type State = OpenEnum<typeof State>;
 
 /**
  * The enforcement verdict for a shadow MCP server, computed server-side from policies, grants, and the recorded decision. state is the canonical compression of who may call the server; the remaining fields name the mechanisms so a client renders wording without re-deriving enforcement.
@@ -118,30 +119,32 @@ export type ShadowMCPAccessSummary = {
 };
 
 /** @internal */
-export const AllowedFor$inboundSchema: z.ZodMiniEnum<typeof AllowedFor> = z
-  .enum(AllowedFor);
+export const AllowedFor$inboundSchema: z.ZodMiniType<AllowedFor, unknown> =
+  openEnums.inboundSchema(AllowedFor);
 
 /** @internal */
-export const BlockedFor$inboundSchema: z.ZodMiniEnum<typeof BlockedFor> = z
-  .enum(BlockedFor);
+export const BlockedFor$inboundSchema: z.ZodMiniType<BlockedFor, unknown> =
+  openEnums.inboundSchema(BlockedFor);
 
 /** @internal */
-export const BlockingDefault$inboundSchema: z.ZodMiniEnum<
-  typeof BlockingDefault
-> = z.enum(BlockingDefault);
+export const BlockingDefault$inboundSchema: z.ZodMiniType<
+  BlockingDefault,
+  unknown
+> = openEnums.inboundSchema(BlockingDefault);
 
 /** @internal */
-export const Decision$inboundSchema: z.ZodMiniEnum<typeof Decision> = z.enum(
-  Decision,
-);
+export const Decision$inboundSchema: z.ZodMiniType<Decision, unknown> =
+  openEnums.inboundSchema(Decision);
 
 /** @internal */
-export const DecisionCoverage$inboundSchema: z.ZodMiniEnum<
-  typeof DecisionCoverage
-> = z.enum(DecisionCoverage);
+export const DecisionCoverage$inboundSchema: z.ZodMiniType<
+  DecisionCoverage,
+  unknown
+> = openEnums.inboundSchema(DecisionCoverage);
 
 /** @internal */
-export const State$inboundSchema: z.ZodMiniEnum<typeof State> = z.enum(State);
+export const State$inboundSchema: z.ZodMiniType<State, unknown> = openEnums
+  .inboundSchema(State);
 
 /** @internal */
 export const ShadowMCPAccessSummary$inboundSchema: z.ZodMiniType<

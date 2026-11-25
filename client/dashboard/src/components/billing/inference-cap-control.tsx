@@ -1,4 +1,7 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { SetSpendCapRequestBodyKeyType as KnownSetSpendCapRequestBodyKeyType } from "@gram/client/models/components/setspendcaprequestbody.js";
 import { InferenceCapMeter } from "@/components/billing/inference-cap-meter";
+import { BookingCalendarLink } from "@/pages/demo/components/booking-calendar/BookingCalendarLink";
 import {
   inferenceCapAnchor,
   inferenceCapLabel,
@@ -14,15 +17,10 @@ import { invalidateAllGetInferenceSpendCaps } from "@gram/client/react-query/get
 import { useSetSpendCapMutation } from "@gram/client/react-query/setSpendCap.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { Link } from "react-router";
 
 /** The bounds the API accepts for a monthly inference cap, in whole USD. */
 const MIN_CAP_USD = 1;
 const MAX_CAP_USD = 10_000;
-
-// The in-app booking gate, which prefills the form from the session — the same
-// path the trial card sends people to. Not the marketing site's /talk-to-us.
-const SALES_PATH = "/talk-to-us";
 
 function formatUsd(amount: number): string {
   return `$${amount.toLocaleString("en-US")}`;
@@ -54,7 +52,7 @@ const DISABLED_NOTE =
   "This inference is turned off for this organization, so its cap can't be changed.";
 
 /**
- * One organization's cap on one Gram-managed inference key: what it has spent
+ * One organization's cap on one Speakeasy-managed inference key: what it has spent
  * this month, what the ceiling is, and — for an admin who can move it — the
  * field that does.
  *
@@ -99,7 +97,14 @@ export function InferenceCapControl({
     // the anchor sits on the whole control: whichever variant this organization
     // gets, the link lands on the cap it named. `scroll-mt` clears the sticky
     // page header.
-    <div id={inferenceCapAnchor(cap.keyType)} className="scroll-mt-24">
+    <div
+      id={
+        isKnownEnumValue(KnownSetSpendCapRequestBodyKeyType, cap.keyType)
+          ? inferenceCapAnchor(cap.keyType)
+          : undefined
+      }
+      className="scroll-mt-24"
+    >
       {controlFor(cap, locked, refetching, announcesLock)}
     </div>
   );
@@ -111,6 +116,14 @@ function controlFor(
   refetching: boolean,
   announcesLock: boolean,
 ): JSX.Element {
+  if (!isKnownEnumValue(KnownSetSpendCapRequestBodyKeyType, cap.keyType)) {
+    return (
+      <CapReadOnly
+        cap={cap}
+        note="Refresh the page before editing this unsupported inference cap."
+      />
+    );
+  }
   if (cap.disabled) return <CapReadOnly cap={cap} note={DISABLED_NOTE} />;
 
   // Nothing writable here, so the mutation is never mounted — the lock holds
@@ -154,7 +167,7 @@ function LockedCapField({ cap }: { cap: InferenceSpendCap }): JSX.Element {
         />
       </Stack>
       <Button type="button" disabled>
-        {`SAVE ${label.toUpperCase()}`}
+        {`Save ${label.toLowerCase()}`}
       </Button>
     </Stack>
   );
@@ -274,7 +287,11 @@ function CapForm({
     // that holds if a submission reaches the form some other way. It refuses
     // before the amount is judged: a form that isn't accepting a save has
     // nothing to say about what is in the field.
-    if (locked) return;
+    if (
+      locked ||
+      !isKnownEnumValue(KnownSetSpendCapRequestBodyKeyType, cap.keyType)
+    )
+      return;
 
     setSubmitted(true);
     if (validationError !== null) return;
@@ -330,15 +347,23 @@ function CapForm({
               admin who just had a larger amount rejected. */}
           <Text muted small>
             Need a cap above {MAX_LABEL}?{" "}
-            <Link to={SALES_PATH} className="underline underline-offset-2">
+            <BookingCalendarLink
+              eventLabel="Inference caps — 30 min"
+              formDefaults={{
+                source: "Dashboard: Inference caps",
+                notes: `Request inference cap above ${MAX_LABEL}`,
+              }}
+              telemetrySource="inference_cap"
+              className="underline"
+            >
               Talk to us
-            </Link>
+            </BookingCalendarLink>
             .
           </Text>
         </Stack>
         <Stack direction="horizontal" align="center" gap={3}>
           <Button type="submit" disabled={mutation.isPending || locked}>
-            {mutation.isPending ? "SAVING..." : `SAVE ${label.toUpperCase()}`}
+            {mutation.isPending ? "Saving..." : `Save ${label.toLowerCase()}`}
           </Button>
           <CapFormFeedback
             label={label}

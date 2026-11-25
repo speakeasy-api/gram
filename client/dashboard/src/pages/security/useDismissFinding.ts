@@ -7,10 +7,10 @@ import { useRiskUnmarkResultsFalsePositiveMutation } from "@gram/client/react-qu
 import { invalidateAllRiskListDismissedResults } from "@gram/client/react-query/riskListDismissedResults.js";
 import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { invalidateAllRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
 import { invalidateAllRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { invalidateAllRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { showUndoToast } from "@/lib/toast-undo";
+import { chunk } from "@/lib/utils";
 import {
   expireRestoredAfter,
   getRestoredFindings,
@@ -30,14 +30,6 @@ const MAX_BATCH = 500;
 // restore triggers. The window only has to outlast that lag; it expires on its
 // own so an id can never be hidden indefinitely.
 export const RESTORE_HIDE_MS = 60_000;
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    chunks.push(items.slice(i, i + size));
-  }
-  return chunks;
-}
 
 /** Runs `mutateAsync` once per MAX_BATCH-sized chunk of `ids`, one batch at a
  * time (not concurrently — a selection of several thousand ids should not
@@ -104,10 +96,9 @@ export function useDismissFinding(): {
 
   const invalidateLists = useCallback(() => {
     const invalidate = () => {
-      // RiskEvents.tsx and RiskOverviewCategoryDetail.tsx each query results
-      // directly via useInfiniteQuery (not a generated hook), under their own
-      // queryKey under this shared ["risk", "results", ...] prefix (e.g.
-      // ["risk","results","list"]). Invalidate the whole prefix rather than
+      // RiskEvents.tsx queries results directly via useInfiniteQuery (not a
+      // generated hook), under its own queryKey under this shared
+      // ["risk", "results", ...] prefix (e.g. ["risk","results","list"]). Invalidate the whole prefix rather than
       // each exact key — suppressing from one surface (e.g. Risk Events) must
       // be reflected on every other surface, and matching each new custom key
       // one-by-one here is exactly the kind of thing that's easy to add a
@@ -123,7 +114,6 @@ export function useDismissFinding(): {
       // as still flagged until a manual reload.
       void invalidateAllRiskListResults(queryClient);
       void invalidateAllRiskOverview(queryClient);
-      void invalidateAllRiskRuleBreakdown(queryClient);
       void invalidateAllRiskUserBreakdown(queryClient);
       // The Watchdog page clusters the same findings into signals.
       void invalidateAllRiskSignals(queryClient);

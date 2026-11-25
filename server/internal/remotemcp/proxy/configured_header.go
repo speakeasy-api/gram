@@ -5,6 +5,27 @@ import (
 	"net/http"
 )
 
+// IsDeniedPassThroughSource reports whether an inbound header may not be used
+// as a pass-through source.
+//
+// isSkippedRequestHeader already refuses to copy Cookie upstream because it
+// carries the dashboard's gram_session rather than any intent toward the
+// remote server. A configured header reads the inbound request directly, so
+// without this it could carry that same cookie upstream under any name it
+// likes and walk straight around that decision.
+//
+// Authorization is denied for the same reason: it may carry the credential
+// the caller authenticated to Speakeasy with. An upstream credential supplied
+// by the caller must arrive in a header of its own.
+func IsDeniedPassThroughSource(name string) bool {
+	switch headerKey(name) {
+	case "authorization", "cookie", "set-cookie", "proxy-authorization":
+		return true
+	default:
+		return false
+	}
+}
+
 // ConfiguredHeader describes how a single outgoing header sent to the remote
 // MCP server is populated. Exactly one of StaticValue or ValueFromRequestHeader
 // is set.
@@ -12,6 +33,10 @@ type ConfiguredHeader struct {
 	// IsRequired, when true, causes the proxy to reject the request with a
 	// bad-request error if the header cannot be resolved to a non-empty value.
 	IsRequired bool
+
+	// IsSecret preserves whether the configured value is credential material,
+	// even after decryption. It does not change header resolution.
+	IsSecret bool
 
 	// Name is the HTTP header name to send to the remote MCP server.
 	Name string
@@ -32,6 +57,15 @@ type ConfiguredHeader struct {
 func (h ConfiguredHeader) Resolve(userReq *http.Request) (string, error) {
 	switch {
 	case h.ValueFromRequestHeader != "":
+		if IsDeniedPassThroughSource(h.ValueFromRequestHeader) {
+			// Never read the source. An optional row is dropped rather than
+			// failing every request to a server that still carries one; a
+			// required row cannot be satisfied, so the request is refused.
+			if !h.IsRequired {
+				return "", nil
+			}
+			return "", fmt.Errorf("header %q cannot be populated from request header %q", h.Name, h.ValueFromRequestHeader)
+		}
 		value := userReq.Header.Get(h.ValueFromRequestHeader)
 		if value == "" && h.IsRequired {
 			return "", fmt.Errorf("required header %q missing from request (pass-through from %q)", h.Name, h.ValueFromRequestHeader)

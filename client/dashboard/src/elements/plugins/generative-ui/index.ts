@@ -1,4 +1,4 @@
-import { Plugin } from "@/elements/types/plugins";
+import type { Plugin } from "@/elements/types/plugins";
 import generativeUIPrompt from "@/elements/prompts/generative-ui.txt?raw";
 import { GenerativeUIRenderer } from "./component";
 

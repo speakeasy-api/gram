@@ -14,7 +14,7 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Explore third-party tools in Gram.
+// Explore third-party tools in Speakeasy.
 type Service interface {
 	// Get a third-party integration by ID or name.
 	Get(context.Context, *GetPayload) (res *GetIntegrationResult, err error)

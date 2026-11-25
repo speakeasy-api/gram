@@ -83,8 +83,8 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 			}
 		}
 		for _, e := range toolTypes {
-			if !(e == "http" || e == "prompt" || e == "function" || e == "platform" || e == "externalmcp") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_types[*]", e, []any{"http", "prompt", "function", "platform", "externalmcp"}))
+			if !(e == "http" || e == "prompt" || e == "function" || e == "platform") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_types[*]", e, []any{"http", "prompt", "function", "platform"}))
 			}
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
@@ -289,9 +289,6 @@ func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {
 	}
 	if v.PlatformToolDefinition != nil {
 		res.PlatformToolDefinition = marshalTypesPlatformToolDefinitionToPlatformToolDefinitionResponseBody(v.PlatformToolDefinition)
-	}
-	if v.ExternalMcpToolDefinition != nil {
-		res.ExternalMcpToolDefinition = marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBody(v.ExternalMcpToolDefinition)
 	}
 
 	return res
@@ -586,61 +583,6 @@ func marshalTypesPlatformToolDefinitionToPlatformToolDefinitionResponseBody(v *t
 		Summarizer:    v.Summarizer,
 		CreatedAt:     v.CreatedAt,
 		UpdatedAt:     v.UpdatedAt,
-	}
-	if v.Canonical != nil {
-		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
-	}
-	if v.Variation != nil {
-		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
-	}
-	if v.Annotations != nil {
-		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)
-	}
-
-	return res
-}
-
-// marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBody
-// builds a value of type *ExternalMCPToolDefinitionResponseBody from a value
-// of type *types.ExternalMCPToolDefinition.
-func marshalTypesExternalMCPToolDefinitionToExternalMCPToolDefinitionResponseBody(v *types.ExternalMCPToolDefinition) *ExternalMCPToolDefinitionResponseBody {
-	if v == nil {
-		return nil
-	}
-	res := &ExternalMCPToolDefinitionResponseBody{
-		Type:                       v.Type,
-		DeploymentExternalMcpID:    v.DeploymentExternalMcpID,
-		DeploymentID:               v.DeploymentID,
-		RegistryID:                 v.RegistryID,
-		RegistrySpecifier:          v.RegistrySpecifier,
-		RegistryServerName:         v.RegistryServerName,
-		Slug:                       v.Slug,
-		RemoteURL:                  v.RemoteURL,
-		TransportType:              v.TransportType,
-		RequiresOauth:              v.RequiresOauth,
-		OauthVersion:               v.OauthVersion,
-		OauthAuthorizationEndpoint: v.OauthAuthorizationEndpoint,
-		OauthTokenEndpoint:         v.OauthTokenEndpoint,
-		OauthRegistrationEndpoint:  v.OauthRegistrationEndpoint,
-		CreatedAt:                  v.CreatedAt,
-		UpdatedAt:                  v.UpdatedAt,
-		ID:                         v.ID,
-		ToolUrn:                    v.ToolUrn,
-		ProjectID:                  v.ProjectID,
-		Name:                       v.Name,
-		CanonicalName:              v.CanonicalName,
-		Description:                v.Description,
-		SchemaVersion:              v.SchemaVersion,
-		Schema:                     v.Schema,
-		Confirm:                    v.Confirm,
-		ConfirmPrompt:              v.ConfirmPrompt,
-		Summarizer:                 v.Summarizer,
-	}
-	if v.OauthScopesSupported != nil {
-		res.OauthScopesSupported = make([]string, len(v.OauthScopesSupported))
-		for i, val := range v.OauthScopesSupported {
-			res.OauthScopesSupported[i] = val
-		}
 	}
 	if v.Canonical != nil {
 		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)

@@ -48,13 +48,20 @@ type UpdateToolsetRequestBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// List of resource URNs to include in the toolset
 	ResourceUrns []string `form:"resource_urns,omitempty" json:"resource_urns,omitempty" xml:"resource_urns,omitempty"`
-	// Whether the toolset is enabled for MCP
+	// Deprecated: rejected; use mcpServers.update. Whether the toolset is enabled
+	// for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
-	// The slug of the MCP to use for the toolset
+	// Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The
+	// slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
+	// Deprecated: rejected; use mcpServers.update. Whether the toolset is public
+	// in MCP
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// The ID of the custom domain to use for the toolset
+	// Deprecated: rejected; use mcpServers.update. Where the hosted MCP is
+	// accessible: public_only, dual, or private_only
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
+	// Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The ID
+	// of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
@@ -67,11 +74,17 @@ type AddExternalOAuthServerRequestBody struct {
 	ExternalOauthServer *ExternalOAuthServerFormRequestBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 }
 
-// SetUserSessionIssuerRequestBody is the type of the "toolsets" service
-// "setUserSessionIssuer" endpoint HTTP request body.
-type SetUserSessionIssuerRequestBody struct {
-	// The user_session_issuer id to link, or null to unlink.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+// UpdateExternalOAuthServerRequestBody is the type of the "toolsets" service
+// "updateExternalOAuthServer" endpoint HTTP request body.
+type UpdateExternalOAuthServerRequestBody struct {
+	// JSON object metadata to restore Speakeasy-hosted compatibility mode. Supply
+	// exactly one of metadata and authorization_server_issuer.
+	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// Exact HTTPS issuer to set for provider-hosted discovery. Speakeasy strictly
+	// discovers and verifies it before the atomic update. Supply exactly one of
+	// authorization_server_issuer and metadata; clients may need to register or
+	// authenticate again after a mode change.
+	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 }
 
 // SetToolVariationsGroupRequestBody is the type of the "toolsets" service
@@ -106,8 +119,6 @@ type CreateToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
 	// The tools in this toolset
@@ -129,6 +140,8 @@ type CreateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -137,8 +150,8 @@ type CreateToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -192,8 +205,6 @@ type UpdateToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
 	// The tools in this toolset
@@ -215,6 +226,8 @@ type UpdateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -223,8 +236,8 @@ type UpdateToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -264,8 +277,6 @@ type GetToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
 	// The tools in this toolset
@@ -287,6 +298,8 @@ type GetToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -295,8 +308,8 @@ type GetToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -364,8 +377,6 @@ type CloneToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
 	// The tools in this toolset
@@ -387,6 +398,8 @@ type CloneToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -395,8 +408,8 @@ type CloneToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -436,8 +449,6 @@ type AddExternalOAuthServerResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
 	// The tools in this toolset
@@ -459,6 +470,8 @@ type AddExternalOAuthServerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -467,8 +480,80 @@ type AddExternalOAuthServerResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The slug of the user_session_issuer wired to this toolset; present when
+	// user_session_issuer_id is.
+	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
+	// The id of the tool variations group enabling MCP tool filtering for this
+	// toolset. Set via toolsets.setToolVariationsGroup; null when filtering is
+	// disabled.
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateExternalOAuthServerResponseBody is the type of the "toolsets" service
+// "updateExternalOAuthServer" endpoint HTTP response body.
+type UpdateExternalOAuthServerResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -508,8 +593,6 @@ type RemoveOAuthServerResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
 	// The tools in this toolset
@@ -531,6 +614,8 @@ type RemoveOAuthServerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -539,80 +624,8 @@ type RemoveOAuthServerResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
-	// The slug of the user_session_issuer wired to this toolset; present when
-	// user_session_issuer_id is.
-	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
-	// The id of the tool variations group enabling MCP tool filtering for this
-	// toolset. Set via toolsets.setToolVariationsGroup; null when filtering is
-	// disabled.
-	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
-	// When the toolset was created.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the toolset was last updated.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// SetUserSessionIssuerResponseBody is the type of the "toolsets" service
-// "setUserSessionIssuer" endpoint HTTP response body.
-type SetUserSessionIssuerResponseBody struct {
-	// The ID of the toolset
-	ID string `form:"id" json:"id" xml:"id"`
-	// The project ID this toolset belongs to
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The organization ID this toolset belongs to
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The account type of the organization
-	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
-	// The name of the toolset
-	Name string `form:"name" json:"name" xml:"name"`
-	// The slug of the toolset
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Description of the toolset
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// The security variables that are relevant to the toolset
-	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
-	// The server variables that are relevant to the toolset
-	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
-	// The function environment variables that are relevant to the toolset
-	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
-	// The metadata surrounding oauth enabled tools within this server
-	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
-	// The tools in this toolset
-	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
-	// The tool URNs in this toolset
-	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
-	// The version of the toolset (will be 0 if none exists)
-	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
-	// The resources in this toolset
-	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
-	// The resource URNs in this toolset
-	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
-	// The prompt templates in this toolset -- Note: these are actual prompts, as
-	// in MCP prompts
-	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
-	// The mode to use for tool selection
-	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
-	// The registry lineage for toolsets installed from an external MCP catalog
-	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
-	// The external OAuth server details
-	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -652,8 +665,6 @@ type SetToolVariationsGroupResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
 	// The tools in this toolset
@@ -675,6 +686,8 @@ type SetToolVariationsGroupResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -683,8 +696,8 @@ type SetToolVariationsGroupResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -2169,196 +2182,6 @@ type ListToolSchemaStaticValuesGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CheckMCPSlugAvailabilityUnauthorizedResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "unauthorized" error.
-type CheckMCPSlugAvailabilityUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityForbiddenResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "forbidden" error.
-type CheckMCPSlugAvailabilityForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityBadRequestResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "bad_request" error.
-type CheckMCPSlugAvailabilityBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityNotFoundResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "not_found" error.
-type CheckMCPSlugAvailabilityNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityConflictResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "conflict" error.
-type CheckMCPSlugAvailabilityConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityUnsupportedMediaResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "unsupported_media" error.
-type CheckMCPSlugAvailabilityUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityInvalidResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "invalid" error.
-type CheckMCPSlugAvailabilityInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityInvariantViolationResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "invariant_violation" error.
-type CheckMCPSlugAvailabilityInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityUnexpectedResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "unexpected" error.
-type CheckMCPSlugAvailabilityUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CheckMCPSlugAvailabilityGatewayErrorResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "gateway_error" error.
-type CheckMCPSlugAvailabilityGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // CloneToolsetUnauthorizedResponseBody is the type of the "toolsets" service
 // "cloneToolset" endpoint HTTP response body for the "unauthorized" error.
 type CloneToolsetUnauthorizedResponseBody struct {
@@ -2731,6 +2554,196 @@ type AddExternalOAuthServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpdateExternalOAuthServerUnauthorizedResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "unauthorized" error.
+type UpdateExternalOAuthServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerForbiddenResponseBody is the type of the "toolsets"
+// service "updateExternalOAuthServer" endpoint HTTP response body for the
+// "forbidden" error.
+type UpdateExternalOAuthServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerBadRequestResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "bad_request" error.
+type UpdateExternalOAuthServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerNotFoundResponseBody is the type of the "toolsets"
+// service "updateExternalOAuthServer" endpoint HTTP response body for the
+// "not_found" error.
+type UpdateExternalOAuthServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerConflictResponseBody is the type of the "toolsets"
+// service "updateExternalOAuthServer" endpoint HTTP response body for the
+// "conflict" error.
+type UpdateExternalOAuthServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerUnsupportedMediaResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "unsupported_media" error.
+type UpdateExternalOAuthServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerInvalidResponseBody is the type of the "toolsets"
+// service "updateExternalOAuthServer" endpoint HTTP response body for the
+// "invalid" error.
+type UpdateExternalOAuthServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerInvariantViolationResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "invariant_violation" error.
+type UpdateExternalOAuthServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerUnexpectedResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "unexpected" error.
+type UpdateExternalOAuthServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateExternalOAuthServerGatewayErrorResponseBody is the type of the
+// "toolsets" service "updateExternalOAuthServer" endpoint HTTP response body
+// for the "gateway_error" error.
+type UpdateExternalOAuthServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RemoveOAuthServerUnauthorizedResponseBody is the type of the "toolsets"
 // service "removeOAuthServer" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2902,196 +2915,6 @@ type RemoveOAuthServerUnexpectedResponseBody struct {
 // service "removeOAuthServer" endpoint HTTP response body for the
 // "gateway_error" error.
 type RemoveOAuthServerGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SetUserSessionIssuerUnauthorizedResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "unauthorized" error.
-type SetUserSessionIssuerUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SetUserSessionIssuerForbiddenResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "forbidden" error.
-type SetUserSessionIssuerForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SetUserSessionIssuerBadRequestResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "bad_request" error.
-type SetUserSessionIssuerBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SetUserSessionIssuerNotFoundResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "not_found" error.
-type SetUserSessionIssuerNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SetUserSessionIssuerConflictResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "conflict" error.
-type SetUserSessionIssuerConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SetUserSessionIssuerUnsupportedMediaResponseBody is the type of the
-// "toolsets" service "setUserSessionIssuer" endpoint HTTP response body for
-// the "unsupported_media" error.
-type SetUserSessionIssuerUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SetUserSessionIssuerInvalidResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the "invalid"
-// error.
-type SetUserSessionIssuerInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SetUserSessionIssuerInvariantViolationResponseBody is the type of the
-// "toolsets" service "setUserSessionIssuer" endpoint HTTP response body for
-// the "invariant_violation" error.
-type SetUserSessionIssuerInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SetUserSessionIssuerUnexpectedResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "unexpected" error.
-type SetUserSessionIssuerUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// SetUserSessionIssuerGatewayErrorResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "gateway_error" error.
-type SetUserSessionIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3341,23 +3164,6 @@ type FunctionEnvironmentVariableResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 }
 
-// ExternalMCPHeaderDefinitionResponseBody is used to define fields on response
-// body types.
-type ExternalMCPHeaderDefinitionResponseBody struct {
-	// The prefixed environment variable name (e.g., SLACK_X_API_KEY)
-	Name string `form:"name" json:"name" xml:"name"`
-	// The actual HTTP header name to send (e.g., X-Api-Key)
-	HeaderName string `form:"header_name" json:"header_name" xml:"header_name"`
-	// Description of the header
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Placeholder value for the header
-	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
-	// Whether the header is required
-	Required bool `form:"required" json:"required" xml:"required"`
-	// Whether the header value is secret
-	Secret bool `form:"secret" json:"secret" xml:"secret"`
-}
-
 // OAuthEnablementMetadataResponseBody is used to define fields on response
 // body types.
 type OAuthEnablementMetadataResponseBody struct {
@@ -3375,8 +3181,6 @@ type ToolResponseBody struct {
 	PromptTemplate *PromptTemplateResponseBody `form:"prompt_template,omitempty" json:"prompt_template,omitempty" xml:"prompt_template,omitempty"`
 	// The Platform tool definition
 	PlatformToolDefinition *PlatformToolDefinitionResponseBody `form:"platform_tool_definition,omitempty" json:"platform_tool_definition,omitempty" xml:"platform_tool_definition,omitempty"`
-	// The external MCP tool definition
-	ExternalMcpToolDefinition *ExternalMCPToolDefinitionResponseBody `form:"external_mcp_tool_definition,omitempty" json:"external_mcp_tool_definition,omitempty" xml:"external_mcp_tool_definition,omitempty"`
 }
 
 // HTTPToolDefinitionResponseBody is used to define fields on response body
@@ -3670,75 +3474,6 @@ type PlatformToolDefinitionResponseBody struct {
 	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 }
 
-// ExternalMCPToolDefinitionResponseBody is used to define fields on response
-// body types.
-type ExternalMCPToolDefinitionResponseBody struct {
-	// Whether or not the tool is a proxy tool
-	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// The ID of the deployments_external_mcps record
-	DeploymentExternalMcpID string `form:"deployment_external_mcp_id" json:"deployment_external_mcp_id" xml:"deployment_external_mcp_id"`
-	// The ID of the deployment
-	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
-	// The ID of the MCP registry
-	RegistryID string `form:"registry_id" json:"registry_id" xml:"registry_id"`
-	// The specifier of the external MCP server (e.g.,
-	// 'io.modelcontextprotocol.anonymous/exa')
-	RegistrySpecifier string `form:"registry_specifier" json:"registry_specifier" xml:"registry_specifier"`
-	// The name of the external MCP server (e.g., exa)
-	RegistryServerName string `form:"registry_server_name" json:"registry_server_name" xml:"registry_server_name"`
-	// The slug used for tool prefixing (e.g., github)
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// The URL to connect to the MCP server
-	RemoteURL string `form:"remote_url" json:"remote_url" xml:"remote_url"`
-	// The transport type used to connect to the MCP server
-	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
-	// Whether the external MCP server requires OAuth authentication
-	RequiresOauth bool `form:"requires_oauth" json:"requires_oauth" xml:"requires_oauth"`
-	// OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'
-	OauthVersion string `form:"oauth_version" json:"oauth_version" xml:"oauth_version"`
-	// The OAuth authorization endpoint URL
-	OauthAuthorizationEndpoint *string `form:"oauth_authorization_endpoint,omitempty" json:"oauth_authorization_endpoint,omitempty" xml:"oauth_authorization_endpoint,omitempty"`
-	// The OAuth token endpoint URL
-	OauthTokenEndpoint *string `form:"oauth_token_endpoint,omitempty" json:"oauth_token_endpoint,omitempty" xml:"oauth_token_endpoint,omitempty"`
-	// The OAuth dynamic client registration endpoint URL
-	OauthRegistrationEndpoint *string `form:"oauth_registration_endpoint,omitempty" json:"oauth_registration_endpoint,omitempty" xml:"oauth_registration_endpoint,omitempty"`
-	// The OAuth scopes supported by the server
-	OauthScopesSupported []string `form:"oauth_scopes_supported,omitempty" json:"oauth_scopes_supported,omitempty" xml:"oauth_scopes_supported,omitempty"`
-	// The creation date of the tool.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// The last update date of the tool.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// The ID of the tool
-	ID string `form:"id" json:"id" xml:"id"`
-	// The URN of this tool
-	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
-	// The ID of the project
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The name of the tool
-	Name string `form:"name" json:"name" xml:"name"`
-	// The canonical name of the tool. Will be the same as the name if there is no
-	// variation.
-	CanonicalName string `form:"canonical_name" json:"canonical_name" xml:"canonical_name"`
-	// Description of the tool
-	Description string `form:"description" json:"description" xml:"description"`
-	// Version of the schema
-	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
-	// JSON schema for the request
-	Schema string `form:"schema" json:"schema" xml:"schema"`
-	// Confirmation mode for the tool
-	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
-	// Prompt for the confirmation
-	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
-	// Summarizer for the tool
-	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
-	// The original details of a tool, excluding any variations
-	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
-	// The variation details of a tool. Only includes explicitly varied fields.
-	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
-	// MCP tool annotations providing hints about tool behavior
-	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
-}
-
 // ResourceResponseBody is used to define fields on response body types.
 type ResourceResponseBody struct {
 	// The function resource definition
@@ -3795,8 +3530,13 @@ type ExternalOAuthServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The slug of the external OAuth server
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// The metadata for the external OAuth server
-	Metadata any `form:"metadata" json:"metadata" xml:"metadata"`
+	// The validated RFC 8414 metadata Speakeasy hosts in compatibility mode.
+	// Exactly one of metadata and authorization_server_issuer is present.
+	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery.
+	// Exactly one of authorization_server_issuer and metadata is present; changing
+	// modes may require clients to register or authenticate again.
+	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 	// When the external OAuth server was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the external OAuth server was last updated.
@@ -3825,8 +3565,6 @@ type ToolsetEntryResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolEntryResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
@@ -3975,10 +3713,16 @@ type ToolsetOriginRequestBody struct {
 // ExternalOAuthServerFormRequestBody is used to define fields on request body
 // types.
 type ExternalOAuthServerFormRequestBody struct {
-	// The slug of the external OAuth server
+	// Optional external OAuth server slug retained for compatibility. Speakeasy
+	// generates one from the toolset slug when omitted.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// The metadata for the external OAuth server
+	// JSON object metadata for Speakeasy-hosted compatibility mode. Supply exactly
+	// one of metadata and authorization_server_issuer.
 	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Speakeasy fetches
+	// and strictly verifies this issuer before persistence. Supply exactly one of
+	// authorization_server_issuer and metadata.
+	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 }
 
 // NewCreateToolsetResponseBody builds the HTTP response body from the result
@@ -4009,6 +3753,10 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -4042,16 +3790,6 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 				continue
 			}
 			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
-		}
-	}
-	if res.ExternalMcpHeaderDefinitions != nil {
-		body.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(res.ExternalMcpHeaderDefinitions))
-		for i, val := range res.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				body.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			body.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
 		}
 	}
 	if res.OauthEnablementMetadata != nil {
@@ -4185,6 +3923,10 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -4217,16 +3959,6 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 				continue
 			}
 			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
-		}
-	}
-	if res.ExternalMcpHeaderDefinitions != nil {
-		body.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(res.ExternalMcpHeaderDefinitions))
-		for i, val := range res.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				body.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			body.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
 		}
 	}
 	if res.OauthEnablementMetadata != nil {
@@ -4322,6 +4054,10 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -4354,16 +4090,6 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 				continue
 			}
 			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
-		}
-	}
-	if res.ExternalMcpHeaderDefinitions != nil {
-		body.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(res.ExternalMcpHeaderDefinitions))
-		for i, val := range res.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				body.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			body.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
 		}
 	}
 	if res.OauthEnablementMetadata != nil {
@@ -4514,6 +4240,10 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -4546,16 +4276,6 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 				continue
 			}
 			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
-		}
-	}
-	if res.ExternalMcpHeaderDefinitions != nil {
-		body.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(res.ExternalMcpHeaderDefinitions))
-		for i, val := range res.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				body.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			body.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
 		}
 	}
 	if res.OauthEnablementMetadata != nil {
@@ -4651,6 +4371,10 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -4685,14 +4409,136 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
 		}
 	}
-	if res.ExternalMcpHeaderDefinitions != nil {
-		body.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(res.ExternalMcpHeaderDefinitions))
-		for i, val := range res.ExternalMcpHeaderDefinitions {
+	if res.OauthEnablementMetadata != nil {
+		body.OauthEnablementMetadata = marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody(res.OauthEnablementMetadata)
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
 			if val == nil {
-				body.ExternalMcpHeaderDefinitions[i] = nil
+				body.Tools[i] = nil
 				continue
 			}
-			body.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			if val == nil {
+				body.Resources[i] = nil
+				continue
+			}
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			if val == nil {
+				body.PromptTemplates[i] = nil
+				continue
+			}
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.Origin != nil {
+		body.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(res.Origin)
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerResponseBody builds the HTTP response body from
+// the result of the "updateExternalOAuthServer" endpoint of the "toolsets"
+// service.
+func NewUpdateExternalOAuthServerResponseBody(res *types.Toolset) *UpdateExternalOAuthServerResponseBody {
+	body := &UpdateExternalOAuthServerResponseBody{
+		ID:                    res.ID,
+		ProjectID:             res.ProjectID,
+		OrganizationID:        res.OrganizationID,
+		AccountType:           res.AccountType,
+		Name:                  res.Name,
+		Slug:                  string(res.Slug),
+		Description:           res.Description,
+		ToolsetVersion:        res.ToolsetVersion,
+		McpIsPublic:           res.McpIsPublic,
+		McpEnabled:            res.McpEnabled,
+		ToolSelectionMode:     res.ToolSelectionMode,
+		CustomDomainID:        res.CustomDomainID,
+		UserSessionIssuerID:   res.UserSessionIssuerID,
+		ToolVariationsGroupID: res.ToolVariationsGroupID,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
+	if res.UserSessionIssuerSlug != nil {
+		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
+		body.UserSessionIssuerSlug = &userSessionIssuerSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			if val == nil {
+				body.SecurityVariables[i] = nil
+				continue
+			}
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			if val == nil {
+				body.ServerVariables[i] = nil
+				continue
+			}
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			if val == nil {
+				body.FunctionEnvironmentVariables[i] = nil
+				continue
+			}
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
 		}
 	}
 	if res.OauthEnablementMetadata != nil {
@@ -4788,142 +4634,9 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
-	if res.UserSessionIssuerSlug != nil {
-		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
-		body.UserSessionIssuerSlug = &userSessionIssuerSlug
-	}
-	if res.SecurityVariables != nil {
-		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
-		for i, val := range res.SecurityVariables {
-			if val == nil {
-				body.SecurityVariables[i] = nil
-				continue
-			}
-			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
-		}
-	}
-	if res.ServerVariables != nil {
-		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
-		for i, val := range res.ServerVariables {
-			if val == nil {
-				body.ServerVariables[i] = nil
-				continue
-			}
-			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
-		}
-	}
-	if res.FunctionEnvironmentVariables != nil {
-		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
-		for i, val := range res.FunctionEnvironmentVariables {
-			if val == nil {
-				body.FunctionEnvironmentVariables[i] = nil
-				continue
-			}
-			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
-		}
-	}
-	if res.ExternalMcpHeaderDefinitions != nil {
-		body.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(res.ExternalMcpHeaderDefinitions))
-		for i, val := range res.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				body.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			body.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
-		}
-	}
-	if res.OauthEnablementMetadata != nil {
-		body.OauthEnablementMetadata = marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody(res.OauthEnablementMetadata)
-	}
-	if res.Tools != nil {
-		body.Tools = make([]*ToolResponseBody, len(res.Tools))
-		for i, val := range res.Tools {
-			if val == nil {
-				body.Tools[i] = nil
-				continue
-			}
-			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
-		}
-	} else {
-		body.Tools = []*ToolResponseBody{}
-	}
-	if res.ToolUrns != nil {
-		body.ToolUrns = make([]string, len(res.ToolUrns))
-		for i, val := range res.ToolUrns {
-			body.ToolUrns[i] = val
-		}
-	} else {
-		body.ToolUrns = []string{}
-	}
-	if res.Resources != nil {
-		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
-		for i, val := range res.Resources {
-			if val == nil {
-				body.Resources[i] = nil
-				continue
-			}
-			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
-		}
-	} else {
-		body.Resources = []*ResourceResponseBody{}
-	}
-	if res.ResourceUrns != nil {
-		body.ResourceUrns = make([]string, len(res.ResourceUrns))
-		for i, val := range res.ResourceUrns {
-			body.ResourceUrns[i] = val
-		}
-	} else {
-		body.ResourceUrns = []string{}
-	}
-	if res.PromptTemplates != nil {
-		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
-		for i, val := range res.PromptTemplates {
-			if val == nil {
-				body.PromptTemplates[i] = nil
-				continue
-			}
-			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
-		}
-	} else {
-		body.PromptTemplates = []*PromptTemplateResponseBody{}
-	}
-	if res.Origin != nil {
-		body.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(res.Origin)
-	}
-	if res.ExternalOauthServer != nil {
-		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
-	}
-	return body
-}
-
-// NewSetUserSessionIssuerResponseBody builds the HTTP response body from the
-// result of the "setUserSessionIssuer" endpoint of the "toolsets" service.
-func NewSetUserSessionIssuerResponseBody(res *types.Toolset) *SetUserSessionIssuerResponseBody {
-	body := &SetUserSessionIssuerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		OrganizationID:        res.OrganizationID,
-		AccountType:           res.AccountType,
-		Name:                  res.Name,
-		Slug:                  string(res.Slug),
-		Description:           res.Description,
-		ToolsetVersion:        res.ToolsetVersion,
-		McpIsPublic:           res.McpIsPublic,
-		McpEnabled:            res.McpEnabled,
-		ToolSelectionMode:     res.ToolSelectionMode,
-		CustomDomainID:        res.CustomDomainID,
-		UserSessionIssuerID:   res.UserSessionIssuerID,
-		ToolVariationsGroupID: res.ToolVariationsGroupID,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
-	}
-	if res.DefaultEnvironmentSlug != nil {
-		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
-		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
-	}
-	if res.McpSlug != nil {
-		mcpSlug := string(*res.McpSlug)
-		body.McpSlug = &mcpSlug
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -4957,16 +4670,6 @@ func NewSetUserSessionIssuerResponseBody(res *types.Toolset) *SetUserSessionIssu
 				continue
 			}
 			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
-		}
-	}
-	if res.ExternalMcpHeaderDefinitions != nil {
-		body.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(res.ExternalMcpHeaderDefinitions))
-		for i, val := range res.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				body.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			body.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
 		}
 	}
 	if res.OauthEnablementMetadata != nil {
@@ -5062,6 +4765,10 @@ func NewSetToolVariationsGroupResponseBody(res *types.Toolset) *SetToolVariation
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -5094,16 +4801,6 @@ func NewSetToolVariationsGroupResponseBody(res *types.Toolset) *SetToolVariation
 				continue
 			}
 			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
-		}
-	}
-	if res.ExternalMcpHeaderDefinitions != nil {
-		body.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(res.ExternalMcpHeaderDefinitions))
-		for i, val := range res.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				body.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			body.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
 		}
 	}
 	if res.OauthEnablementMetadata != nil {
@@ -6308,156 +6005,6 @@ func NewListToolSchemaStaticValuesGatewayErrorResponseBody(res *goa.ServiceError
 	return body
 }
 
-// NewCheckMCPSlugAvailabilityUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityUnauthorizedResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityUnauthorizedResponseBody {
-	body := &CheckMCPSlugAvailabilityUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityForbiddenResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityForbiddenResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityForbiddenResponseBody {
-	body := &CheckMCPSlugAvailabilityForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityBadRequestResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityBadRequestResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityBadRequestResponseBody {
-	body := &CheckMCPSlugAvailabilityBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityNotFoundResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityNotFoundResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityNotFoundResponseBody {
-	body := &CheckMCPSlugAvailabilityNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityConflictResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityConflictResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityConflictResponseBody {
-	body := &CheckMCPSlugAvailabilityConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "checkMCPSlugAvailability" endpoint of
-// the "toolsets" service.
-func NewCheckMCPSlugAvailabilityUnsupportedMediaResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityUnsupportedMediaResponseBody {
-	body := &CheckMCPSlugAvailabilityUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityInvalidResponseBody builds the HTTP response body
-// from the result of the "checkMCPSlugAvailability" endpoint of the "toolsets"
-// service.
-func NewCheckMCPSlugAvailabilityInvalidResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityInvalidResponseBody {
-	body := &CheckMCPSlugAvailabilityInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "checkMCPSlugAvailability" endpoint of
-// the "toolsets" service.
-func NewCheckMCPSlugAvailabilityInvariantViolationResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityInvariantViolationResponseBody {
-	body := &CheckMCPSlugAvailabilityInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityUnexpectedResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityUnexpectedResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityUnexpectedResponseBody {
-	body := &CheckMCPSlugAvailabilityUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCheckMCPSlugAvailabilityGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "checkMCPSlugAvailability" endpoint of the
-// "toolsets" service.
-func NewCheckMCPSlugAvailabilityGatewayErrorResponseBody(res *goa.ServiceError) *CheckMCPSlugAvailabilityGatewayErrorResponseBody {
-	body := &CheckMCPSlugAvailabilityGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewCloneToolsetUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "cloneToolset" endpoint of the "toolsets" service.
 func NewCloneToolsetUnauthorizedResponseBody(res *goa.ServiceError) *CloneToolsetUnauthorizedResponseBody {
@@ -6748,6 +6295,156 @@ func NewAddExternalOAuthServerGatewayErrorResponseBody(res *goa.ServiceError) *A
 	return body
 }
 
+// NewUpdateExternalOAuthServerUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "updateExternalOAuthServer" endpoint of
+// the "toolsets" service.
+func NewUpdateExternalOAuthServerUnauthorizedResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerUnauthorizedResponseBody {
+	body := &UpdateExternalOAuthServerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerForbiddenResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerForbiddenResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerForbiddenResponseBody {
+	body := &UpdateExternalOAuthServerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerBadRequestResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerBadRequestResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerBadRequestResponseBody {
+	body := &UpdateExternalOAuthServerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerNotFoundResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerNotFoundResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerNotFoundResponseBody {
+	body := &UpdateExternalOAuthServerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerConflictResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerConflictResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerConflictResponseBody {
+	body := &UpdateExternalOAuthServerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "updateExternalOAuthServer" endpoint of
+// the "toolsets" service.
+func NewUpdateExternalOAuthServerUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerUnsupportedMediaResponseBody {
+	body := &UpdateExternalOAuthServerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerInvalidResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerInvalidResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerInvalidResponseBody {
+	body := &UpdateExternalOAuthServerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "updateExternalOAuthServer" endpoint of
+// the "toolsets" service.
+func NewUpdateExternalOAuthServerInvariantViolationResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerInvariantViolationResponseBody {
+	body := &UpdateExternalOAuthServerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerUnexpectedResponseBody builds the HTTP response
+// body from the result of the "updateExternalOAuthServer" endpoint of the
+// "toolsets" service.
+func NewUpdateExternalOAuthServerUnexpectedResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerUnexpectedResponseBody {
+	body := &UpdateExternalOAuthServerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateExternalOAuthServerGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "updateExternalOAuthServer" endpoint of
+// the "toolsets" service.
+func NewUpdateExternalOAuthServerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateExternalOAuthServerGatewayErrorResponseBody {
+	body := &UpdateExternalOAuthServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRemoveOAuthServerUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "removeOAuthServer" endpoint of the "toolsets"
 // service.
@@ -6884,156 +6581,6 @@ func NewRemoveOAuthServerUnexpectedResponseBody(res *goa.ServiceError) *RemoveOA
 // service.
 func NewRemoveOAuthServerGatewayErrorResponseBody(res *goa.ServiceError) *RemoveOAuthServerGatewayErrorResponseBody {
 	body := &RemoveOAuthServerGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSetUserSessionIssuerUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "setUserSessionIssuer" endpoint of the
-// "toolsets" service.
-func NewSetUserSessionIssuerUnauthorizedResponseBody(res *goa.ServiceError) *SetUserSessionIssuerUnauthorizedResponseBody {
-	body := &SetUserSessionIssuerUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSetUserSessionIssuerForbiddenResponseBody builds the HTTP response body
-// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
-// service.
-func NewSetUserSessionIssuerForbiddenResponseBody(res *goa.ServiceError) *SetUserSessionIssuerForbiddenResponseBody {
-	body := &SetUserSessionIssuerForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSetUserSessionIssuerBadRequestResponseBody builds the HTTP response body
-// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
-// service.
-func NewSetUserSessionIssuerBadRequestResponseBody(res *goa.ServiceError) *SetUserSessionIssuerBadRequestResponseBody {
-	body := &SetUserSessionIssuerBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSetUserSessionIssuerNotFoundResponseBody builds the HTTP response body
-// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
-// service.
-func NewSetUserSessionIssuerNotFoundResponseBody(res *goa.ServiceError) *SetUserSessionIssuerNotFoundResponseBody {
-	body := &SetUserSessionIssuerNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSetUserSessionIssuerConflictResponseBody builds the HTTP response body
-// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
-// service.
-func NewSetUserSessionIssuerConflictResponseBody(res *goa.ServiceError) *SetUserSessionIssuerConflictResponseBody {
-	body := &SetUserSessionIssuerConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSetUserSessionIssuerUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "setUserSessionIssuer" endpoint of the
-// "toolsets" service.
-func NewSetUserSessionIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *SetUserSessionIssuerUnsupportedMediaResponseBody {
-	body := &SetUserSessionIssuerUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSetUserSessionIssuerInvalidResponseBody builds the HTTP response body
-// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
-// service.
-func NewSetUserSessionIssuerInvalidResponseBody(res *goa.ServiceError) *SetUserSessionIssuerInvalidResponseBody {
-	body := &SetUserSessionIssuerInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSetUserSessionIssuerInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "setUserSessionIssuer" endpoint of the
-// "toolsets" service.
-func NewSetUserSessionIssuerInvariantViolationResponseBody(res *goa.ServiceError) *SetUserSessionIssuerInvariantViolationResponseBody {
-	body := &SetUserSessionIssuerInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSetUserSessionIssuerUnexpectedResponseBody builds the HTTP response body
-// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
-// service.
-func NewSetUserSessionIssuerUnexpectedResponseBody(res *goa.ServiceError) *SetUserSessionIssuerUnexpectedResponseBody {
-	body := &SetUserSessionIssuerUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewSetUserSessionIssuerGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "setUserSessionIssuer" endpoint of the
-// "toolsets" service.
-func NewSetUserSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *SetUserSessionIssuerGatewayErrorResponseBody {
-	body := &SetUserSessionIssuerGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7267,6 +6814,10 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 		mcpSlug := types.Slug(*body.McpSlug)
 		v.McpSlug = &mcpSlug
 	}
+	if body.NetworkAccessMode != nil {
+		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
+		v.NetworkAccessMode = &networkAccessMode
+	}
 	if body.PromptTemplateNames != nil {
 		v.PromptTemplateNames = make([]string, len(body.PromptTemplateNames))
 		for i, val := range body.PromptTemplateNames {
@@ -7308,7 +6859,7 @@ func NewDeleteToolsetPayload(slug string, sessionToken *string, apikeyToken *str
 // NewGetToolsetPayload builds a toolsets service getToolset endpoint payload.
 func NewGetToolsetPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.GetToolsetPayload {
 	v := &toolsets.GetToolsetPayload{}
-	v.Slug = types.Slug(slug)
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -7332,18 +6883,6 @@ func NewListToolFiltersPayload(slug string, sessionToken *string, apikeyToken *s
 // listToolSchemaStaticValues endpoint payload.
 func NewListToolSchemaStaticValuesPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.ListToolSchemaStaticValuesPayload {
 	v := &toolsets.ListToolSchemaStaticValuesPayload{}
-	v.Slug = types.Slug(slug)
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v
-}
-
-// NewCheckMCPSlugAvailabilityPayload builds a toolsets service
-// checkMCPSlugAvailability endpoint payload.
-func NewCheckMCPSlugAvailabilityPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.CheckMCPSlugAvailabilityPayload {
-	v := &toolsets.CheckMCPSlugAvailabilityPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -7377,10 +6916,13 @@ func NewAddExternalOAuthServerPayload(body *AddExternalOAuthServerRequestBody, s
 	return v
 }
 
-// NewRemoveOAuthServerPayload builds a toolsets service removeOAuthServer
-// endpoint payload.
-func NewRemoveOAuthServerPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.RemoveOAuthServerPayload {
-	v := &toolsets.RemoveOAuthServerPayload{}
+// NewUpdateExternalOAuthServerPayload builds a toolsets service
+// updateExternalOAuthServer endpoint payload.
+func NewUpdateExternalOAuthServerPayload(body *UpdateExternalOAuthServerRequestBody, slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.UpdateExternalOAuthServerPayload {
+	v := &toolsets.UpdateExternalOAuthServerPayload{
+		Metadata:                  body.Metadata,
+		AuthorizationServerIssuer: body.AuthorizationServerIssuer,
+	}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -7389,12 +6931,10 @@ func NewRemoveOAuthServerPayload(slug string, sessionToken *string, apikeyToken 
 	return v
 }
 
-// NewSetUserSessionIssuerPayload builds a toolsets service
-// setUserSessionIssuer endpoint payload.
-func NewSetUserSessionIssuerPayload(body *SetUserSessionIssuerRequestBody, slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.SetUserSessionIssuerPayload {
-	v := &toolsets.SetUserSessionIssuerPayload{
-		UserSessionIssuerID: body.UserSessionIssuerID,
-	}
+// NewRemoveOAuthServerPayload builds a toolsets service removeOAuthServer
+// endpoint payload.
+func NewRemoveOAuthServerPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.RemoveOAuthServerPayload {
+	v := &toolsets.RemoveOAuthServerPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -7458,6 +6998,11 @@ func ValidateUpdateToolsetRequestBody(body *UpdateToolsetRequestBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 		}
 	}
+	if body.NetworkAccessMode != nil {
+		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
+		}
+	}
 	return
 }
 
@@ -7475,11 +7020,19 @@ func ValidateAddExternalOAuthServerRequestBody(body *AddExternalOAuthServerReque
 	return
 }
 
-// ValidateSetUserSessionIssuerRequestBody runs the validations defined on
-// SetUserSessionIssuerRequestBody
-func ValidateSetUserSessionIssuerRequestBody(body *SetUserSessionIssuerRequestBody) (err error) {
-	if body.UserSessionIssuerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+// ValidateUpdateExternalOAuthServerRequestBody runs the validations defined on
+// UpdateExternalOAuthServerRequestBody
+func ValidateUpdateExternalOAuthServerRequestBody(body *UpdateExternalOAuthServerRequestBody) (err error) {
+	if body.AuthorizationServerIssuer != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.authorization_server_issuer", *body.AuthorizationServerIssuer, goa.FormatURI))
+	}
+	if body.AuthorizationServerIssuer != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.authorization_server_issuer", *body.AuthorizationServerIssuer, "^https://"))
+	}
+	if body.AuthorizationServerIssuer != nil {
+		if utf8.RuneCountInString(*body.AuthorizationServerIssuer) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.authorization_server_issuer", *body.AuthorizationServerIssuer, utf8.RuneCountInString(*body.AuthorizationServerIssuer), 500, false))
+		}
 	}
 	return
 }
@@ -7505,18 +7058,23 @@ func ValidateToolsetOriginRequestBody(body *ToolsetOriginRequestBody) (err error
 // ValidateExternalOAuthServerFormRequestBody runs the validations defined on
 // ExternalOAuthServerFormRequestBody
 func ValidateExternalOAuthServerFormRequestBody(body *ExternalOAuthServerFormRequestBody) (err error) {
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.Metadata == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("metadata", "body"))
-	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	if body.AuthorizationServerIssuer != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.authorization_server_issuer", *body.AuthorizationServerIssuer, goa.FormatURI))
+	}
+	if body.AuthorizationServerIssuer != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.authorization_server_issuer", *body.AuthorizationServerIssuer, "^https://"))
+	}
+	if body.AuthorizationServerIssuer != nil {
+		if utf8.RuneCountInString(*body.AuthorizationServerIssuer) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.authorization_server_issuer", *body.AuthorizationServerIssuer, utf8.RuneCountInString(*body.AuthorizationServerIssuer), 500, false))
 		}
 	}
 	return

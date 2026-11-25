@@ -1,4 +1,5 @@
-import { Assistant } from "@gram/client/models/components/assistant.js";
+import type { ReasoningEffort } from "./reasoning-effort";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
 import {
   invalidateAllAssistantsGet,
   queryKeyAssistantsGet,
@@ -11,20 +12,15 @@ import { invalidateAllTrigger } from "@gram/client/react-query/trigger.js";
 import { invalidateAllTriggers } from "@gram/client/react-query/triggers.js";
 import { invalidateAllSkill } from "@gram/client/react-query/skill.js";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  AssistantDraftCtx,
+import { useProject } from "@/contexts/Auth";
+import type { ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
   AssistantEnv,
   DraftContextValue,
   PendingResolver,
 } from "./useAssistantDraft";
+import { AssistantDraftCtx } from "./useAssistantDraft";
 
 export function AssistantDraftProvider({
   initialAssistantId,
@@ -36,16 +32,25 @@ export function AssistantDraftProvider({
   children: ReactNode;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const project = useProject();
   const [assistantId, setAssistantIdState] = useState<string | null>(
     initialAssistantId,
   );
   const [assistantEnv, setAssistantEnvState] = useState<AssistantEnv | null>(
     null,
   );
+  const [reasoningEffort, setReasoningEffortState] =
+    useState<ReasoningEffort>("medium");
+  const reasoningEffortRef = useRef<ReasoningEffort>("medium");
+  const getReasoningEffort = useCallback(() => reasoningEffortRef.current, []);
+  const setReasoningEffort = useCallback((value: ReasoningEffort) => {
+    reasoningEffortRef.current = value;
+    setReasoningEffortState(value);
+  }, []);
   const pendingRef = useRef(new Map<string, PendingResolver>());
 
   const { data: assistant, refetch } = useAssistantsGet(
-    { id: assistantId ?? "" },
+    { id: assistantId ?? "", gramProject: project.slug },
     undefined,
     {
       enabled: !!assistantId,
@@ -68,14 +73,17 @@ export function AssistantDraftProvider({
 
   const setAssistant = useCallback(
     (next: Assistant) => {
-      queryClient.setQueryData(queryKeyAssistantsGet({ id: next.id }), next);
+      queryClient.setQueryData(
+        queryKeyAssistantsGet({ id: next.id, gramProject: project.slug }),
+        next,
+      );
       setAssistantIdState((prev) => {
         if (prev === next.id) return prev;
         onAssistantCreated?.(next.id);
         return next.id;
       });
     },
-    [queryClient, onAssistantCreated],
+    [queryClient, onAssistantCreated, project.slug],
   );
 
   const invalidateAll = useCallback(() => {
@@ -124,6 +132,9 @@ export function AssistantDraftProvider({
 
   const value = useMemo<DraftContextValue>(
     () => ({
+      reasoningEffort,
+      getReasoningEffort,
+      setReasoningEffort,
       assistantId,
       setAssistantId,
       setAssistant,
@@ -137,6 +148,9 @@ export function AssistantDraftProvider({
       setAssistantEnv,
     }),
     [
+      reasoningEffort,
+      getReasoningEffort,
+      setReasoningEffort,
       assistantId,
       setAssistantId,
       setAssistant,

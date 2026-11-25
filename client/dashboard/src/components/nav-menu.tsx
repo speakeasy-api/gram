@@ -5,13 +5,14 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { cn } from "@/lib/utils";
-import { AppRoute } from "@/routes";
+import type { AppRoute } from "@/routes";
 import { ChevronRightIcon } from "lucide-react";
 import { motion } from "motion/react";
 import React from "react";
 import { Link } from "react-router";
 import { ProductTierBadge } from "./product-tier-badge";
-import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
+import type { ReleaseStage } from "./release-stage-badge";
+import { ReleaseStageMarker } from "./release-stage-badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 
@@ -35,6 +36,8 @@ type NavContextValue = {
   hoveredItem: string | null;
   setHoveredItem: (item: string | null) => void;
   activeItem: string | null;
+  /** The group containing the current route, for the active marker. */
+  activeGroup: string | null;
   registerRef: (id: string, el: HTMLElement | null) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
 };
@@ -46,6 +49,7 @@ const NavGroupContext = React.createContext<NavContextValue>({
   hoveredItem: null,
   setHoveredItem: () => {},
   activeItem: null,
+  activeGroup: null,
   registerRef: () => {},
   containerRef: { current: null },
 });
@@ -252,6 +256,7 @@ export function NavGroupProvider({
       hoveredItem,
       setHoveredItem,
       activeItem: resolvedActive,
+      activeGroup: activeGroup ?? null,
       registerRef,
       containerRef,
     }),
@@ -261,6 +266,7 @@ export function NavGroupProvider({
       openGroupFn,
       hoveredItem,
       resolvedActive,
+      activeGroup,
       registerRef,
     ],
   );
@@ -274,7 +280,7 @@ export function NavGroupProvider({
       >
         {highlightRect && (
           <motion.div
-            className="bg-card border-border pointer-events-none absolute border"
+            className="bg-card pointer-events-none absolute"
             animate={{
               top: highlightRect.top,
               left: highlightRect.left,
@@ -292,6 +298,24 @@ export function NavGroupProvider({
     </NavGroupContext.Provider>
   );
 }
+
+// There is one card on the list and it slides: it rests on the current page
+// and follows the pointer (`hoveredItem ?? resolvedActive`), so hovering reads
+// as "this one next", not as a second selection. The active item therefore
+// draws no ground of its own — two cards at once is the thing the slide is
+// meant to avoid — and says where you are with a rule instead, which the
+// moving card cannot take with it.
+//
+// Full height rather than a centred stub: it reads as the edge of the row,
+// and it lines up with the card whenever the card is resting on it.
+const ACTIVE_ITEM =
+  "text-foreground before:bg-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:content-['']";
+
+// The same marker, but only once the sidebar collapses to icons — where an
+// expanded group's leaves are hidden and it is the only thing that can say
+// where you are.
+const ACTIVE_MARKER_ICON_RAIL =
+  "group-data-[collapsible=icon]:before:bg-foreground group-data-[collapsible=icon]:before:absolute group-data-[collapsible=icon]:before:inset-y-0 group-data-[collapsible=icon]:before:left-0 group-data-[collapsible=icon]:before:w-0.5 group-data-[collapsible=icon]:before:content-['']";
 
 // ---------------------------------------------------------------------------
 // Hook for registering item ref + hover handlers
@@ -451,10 +475,11 @@ export function NavButton({
       target={target}
       onClick={handleClick}
       className={cn(
+        "focus-visible:ring-1 focus-visible:ring-[var(--border-focus)]",
         "relative z-1 flex w-full items-center gap-2 px-2 py-1.5 text-sm transition-colors hover:no-underline",
         "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
         active
-          ? "text-foreground font-semibold"
+          ? ACTIVE_ITEM
           : "text-muted-foreground hover:text-foreground font-medium",
       )}
     >
@@ -478,10 +503,10 @@ export function NavButton({
       </Text>
       {title === "Billing" && <ProductTierBadge />}
       {stage && (
-        <ReleaseStageBadge
+        <ReleaseStageMarker
           stage={stage}
-          noTooltip
-          className="group-data-[collapsible=icon]:hidden"
+          expanded={!!active}
+          className="ml-auto group-data-[collapsible=icon]:hidden"
         />
       )}
     </Link>
@@ -526,10 +551,15 @@ export function CollapsibleNavGroup({
   stage?: ReleaseStage;
   children: React.ReactNode;
 }): React.JSX.Element {
-  const { openGroups, toggleGroup, openGroup } =
+  const { openGroups, toggleGroup, openGroup, activeGroup } =
     React.useContext(NavGroupContext);
   const navItem = useNavItem(label);
   const isOpen = openGroups.has(label);
+  // isOpen is "accordion expanded", not "you are here" — several groups sit
+  // open at once, so keying the marker on it marked all of them. The group
+  // wears the marker only while its own leaf cannot: when it is collapsed,
+  // and in the icon rail, where every leaf is hidden.
+  const isActiveGroup = activeGroup === label;
 
   const handleClick = () => {
     if (!isOpen) {
@@ -557,6 +587,8 @@ export function CollapsibleNavGroup({
               isOpen
                 ? "text-foreground font-semibold"
                 : "text-muted-foreground hover:text-foreground font-medium",
+              isActiveGroup && !isOpen && ACTIVE_ITEM,
+              isActiveGroup && isOpen && ACTIVE_MARKER_ICON_RAIL,
             )}
           >
             <Icon
@@ -569,10 +601,10 @@ export function CollapsibleNavGroup({
               {label}
             </span>
             {stage && (
-              <ReleaseStageBadge
+              <ReleaseStageMarker
                 stage={stage}
-                noTooltip
-                className="transition-opacity duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:opacity-0"
+                expanded={isActiveGroup}
+                className="group-data-[collapsible=icon]:hidden"
               />
             )}
           </Link>
@@ -678,10 +710,21 @@ export function CollapsibleNavItem({
           to={item.href()}
           onClick={handleClick}
           className={cn(
+            // A hairline ring rather than the browser's fallback: without a
+            // ring class these rows take the 2px outline in App.css, which
+            // draws a black slab around the whole row and its badge.
+            "focus-visible:ring-1 focus-visible:ring-[var(--border-focus)]",
             "relative z-1 flex items-center gap-2 px-2 py-1 text-sm transition-colors hover:no-underline",
             item.active
-              ? "text-foreground font-semibold"
+              ? ACTIVE_ITEM
               : "text-muted-foreground hover:text-foreground",
+            // The active rule is centred on the group's 1px track: a 2px rule
+            // starts half a pixel left of the track. Rows sit 9px right of it
+            // (the track's 1px plus 8px padding). Active rows only: any
+            // `before:` utility gives the pseudo-element content, which on an
+            // inactive row lands in the flex flow and pushes the label right
+            // by the gap.
+            item.active && "before:-left-[9.5px]",
           )}
         >
           <span className={cn("truncate", isLoading && "nav-shimmer")}>
@@ -689,7 +732,11 @@ export function CollapsibleNavItem({
           </span>
           {item.title === "Billing" && <ProductTierBadge />}
           {(stage ?? item.stage) && (
-            <ReleaseStageBadge stage={(stage ?? item.stage)!} noTooltip />
+            <ReleaseStageMarker
+              stage={(stage ?? item.stage)!}
+              expanded={!!item.active}
+              className="ml-auto"
+            />
           )}
         </Link>
       </div>

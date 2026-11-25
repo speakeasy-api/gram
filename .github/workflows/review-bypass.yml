@@ -38,6 +38,13 @@ on:
 
 permissions: {}
 
+# Each reconcile run re-reads the PR's current labels and reviews, so a queued
+# one replaced by a newer one loses nothing. `closed` runs get their own group
+# so a later label event cannot replace the merge audit notification.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}-${{ github.event.action == 'closed' && 'closed' || 'reconcile' }}
+  cancel-in-progress: false
+
 jobs:
   reconcile:
     name: Reconcile bypass approval with label

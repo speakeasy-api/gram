@@ -1,10 +1,12 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"net/http"
@@ -22,36 +24,68 @@ import (
 	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
-	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/server/internal/trials"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 type Service struct {
+	catalogPromotion *catalogpromotion.Service
+	providerHealth   *mcpconnectionattempts.ProviderHealth
+	registry         *mcpregistry.Service
+	remoteSessions   *remotesessions.Service
+
+	// tailscaleOAuthMigration serves the temporary Tailscale OAuth client
+	// migration to organization keys; nil without organization encryption.
+	tailscaleOAuthMigration *TailscaleOAuthMigration
+	assets                  *assets.Service
+	mcpSourceStorage        blobio.Reader
+
+	// gcpIdentity screens and verifies platform external credentials. Nil
+	// leaves those methods unavailable.
+	gcpIdentity *gcpauth.Identity
+
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -63,34 +97,98 @@ type Service struct {
 	dashboardURL         *url.URL
 	supportHandoffIssuer supportHandoffIssuer
 
+	// mcpServerURL is the public Speakeasy server origin that platform-domain MCP
+	// URLs are built on. Nil leaves those URLs out.
+	mcpServerURL *url.URL
+
+	// workosEnvironmentID scopes WorkOS dashboard links. Empty leaves them out.
+	workosEnvironmentID string
+
+	// newOrganizationDefaultHost is recorded as the default host of
+	// organizations staff create. Null records none.
+	newOrganizationDefaultHost pgtype.Text
+
+	// staffOrg is the deployment's Speakeasy staff organization, whose
+	// OpenRouter keys bypass the tier credit limits.
+	staffOrg staff.Organization
+
+	// stripeDashboardBase roots Stripe dashboard links in the API key's mode.
+	// Empty leaves them out.
+	stripeDashboardBase string
+
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
-	workos orgprovision.WorkOSOrganizationCreator
+	workos orgprovision.WorkOSVerifiedDomainCreator
 
 	openRouter           TrialKeyReviver
 	openRouterSpendCap   OpenRouterSpendCapScheduler
 	openRouterUsage      OpenRouterUsageReader
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
+	// memoryEvalStarter starts team memory eval runs. Nil leaves
+	// startMemoryEvalRun unavailable.
+	memoryEvalStarter MemoryEvalRunStarter
+
+	// projectRedeployer redeploys projects. Nil when this server has no
+	// Temporal connection.
+	projectRedeployer ProjectRedeployer
+
+	// assistantIdentities provisions assistant agent identities. Nil when this
+	// server has no Speakeasy signing issuer configured.
+	assistantIdentities *assistantidentity.Service
 
 	audit *audit.Logger
 
 	trial   trialemails.Notifier
 	billing BillingOperations
+
+	supportCoverage SupportCoverageReader
+	mcpServerHealth MCPServerHealthReader
+
+	// scopes reads and writes remote MCP server scope pins.
+	scopes *remotemcp.StaffScopes
+	// HookClientsCache shares snapshot storage with the nightly worker.
+	*HookClientsCache
+
+	hookFleet         HookFleetReader
+	hookFleetVersions hookversions.Policy
+
+	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets. Empty leaves targets out of listCustomDomains.
+	customDomainTargetSuffix string
+
+	// orgEncryption reports and changes organization encryption transitions.
+	// Nil leaves those methods unavailable.
+	orgEncryption *OrganizationEncryption
 }
 
 type BillingOperations interface {
 	GetPaygBillingSummaryForOrganization(context.Context, string) (*usage.PaygBillingSummary, error)
+	GetMeterUsageForOrganization(context.Context, string, *usagegen.GetMeterUsagePayload) (*usagegen.MeterUsageResponse, error)
+	GetSpendBreakdownForOrganization(context.Context, string, *usagegen.GetSpendBreakdownPayload) (*usagegen.SpendBreakdownResponse, error)
+	// GetCustomerUsage reads usage for many organizations in one query, returning one entry per organization in request order.
+	GetCustomerUsage(context.Context, []usage.CustomerUsageOrganization, usage.CustomerUsageInterval) (*usage.CustomerUsageReport, error)
+	GetStripeCustomer(context.Context, string) (*stripeclient.CustomerDetails, error)
+	// GetStripeSubscriptionByID loads a live Stripe subscription to verify its identity.
+	// Pass stripeclient.RequireAdoptionEligibility for catalog validation when linking;
+	// omit it for tolerant reads of an existing linked subscription.
+	GetStripeSubscriptionByID(context.Context, string, ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error)
 	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
 	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
 
-// TrialKeyReviver is the OpenRouter surface a trial re-arm needs.
+// TrialKeyReviver is the OpenRouter surface used by admin key operations and
+// trial lifecycle replacement. The WithDB removal records local desired state
+// only; reconciliation happens after the business transaction commits.
 type TrialKeyReviver interface {
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 	ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+	RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error)
+	PrepareEnterpriseTrialConversionKeyWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, enterpriseFloor int64) (openrouter.EnterpriseTrialConversionKeyChange, error)
+	ReconcileAPIKeyDisabled(ctx context.Context, orgID string, keyType openrouter.KeyType) error
+	ReconcileAPIKeyConversionPolicy(ctx context.Context, orgID string, keyType openrouter.KeyType) error
 }
 
 type OpenRouterSpendCapScheduler interface {
@@ -119,8 +217,6 @@ func (ChatAnalysisTriggerUnavailable) Signal(context.Context, uuid.UUID) error {
 	return ErrChatAnalysisTriggerUnavailable
 }
 
-const keyBillingLockWaitTimeout = 5 * time.Second
-
 // TrialKeysUnavailable lets the admin server boot without OpenRouter.
 type TrialKeysUnavailable struct{}
 
@@ -134,6 +230,22 @@ func (TrialKeysUnavailable) ReinstateAPIKeyLimit(context.Context, string, openro
 
 func (TrialKeysUnavailable) ReinstateAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error) {
 	return 0, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) PrepareEnterpriseTrialConversionKeyWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64) (openrouter.EnterpriseTrialConversionKeyChange, error) {
+	return openrouter.EnterpriseTrialConversionKeyChange{}, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) ReconcileAPIKeyDisabled(context.Context, string, openrouter.KeyType) error {
+	return ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) ReconcileAPIKeyConversionPolicy(context.Context, string, openrouter.KeyType) error {
+	return ErrOpenRouterUnavailable
 }
 
 func (TrialKeysUnavailable) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
@@ -151,14 +263,18 @@ func NewService(
 	oidcClient *OIDCClient,
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
-	workosClient orgprovision.WorkOSOrganizationCreator,
+	workosClient orgprovision.WorkOSVerifiedDomainCreator,
 	openRouter AdminOpenRouter,
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
 	chatAnalysisSignaler analysis.Signaler,
 	openRouterSpendCap OpenRouterSpendCapScheduler,
 	billing BillingOperations,
+	supportCoverage SupportCoverageReader,
+	mcpServerHealth MCPServerHealthReader,
 	dashboardURL *url.URL,
+	registry *mcpregistry.Service,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -176,15 +292,16 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:         logger,
-		db:             db,
-		oidc:           oidcClient,
-		sessions:       sessionStore,
-		verifier:       NewVerifier(logger, sessionStore, oidcClient, adminCache),
-		allowedOrigins: allowedOrigins,
-		dashboardURL:   dashboardURL,
+	return &Service{orgEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
+		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:                     logger,
+		db:                         db,
+		oidc:                       oidcClient,
+		sessions:                   sessionStore,
+		verifier:                   NewVerifier(logger, sessionStore, oidcClient, adminCache),
+		allowedOrigins:             allowedOrigins,
+		dashboardURL:               dashboardURL,
 		supportHandoffIssuer: supporthandoff.NewIssuer(
 			supporthandoff.NewStore(adminCache),
 		),
@@ -194,67 +311,389 @@ func NewService(
 		openRouterUsage:      openRouter,
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,
+		memoryEvalStarter:    nil,
 		audit:                audit.NewLogger(),
+		scopes:               remotemcp.NewStaffScopes(logger, db, audit.NewLogger()),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:   trialNotifier,
-		billing: billing,
+		trial:                    trialNotifier,
+		billing:                  billing,
+		supportCoverage:          supportCoverage,
+		mcpServerHealth:          mcpServerHealth,
+		HookClientsCache:         NewHookClientsCache(logger, adminCache, nil, nil),
+		hookFleet:                nil,
+		hookFleetVersions:        hookversions.Policy{Latest: nil, Minimum: nil},
+		customDomainTargetSuffix: "",
+		staffOrg:                 staffOrg,
 	}
+}
+
+// SetNewOrganizationDefaultHost sets the default host recorded on
+// organizations staff create. Unset records none.
+func (s *Service) SetNewOrganizationDefaultHost(host pgtype.Text) {
+	s.newOrganizationDefaultHost = host
+}
+
+func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*gen.AdminSession, error) {
+	authCtx, ok := contextvalues.GetAdminAuthContext(ctx)
+	if !ok {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	return &gen.AdminSession{Email: authCtx.Email, Name: conv.PtrEmpty(authCtx.Name)}, nil
+}
+
+func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *gen.ProductFeatures {
+	return &gen.ProductFeatures{
+		LogsEnabled: snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled: snapshot.AuthzChallengeLoggingEnabled, SsoEnabled: snapshot.SsoEnabled, ScimEnabled: snapshot.ScimEnabled,
+		HooksBrowserLoginEnabled: snapshot.HooksBrowserLoginEnabled, HooksFailOpenEnabled: snapshot.HooksFailOpenEnabled,
+		CustomModelKeysEnabled: snapshot.CustomModelKeysEnabled, SkillsEnabled: snapshot.SkillsEnabled, SkillCaptureMetadataOnly: snapshot.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled: snapshot.AiPlatformPushIntegrationsEnabled, PlatformMcpEnabled: snapshot.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled: snapshot.CustomerManagedEncryptionKeysEnabled, RemoteSessionAutoRefreshEnabled: snapshot.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled,
+		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
+		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
+		CodeModeEnabled: snapshot.CodeModeEnabled, DeviceAgent: snapshot.DeviceAgent,
+		// Deployment-wide settings, not part of an organization's features.
+		AssistantsAvailable: nil,
+		FunctionsAvailable:  nil,
+		// Staff read enforcement through the upstream auth enforcement status.
+		UpstreamAuthEnforced: nil,
+	}
+}
+
+func (s *Service) GetOrganizationFeatures(ctx context.Context, payload *gen.GetOrganizationFeaturesPayload) (*gen.ProductFeatures, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
+}
+
+// GetOrganizationFeaturesStrict is the staff MCP read path. An incomplete flag
+// lookup must not be reported as a set of disabled entitlements.
+func (s *Service) GetOrganizationFeaturesStrict(ctx context.Context, organizationID string) (*gen.ProductFeatures, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := s.productFeatures.SnapshotStrict(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("read organization features: %w", err)
+	}
+	return productFeaturesResult(snapshot), nil
+}
+
+func (s *Service) SetOrganizationFeature(ctx context.Context, payload *gen.SetOrganizationFeaturePayload) (*gen.ProductFeatures, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	actor, displayName, _ := adminActor(ctx)
+	mutator := productfeatures.NewMutator(s.productFeatures, s.audit)
+	feature := productfeatures.Feature(payload.FeatureName)
+	mutationActor := productfeatures.MutationActor{Principal: actor, DisplayName: displayName, Slug: nil}
+	if feature == productfeatures.FeatureRemoteSessionAutoRefresh {
+		err = mutator.SetRemoteSessionAutoRefreshEnabled(ctx, organizationID, payload.Enabled, mutationActor)
+	} else {
+		err = mutator.SetFeature(ctx, organizationID, feature, payload.Enabled, mutationActor)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("set organization feature: %w", err)
+	}
+	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
+}
+
+func chatAnalysisSettingsResult(settings chatanalysis.Settings) *gen.AdminChatAnalysisSettings {
+	return &gen.AdminChatAnalysisSettings{
+		OrganizationID: settings.OrganizationID, WorkUnitsEnabled: settings.WorkUnitsEnabled, WorkUnitsDailyCap: settings.WorkUnitsDailyCap,
+		BusinessMemoryEnabled: settings.BusinessMemoryEnabled, BusinessMemoryDailyCap: settings.BusinessMemoryDailyCap, IsDefault: settings.IsDefault,
+	}
+}
+
+func (s *Service) GetOrganizationChatAnalysisSettings(ctx context.Context, payload *gen.GetOrganizationChatAnalysisSettingsPayload) (*gen.AdminChatAnalysisSettings, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	settings, err := chatanalysis.LoadSettings(ctx, s.db, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat analysis settings").LogError(ctx, s.logger)
+	}
+	return chatAnalysisSettingsResult(settings), nil
+}
+
+func (s *Service) SetOrganizationChatAnalysisSettings(ctx context.Context, payload *gen.SetOrganizationChatAnalysisSettingsPayload) (*gen.AdminChatAnalysisSettings, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	actor, displayName, operatorEmail := adminActor(ctx)
+	settings, err := chatanalysis.UpsertSettings(ctx, s.db, s.audit, organizationID, payload.Judge, payload.Enabled, payload.DailyCap, actor, displayName)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "update chat analysis settings").LogError(ctx, s.logger)
+	}
+	s.logger.InfoContext(ctx, "updated chat analysis settings", attr.SlogOrganizationID(organizationID), attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")))
+	return chatAnalysisSettingsResult(settings), nil
+}
+
+func (s *Service) TriggerOrganizationChatAnalysis(ctx context.Context, payload *gen.TriggerOrganizationChatAnalysisPayload) (*gen.AdminChatAnalysisTriggerResult, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	projectsSignaled, err := chatanalysis.TriggerOrganization(ctx, s.db, s.chatAnalysisSignaler, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "trigger chat analysis").LogError(ctx, s.logger)
+	}
+	_, _, operatorEmail := adminActor(ctx)
+	s.logger.InfoContext(ctx, "triggered chat analysis", attr.SlogOrganizationID(organizationID), attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")))
+	return &gen.AdminChatAnalysisTriggerResult{ProjectsSignaled: projectsSignaled}, nil
+}
+
+func (s *Service) OpenOrganizationInDashboard(ctx context.Context, payload *gen.OpenOrganizationInDashboardPayload) (*gen.AdminDashboardRedirect, error) {
+	organizationID := strings.TrimSpace(payload.OrganizationID)
+	if organizationID == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "organization_id is required")
+	}
+	if s.dashboardURL == nil || s.dashboardURL.Scheme == "" || s.dashboardURL.Host == "" {
+		return nil, oops.E(oops.CodeUnexpected, nil, "dashboard URL is not configured").LogError(ctx, s.logger)
+	}
+	organization, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load support target").LogError(ctx, s.logger)
+	}
+	if organization.DisabledAt.Valid {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	token, err := s.supportHandoffIssuer.Issue(ctx, organization.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "issue support handoff").LogError(ctx, s.logger)
+	}
+	query := url.Values{}
+	query.Set("support_handoff", token)
+	query.Set("redirect", "/"+organization.Slug)
+	destination := url.URL{Scheme: s.dashboardURL.Scheme, Host: s.dashboardURL.Host, Path: "/rpc/auth.login", RawQuery: query.Encode()}
+	return &gen.AdminDashboardRedirect{Location: destination.String(), CacheControl: "no-store"}, nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	// Goa lazily assigns a nil error formatter inside a shared request closure.
+	// Supply its default eagerly so concurrent error responses do not race.
+	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, goahttp.NewErrorResponse)
+	server.Callback = scopeMCPAdminCookie(server.Callback)
+	server.ListOrganizations = service.rejectEmptyOrganizationStatus(server.ListOrganizations)
+	server.GetSession = service.preauthorizeAdmin(server.GetSession)
+	server.GetOrganizationOnboardingStack = service.preauthorizeAdmin(server.GetOrganizationOnboardingStack)
+	server.SetOrganizationOnboardingStack = service.strictAdminJSON(server.SetOrganizationOnboardingStack, func() any { return new(adminserver.SetOrganizationOnboardingStackRequestBody) })
+	server.GetOnboardingStackOptions = service.preauthorizeAdmin(server.GetOnboardingStackOptions)
+	server.ListOnboardingSteps = service.preauthorizeAdmin(server.ListOnboardingSteps)
+	server.ListOnboardingUseCases = service.preauthorizeAdmin(server.ListOnboardingUseCases)
+	server.CreateOnboardingUseCase = service.strictAdminJSON(server.CreateOnboardingUseCase, func() any { return new(adminserver.CreateOnboardingUseCaseRequestBody) })
+	server.UpdateOnboardingUseCase = service.strictAdminJSON(server.UpdateOnboardingUseCase, func() any { return new(adminserver.UpdateOnboardingUseCaseRequestBody) })
+	server.DeleteOnboardingUseCase = service.strictAdminJSON(server.DeleteOnboardingUseCase, func() any { return new(adminserver.DeleteOnboardingUseCaseRequestBody) })
+	server.ListOnboardingPlaybooks = service.preauthorizeAdmin(server.ListOnboardingPlaybooks)
+	server.CreateOnboardingPlaybook = service.strictAdminJSON(server.CreateOnboardingPlaybook, func() any { return new(adminserver.CreateOnboardingPlaybookRequestBody) })
+	server.UpdateOnboardingPlaybook = service.strictAdminJSON(server.UpdateOnboardingPlaybook, func() any { return new(adminserver.UpdateOnboardingPlaybookRequestBody) })
+	server.DeleteOnboardingPlaybook = service.strictAdminJSON(server.DeleteOnboardingPlaybook, func() any { return new(adminserver.DeleteOnboardingPlaybookRequestBody) })
+	server.CloneOnboardingPlaybook = service.strictAdminJSON(server.CloneOnboardingPlaybook, func() any { return new(adminserver.CloneOnboardingPlaybookRequestBody) })
+	server.GetOrganizationOnboardingPlaybook = service.preauthorizeAdmin(server.GetOrganizationOnboardingPlaybook)
+	server.AssignOrganizationOnboardingPlaybook = service.strictAdminJSON(server.AssignOrganizationOnboardingPlaybook, func() any { return new(adminserver.AssignOrganizationOnboardingPlaybookRequestBody) })
+	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
+	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
+	server.GetStripeCustomer = service.preauthorizeAdmin(server.GetStripeCustomer)
+	server.GetMeterUsage = service.preauthorizeAdmin(server.GetMeterUsage)
+	server.GetSpendBreakdown = service.preauthorizeAdmin(server.GetSpendBreakdown)
+	server.ListCustomerUsage = service.preauthorizeAdmin(server.ListCustomerUsage)
+	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
+	server.GetMemoryEvalOptions = service.preauthorizeAdmin(server.GetMemoryEvalOptions)
+	server.ListMemoryEvalRuns = service.preauthorizeAdmin(server.ListMemoryEvalRuns)
+	server.GetMemoryEvalRun = service.preauthorizeAdmin(server.GetMemoryEvalRun)
+	server.StartMemoryEvalRun = service.strictAdminJSON(server.StartMemoryEvalRun, func() any { return new(adminserver.StartMemoryEvalRunRequestBody) })
+	server.GetHooksRollout = service.preauthorizeAdmin(server.GetHooksRollout)
+	server.GetOrganizationHooksRollout = service.preauthorizeAdmin(server.GetOrganizationHooksRollout)
+	server.SetHooksRolloutDefault = service.strictAdminJSON(server.SetHooksRolloutDefault, func() any { return new(adminserver.SetHooksRolloutDefaultRequestBody) })
+	server.SetOrganizationHooksRollout = service.strictAdminJSON(server.SetOrganizationHooksRollout, func() any { return new(adminserver.SetOrganizationHooksRolloutRequestBody) })
+	server.ClearOrganizationHooksRollout = service.strictAdminJSON(server.ClearOrganizationHooksRollout, func() any { return new(adminserver.ClearOrganizationHooksRolloutRequestBody) })
+	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
+	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
+	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
+	server.SetAdoptionDashboardURL = service.strictAdminJSON(server.SetAdoptionDashboardURL, func() any { return new(adminserver.SetAdoptionDashboardURLRequestBody) })
+	server.GetStripeSubscriptionCandidate = service.preauthorizeAdmin(server.GetStripeSubscriptionCandidate)
+	server.SetStripeSubscription = service.strictAdminJSON(server.SetStripeSubscription, func() any { return new(adminserver.SetStripeSubscriptionRequestBody) })
+	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
+	server.CreateGlobalIssuer = service.strictAdminJSON(server.CreateGlobalIssuer, func() any { return new(adminserver.CreateGlobalIssuerRequestBody) })
+	server.GetGlobalIssuerDuplicatePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerDuplicatePreflight)
+	server.ListGlobalIssuers = service.preauthorizeAdmin(server.ListGlobalIssuers)
+	server.GetGlobalIssuer = service.preauthorizeAdmin(server.GetGlobalIssuer)
+	server.UpdateGlobalIssuer = service.strictAdminJSON(server.UpdateGlobalIssuer, func() any { return new(adminserver.UpdateGlobalIssuerRequestBody) })
+	server.DeleteGlobalIssuer = service.preauthorizeAdmin(server.DeleteGlobalIssuer)
+	server.FetchGlobalIssuerMetadata = service.strictAdminJSON(server.FetchGlobalIssuerMetadata, func() any { return new(adminserver.FetchGlobalIssuerMetadataRequestBody) })
+	server.RefreshGlobalIssuerMetadata = service.strictAdminJSON(server.RefreshGlobalIssuerMetadata, func() any { return new(adminserver.RefreshGlobalIssuerMetadataRequestBody) })
+	server.ListGlobalIssuerConvergenceCandidates = service.preauthorizeAdmin(server.ListGlobalIssuerConvergenceCandidates)
+	server.GetGlobalIssuerMigratePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerMigratePreflight)
+	server.MigrateToGlobalIssuer = service.strictAdminJSON(server.MigrateToGlobalIssuer, func() any { return new(adminserver.MigrateToGlobalIssuerRequestBody) })
+	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
+	server.ListRegistryEntries = service.preauthorizeAdmin(server.ListRegistryEntries)
+	server.GetRegistryEntry = service.preauthorizeAdmin(server.GetRegistryEntry)
+	server.ListRegistryPromotionCandidates = service.preauthorizeAdmin(server.ListRegistryPromotionCandidates)
+	server.GetRegistryPromotionCandidate = service.strictAdminJSON(server.GetRegistryPromotionCandidate, func() any { return new(adminserver.GetRegistryPromotionCandidateRequestBody) })
+	server.RetryRegistryPromotionDocs = service.strictAdminJSON(server.RetryRegistryPromotionDocs, func() any { return new(adminserver.RetryRegistryPromotionDocsRequestBody) })
+	server.CurateRegistryPromotionCandidate = service.strictAdminJSON(server.CurateRegistryPromotionCandidate, func() any { return new(adminserver.CurateRegistryPromotionCandidateRequestBody) })
+	server.PromoteRegistryCandidate = service.strictAdminJSON(server.PromoteRegistryCandidate, func() any { return new(adminserver.PromoteRegistryCandidateRequestBody) })
+	server.CreateRegistryEntry = service.strictAdminJSONLimit(server.CreateRegistryEntry, func() any { return new(adminserver.CreateRegistryEntryRequestBody) }, 16<<20)
+	server.SaveRegistryEntry = service.strictAdminJSONLimit(server.SaveRegistryEntry, func() any { return new(adminserver.SaveRegistryEntryRequestBody) }, 16<<20)
+	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
+	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
+	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
+	server.SetMcpServerScopePin = service.strictAdminJSON(server.SetMcpServerScopePin, func() any { return new(adminserver.SetMcpServerScopePinRequestBody) })
+	server.CreateSignupOffer = service.strictAdminJSON(server.CreateSignupOffer, func() any { return new(adminserver.CreateSignupOfferRequestBody) })
+	server.UpdateSignupOffer = service.strictAdminJSON(server.UpdateSignupOffer, func() any { return new(adminserver.UpdateSignupOfferRequestBody) })
+	server.ListUpstreamOAuthMigrationOrganizations = service.preauthorizeAdmin(server.ListUpstreamOAuthMigrationOrganizations)
+	server.GetUpstreamOAuthMigrationStatus = service.preauthorizeAdmin(server.GetUpstreamOAuthMigrationStatus)
+	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
+	server.EnableUpstreamAuthEnforcement = service.strictAdminJSON(server.EnableUpstreamAuthEnforcement, func() any { return new(adminserver.EnableUpstreamAuthEnforcementRequestBody) })
+	server.DisableUpstreamAuthEnforcement = service.strictAdminJSON(server.DisableUpstreamAuthEnforcement, func() any { return new(adminserver.DisableUpstreamAuthEnforcementRequestBody) })
+	server.ListPlatformExternalCredentials = service.preauthorizeAdmin(server.ListPlatformExternalCredentials)
+	server.GetGcpIamPlatformCredential = service.preauthorizeAdmin(server.GetGcpIamPlatformCredential)
+	server.CreateGcpIamPlatformCredential = service.strictAdminJSON(server.CreateGcpIamPlatformCredential, func() any { return new(adminserver.CreateGcpIamPlatformCredentialRequestBody) })
+	server.UpdateGcpIamPlatformCredential = service.strictAdminJSON(server.UpdateGcpIamPlatformCredential, func() any { return new(adminserver.UpdateGcpIamPlatformCredentialRequestBody) })
+	server.VerifyGcpIamPlatformCredential = service.strictAdminJSON(server.VerifyGcpIamPlatformCredential, func() any { return new(adminserver.VerifyGcpIamPlatformCredentialRequestBody) })
+	server.DeleteGcpIamPlatformCredential = service.strictAdminJSON(server.DeleteGcpIamPlatformCredential, func() any { return new(adminserver.DeleteGcpIamPlatformCredentialRequestBody) })
+	server.ListAssistantOrganizations = service.preauthorizeAdmin(server.ListAssistantOrganizations)
+	server.RepairOrganizationAssistantAgentNames = service.strictAdminJSON(server.RepairOrganizationAssistantAgentNames, func() any { return new(adminserver.RepairOrganizationAssistantAgentNamesRequestBody) })
+	server.ListOrganizationAssistants = service.preauthorizeAdmin(server.ListOrganizationAssistants)
+	server.MigrateOrganizationAssistantIdentities = service.strictAdminJSON(server.MigrateOrganizationAssistantIdentities, func() any { return new(adminserver.MigrateOrganizationAssistantIdentitiesRequestBody) })
+	server.MigrateOrganizationAssistantsToKit = service.strictAdminJSON(server.MigrateOrganizationAssistantsToKit, func() any { return new(adminserver.MigrateOrganizationAssistantsToKitRequestBody) })
+	server.GetOrganizationEncryption = service.preauthorizeAdmin(server.GetOrganizationEncryption)
+	server.ListOrganizationEncryptionTransitions = service.preauthorizeAdmin(server.ListOrganizationEncryptionTransitions)
+	server.EnrollOrganizationEncryption = service.strictAdminJSON(server.EnrollOrganizationEncryption, func() any { return new(adminserver.EnrollOrganizationEncryptionRequestBody) })
+	server.RollbackOrganizationEncryption = service.strictAdminJSON(server.RollbackOrganizationEncryption, func() any { return new(adminserver.RollbackOrganizationEncryptionRequestBody) })
+	server.RunOrganizationEncryption = service.strictAdminJSON(server.RunOrganizationEncryption, func() any { return new(adminserver.RunOrganizationEncryptionRequestBody) })
+	server.FinalizeOrganizationEncryption = service.strictAdminJSON(server.FinalizeOrganizationEncryption, func() any { return new(adminserver.FinalizeOrganizationEncryptionRequestBody) })
+	adminserver.Mount(mux, server)
+	mux.Handle(http.MethodGet, "/admin/mcpServerSources", service.mcpServerSourcesHandler(false).ServeHTTP)
+	mux.Handle(http.MethodGet, "/admin/mcpServerSourceDownload", service.mcpServerSourcesHandler(true).ServeHTTP)
 
-	// See sessionInfo in session_handler.go and adminOrganizationFeatures in
-	// features_handler.go for why these routes are hand written rather than
-	// generated from the Goa design.
-	mux.Handle(
-		http.MethodGet,
-		"/admin/session.get",
-		oops.ErrHandle(service.logger, service.handleGetSession).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodGet,
-		"/admin/organization.features",
-		oops.ErrHandle(service.logger, service.handleGetOrganizationFeatures).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.features",
-		oops.ErrHandle(service.logger, service.handleSetOrganizationFeature).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodGet,
-		"/admin/organization.chatAnalysisSettings",
-		oops.ErrHandle(service.logger, service.handleGetChatAnalysisSettings).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.chatAnalysisSettings",
-		oops.ErrHandle(service.logger, service.handleSetChatAnalysisSettings).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.chatAnalysisTrigger",
-		oops.ErrHandle(service.logger, service.handleTriggerChatAnalysis).ServeHTTP,
-	)
-	mux.Handle(
-		http.MethodPost,
-		"/admin/organization.open-dashboard",
-		oops.ErrHandle(service.logger, service.handleOpenOrganizationInDashboard).ServeHTTP,
-	)
 }
 
+// Keep the dashboard's /admin session cookie unchanged. A successful MCP
+// login also needs the same session on /admin-mcp for browser consent. A
+// dashboard login clears any older MCP-scoped browser cookie.
+func scopeMCPAdminCookie(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(&adminCallbackWriter{ResponseWriter: w}, r)
+	})
+}
+
+type adminCallbackWriter struct{ http.ResponseWriter }
+
+func (w *adminCallbackWriter) WriteHeader(status int) {
+	if status == http.StatusTemporaryRedirect {
+		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct_v5 // Only response headers are needed to parse cookies.
+			if cookie.Name != constants.AdminSessionCookie || cookie.Value == "" {
+				continue
+			}
+			mcpCookie := &http.Cookie{ //nolint:exhaustruct_v5 // No Domain so middleware controls cookie sharing.
+				Name:     constants.AdminSessionCookie,
+				Path:     "/admin-mcp",
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			}
+			location := w.Header().Get("Location")
+			if strings.HasPrefix(location, "/admin-mcp/connect?state=") {
+				mcpCookie.Value = cookie.Value
+			} else {
+				mcpCookie.MaxAge = -1
+			}
+			http.SetCookie(w.ResponseWriter, mcpCookie)
+			break
+		}
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+// Goa's optional string query decoder treats present-but-empty values as absent,
+// before enum validation. Keep that distinction for this status parameter only;
+// omission is unrestricted, but an explicit empty value is not a valid status.
+func (s *Service) rejectEmptyOrganizationStatus(next http.Handler) http.Handler {
+	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
+		query := r.URL.Query()
+		if query.Has("disabled_status") && query.Get("disabled_status") == "" {
+			return oops.E(oops.CodeInvalid, nil, "disabled_status must be all, active, or disabled")
+		}
+		next.ServeHTTP(w, r)
+		return nil
+	})
+}
+
+type adminPreauthorizedKey struct{}
+
+func markAdminPreauthorized(ctx context.Context) context.Context {
+	return context.WithValue(ctx, adminPreauthorizedKey{}, true)
+}
+
+func (s *Service) preauthorizeAdmin(next http.Handler) http.Handler {
+	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
+		ctx, err := s.authorizeAdminRequest(r)
+		if err != nil {
+			return err
+		}
+		next.ServeHTTP(w, r.WithContext(markAdminPreauthorized(ctx)))
+		return nil
+	})
+}
+
+const maxAdminJSONBodyBytes = 1 << 20
+
+func (s *Service) strictAdminJSON(next http.Handler, body func() any) http.Handler {
+	return s.strictAdminJSONLimit(next, body, maxAdminJSONBodyBytes)
+}
+
+func (s *Service) strictAdminJSONLimit(next http.Handler, body func() any, maxBytes int64) http.Handler {
+	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
+		ctx, err := s.authorizeAdminRequest(r)
+		if err != nil {
+			return err
+		}
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBytes))
+		if err != nil {
+			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+				return oops.E(oops.CodeRequestTooLarge, err, "read admin request body")
+			}
+			return oops.E(oops.CodeBadRequest, err, "read admin request body")
+		}
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(body()); err != nil {
+			return oops.E(oops.CodeBadRequest, err, "decode admin request body")
+		}
+		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+			return oops.E(oops.CodeBadRequest, err, "decode admin request body")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		next.ServeHTTP(w, r.WithContext(markAdminPreauthorized(ctx)))
+		return nil
+	})
+}
+
+// Verifier exposes the live staff session verifier to the admin-only MCP transport.
+func (s *Service) Verifier() *Verifier { return s.verifier }
+
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	if preauthorized, _ := ctx.Value(adminPreauthorizedKey{}).(bool); preauthorized {
+		return ctx, nil
+	}
 	ctx, err := s.verifier.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, fmt.Errorf("admin auth: %w", err)
@@ -447,13 +886,24 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.C(oops.CodeNotFound)
 	}
 
-	return adminProjectDetailFromIDRow(row), nil
+	detail := adminProjectDetailFromIDRow(row)
+	activeDeploymentID, err := deploymentsrepo.New(s.db).GetActiveDeploymentID(ctx, row.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup active deployment").LogError(ctx, s.logger)
+	default:
+		detail.ActiveDeploymentID = new(activeDeploymentID.String())
+	}
+
+	return detail, nil
 }
 
 func adminProjectDetailFromIDRow(row repo.AdminGetProjectDetailByIDRow) *gen.AdminProjectDetail {
 	logo := uuidPtr(row.LogoAssetID)
 	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
 	return &gen.AdminProjectDetail{
+		ActiveDeploymentID:     nil,
 		ID:                     row.ID.String(),
 		Name:                   row.Name,
 		Slug:                   row.Slug,
@@ -487,49 +937,36 @@ const (
 // The columns the ORDER BY ladder in AdminListOrganizations knows. The opaque
 // ids are absent on purpose: an order built from them tells an operator nothing.
 //
-// This map cannot widen what the ladder accepts. The ladder matches these seven
-// literals and nothing else, so an unrecognised sort key collapses to the
-// tiebreaker with or without the check here. It is defense in depth, and the one
+// This map cannot widen what the ladder accepts. The ladder matches these eight
+// literals and nothing else. Unknown keys use the newest-first default below.
+// This is defense in depth, and the one
 // place a reader can see the accepted set without reading the SQL.
 var listOrganizationsSortColumns = map[string]bool{
 	"name":          true,
 	"slug":          true,
 	"account_type":  true,
+	"account_tier":  true,
 	"member_count":  true,
 	"created_at":    true,
 	"disabled_at":   true,
 	"trial_ends_at": true,
 }
 
-// listOrganizationsFilters resolves the two set filters the SQL takes from the
-// four the payload offers. The scalar account_type and the include_disabled
-// boolean predate the sets and stay live, because this endpoint keeps serving
-// the dashboard that is on main until AGE-3207 retires them.
-//
-// Unknown values pass straight through to match nothing. An organization can
-// carry an account type from outside the list the dashboard knows, and an
-// operator pasting a colleague's URL is owed an empty table rather than a 422.
-func listOrganizationsFilters(payload *gen.ListOrganizationsPayload) (accountTypes []string, disabledStates []string) {
-	// Union, not override: a caller supplying both asks for both.
-	accountTypes = payload.AccountTypes
+// listOrganizationsFilters unions the legacy scalar account type with the set.
+// Unknown account types continue to match nothing.
+func listOrganizationsFilters(payload *gen.ListOrganizationsPayload) []string {
+	accountTypes := payload.AccountTypes
 	if payload.AccountType != nil {
 		accountTypes = append(append([]string{}, accountTypes...), *payload.AccountType)
 	}
-
-	// disabled_states overrides the boolean outright. The boolean only picks the
-	// fallback, and these two literals are the arms of the CASE in both queries.
-	disabledStates = payload.DisabledStates
-	if len(disabledStates) == 0 {
-		disabledStates = []string{"active"}
-		if conv.PtrValOr(payload.IncludeDisabled, false) {
-			disabledStates = append(disabledStates, "disabled")
-		}
-	}
-
-	return accountTypes, disabledStates
+	return accountTypes
 }
 
 func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrganizationsPayload) (*gen.AdminListOrganizationsResult, error) {
+	bounds, err := listOrganizationsBounds(payload)
+	if err != nil {
+		return nil, err
+	}
 	queries := repo.New(s.db)
 
 	limit := int32(listOrganizationsDefaultLimit)
@@ -551,15 +988,15 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	// An unknown sort key falls back to the default order instead of failing: the
 	// value comes from a URL operators paste to each other, and a typo should not
 	// break the page.
-	sortBy := ""
+	sortBy, sortDir := "created_at", "desc"
 	if payload.Sort != nil {
 		if key := strings.ToLower(*payload.Sort); listOrganizationsSortColumns[key] {
 			sortBy = key
+			sortDir = "asc"
+			if payload.Direction != nil && strings.EqualFold(*payload.Direction, "desc") {
+				sortDir = "desc"
+			}
 		}
-	}
-	sortDir := "asc"
-	if payload.Direction != nil && strings.EqualFold(*payload.Direction, "desc") {
-		sortDir = "desc"
 	}
 
 	var afterID pgtype.Text
@@ -573,7 +1010,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		fetchLimit = limit + 1
 	}
 
-	accountTypes, disabledStates := listOrganizationsFilters(payload)
+	accountTypes := listOrganizationsFilters(payload)
 
 	// Trimmed once for both queries. A pasted id commonly arrives with the
 	// newline that ended the line it was copied from, and no arm matches through
@@ -585,7 +1022,11 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		Q:              searchTerm,
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
-		DisabledStates: disabledStates,
+		DisabledStatus: bounds.disabledStatus,
+		MinMembers:     bounds.minMembers,
+		MaxMembers:     bounds.maxMembers,
+		CreatedAtGte:   bounds.createdAtGte,
+		CreatedAtLt:    bounds.createdAtLt,
 		AfterID:        afterID,
 		SortBy:         sortBy,
 		SortDir:        sortDir,
@@ -603,7 +1044,11 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		Q:              searchTerm,
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
-		DisabledStates: disabledStates,
+		DisabledStatus: bounds.disabledStatus,
+		MinMembers:     bounds.minMembers,
+		MaxMembers:     bounds.maxMembers,
+		CreatedAtGte:   bounds.createdAtGte,
+		CreatedAtLt:    bounds.createdAtLt,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count organizations").LogError(ctx, s.logger)
@@ -618,7 +1063,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 
 	orgs := make([]*gen.AdminOrganization, len(rows))
 	for i := range rows {
-		orgs[i] = adminOrganizationFromRow(rows[i])
+		orgs[i] = s.adminOrganizationFromRow(rows[i])
 	}
 
 	return &gen.AdminListOrganizationsResult{
@@ -715,45 +1160,85 @@ func (s *Service) ListOrganizationProjects(ctx context.Context, payload *gen.Lis
 }
 
 func (s *Service) ListOrganizationActivity(ctx context.Context, payload *gen.ListOrganizationActivityPayload) (*gen.AdminListOrganizationActivityResult, error) {
+	return s.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{
+		OrganizationID: payload.OrganizationID, Cursor: payload.Cursor,
+		ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorID: nil, Action: nil,
+		SubjectType: nil, SubjectID: nil, ActingSurface: nil, From: nil, To: nil,
+	})
+}
+
+func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter OrganizationActivityFilter) (*gen.AdminListOrganizationActivityResult, error) {
 	_, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID: payload.OrganizationID, AllowSlug: false,
+		ID: filter.OrganizationID, AllowSlug: false,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization for activity").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization for activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+	}
+	if filter.ProjectID.Valid {
+		belongs, err := repo.New(s.db).AdminAuditProjectBelongsToOrganization(ctx, repo.AdminAuditProjectBelongsToOrganizationParams{
+			ProjectID: filter.ProjectID.UUID, OrganizationID: filter.OrganizationID,
+		})
+		switch {
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "lookup activity project organization").LogError(ctx, s.logger)
+		case !belongs:
+			return nil, oops.C(oops.CodeNotFound)
+		}
+	}
+	if filter.From != nil && filter.To != nil && !filter.From.Before(*filter.To) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "from must be before to")
 	}
 
 	params := auditrepo.ListAuditLogsParams{
-		OrganizationID:         payload.OrganizationID,
-		ProjectID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:         filter.OrganizationID,
+		ProjectID:              filter.ProjectID,
 		CursorSeq:              pgtype.Int8{Int64: 0, Valid: false},
-		ActorID:                pgtype.Text{String: "", Valid: false},
-		Action:                 pgtype.Text{String: "", Valid: false},
-		SubjectType:            pgtype.Text{String: "", Valid: false},
+		ActorID:                conv.PtrToPGTextEmpty(filter.ActorID),
+		Action:                 conv.PtrToPGTextEmpty(filter.Action),
+		SubjectType:            conv.PtrToPGTextEmpty(filter.SubjectType),
 		IncludeAssistantEvents: true,
-		SubjectID:              pgtype.Text{String: "", Valid: false},
+		IncludeInternalEvents:  true,
+		SubjectID:              conv.PtrToPGTextEmpty(filter.SubjectID),
 		SubjectIds:             nil,
-		ActingSurface:          pgtype.Text{String: "", Valid: false},
+		ActingSurface:          conv.PtrToPGTextEmpty(filter.ActingSurface),
+		Origin:                 pgtype.Text{String: "", Valid: false},
+		CreatedFrom:            conv.PtrToPGTimestamptz(filter.From),
+		CreatedTo:              conv.PtrToPGTimestamptz(filter.To),
 	}
-	if payload.Cursor != nil && *payload.Cursor != "" {
-		seq, err := audit.DecodeCursor(*payload.Cursor)
+	var cursor activityCursor
+	if filter.Cursor != nil && *filter.Cursor != "" {
+		cursor, err = decodeActivityCursor(*filter.Cursor)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogWarn(ctx, s.logger)
 		}
-		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
 	}
 
-	rows, err := auditrepo.New(s.db).ListAuditLogs(ctx, params)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization activity").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+	// Staff read the configuration and security logs as one timeline. Each log
+	// pages by its own seq, so the cursor carries a position in each.
+	var configuration, security []auditrepo.ListAuditLogsRow
+	if !cursor.configuration.done {
+		params.CursorSeq = cursor.configuration.seq
+		configuration, err = auditrepo.New(s.db).ListAuditLogs(ctx, params)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list organization activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+		}
+	}
+	if !cursor.security.done {
+		params.CursorSeq = cursor.security.seq
+		security, err = securityevent.List(ctx, s.db, params)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list organization security activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+		}
 	}
 
 	const pageSize = 50
-	logs := make([]*gen.AuditLog, 0, min(len(rows), pageSize))
-	for _, row := range rows[:min(len(rows), pageSize)] {
-		log, err := adminActivityLog(row)
+	page, next := mergeActivity(configuration, security, cursor, pageSize)
+	logs := make([]*gen.AdminAuditLog, 0, len(page))
+	for _, entry := range page {
+		log, err := adminActivityLog(entry.row, entry.category)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build organization activity response").LogError(ctx, s.logger)
 		}
@@ -761,15 +1246,14 @@ func (s *Service) ListOrganizationActivity(ctx context.Context, payload *gen.Lis
 	}
 
 	var nextCursor *string
-	if len(rows) > pageSize {
-		cursor := audit.EncodeCursor(rows[pageSize-1].Seq, rows[pageSize-1].ID.String())
-		nextCursor = &cursor
+	if next != nil {
+		nextCursor = new(next.encode())
 	}
 
 	return &gen.AdminListOrganizationActivityResult{Logs: logs, NextCursor: nextCursor}, nil
 }
 
-func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
+func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (*gen.AdminAuditLog, error) {
 	var metadata map[string]any
 	if len(row.Metadata) > 0 {
 		var decoded any
@@ -779,7 +1263,13 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		metadata, _ = decoded.(map[string]any)
 	}
 
-	actorDisplayName := conv.FromPGText[string](row.ActorDisplayName)
+	// Directory name first, matching the audit feed: every writer stores the
+	// acting user's email, so the stored value renders this list as a column
+	// of addresses. Actors with no directory row keep what was stored.
+	actorDisplayName := conv.FromPGText[string](row.ActorUserDisplayName)
+	if actorDisplayName == nil || *actorDisplayName == "" {
+		actorDisplayName = conv.FromPGText[string](row.ActorDisplayName)
+	}
 	if row.ActorID == "system" {
 		actorDisplayName = conv.PtrEmpty("System")
 	}
@@ -788,11 +1278,12 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		actingSurface = string(audit.SurfaceUnknown)
 	}
 
-	return &gen.AuditLog{
+	return &gen.AdminAuditLog{
 		ID: row.ID.String(), ProjectID: conv.FromNullableUUID(row.ProjectID), ProjectSlug: conv.FromPGText[string](row.ProjectSlug),
 		ActorID: row.ActorID, ActorType: row.ActorType, ActorDisplayName: actorDisplayName, ActorSlug: conv.FromPGText[string](row.ActorSlug),
-		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID),
-		SubjectID: row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
+		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID), Category: new(string(category)),
+		IsInternal: new(row.IsInternal),
+		SubjectID:  row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
 		BeforeSnapshot: row.BeforeSnapshot, AfterSnapshot: row.AfterSnapshot, Metadata: metadata, CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
@@ -801,27 +1292,36 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	if payload.AccountType == nil && payload.Whitelisted == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type or whitelisted must be supplied")
 	}
+	if payload.AccountType == nil {
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin organization whitelist change").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		actor, displayName, _ := adminActor(ctx)
+		if _, err := SetOrganizationWhitelistTx(ctx, tx, s.audit, payload.ID, *payload.Whitelisted, actor, displayName); err != nil {
+			if errors.Is(err, ErrOrganizationWhitelistNotFound) {
+				return nil, oops.E(oops.CodeNotFound, err, "organization not found")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "set organization whitelist").LogError(ctx, s.logger)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "commit organization whitelist change").LogError(ctx, s.logger)
+		}
+		return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after whitelist change")
+	}
 	// See ExtendTrial: the design bounds this too, but generated validation only
 	// runs at the HTTP boundary.
 	if payload.AccountType != nil && !constants.IsAccountType(*payload.AccountType) {
 		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), *payload.AccountType)
 	}
 
-	queries := repo.New(s.db)
-	if err := queries.AdminUpdateOrganization(ctx, repo.AdminUpdateOrganizationParams{
-		ID:          payload.ID,
-		AccountType: conv.PtrToPGText(payload.AccountType),
-		Whitelisted: conv.PtrToPGBool(payload.Whitelisted),
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update organization").LogError(ctx, s.logger)
+	updated, err := s.changeAccountTypes(ctx, []string{payload.ID}, *payload.AccountType, payload.Whitelisted)
+	if err != nil {
+		return nil, err
 	}
-
-	// Setting account type is how a trial becomes a signed contract. Stop
-	// pending trial reminders; trialActive stays true otherwise.
-	if payload.AccountType != nil {
-		if err := s.trial.TrialInactive(ctx, payload.ID); err != nil {
-			s.logger.ErrorContext(ctx, "failed to notify trial inactive", attr.SlogError(err), attr.SlogOrganizationID(payload.ID))
-		}
+	if len(updated) == 0 {
+		return nil, oops.E(oops.CodeNotFound, nil, "organization not found")
 	}
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after update")
@@ -832,12 +1332,9 @@ func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUp
 		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), payload.AccountType)
 	}
 
-	updated, err := repo.New(s.db).AdminBulkUpdateAccountType(ctx, repo.AdminBulkUpdateAccountTypeParams{
-		AccountType: payload.AccountType,
-		Ids:         payload.Ids,
-	})
+	updated, err := s.changeAccountTypes(ctx, payload.Ids, payload.AccountType, nil)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "bulk update account type").LogError(ctx, s.logger)
+		return nil, err
 	}
 
 	written := make(map[string]struct{}, len(updated))
@@ -871,27 +1368,96 @@ func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUp
 }
 
 func (s *Service) DisableOrganization(ctx context.Context, payload *gen.DisableOrganizationPayload) (*gen.AdminOrganization, error) {
-	rows, err := repo.New(s.db).AdminDisableOrganization(ctx, payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "disable organization").LogError(ctx, s.logger)
-	}
-	if rows == 0 {
-		return nil, oops.C(oops.CodeNotFound)
-	}
-
-	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after disable")
+	return s.setOrganizationAccess(ctx, payload.ID, false, "disable")
 }
 
 func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrganizationPayload) (*gen.AdminOrganization, error) {
-	rows, err := repo.New(s.db).AdminEnableOrganization(ctx, payload.ID)
+	return s.setOrganizationAccess(ctx, payload.ID, true, "enable")
+}
+
+func (s *Service) setOrganizationAccess(ctx context.Context, organizationID string, enabled bool, operation string) (*gen.AdminOrganization, error) {
+	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "enable organization").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin organization access transaction").LogError(ctx, logger)
 	}
-	if rows == 0 {
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	actor, actorDisplayName, _ := adminActor(ctx)
+	_, err = SetOrganizationAccessTx(ctx, tx, s.audit, organizationID, enabled, actor, actorDisplayName)
+	if errors.Is(err, ErrOrganizationAccessNotFound) {
 		return nil, oops.C(oops.CodeNotFound)
 	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "%s organization", operation).LogError(ctx, logger)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit organization access change").LogError(ctx, logger)
+	}
+	return s.readOrganizationAfterWrite(ctx, organizationID, "fetch organization after "+operation)
+}
 
-	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
+// TrialExtension is the trial end-date transition an extension wrote.
+type TrialExtension struct {
+	PreviousEndsAt time.Time
+	EndsAt         time.Time
+}
+
+// ErrTrialNotRunning reports that an organization has no running enterprise
+// trial to extend.
+var ErrTrialNotRunning = errors.New("organization has no running enterprise trial to extend")
+
+// TrialActor is who the trial extension audit entry names.
+type TrialActor struct {
+	Principal   urn.Principal
+	DisplayName *string
+}
+
+// ExtendTrialTx extends a running enterprise trial by days and records its
+// audit entry inside the caller's transaction; the caller commits. It returns
+// ErrTrialNotRunning when there is no running trial to extend. The admin API
+// passes the session operator, and the staff Admin MCP passes its own actor.
+func ExtendTrialTx(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, logger *slog.Logger, organizationID string, days int, actor TrialActor) (TrialExtension, error) {
+	// Checked on the wide value before narrowing; see ExtendTrial.
+	if days < constants.MinTrialExtensionDays || days > constants.MaxTrialExtensionDays {
+		return TrialExtension{}, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialExtensionDays, constants.MaxTrialExtensionDays)
+	}
+
+	extended, err := trialsRepo.New(tx).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
+		OrganizationID: organizationID,
+		ExtendByDays:   int32(days),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return TrialExtension{}, ErrTrialNotRunning
+	case err != nil:
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
+	}
+
+	// The customer's feed names the organization, not only its id, and extend
+	// writes nothing on organization_metadata to get those columns back from.
+	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        organizationID,
+		AllowSlug: false,
+	})
+	if err != nil {
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
+	}
+
+	if err := auditLogger.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
+		OrganizationID:      organizationID,
+		Actor:               actor.Principal,
+		ActorDisplayName:    actor.DisplayName,
+		ActorSlug:           nil,
+		OrganizationName:    organization.Name,
+		OrganizationSlug:    organization.Slug,
+		ExtendedByDays:      days,
+		PreviousTrialEndsAt: extended.PreviousEndsAt.Time,
+		TrialEndsAt:         extended.EndsAt.Time,
+	}); err != nil {
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "log trial extension").LogError(ctx, logger)
+	}
+	return TrialExtension{PreviousEndsAt: extended.PreviousEndsAt.Time, EndsAt: extended.EndsAt.Time}, nil
 }
 
 func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPayload) (*gen.AdminOrganization, error) {
@@ -917,12 +1483,10 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	extended, err := trialsRepo.New(tx).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
-		OrganizationID: payload.ID,
-		ExtendByDays:   int32(payload.Days),
-	})
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
+	_, err = ExtendTrialTx(ctx, tx, s.audit, logger, payload.ID, payload.Days, TrialActor{Principal: actor, DisplayName: actorDisplayName})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, ErrTrialNotRunning):
 		// rejectTrialChange reads on the pool, so this connection goes back
 		// before it asks for a second one. The deferred rollback is idempotent.
 		_ = tx.Rollback(ctx)
@@ -930,32 +1494,7 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 			"look up organization after unextended trial",
 			"organization has no running enterprise trial to extend")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
-	}
-
-	// The customer's feed names the organization, not only its id, and extend
-	// writes nothing on organization_metadata to get those columns back from.
-	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID:        payload.ID,
-		AllowSlug: false,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
-	}
-
-	actor, actorDisplayName, operatorEmail := adminActor(ctx)
-	if err := s.audit.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
-		OrganizationID:      payload.ID,
-		Actor:               actor,
-		ActorDisplayName:    actorDisplayName,
-		ActorSlug:           nil,
-		OrganizationName:    organization.Name,
-		OrganizationSlug:    organization.Slug,
-		ExtendedByDays:      payload.Days,
-		PreviousTrialEndsAt: extended.PreviousEndsAt.Time,
-		TrialEndsAt:         extended.EndsAt.Time,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log trial extension").LogError(ctx, logger)
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -968,6 +1507,71 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	)
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial extension")
+}
+
+func (s *Service) ChangeTrialEndDate(ctx context.Context, payload *gen.ChangeTrialEndDatePayload) (*gen.AdminOrganization, error) {
+	endsAt, err := time.Parse(time.RFC3339, payload.EndsAt)
+	if err != nil || !endsAt.After(time.Now()) {
+		return nil, oops.E(oops.CodeInvalid, err, "trial end date must be in the future")
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin trial end date change transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	changed, err := trialsRepo.New(tx).ChangeTrialEndDate(ctx, trialsRepo.ChangeTrialEndDateParams{
+		OrganizationID: payload.ID,
+		EndsAt:         conv.ToPGTimestamptz(endsAt),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// rejectTrialChange reads on the pool, so this connection goes back
+		// before it asks for a second one. The deferred rollback is idempotent.
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unchanged trial",
+			"organization has no running enterprise trial to change")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "change trial end date").LogError(ctx, logger)
+	}
+
+	// Include the organization's display name in the audit entry.
+	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        payload.ID,
+		AllowSlug: false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read organization for trial end date change").LogError(ctx, logger)
+	}
+
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
+	if err := s.audit.LogOrganizationEnterpriseTrialEndChanged(ctx, tx, audit.LogOrganizationEnterpriseTrialEndChangedEvent{
+		OrganizationID:      payload.ID,
+		Actor:               actor,
+		ActorDisplayName:    actorDisplayName,
+		ActorSlug:           nil,
+		OrganizationName:    organization.Name,
+		OrganizationSlug:    organization.Slug,
+		PreviousTrialEndsAt: changed.PreviousEndsAt.Time,
+		TrialEndsAt:         changed.EndsAt.Time,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log trial end date change").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit trial end date change").LogError(ctx, logger)
+	}
+
+	// Speakeasy-only, and the only place the email meets the entry's subject.
+	logger.InfoContext(ctx, "changed enterprise trial end date",
+		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
+	)
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial end date change")
 }
 
 // rejectTrialChange turns a trial write that touched no row into the error the
@@ -1002,26 +1606,44 @@ func (s *Service) rejectTrialChange(ctx context.Context, logger *slog.Logger, or
 	return oops.E(oops.CodeConflict, nil, "%s", conflictMessage)
 }
 
-// CreateOrganization creates an organization in WorkOS and then in Gram.
+const organizationCreationUncertain = "Creation could not be confirmed. Check existing organizations before retrying."
+
+// CreateOrganization creates an organization in WorkOS and then in Speakeasy.
 //
 // The WorkOS create happens before the transaction opens, because it is the one
-// step that cannot be rolled back. Everything Gram stores is written inside a
-// single transaction afterwards, so a failure below leaves no organization row,
-// no role grants and no entitlements from this call.
+// step that cannot be rolled back. Everything Speakeasy stores is written inside a
+// single transaction afterwards. A transaction failure rolls back local writes;
+// a response read failure can occur after those writes have committed.
 //
-// That is not the same as leaving nothing. Wherever the WorkOS webhook is
-// configured, organization.created arrives about ten seconds later and the sync
-// activity writes the organization row and its role grants anyway, without the
-// default entitlements this handler would have seeded. AGE-3213 covers that gap.
-// Retrying the create is still the right move: the derived ID makes the retry
-// land on that row rather than beside it.
+// A webhook can still provision the remote organization after a failed request.
+// Repeating the request creates a new WorkOS organization, not an idempotent retry.
 func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrganizationPayload) (*gen.AdminOrganization, error) {
-	name, err := orgprovision.ValidateName(payload.Name)
+	if !payload.OwnershipConfirmed {
+		return nil, oops.E(oops.CodeInvalid, nil, "confirm that the organization owns this domain before creating it")
+	}
+	hostname, err := organizationHostname(payload.URL)
 	if err != nil {
 		return nil, err
 	}
 
-	created, err := orgprovision.CreateInWorkOS(ctx, s.workos, name)
+	requestedName := orgprovision.NameFromHostname(hostname)
+	if payload.Name != nil {
+		requestedName = *payload.Name
+	}
+	name, err := orgprovision.ValidateName(requestedName)
+	if err != nil {
+		return nil, err
+	}
+
+	requestedSlug := ""
+	if payload.Slug != nil {
+		requestedSlug, err = validateOrganizationSlug(*payload.Slug)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(ctx, s.workos, name, hostname)
 	switch {
 	case errors.Is(err, orgprovision.ErrUnavailable):
 		// CodeInvalid and not CodeInvariantViolation, which reads like the
@@ -1031,8 +1653,10 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// operator. oops.CodeMap disagrees and maps it to 422; the Goa HTTP
 		// layer does not read that map.
 		return nil, oops.E(oops.CodeInvalid, err, "this server has no WorkOS configuration, so it cannot create organizations")
+	case errors.Is(err, workos.ErrOrganizationCreationRejected):
+		return nil, oops.E(oops.CodeInvalid, err, "WorkOS rejected organization creation. Check the company URL and whether its domain is eligible for verification.").LogWarn(ctx, s.logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeGatewayError, err, "create organization in WorkOS").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeGatewayError, err, organizationCreationUncertain).LogError(ctx, s.logger)
 	}
 
 	logger := s.logger.With(
@@ -1042,7 +1666,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin organization creation transaction").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("begin organization creation transaction: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
@@ -1050,24 +1674,53 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	// A row can already exist under the derived ID: WorkOS fires
 	// organization.created the moment the call above returns, so the sync
-	// activity can win the race to insert it. That row's slug is already in the
-	// organization's URL, and re-deriving one would find the base taken by that
-	// very row and write a suffixed variant over it.
+	// activity can win the race to insert it. Without an explicit slug, that
+	// row's slug is kept: re-deriving one would find the base taken by that very
+	// row and write a suffixed variant over it.
 	uniqueSlug := ""
+	if requestedSlug != "" {
+		if lockErr := queries.LockOrganizationSlug(ctx, requestedSlug); lockErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("lock requested organization slug: %w", lockErr), organizationCreationUncertain).LogError(ctx, logger)
+		}
+
+		atRequestedSlug, lookupErr := queries.GetOrganizationMetadataBySlug(ctx, requestedSlug)
+		switch {
+		case errors.Is(lookupErr, pgx.ErrNoRows):
+			uniqueSlug = requestedSlug
+		case lookupErr == nil && atRequestedSlug.ID == created.GramOrganizationID:
+			// The webhook can have inserted this same organization while the
+			// WorkOS request was in flight. In that case the requested slug is
+			// already ours, not a collision that needs a suffix.
+			uniqueSlug = requestedSlug
+		case lookupErr == nil:
+			found, findErr := orgslug.FindUnique(ctx, queries, requestedSlug)
+			if findErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find unique requested organization slug: %w", findErr), organizationCreationUncertain).LogError(ctx, logger)
+			}
+			uniqueSlug = found
+		default:
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("look up requested organization slug: %w", lookupErr), organizationCreationUncertain).LogError(ctx, logger)
+		}
+	}
+
 	existing, err := queries.GetOrganizationMetadata(ctx, created.GramOrganizationID)
 	switch {
-	case err == nil:
+	case err == nil && uniqueSlug == "":
 		uniqueSlug = existing.Slug
+	case (err == nil || errors.Is(err, pgx.ErrNoRows)) && uniqueSlug != "":
+		// The explicit slug wins over a row inserted by the WorkOS webhook for
+		// this same create. That row derived its slug from the display name and
+		// has not represented an operator choice yet.
 	case errors.Is(err, pgx.ErrNoRows):
 		// Seeded with the WorkOS organization ID rather than randomness so a
 		// retry of the same create competes for one advisory-lock key instead
 		// of two.
 		base, baseErr := orgslug.StableBase(name, created.WorkOSOrganizationID)
 		if baseErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, baseErr, "derive organization slug").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("derive organization slug: %w", baseErr), organizationCreationUncertain).LogError(ctx, logger)
 		}
 		if lockErr := queries.LockOrganizationSlug(ctx, base); lockErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, lockErr, "lock organization slug").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("lock organization slug: %w", lockErr), organizationCreationUncertain).LogError(ctx, logger)
 		}
 
 		// Read again now that the lock is held. The read above was taken before
@@ -1083,14 +1736,14 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		case errors.Is(reReadErr, pgx.ErrNoRows):
 			found, findErr := orgslug.FindUnique(ctx, queries, base)
 			if findErr != nil {
-				return nil, oops.E(oops.CodeUnexpected, findErr, "find unique organization slug").LogError(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find unique organization slug: %w", findErr), organizationCreationUncertain).LogError(ctx, logger)
 			}
 			uniqueSlug = found
 		default:
-			return nil, oops.E(oops.CodeUnexpected, reReadErr, "look up organization after slug lock").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("look up organization after slug lock: %w", reReadErr), organizationCreationUncertain).LogError(ctx, logger)
 		}
 	default:
-		return nil, oops.E(oops.CodeUnexpected, err, "look up organization before create").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("look up organization before create: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	// Keyed on the derived ID with ON CONFLICT (id) DO UPDATE, so a webhook that
@@ -1111,91 +1764,46 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// FALSE states that an operator creating an organization is not
 		// whitelisting it.
 		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+		// Records the prospect flow this create starts. The conflict arm above
+		// is reachable — the WorkOS webhook can have inserted the row already —
+		// and that path records no source, so writing it here is what makes the
+		// two orderings agree.
+		CreationSource: conv.ToPGText(orgprovision.SourcePlatformAdmin),
+		DefaultHost:    s.newOrganizationDefaultHost,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create organization metadata").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create organization metadata: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	if err := authz.SeedSystemRoleGrantsTx(ctx, tx, org.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "provision organization access defaults").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision organization access defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
+	}
+	if err := authz.SeedPersonalAuthClientDefaultTx(ctx, tx, org.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision auth client defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
-	if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "seed organization default entitlements").LogError(ctx, logger)
+	if err := productfeatures.SeedNewOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("seed organization default entitlements: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit organization creation transaction").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("commit organization creation transaction: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
-	return s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
+	result, err := s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, organizationCreationUncertain)
+	}
+	return result, nil
 }
 
-// RearmTrial puts a demoted enterprise trial back on.
-//
-// The keys come back up before the restore commits, deliberately not mirroring
-// the demotion's ordering: a partial failure must leave the organization
-// demoted with live keys, never a running trial with dead ones.
+// RearmTrial atomically replaces trial_demotion with the active-trial key policy.
 func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload) (*gen.AdminOrganization, error) {
-	// Defence in depth against a non-HTTP caller: the design's bounds are
-	// generated into the request decoder alone. Keep this on the wide
-	// payload.Days, above the int32 narrowing, or 1<<32 + 1 truncates into range.
 	if payload.Days < constants.MinTrialRearmDays || payload.Days > constants.MaxTrialRearmDays {
 		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialRearmDays, constants.MaxTrialRearmDays)
 	}
 
 	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
-	lockedKeys := make(map[openrouter.KeyType]*pgxpool.Conn, len(openrouter.AllKeyTypes))
-	var result *gen.AdminOrganization
-	err := s.withTrialKeyBillingLocks(ctx, logger, payload.ID, openrouter.AllKeyTypes, lockedKeys, func() error {
-		var lockedErr error
-		result, lockedErr = s.rearmTrialLocked(ctx, logger, payload, lockedKeys)
-		return lockedErr
-	})
-	if err == nil {
-		return result, nil
-	}
-
-	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
-		return nil, shareable
-	}
-	if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
-		return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
-	}
-	return nil, oops.E(oops.CodeUnexpected, err, "lock inference keys for trial re-arm").LogError(ctx, logger)
-}
-
-func (s *Service) withTrialKeyBillingLocks(
-	ctx context.Context,
-	logger *slog.Logger,
-	organizationID string,
-	keyTypes []openrouter.KeyType,
-	locked map[openrouter.KeyType]*pgxpool.Conn,
-	operation func() error,
-) error {
-	if len(keyTypes) == 0 {
-		return operation()
-	}
-
-	keyType := keyTypes[0]
-	err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, organizationID, keyType, keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
-		locked[keyType] = conn
-		defer delete(locked, keyType)
-		return s.withTrialKeyBillingLocks(ctx, logger, organizationID, keyTypes[1:], locked, operation)
-	})
-	if err != nil {
-		return fmt.Errorf("hold OpenRouter %s key billing lock for trial re-arm: %w", keyType, err)
-	}
-	return nil
-}
-
-func (s *Service) rearmTrialLocked(
-	ctx context.Context,
-	logger *slog.Logger,
-	payload *gen.RearmTrialPayload,
-	lockedKeys map[openrouter.KeyType]*pgxpool.Conn,
-) (*gen.AdminOrganization, error) {
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin trial re-arm transaction").LogError(ctx, logger)
@@ -1203,50 +1811,95 @@ func (s *Service) rearmTrialLocked(
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	trials := trialsRepo.New(tx)
-
-	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{
-		OrganizationID: payload.ID,
-		RearmForDays:   conv.SafeInt32(payload.Days),
-	})
+	lockedTrial, err := trials.LockTrialLifecycle(ctx, payload.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// rejectTrialChange reads on the pool, so this connection goes back
-		// before it asks for a second one. The deferred rollback is idempotent.
 		_ = tx.Rollback(ctx)
-		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
-			"look up organization after unrearmed trial",
-			"organization has no demoted enterprise trial to re-arm")
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unrearmed trial", "organization has no demoted enterprise trial to re-arm")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lock trial lifecycle for re-arm").LogError(ctx, logger)
 	}
 
-	uncapped, err := s.reviveTrialKeys(ctx, logger, lockedKeys, payload.ID)
+	if lockedTrial.ConvertedAt.Valid {
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unrearmed trial", "organization has no demoted enterprise trial to re-arm")
+	}
+
+	retryOperations, auditErr := repo.New(tx).AdminGetEnterpriseTrialRetryOperationIDs(ctx, payload.ID)
+	if auditErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, auditErr, "check trial generation audit operations").LogError(ctx, logger)
+	}
+	armOperationID, armErr := uuid.Parse(retryOperations.ArmOperationID)
+	rearmArmOperationID, rearmErr := uuid.Parse(retryOperations.RearmArmOperationID)
+
+	if !lockedTrial.DemotedAt.Valid {
+		sameGeneration := armErr == nil && rearmErr == nil && armOperationID == rearmArmOperationID && retryOperations.MatchingRearmCount == 1
+		if sameGeneration && lockedTrial.EndsAt.Valid && lockedTrial.EndsAt.Time.After(time.Now()) {
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, rollbackErr, "close trial re-arm retry transaction").LogError(ctx, logger)
+			}
+			s.updateTrialFeatureCache(ctx, payload.ID)
+			if err := s.reconcileRearmedTrialKeys(ctx, logger, payload.ID, openrouter.AllKeyTypes); err != nil {
+				return nil, err
+			}
+			return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm retry")
+		}
+
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unrearmed trial", "organization has no demoted enterprise trial to re-arm")
+	}
+	if armErr != nil {
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unaudited trial", "organization trial generation has no valid arm operation")
+	}
+
+	// The lifecycle row is locked first. Every transaction advisory lock then
+	// follows in canonical order before any key-row access.
+	for _, keyType := range openrouter.AllKeyTypes {
+		if err := openrouter.AcquireAPIKeyBillingTransactionLock(ctx, tx, payload.ID, keyType); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter %s key for trial re-arm", keyType).LogError(ctx, logger)
+		}
+	}
+
+	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{OrganizationID: payload.ID, RearmForDays: conv.SafeInt32(payload.Days)})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "re-arm locked trial").LogError(ctx, logger)
 	}
 
-	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{
-		OrganizationID: payload.ID,
-		AccountType:    rearmed.Tier,
-	})
+	desiredLimit, ok := openrouter.DefaultCreditLimit(s.staffOrg, payload.ID, billing.Tier(rearmed.Tier), true)
+	if !ok || desiredLimit <= 0 {
+		return nil, oops.E(oops.CodeUnexpected, nil, "trial tier %q has no OpenRouter credit policy", rearmed.Tier).LogError(ctx, logger)
+	}
+
+	reconcile := make([]openrouter.KeyType, 0, len(openrouter.AllKeyTypes))
+	keyAccessChanged := false
+	for _, keyType := range openrouter.AllKeyTypes {
+		_, change, removeErr := s.openRouter.RemoveAPIKeyDisableCauseWithDB(ctx, tx, payload.ID, keyType, openrouter.DisableCauseTrialDemotion, &desiredLimit)
+		switch {
+		case errors.Is(removeErr, ErrOpenRouterUnavailable):
+			return nil, oops.E(oops.CodeInvalid, removeErr, "this server cannot update model provider key lifecycle state")
+		case removeErr != nil:
+			return nil, oops.E(oops.CodeUnexpected, removeErr, "remove trial demotion cause from openrouter %s key", keyType).LogError(ctx, logger)
+		}
+		keyAccessChanged = keyAccessChanged || change.KeyAccessChanged
+		if change.KeyAccessChanged {
+			reconcile = append(reconcile, keyType)
+		}
+	}
+
+	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{OrganizationID: payload.ID, AccountType: rearmed.Tier})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "restore organization from trial").LogError(ctx, logger)
 	}
-
 	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, payload.ID, true); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "restore trial runtime features").LogError(ctx, logger)
 	}
 
 	actor, actorDisplayName, operatorEmail := adminActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialRearmed(ctx, tx, audit.LogOrganizationEnterpriseTrialRearmedEvent{
-		OrganizationID:   payload.ID,
-		Actor:            actor,
-		ActorDisplayName: actorDisplayName,
-		ActorSlug:        nil,
-		OrganizationName: organization.Name,
-		OrganizationSlug: organization.Slug,
-		AccountType:      rearmed.Tier,
-		TrialEndsAt:      rearmed.EndsAt.Time,
+		OrganizationID: payload.ID, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil,
+		OrganizationName: organization.Name, OrganizationSlug: organization.Slug, AccountType: rearmed.Tier,
+		TrialEndsAt: rearmed.EndsAt.Time, ArmAuditOperation: armOperationID.String(), KeyAccessChanged: keyAccessChanged,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log trial re-arm").LogError(ctx, logger)
 	}
@@ -1255,95 +1908,167 @@ func (s *Service) rearmTrialLocked(
 		return nil, oops.E(oops.CodeUnexpected, err, "commit trial re-arm").LogError(ctx, logger)
 	}
 
-	s.recapRevivedKeys(ctx, logger, lockedKeys, payload.ID, uncapped)
-	for _, feature := range productfeatures.TrialRuntimeFeatures {
-		s.productFeatures.UpdateFeatureCache(ctx, payload.ID, feature, true)
+	s.updateTrialFeatureCache(ctx, payload.ID)
+	if err := s.reconcileRearmedTrialKeys(ctx, logger, payload.ID, reconcile); err != nil {
+		return nil, err
 	}
-
-	// Speakeasy-only, and the only place the email meets the entry's subject.
-	logger.InfoContext(ctx, "re-armed enterprise trial",
-		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
-	)
-
+	logger.InfoContext(ctx, "re-armed enterprise trial", attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")))
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm")
 }
 
-// reviveTrialKeys brings every platform key the organization holds back up, and
-// returns the types revived at a pre-commit ceiling, for recapRevivedKeys.
+// StartTrial grants a new enterprise trial, either to an organization that has
+// never trialled or to one whose previous trial expired without converting or
+// being demoted.
 //
-// Shaped like openrouterkeys.EnableKey rather than the demotion's blind loop:
-// DisableAPIKey no-ops on a missing key row, RefreshAPIKeyLimit errors on one.
-//
-// The caller holds both per-key session locks through commit. Key revival uses
-// those locked sessions but stays outside the organization transaction, so a
-// later rollback leaves the org demoted with live keys instead of exposing an
-// admitted trial whose keys are still disabled.
-func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, lockedKeys map[openrouter.KeyType]*pgxpool.Conn, organizationID string) ([]openrouter.KeyType, error) {
-	var uncapped []openrouter.KeyType
+// Key policy is recorded inside the same transaction as the grant, matching
+// re-arm: a rollback must not leave live keys on an organization that is still
+// without a running trial.
+func (s *Service) StartTrial(ctx context.Context, payload *gen.StartTrialPayload) (*gen.AdminOrganization, error) {
+	// Defence in depth against a non-HTTP caller: the design's bounds are
+	// generated into the request decoder alone. Keep this on the wide
+	// payload.Days, above the int32 narrowing, or 1<<32 + 1 truncates into range.
+	if payload.Days < constants.MinTrialStartDays || payload.Days > constants.MaxTrialStartDays {
+		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialStartDays, constants.MaxTrialStartDays)
+	}
 
-	for _, keyType := range openrouter.AllKeyTypes {
-		conn := lockedKeys[keyType]
-		if conn == nil {
-			return nil, oops.E(oops.CodeUnexpected, nil, "missing openrouter %s key lock", keyType).LogError(ctx, logger)
-		}
-		row, err := orrepo.New(conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
-			OrganizationID: organizationID,
-			KeyType:        string(keyType),
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			continue
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "read openrouter %s key", keyType).LogError(ctx, logger)
-		case !row.Disabled:
-			continue
-		}
+	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin trial start transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-		// The ceiling recorded on the row, not the policy default: a trial
-		// key is minted well below that default. A zero resolves from the
-		// pre-commit free-tier projection and is corrected after commit.
-		if row.MonthlyCredits == 0 {
-			uncapped = append(uncapped, keyType)
-		}
-		limit := conv.PtrEmpty(int(row.MonthlyCredits))
-		_, err = s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, limit)
-		switch {
-		case errors.Is(err, ErrOpenRouterUnavailable):
-			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
-		case err != nil:
-			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)
+	lockedTrial, err := trialsRepo.New(tx).LockTrialLifecycle(ctx, payload.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Never trialled: ArmEnterpriseTrialTx inserts the row.
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lock trial lifecycle for start").LogError(ctx, logger)
+	default:
+		if lockedTrial.ConvertedAt.Valid || lockedTrial.DemotedAt.Valid || (lockedTrial.EndsAt.Valid && lockedTrial.EndsAt.Time.After(time.Now())) {
+			_ = tx.Rollback(ctx)
+			return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unstarted trial", "organization has no startable enterprise trial")
 		}
 	}
 
-	return uncapped, nil
+	// The lifecycle row is locked first when it exists. Every transaction
+	// advisory lock then follows in canonical order before any key-row access.
+	for _, keyType := range openrouter.AllKeyTypes {
+		if err := openrouter.AcquireAPIKeyBillingTransactionLock(ctx, tx, payload.ID, keyType); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter %s key for trial start", keyType).LogError(ctx, logger)
+		}
+	}
+
+	// The runtime gates ride along with the bundle: an expired trial's
+	// demotion sweep turned them off, and a never-trialled organization only
+	// has its signup defaults.
+	seeder := func(ctx context.Context, tx pgx.Tx, organizationID string) error {
+		if err := productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, organizationID); err != nil {
+			return fmt.Errorf("seed enterprise trial bundle: %w", err)
+		}
+		if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, organizationID, true); err != nil {
+			return fmt.Errorf("enable trial runtime features: %w", err)
+		}
+		return nil
+	}
+	started, err := trials.ArmEnterpriseTrialTx(ctx, tx, trials.ArmParams{
+		OrganizationID: payload.ID,
+		Days:           conv.SafeInt32(payload.Days),
+		Seeder:         seeder,
+	})
+	switch {
+	case errors.Is(err, trials.ErrNotStartable):
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unstarted trial",
+			"organization has no startable enterprise trial")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "start trial").LogError(ctx, logger)
+	}
+
+	desiredLimit, ok := openrouter.DefaultCreditLimit(s.staffOrg, payload.ID, billing.Tier(started.Tier), true)
+	if !ok || desiredLimit <= 0 {
+		return nil, oops.E(oops.CodeUnexpected, nil, "trial tier %q has no OpenRouter credit policy", started.Tier).LogError(ctx, logger)
+	}
+
+	reconcile := make([]openrouter.KeyType, 0, len(openrouter.AllKeyTypes))
+	for _, keyType := range openrouter.AllKeyTypes {
+		_, change, removeErr := s.openRouter.RemoveAPIKeyDisableCauseWithDB(ctx, tx, payload.ID, keyType, openrouter.DisableCauseTrialDemotion, &desiredLimit)
+		switch {
+		case errors.Is(removeErr, ErrOpenRouterUnavailable):
+			return nil, oops.E(oops.CodeInvalid, removeErr, "this server cannot update model provider key lifecycle state")
+		case removeErr != nil:
+			return nil, oops.E(oops.CodeUnexpected, removeErr, "remove trial demotion cause from openrouter %s key", keyType).LogError(ctx, logger)
+		}
+		if change.KeyAccessChanged {
+			reconcile = append(reconcile, keyType)
+		}
+	}
+
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
+	if err := s.audit.LogOrganizationEnterpriseTrialStarted(ctx, tx, audit.LogOrganizationEnterpriseTrialStartedEvent{
+		OrganizationID:   payload.ID,
+		Actor:            actor,
+		ActorDisplayName: actorDisplayName,
+		ActorSlug:        nil,
+		OrganizationName: started.OrganizationName,
+		OrganizationSlug: started.OrganizationSlug,
+		AccountType:      started.Tier,
+		TrialEndsAt:      started.EndsAt,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log trial start").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit trial start transaction").LogError(ctx, logger)
+	}
+
+	s.updateStartedTrialFeatureCache(ctx, payload.ID)
+	if err := s.reconcileRearmedTrialKeys(ctx, logger, payload.ID, reconcile); err != nil {
+		return nil, err
+	}
+
+	logger.InfoContext(ctx, "started enterprise trial",
+		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
+	)
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial start")
 }
 
-// recapRevivedKeys puts the trial's own ceiling on the keys reviveTrialKeys
-// could only revive at the free-tier one. It must run after the commit, because
-// a nil limit resolves from the now-committed organization tier.
-//
-// A failure is logged and swallowed: the re-arm is already durable, so an error
-// here would report an armed trial as unarmed.
-func (s *Service) recapRevivedKeys(ctx context.Context, logger *slog.Logger, lockedKeys map[openrouter.KeyType]*pgxpool.Conn, organizationID string, keyTypes []openrouter.KeyType) {
-	for _, keyType := range keyTypes {
-		conn := lockedKeys[keyType]
-		if conn == nil {
-			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: missing key lock",
-				attr.SlogOpenRouterKeyType(string(keyType)),
-			)
+func (s *Service) updateTrialFeatureCache(ctx context.Context, organizationID string) {
+	s.updateEnabledFeatureCache(ctx, organizationID, productfeatures.TrialRuntimeFeatures)
+}
+
+func (s *Service) updateStartedTrialFeatureCache(ctx context.Context, organizationID string) {
+	features := make([]productfeatures.Feature, 0, len(productfeatures.EnterpriseAccessBundle)+len(productfeatures.TrialRuntimeFeatures)+1)
+	features = append(features, productfeatures.EnterpriseAccessBundle...)
+	features = append(features, productfeatures.TrialRuntimeFeatures...)
+	features = append(features, productfeatures.FeatureSkills)
+	s.updateEnabledFeatureCache(ctx, organizationID, features)
+}
+
+func (s *Service) updateEnabledFeatureCache(ctx context.Context, organizationID string, features []productfeatures.Feature) {
+	seen := make(map[productfeatures.Feature]struct{}, len(features))
+	for _, feature := range features {
+		if _, dup := seen[feature]; dup {
 			continue
 		}
-		if _, err := s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, nil); err != nil {
-			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: refresh it from the platform admin key page",
-				attr.SlogError(err),
-				attr.SlogOpenRouterKeyType(string(keyType)),
-			)
+		seen[feature] = struct{}{}
+		s.productFeatures.UpdateFeatureCache(ctx, organizationID, feature, true)
+	}
+}
+
+func (s *Service) reconcileRearmedTrialKeys(ctx context.Context, logger *slog.Logger, organizationID string, keyTypes []openrouter.KeyType) error {
+	for _, keyType := range keyTypes {
+		if err := s.openRouter.ReconcileAPIKeyDisabled(ctx, organizationID, keyType); err != nil {
+			return oops.E(oops.CodeGatewayError, err, "reconcile openrouter %s key after trial re-arm", keyType).LogError(ctx, logger)
 		}
 	}
+	return nil
 }
 
 // adminActor identifies the operator behind an admin-app write. An admin session
-// carries an OIDC subject rather than a Gram user id, and a call without one
+// carries an OIDC subject rather than a Speakeasy user id, and a call without one
 // records the system actor the demotion sweeper uses. The email is returned
 // separately for private structured logs.
 func adminActor(ctx context.Context) (actor urn.Principal, displayName, operatorEmail *string) {
@@ -1375,7 +2100,7 @@ func (s *Service) readOrganizationAfterWrite(ctx context.Context, id string, err
 		return nil, oops.E(oops.CodeUnexpected, err, "%s", errMsg).LogError(ctx, s.logger)
 	}
 
-	return adminOrganizationFromGetRow(row), nil
+	return s.adminOrganizationFromGetRow(row), nil
 }
 
 func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizationPayload) (*gen.AdminOrganization, error) {
@@ -1389,46 +2114,62 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization by id or slug").LogError(ctx, s.logger)
 	}
-	return adminOrganizationFromGetRow(row), nil
+	return s.adminOrganizationFromGetRow(row), nil
 }
 
-func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
+func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
-		ID:               row.ID,
-		Name:             row.Name,
-		Slug:             row.Slug,
-		AccountType:      row.AccountType,
-		WorkosID:         conv.FromPGText[string](row.WorkosID),
-		Whitelisted:      row.Whitelisted,
-		DisabledAt:       pgTimestampPtr(row.DisabledAt),
-		TrialState:       &row.TrialState,
-		TrialTier:        conv.FromPGText[string](row.TrialTier),
-		TrialEndsAt:      pgTimestampPtr(row.TrialEndsAt),
-		TrialConvertedAt: pgTimestampPtr(row.TrialConvertedAt),
-		TrialDemotedAt:   pgTimestampPtr(row.TrialDemotedAt),
-		MemberCount:      int(row.MemberCount),
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                             row.ID,
+		Name:                           row.Name,
+		Slug:                           row.Slug,
+		AccountType:                    row.AccountType,
+		WorkosID:                       conv.FromPGText[string](row.WorkosID),
+		WorkosDashboardURL:             s.workosDashboardURL(row.WorkosID),
+		StripeCustomerID:               conv.FromPGText[string](row.StripeCustomerID),
+		StripeSubscriptionID:           conv.FromPGText[string](row.StripeSubscriptionID),
+		StripeCustomerDashboardURL:     s.stripeCustomerDashboardURL(row.StripeCustomerID),
+		StripeSubscriptionDashboardURL: s.stripeSubscriptionDashboardURL(row.StripeSubscriptionID),
+		Whitelisted:                    row.Whitelisted,
+		DisabledAt:                     pgTimestampPtr(row.DisabledAt),
+		TrialState:                     &row.TrialState,
+		TrialTier:                      conv.FromPGText[string](row.TrialTier),
+		TrialEndsAt:                    pgTimestampPtr(row.TrialEndsAt),
+		TrialConvertedAt:               pgTimestampPtr(row.TrialConvertedAt),
+		TrialDemotedAt:                 pgTimestampPtr(row.TrialDemotedAt),
+		CreationSource:                 conv.FromPGText[string](row.CreationSource),
+		AdoptionDashboardURL:           conv.FromPGText[string](row.AdoptionDashboardUrl),
+		MemberCount:                    int(row.MemberCount),
+		CreatedAt:                      row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                      row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
-func adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
+func (s *Service) adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
-		ID:               row.ID,
-		Name:             row.Name,
-		Slug:             row.Slug,
-		AccountType:      row.AccountType,
-		WorkosID:         conv.FromPGText[string](row.WorkosID),
-		Whitelisted:      row.Whitelisted,
-		DisabledAt:       pgTimestampPtr(row.DisabledAt),
-		TrialState:       &row.TrialState,
-		TrialTier:        nil,
-		TrialEndsAt:      pgTimestampPtr(row.TrialEndsAt),
-		TrialConvertedAt: nil,
-		TrialDemotedAt:   nil,
-		MemberCount:      int(row.MemberCount),
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                             row.ID,
+		Name:                           row.Name,
+		Slug:                           row.Slug,
+		AccountType:                    row.AccountType,
+		WorkosID:                       conv.FromPGText[string](row.WorkosID),
+		WorkosDashboardURL:             s.workosDashboardURL(row.WorkosID),
+		StripeCustomerID:               conv.FromPGText[string](row.StripeCustomerID),
+		StripeSubscriptionID:           conv.FromPGText[string](row.StripeSubscriptionID),
+		StripeCustomerDashboardURL:     s.stripeCustomerDashboardURL(row.StripeCustomerID),
+		StripeSubscriptionDashboardURL: s.stripeSubscriptionDashboardURL(row.StripeSubscriptionID),
+		Whitelisted:                    row.Whitelisted,
+		DisabledAt:                     pgTimestampPtr(row.DisabledAt),
+		TrialState:                     &row.TrialState,
+		TrialTier:                      nil,
+		TrialEndsAt:                    pgTimestampPtr(row.TrialEndsAt),
+		TrialConvertedAt:               nil,
+		TrialDemotedAt:                 nil,
+		// The list does not select it. The record view asks for one organization
+		// and reads it there, like trial_tier above.
+		CreationSource:       nil,
+		AdoptionDashboardURL: nil,
+		MemberCount:          int(row.MemberCount),
+		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

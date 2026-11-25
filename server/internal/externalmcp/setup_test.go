@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -72,15 +72,15 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
-
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
 
-	catalog := externalmcp.NewCatalogService(conn, mcpRegistryClient, nil)
-	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, catalog, authzEngine, serverURL)
+	validator, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	catalog := externalmcp.NewCatalogService(conn, externalmcp.NewNativeRegistryReader(mcpregistry.New(conn, validator)))
+	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, cache.NoopCache, catalog, authzEngine, serverURL)
 
 	return ctx, &testInstance{
 		service:        svc,

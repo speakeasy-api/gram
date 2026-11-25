@@ -26,6 +26,8 @@ type Endpoints struct {
 	MoveIssuer                  goa.Endpoint
 	GetIssuerMigratePreflight   goa.Endpoint
 	MigrateIssuer               goa.Endpoint
+	SetEMAProviders             goa.Endpoint
+	ListEMAServices             goa.Endpoint
 	FetchIssuerMetadata         goa.Endpoint
 	RefreshIssuerMetadata       goa.Endpoint
 }
@@ -46,6 +48,8 @@ func NewEndpoints(s Service) *Endpoints {
 		MoveIssuer:                  NewMoveIssuerEndpoint(s, a.APIKeyAuth),
 		GetIssuerMigratePreflight:   NewGetIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
 		MigrateIssuer:               NewMigrateIssuerEndpoint(s, a.APIKeyAuth),
+		SetEMAProviders:             NewSetEMAProvidersEndpoint(s, a.APIKeyAuth),
+		ListEMAServices:             NewListEMAServicesEndpoint(s, a.APIKeyAuth),
 		FetchIssuerMetadata:         NewFetchIssuerMetadataEndpoint(s, a.APIKeyAuth),
 		RefreshIssuerMetadata:       NewRefreshIssuerMetadataEndpoint(s, a.APIKeyAuth),
 	}
@@ -64,6 +68,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.MoveIssuer = m(e.MoveIssuer)
 	e.GetIssuerMigratePreflight = m(e.GetIssuerMigratePreflight)
 	e.MigrateIssuer = m(e.MigrateIssuer)
+	e.SetEMAProviders = m(e.SetEMAProviders)
+	e.ListEMAServices = m(e.ListEMAServices)
 	e.FetchIssuerMetadata = m(e.FetchIssuerMetadata)
 	e.RefreshIssuerMetadata = m(e.RefreshIssuerMetadata)
 }
@@ -418,6 +424,52 @@ func NewMigrateIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return s.MigrateIssuer(ctx, p)
+	}
+}
+
+// NewSetEMAProvidersEndpoint returns an endpoint function that calls the
+// method "setEMAProviders" of service "organizationRemoteSessionIssuers".
+func NewSetEMAProvidersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetEMAProvidersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetEMAProviders(ctx, p)
+	}
+}
+
+// NewListEMAServicesEndpoint returns an endpoint function that calls the
+// method "listEMAServices" of service "organizationRemoteSessionIssuers".
+func NewListEMAServicesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListEMAServicesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListEMAServices(ctx, p)
 	}
 }
 

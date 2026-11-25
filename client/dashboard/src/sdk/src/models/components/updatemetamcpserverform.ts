@@ -7,6 +7,36 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+ */
+export const UpdateMetaMcpServerFormDiscoveryMode = {
+  Progressive: "progressive",
+  Direct: "direct",
+  CodeMode: "code_mode",
+} as const;
+/**
+ * The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+ */
+export type UpdateMetaMcpServerFormDiscoveryMode = ClosedEnum<
+  typeof UpdateMetaMcpServerFormDiscoveryMode
+>;
+
+/**
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
+ */
+export const UpdateMetaMcpServerFormNetworkAccessMode = {
+  PublicOnly: "public_only",
+  Dual: "dual",
+  PrivateOnly: "private_only",
+} as const;
+/**
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
+ */
+export type UpdateMetaMcpServerFormNetworkAccessMode = ClosedEnum<
+  typeof UpdateMetaMcpServerFormNetworkAccessMode
+>;
+
+/**
  * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
  */
 export const UpdateMetaMcpServerFormVisibility = {
@@ -21,17 +51,29 @@ export type UpdateMetaMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility preserves the stored value.
+ * Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility or network_access_mode preserves the respective stored value.
  */
 export type UpdateMetaMcpServerForm = {
+  /**
+   * The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+   */
+  discoveryMode?: UpdateMetaMcpServerFormDiscoveryMode | undefined;
   /**
    * The ID of the meta MCP server to update
    */
   id: string;
   /**
+   * Custom server instructions replace Speakeasy's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Speakeasy's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
+   */
+  instructions?: string | undefined;
+  /**
    * The display name of the meta MCP server
    */
   name: string;
+  /**
+   * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
+   */
+  networkAccessMode?: UpdateMetaMcpServerFormNetworkAccessMode | undefined;
   /**
    * The ID of the user session issuer used to authenticate callers. Omit for no issuer.
    */
@@ -43,14 +85,28 @@ export type UpdateMetaMcpServerForm = {
 };
 
 /** @internal */
+export const UpdateMetaMcpServerFormDiscoveryMode$outboundSchema: z.ZodMiniEnum<
+  typeof UpdateMetaMcpServerFormDiscoveryMode
+> = z.enum(UpdateMetaMcpServerFormDiscoveryMode);
+
+/** @internal */
+export const UpdateMetaMcpServerFormNetworkAccessMode$outboundSchema:
+  z.ZodMiniEnum<typeof UpdateMetaMcpServerFormNetworkAccessMode> = z.enum(
+    UpdateMetaMcpServerFormNetworkAccessMode,
+  );
+
+/** @internal */
 export const UpdateMetaMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
   typeof UpdateMetaMcpServerFormVisibility
 > = z.enum(UpdateMetaMcpServerFormVisibility);
 
 /** @internal */
 export type UpdateMetaMcpServerForm$Outbound = {
+  discovery_mode?: string | undefined;
   id: string;
+  instructions?: string | undefined;
   name: string;
+  network_access_mode?: string | undefined;
   user_session_issuer_id?: string | undefined;
   visibility?: string | undefined;
 };
@@ -61,13 +117,22 @@ export const UpdateMetaMcpServerForm$outboundSchema: z.ZodMiniType<
   UpdateMetaMcpServerForm
 > = z.pipe(
   z.object({
+    discoveryMode: z.optional(
+      UpdateMetaMcpServerFormDiscoveryMode$outboundSchema,
+    ),
     id: z.string(),
+    instructions: z.optional(z.string()),
     name: z.string(),
+    networkAccessMode: z.optional(
+      UpdateMetaMcpServerFormNetworkAccessMode$outboundSchema,
+    ),
     userSessionIssuerId: z.optional(z.string()),
     visibility: z.optional(UpdateMetaMcpServerFormVisibility$outboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
+      discoveryMode: "discovery_mode",
+      networkAccessMode: "network_access_mode",
       userSessionIssuerId: "user_session_issuer_id",
     });
   }),

@@ -37,6 +37,10 @@ export type ListChallengesRequest = {
    */
   scope?: string | undefined;
   /**
+   * Leave out checks of these scopes, from the rows and from the total.
+   */
+  excludeScopes?: Array<string> | undefined;
+  /**
    * Filter to a specific project.
    */
   projectId?: string | undefined;
@@ -48,6 +52,14 @@ export type ListChallengesRequest = {
    * Fetch specific challenges by ID. When set, other filters and pagination are ignored.
    */
   ids?: Array<string> | undefined;
+  /**
+   * Inclusive start of the window to list challenges from. Omit for the whole history.
+   */
+  from?: Date | undefined;
+  /**
+   * Exclusive end of the window to list challenges from. Omit for the whole history.
+   */
+  to?: Date | undefined;
   /**
    * Maximum number of results to return.
    */
@@ -107,9 +119,12 @@ export type ListChallengesRequest$Outbound = {
   outcome?: string | undefined;
   principal_urn?: string | undefined;
   scope?: string | undefined;
+  exclude_scopes?: Array<string> | undefined;
   project_id?: string | undefined;
   resolved?: boolean | undefined;
   ids?: Array<string> | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
   limit: number;
   offset: number;
   "Gram-Key"?: string | undefined;
@@ -125,9 +140,12 @@ export const ListChallengesRequest$outboundSchema: z.ZodMiniType<
     outcome: z.optional(QueryParamOutcome$outboundSchema),
     principalUrn: z.optional(z.string()),
     scope: z.optional(z.string()),
+    excludeScopes: z.optional(z.array(z.string())),
     projectId: z.optional(z.string()),
     resolved: z.optional(z.boolean()),
     ids: z.optional(z.array(z.string())),
+    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     limit: z._default(z.int(), 50),
     offset: z._default(z.int(), 0),
     gramKey: z.optional(z.string()),
@@ -136,6 +154,7 @@ export const ListChallengesRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       principalUrn: "principal_urn",
+      excludeScopes: "exclude_scopes",
       projectId: "project_id",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",

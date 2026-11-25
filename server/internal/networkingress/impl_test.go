@@ -1,0 +1,310 @@
+package networkingress_test
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/network_ingress"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
+	gatewayrepo "github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+)
+
+func TestCreateIngressRequiresEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	payload := &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: new("private-mcp"), OauthClientID: "client", OauthClientSecret: "secret"}
+
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
+	_, err := ti.service.CreateIngress(ctx, payload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
+	result, err := ti.service.CreateIngress(ctx, payload)
+	require.NoError(t, err)
+	require.True(t, result.CredentialsConfigured)
+}
+
+func TestGetIngressReturnsEmptyResultWhenNotConfigured(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	result, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.Nil(t, result.Ingress)
+	require.Equal(t, networkingress.DefaultGatewayTag, result.GatewayTag, "the setup steps show the default tag before any connection exists")
+}
+
+func TestGetIngressReturnsTheConfiguredGatewayTag(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ti.service.UseGateway(networkingress.GatewayRuntimeConfig{Tag: "tag:speakeasy-dev"})
+
+	empty, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "tag:speakeasy-dev", empty.GatewayTag)
+
+	ti.create(t, ctx)
+	configured, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, configured.Ingress)
+	require.Equal(t, "tag:speakeasy-dev", configured.GatewayTag)
+}
+
+func TestCreateIngressEncryptsCredentialsAndPinsResources(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	result := ti.create(t, ctx)
+	row := loadRow(t, ctx, ti)
+
+	require.NotContains(t, row.CredentialsEncrypted.String, "client-id")
+	require.NotContains(t, row.CredentialsEncrypted.String, "client-secret")
+	require.NotContains(t, strings.Join([]string{result.ID, result.Hostname, result.Provider}, " "), "client-secret")
+	require.Equal(t, "platform", row.EndpointNamespaceKind)
+	require.False(t, row.CustomDomainID.Valid)
+	require.NotEqual(t, []byte("{}"), row.ProviderResources)
+	require.Equal(t, row.AttestorNamespace+"-attestor", row.AttestorServiceAccount)
+}
+
+func TestDeleteRetainsCleanupIdentityAndBlocksReplacement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := ti.create(t, ctx)
+	require.NoError(t, ti.service.DeleteIngress(ctx, &gen.DeleteIngressPayload{}))
+
+	deleted, err := repo.New(ti.conn).GetNetworkIngressByID(ctx, repo.GetNetworkIngressByIDParams{ID: uuid.MustParse(created.ID), OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	require.True(t, deleted.Deleted)
+	require.True(t, deleted.CredentialsEncrypted.Valid)
+	require.NotEqual(t, []byte("{}"), deleted.ProviderResources)
+
+	visible, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, visible.Ingress)
+	require.Equal(t, created.ID, visible.Ingress.ID)
+	require.Equal(t, "deleting", visible.Ingress.Status)
+	require.False(t, visible.Ingress.Enabled)
+
+	_, err = ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: new("replacement"), OauthClientID: "next", OauthClientSecret: "next-secret"})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	// Repeated delete resumes cleanup rather than returning not-found.
+	require.NoError(t, ti.service.DeleteIngress(ctx, &gen.DeleteIngressPayload{}))
+}
+
+func TestNetworkIngressManagementReadsRequireOrgAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ti.create(t, ctx)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource))
+
+	_, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.GetDeleteImpact(ctx, &gen.GetDeleteImpactPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.CheckHealth(ctx, &gen.CheckHealthPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestNetworkModeAdmissionLockSerializesIngressDisable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ti.create(t, ctx)
+	admission := networkingress.NewExpansionAdmission(ti.features, true, true)
+	finalizeNetworkAccess, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, finalizeNetworkAccess.Finalize(ctx, tx))
+	disabled := false
+	type outcome struct {
+		result *gen.NetworkIngress
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		result, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Enabled: &disabled})
+		done <- outcome{result: result, err: err}
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
+	require.NoError(t, tx.Commit(ctx))
+	completed := <-done
+	require.NoError(t, completed.err)
+	updated := completed.result
+	require.False(t, updated.Enabled)
+}
+
+func TestNetworkIngressIDLookupRequiresOwningOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := ti.create(t, ctx)
+
+	_, err := repo.New(ti.conn).GetNetworkIngressByID(ctx, repo.GetNetworkIngressByIDParams{ID: uuid.MustParse(created.ID), OrganizationID: "org_other"})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestIdentityRequiredUpdateMarksIngressPendingAndClearsError(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ti.create(t, ctx)
+	err := testrepo.New(ti.conn).SetNetworkIngressObservationFixture(ctx, testrepo.SetNetworkIngressObservationFixtureParams{
+		Status:         "error",
+		LastError:      pgtype.Text{String: "old_error", Valid: true},
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+
+	identityRequired := true
+	result, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{IdentityRequired: &identityRequired})
+	require.NoError(t, err)
+	require.Equal(t, "pending", result.Status)
+	require.Nil(t, result.LastError)
+}
+
+func TestGetIngressExplainsAMissingCertificate(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := ti.create(t, ctx)
+	ingressID := uuid.MustParse(created.ID)
+	refusal := "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC"
+	gateway := gatewayrepo.New(ti.conn)
+	for slot, beat := range []struct{ status, message string }{
+		{status: "awaiting_certificate", message: refusal},
+		{status: "starting", message: "obtaining a TLS certificate"},
+	} {
+		require.NoError(t, gateway.EnsureNetworkIngressNodeSlot(ctx, gatewayrepo.EnsureNetworkIngressNodeSlotParams{NetworkIngressID: ingressID, OrganizationID: ti.orgID, Slot: int32(slot)}))
+		_, err := gateway.HeartbeatNetworkIngressNode(ctx, gatewayrepo.HeartbeatNetworkIngressNodeParams{
+			PodName: pgtype.Text{String: "gram-tailnet-gateway-0", Valid: true}, Status: beat.status, NodeID: pgtype.Text{}, DnsName: pgtype.Text{},
+			LastError:        pgtype.Text{String: beat.message, Valid: true},
+			NetworkIngressID: ingressID, OrganizationID: ti.orgID, Slot: int32(slot),
+		})
+		require.NoError(t, err)
+	}
+
+	result, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.Nil(t, result.Ingress.StatusDetail, "only a certificate error carries the gateway's explanation")
+
+	require.NoError(t, testrepo.New(ti.conn).SetNetworkIngressObservationFixture(ctx, testrepo.SetNetworkIngressObservationFixtureParams{
+		Status: "error", LastError: pgtype.Text{String: "provider_certificate_unavailable", Valid: true}, OrganizationID: ti.orgID,
+	}))
+	result, err = ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, result.Ingress.StatusDetail)
+	require.Equal(t, refusal, *result.Ingress.StatusDetail, "the refused slot's message names the cause")
+}
+
+func TestDisableAndDeleteRemainAvailableAfterGateRemoval(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := ti.create(t, ctx)
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
+
+	// Existing desired state and deletion impact remain visible so the dashboard
+	// can explain what is still enforced and offer safe recovery.
+	current, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, current.Ingress)
+	require.Equal(t, created.ID, current.Ingress.ID)
+	_, err = ti.service.GetDeleteImpact(ctx, &gen.GetDeleteImpactPayload{})
+	require.NoError(t, err)
+
+	disabled := false
+	result, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Enabled: &disabled})
+	require.NoError(t, err)
+	require.False(t, result.Enabled)
+
+	_, err = ti.service.RotateCredentials(ctx, &gen.RotateCredentialsPayload{OauthClientID: "blocked", OauthClientSecret: "blocked"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.NoError(t, ti.service.DeleteIngress(ctx, &gen.DeleteIngressPayload{}))
+}
+
+func TestDeleteImpactCountsModes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ti.create(t, ctx)
+	// The zero case pins the API shape and query against an organization with no servers.
+	impact, err := ti.service.GetDeleteImpact(ctx, &gen.GetDeleteImpactPayload{})
+	require.NoError(t, err)
+	require.Zero(t, impact.McpServersDual)
+	require.Zero(t, impact.McpServersPrivateOnly)
+	require.Zero(t, impact.MetaMcpServersDual)
+	require.Zero(t, impact.MetaMcpServersPrivateOnly)
+}
+
+func TestCreateIngressRejectsInvalidHostnameAndProvider(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	_, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: "other", Hostname: new("private"), OauthClientID: "id", OauthClientSecret: "secret"})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: new("Not Valid"), OauthClientID: "id", OauthClientSecret: "secret"})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// compile-time coverage for generated nullable custom-domain shape.
+var _ = pgtype.Text{}
+var _ context.Context
+
+func TestCreateHostsEveryIngressOnTheGateway(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	created := ti.create(t, ctx)
+	require.Equal(t, networkingress.RuntimeGateway, created.Runtime)
+	row, err := repo.New(ti.conn).GetNetworkIngressByID(ctx, repo.GetNetworkIngressByIDParams{ID: uuid.MustParse(created.ID), OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	require.Equal(t, networkingress.RuntimeGateway, row.Runtime.String)
+
+	got, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.Equal(t, networkingress.RuntimeGateway, got.Ingress.Runtime)
+}
+
+func TestCreateDefaultsHostnameToSpeakeasy(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: nil, OauthClientID: "client", OauthClientSecret: "secret"})
+	require.NoError(t, err)
+	require.Equal(t, networkingress.DefaultHostname, created.Hostname)
+}
+
+func TestLocalNamerPrefixesCreatedAndRenamedHostnames(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	namer, err := networkingress.NewLocalNamer("ab12")
+	require.NoError(t, err)
+	ti.service.UseGateway(networkingress.GatewayRuntimeConfig{Namer: namer})
+
+	created, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: nil, OauthClientID: "client", OauthClientSecret: "secret"})
+	require.NoError(t, err)
+	require.Equal(t, "local-ab12-speakeasy", created.Hostname, "the default hostname is qualified too")
+
+	renamed, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Hostname: new("tools")})
+	require.NoError(t, err)
+	require.Equal(t, "local-ab12-tools", renamed.Hostname)
+
+	kept, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Hostname: new("local-ab12-tools")})
+	require.NoError(t, err)
+	require.Equal(t, "local-ab12-tools", kept.Hostname, "an already qualified hostname is not prefixed twice")
+}
+
+func TestCreateRefusesHostnamesReservedForLocalDevelopment(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	_, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: new("local-ab12-tools"), OauthClientID: "client", OauthClientSecret: "secret"})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}

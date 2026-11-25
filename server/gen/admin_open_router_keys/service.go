@@ -61,7 +61,7 @@ type AdminOpenRouterKey struct {
 	OrganizationName string
 	// Slug of the owning organization.
 	OrganizationSlug string
-	// The organization's Gram account type (e.g. free, pro, enterprise).
+	// The organization's Speakeasy account type (e.g. free, pro, enterprise).
 	GramAccountType string
 	// Which upstream key this row provisions: 'chat' pays for customer-facing
 	// completions, 'internal' pays for platform-initiated LLM usage.
@@ -70,6 +70,9 @@ type AdminOpenRouterKey struct {
 	MonthlyCredits int64
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled bool
+	// Administrative view of every reason currently disabling the key. Values are
+	// open-ended for forward compatibility.
+	DisableCauses []string
 	// When the key row was created.
 	CreatedAt string
 	// When the key row was last updated.

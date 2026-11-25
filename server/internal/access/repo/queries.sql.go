@@ -13,7 +13,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const createOrganizationRole = `-- name: CreateOrganizationRole :one
+const checkDirectoryRoleInventoryOperator = `-- name: CheckDirectoryRoleInventoryOperator :one
+SELECT id FROM users
+WHERE id = $1 AND admin IS TRUE AND deleted_at IS NULL
+FOR SHARE
+`
+
+func (q *Queries) CheckDirectoryRoleInventoryOperator(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, checkDirectoryRoleInventoryOperator, id)
+	var id_2 string
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const createOrganizationRoleWithRequests = `-- name: CreateOrganizationRoleWithRequests :one
+WITH created AS (
 INSERT INTO organization_roles (
     organization_id,
     workos_slug,
@@ -40,7 +54,10 @@ ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
 WHERE organization_roles.deleted_at IS NOT NULL
-RETURNING
+RETURNING id, organization_id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('organization_id', organization_id, 'role_urn', 'role:organization:' || id::text)), '[]'::jsonb) FROM created)::jsonb AS requests,
     id,
     ('role:organization:' || id::text)::text AS role_urn,
     workos_slug,
@@ -49,9 +66,10 @@ RETURNING
     workos_created_at,
     workos_updated_at,
     0::bigint AS member_count
+FROM created
 `
 
-type CreateOrganizationRoleParams struct {
+type CreateOrganizationRoleWithRequestsParams struct {
 	OrganizationID    string
 	WorkosSlug        string
 	WorkosName        string
@@ -61,7 +79,8 @@ type CreateOrganizationRoleParams struct {
 	WorkosLastEventID pgtype.Text
 }
 
-type CreateOrganizationRoleRow struct {
+type CreateOrganizationRoleWithRequestsRow struct {
+	Requests          []byte
 	ID                uuid.UUID
 	RoleUrn           string
 	WorkosSlug        string
@@ -73,8 +92,8 @@ type CreateOrganizationRoleRow struct {
 }
 
 // Creates an org-scoped role, reactivating a soft-deleted row for the same slug.
-func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganizationRoleParams) (CreateOrganizationRoleRow, error) {
-	row := q.db.QueryRow(ctx, createOrganizationRole,
+func (q *Queries) CreateOrganizationRoleWithRequests(ctx context.Context, arg CreateOrganizationRoleWithRequestsParams) (CreateOrganizationRoleWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, createOrganizationRoleWithRequests,
 		arg.OrganizationID,
 		arg.WorkosSlug,
 		arg.WorkosName,
@@ -83,8 +102,9 @@ func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganiza
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 	)
-	var i CreateOrganizationRoleRow
+	var i CreateOrganizationRoleWithRequestsRow
 	err := row.Scan(
+		&i.Requests,
 		&i.ID,
 		&i.RoleUrn,
 		&i.WorkosSlug,
@@ -95,6 +115,92 @@ func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganiza
 		&i.MemberCount,
 	)
 	return i, err
+}
+
+const decideAccessRequest = `-- name: DecideAccessRequest :one
+UPDATE access_requests
+SET
+  status = $1,
+  decided_by_user_id = $2,
+  decided_via = $3,
+  decided_at = clock_timestamp(),
+  temporary_grant_id = $4,
+  challenge_ids = $5,
+  updated_at = clock_timestamp()
+WHERE organization_id = $6
+  AND id = $7
+  AND status = 'pending'
+  AND deleted IS FALSE
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type DecideAccessRequestParams struct {
+	Status           string
+	DecidedByUserID  pgtype.Text
+	DecidedVia       pgtype.Text
+	TemporaryGrantID uuid.NullUUID
+	ChallengeIds     []string
+	OrganizationID   string
+	ID               uuid.UUID
+}
+
+// Records a decision on a pending request.
+func (q *Queries) DecideAccessRequest(ctx context.Context, arg DecideAccessRequestParams) (AccessRequest, error) {
+	row := q.db.QueryRow(ctx, decideAccessRequest,
+		arg.Status,
+		arg.DecidedByUserID,
+		arg.DecidedVia,
+		arg.TemporaryGrantID,
+		arg.ChallengeIds,
+		arg.OrganizationID,
+		arg.ID,
+	)
+	var i AccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.RequesterUserID,
+		&i.Scope,
+		&i.Selector,
+		&i.ResourceName,
+		&i.Message,
+		&i.Status,
+		&i.DecidedByUserID,
+		&i.DecidedVia,
+		&i.DecidedAt,
+		&i.TemporaryGrantID,
+		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteDirectoryRoleMapping = `-- name: DeleteDirectoryRoleMapping :execrows
+UPDATE directory_role_mappings
+SET deleted_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type DeleteDirectoryRoleMappingParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteDirectoryRoleMapping(ctx context.Context, arg DeleteDirectoryRoleMappingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDirectoryRoleMapping, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deletePrincipalGrant = `-- name: DeletePrincipalGrant :execrows
@@ -175,6 +281,8 @@ WHERE organization_id = $1
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 `
 
 type DeletePrincipalGrantsByResourceParams struct {
@@ -184,7 +292,9 @@ type DeletePrincipalGrantsByResourceParams struct {
 	ResourceID     string
 }
 
-// Removes grant rows for a single resource selector.
+// Removes permanent grant rows for a single resource selector. Used by
+// audience replacement writes; temporary grants are not part of an audience
+// and survive.
 func (q *Queries) DeletePrincipalGrantsByResource(ctx context.Context, arg DeletePrincipalGrantsByResourceParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantsByResource,
 		arg.OrganizationID,
@@ -203,6 +313,8 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND scope = $2
   AND selectors = $3
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 `
 
 type DeletePrincipalGrantsByTargetParams struct {
@@ -211,14 +323,413 @@ type DeletePrincipalGrantsByTargetParams struct {
 	Selectors      []byte
 }
 
-// Removes every principal row for one exact grant target. Used by audience
-// replacement writes where the caller supplies the full desired principal set.
+// Removes every permanent principal row for one exact grant target. Used by
+// audience replacement writes where the caller supplies the full desired
+// principal set. Temporary grants are not part of an audience and survive.
 func (q *Queries) DeletePrincipalGrantsByTarget(ctx context.Context, arg DeletePrincipalGrantsByTargetParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantsByTarget, arg.OrganizationID, arg.Scope, arg.Selectors)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deletePrincipalWildcardGrants = `-- name: DeletePrincipalWildcardGrants :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND COALESCE(selectors->>'resource_id', '*') = '*'
+  AND (selectors - 'resource_kind' - 'resource_id') = '{}'::jsonb
+`
+
+type DeletePrincipalWildcardGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+}
+
+// Removes a principal's unrestricted rows for one scope: a selector naming at
+// most a resource kind and the wildcard resource ID. Older writers stored the
+// kind as "*" or under another name, or left out resource_id (which the grant
+// matcher reads as "*"), so matching on the kind the scope implies today would
+// leave those rows granting access after an administrator removed them.
+func (q *Queries) DeletePrincipalWildcardGrants(ctx context.Context, arg DeletePrincipalWildcardGrantsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalWildcardGrants, arg.OrganizationID, arg.PrincipalUrn, arg.Scope)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const expireLapsedAccessRequest = `-- name: ExpireLapsedAccessRequest :exec
+UPDATE access_requests
+SET status = 'expired', updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND requester_user_id = $2
+  AND scope = $3
+  AND selector = $4
+  AND status = 'pending'
+  AND expires_at <= clock_timestamp()
+  AND deleted IS FALSE
+`
+
+type ExpireLapsedAccessRequestParams struct {
+	OrganizationID  string
+	RequesterUserID string
+	Scope           string
+	Selector        []byte
+}
+
+// Marks the requester's pending request for this access expired once its
+// window has passed, so a new request for the same access can be stored.
+func (q *Queries) ExpireLapsedAccessRequest(ctx context.Context, arg ExpireLapsedAccessRequestParams) error {
+	_, err := q.db.Exec(ctx, expireLapsedAccessRequest,
+		arg.OrganizationID,
+		arg.RequesterUserID,
+		arg.Scope,
+		arg.Selector,
+	)
+	return err
+}
+
+const findMCPResourceProject = `-- name: FindMCPResourceProject :one
+SELECT project_id FROM (
+  SELECT toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = $1
+    AND toolsets.id = $2::uuid
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = $2::uuid
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND meta_mcp_servers.id = $2::uuid
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+LIMIT 1
+`
+
+type FindMCPResourceProjectParams struct {
+	OrganizationID string
+	ResourceID     uuid.UUID
+}
+
+// Resolves the project owning one MCP resource, so a project-scoped grant is
+// checked against the resource's own project rather than any project the
+// caller happens to hold. A gateway server is addressed by its toolset id, a
+// remote or unproxied one by its own id, and an MCP gateway by its meta
+// server id. Tenancy and soft-deletion are decided by the project row in
+// every branch: a toolset outlives the project it belonged to.
+func (q *Queries) FindMCPResourceProject(ctx context.Context, arg FindMCPResourceProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findMCPResourceProject, arg.OrganizationID, arg.ResourceID)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
+const findMCPResourceProjects = `-- name: FindMCPResourceProjects :many
+SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (
+  SELECT toolsets.id AS resource_id, toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = $1
+    AND toolsets.id = ANY($2::uuid[])
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.id AS resource_id, mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = ANY($2::uuid[])
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.id AS resource_id, meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND meta_mcp_servers.id = ANY($2::uuid[])
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+`
+
+type FindMCPResourceProjectsParams struct {
+	OrganizationID string
+	ResourceIds    []uuid.UUID
+}
+
+type FindMCPResourceProjectsRow struct {
+	ResourceID uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// FindMCPResourceProject for many resources at once; unknown ids are absent.
+func (q *Queries) FindMCPResourceProjects(ctx context.Context, arg FindMCPResourceProjectsParams) ([]FindMCPResourceProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findMCPResourceProjects, arg.OrganizationID, arg.ResourceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindMCPResourceProjectsRow
+	for rows.Next() {
+		var i FindMCPResourceProjectsRow
+		if err := rows.Scan(&i.ResourceID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const findMCPResourceVisibility = `-- name: FindMCPResourceVisibility :one
+SELECT resource_type, visibility FROM (
+  SELECT
+    'toolset'::text AS resource_type,
+    COALESCE(cw.visibility, 'disabled')::text AS visibility,
+    2 AS source_rank
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  -- The canonical wrapper owns a hosted toolset's visibility.
+  LEFT JOIN mcp_servers cw ON cw.id = toolsets.id AND cw.toolset_id = toolsets.id AND cw.project_id = toolsets.project_id AND cw.deleted IS FALSE
+  WHERE projects.organization_id = $1
+    AND toolsets.id = $2::uuid
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+    -- A server that kept the toolset's id after leaving it answers for that id instead.
+    AND NOT EXISTS (
+      SELECT 1 FROM mcp_servers kept
+      WHERE kept.id = toolsets.id AND kept.project_id = toolsets.project_id AND kept.deleted IS FALSE
+        AND kept.toolset_id IS DISTINCT FROM toolsets.id
+    )
+  UNION ALL
+  SELECT 'mcp_server'::text AS resource_type, mcp_servers.visibility::text AS visibility, 1 AS source_rank
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = $2::uuid
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT 'gateway'::text AS resource_type, meta_mcp_servers.visibility::text AS visibility, 0 AS source_rank
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND meta_mcp_servers.id = $2::uuid
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+ORDER BY (visibility = 'disabled') DESC, source_rank
+LIMIT 1
+`
+
+type FindMCPResourceVisibilityParams struct {
+	OrganizationID string
+	ResourceID     uuid.UUID
+}
+
+type FindMCPResourceVisibilityRow struct {
+	ResourceType string
+	Visibility   string
+}
+
+// Resolves who may connect to one MCP resource without an access rule, as the
+// same three-valued visibility mcp_servers stores: 'public' endpoints skip the
+// connect check, 'private' ones enforce it, and 'disabled' ones serve nobody.
+// A hosted toolset reads its canonical wrapper's visibility, and one without
+// a wrapper serves nobody; the wrapper row itself reports the same id, and
+// 'disabled' wins between them. A gateway
+// (meta server) is reported as such: it has no connect check of its own, each
+// member server is checked instead. Resources are found by the same
+// identifiers and tenancy rules as FindMCPResourceProject.
+func (q *Queries) FindMCPResourceVisibility(ctx context.Context, arg FindMCPResourceVisibilityParams) (FindMCPResourceVisibilityRow, error) {
+	row := q.db.QueryRow(ctx, findMCPResourceVisibility, arg.OrganizationID, arg.ResourceID)
+	var i FindMCPResourceVisibilityRow
+	err := row.Scan(&i.ResourceType, &i.Visibility)
+	return i, err
+}
+
+const getAccessRequest = `-- name: GetAccessRequest :one
+SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.requested_duration_seconds, access_requests.requested_until, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
+FROM access_requests
+LEFT JOIN principal_grants
+  ON principal_grants.id = access_requests.temporary_grant_id
+  AND principal_grants.organization_id = access_requests.organization_id
+WHERE access_requests.organization_id = $1
+  AND access_requests.id = $2
+  AND access_requests.deleted IS FALSE
+`
+
+type GetAccessRequestParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type GetAccessRequestRow struct {
+	AccessRequest  AccessRequest
+	GrantExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetAccessRequest(ctx context.Context, arg GetAccessRequestParams) (GetAccessRequestRow, error) {
+	row := q.db.QueryRow(ctx, getAccessRequest, arg.OrganizationID, arg.ID)
+	var i GetAccessRequestRow
+	err := row.Scan(
+		&i.AccessRequest.ID,
+		&i.AccessRequest.OrganizationID,
+		&i.AccessRequest.RequesterUserID,
+		&i.AccessRequest.Scope,
+		&i.AccessRequest.Selector,
+		&i.AccessRequest.ResourceName,
+		&i.AccessRequest.Message,
+		&i.AccessRequest.Status,
+		&i.AccessRequest.DecidedByUserID,
+		&i.AccessRequest.DecidedVia,
+		&i.AccessRequest.DecidedAt,
+		&i.AccessRequest.TemporaryGrantID,
+		&i.AccessRequest.ChallengeIds,
+		&i.AccessRequest.RequestedDurationSeconds,
+		&i.AccessRequest.RequestedUntil,
+		&i.AccessRequest.ExpiresAt,
+		&i.AccessRequest.CreatedAt,
+		&i.AccessRequest.UpdatedAt,
+		&i.AccessRequest.DeletedAt,
+		&i.AccessRequest.Deleted,
+		&i.GrantExpiresAt,
+	)
+	return i, err
+}
+
+const getAccessRequestForUpdate = `-- name: GetAccessRequestForUpdate :one
+SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
+FROM access_requests
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetAccessRequestForUpdateParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+// Locks one request so a decision or withdrawal sees the state it changes.
+func (q *Queries) GetAccessRequestForUpdate(ctx context.Context, arg GetAccessRequestForUpdateParams) (AccessRequest, error) {
+	row := q.db.QueryRow(ctx, getAccessRequestForUpdate, arg.OrganizationID, arg.ID)
+	var i AccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.RequesterUserID,
+		&i.Scope,
+		&i.Selector,
+		&i.ResourceName,
+		&i.Message,
+		&i.Status,
+		&i.DecidedByUserID,
+		&i.DecidedVia,
+		&i.DecidedAt,
+		&i.TemporaryGrantID,
+		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getAccessRequestMessageBySlackMessage = `-- name: GetAccessRequestMessageBySlackMessage :one
+SELECT m.id, m.organization_id, m.access_request_id, m.provider, m.kind, m.recipient_user_id, m.slack_team_id, m.slack_user_id, m.slack_channel_id, m.slack_message_ts, m.created_at, m.updated_at, m.deleted_at, m.deleted
+FROM access_request_messages m
+JOIN slack_directory_connections c
+  ON c.organization_id = m.organization_id
+  AND c.slack_team_id = m.slack_team_id
+  AND c.disconnected_at IS NULL
+WHERE m.provider = 'slack'
+  AND m.slack_team_id = $1
+  AND m.slack_channel_id = $2
+  AND m.slack_message_ts = $3
+  AND m.deleted IS FALSE
+ORDER BY m.created_at, m.id
+LIMIT 1
+`
+
+type GetAccessRequestMessageBySlackMessageParams struct {
+	SlackTeamID    pgtype.Text
+	SlackChannelID pgtype.Text
+	SlackMessageTs pgtype.Text
+}
+
+type GetAccessRequestMessageBySlackMessageRow struct {
+	AccessRequestMessage AccessRequestMessage
+}
+
+// Resolves a Slack click to the DM it was made on. Slack signs the click, and
+// the click names its workspace, channel and message, so this lookup is not
+// tenant-scoped; the row it returns carries the tenant. A DM in a workspace
+// the organization has since disconnected finds no row.
+func (q *Queries) GetAccessRequestMessageBySlackMessage(ctx context.Context, arg GetAccessRequestMessageBySlackMessageParams) (GetAccessRequestMessageBySlackMessageRow, error) {
+	row := q.db.QueryRow(ctx, getAccessRequestMessageBySlackMessage, arg.SlackTeamID, arg.SlackChannelID, arg.SlackMessageTs)
+	var i GetAccessRequestMessageBySlackMessageRow
+	err := row.Scan(
+		&i.AccessRequestMessage.ID,
+		&i.AccessRequestMessage.OrganizationID,
+		&i.AccessRequestMessage.AccessRequestID,
+		&i.AccessRequestMessage.Provider,
+		&i.AccessRequestMessage.Kind,
+		&i.AccessRequestMessage.RecipientUserID,
+		&i.AccessRequestMessage.SlackTeamID,
+		&i.AccessRequestMessage.SlackUserID,
+		&i.AccessRequestMessage.SlackChannelID,
+		&i.AccessRequestMessage.SlackMessageTs,
+		&i.AccessRequestMessage.CreatedAt,
+		&i.AccessRequestMessage.UpdatedAt,
+		&i.AccessRequestMessage.DeletedAt,
+		&i.AccessRequestMessage.Deleted,
+	)
+	return i, err
+}
+
+const getActiveDirectoryGroupName = `-- name: GetActiveDirectoryGroupName :one
+SELECT name
+FROM directory_groups
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+`
+
+type GetActiveDirectoryGroupNameParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetActiveDirectoryGroupName(ctx context.Context, arg GetActiveDirectoryGroupNameParams) (string, error) {
+	row := q.db.QueryRow(ctx, getActiveDirectoryGroupName, arg.ID, arg.OrganizationID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
 }
 
 const getActiveOrganizationAdmin = `-- name: GetActiveOrganizationAdmin :one
@@ -336,6 +847,81 @@ func (q *Queries) GetActiveOrganizationRoleBySlug(ctx context.Context, arg GetAc
 		&i.WorkosUpdatedAt,
 		&i.MemberCount,
 	)
+	return i, err
+}
+
+const getDirectoryRoleInventoryOrganization = `-- name: GetDirectoryRoleInventoryOrganization :one
+SELECT workos_id FROM organization_metadata
+WHERE id = $1 AND disabled_at IS NULL
+FOR SHARE
+`
+
+func (q *Queries) GetDirectoryRoleInventoryOrganization(ctx context.Context, id string) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getDirectoryRoleInventoryOrganization, id)
+	var workos_id pgtype.Text
+	err := row.Scan(&workos_id)
+	return workos_id, err
+}
+
+const getDirectoryRoleMapping = `-- name: GetDirectoryRoleMapping :one
+SELECT id, source_kind, directory_group_id, attribute_key, attribute_value, role_urn
+FROM directory_role_mappings
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type GetDirectoryRoleMappingParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetDirectoryRoleMappingRow struct {
+	ID               uuid.UUID
+	SourceKind       string
+	DirectoryGroupID uuid.NullUUID
+	AttributeKey     pgtype.Text
+	AttributeValue   pgtype.Text
+	RoleUrn          string
+}
+
+func (q *Queries) GetDirectoryRoleMapping(ctx context.Context, arg GetDirectoryRoleMappingParams) (GetDirectoryRoleMappingRow, error) {
+	row := q.db.QueryRow(ctx, getDirectoryRoleMapping, arg.ID, arg.OrganizationID)
+	var i GetDirectoryRoleMappingRow
+	err := row.Scan(
+		&i.ID,
+		&i.SourceKind,
+		&i.DirectoryGroupID,
+		&i.AttributeKey,
+		&i.AttributeValue,
+		&i.RoleUrn,
+	)
+	return i, err
+}
+
+const getDirectoryRoleMappingGroupSource = `-- name: GetDirectoryRoleMappingGroupSource :one
+SELECT name, deleted, workos_deleted
+FROM directory_groups
+WHERE id = $1
+  AND organization_id = $2
+FOR SHARE
+`
+
+type GetDirectoryRoleMappingGroupSourceParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetDirectoryRoleMappingGroupSourceRow struct {
+	Name          string
+	Deleted       bool
+	WorkosDeleted bool
+}
+
+func (q *Queries) GetDirectoryRoleMappingGroupSource(ctx context.Context, arg GetDirectoryRoleMappingGroupSourceParams) (GetDirectoryRoleMappingGroupSourceRow, error) {
+	row := q.db.QueryRow(ctx, getDirectoryRoleMappingGroupSource, arg.ID, arg.OrganizationID)
+	var i GetDirectoryRoleMappingGroupSourceRow
+	err := row.Scan(&i.Name, &i.Deleted, &i.WorkosDeleted)
 	return i, err
 }
 
@@ -532,12 +1118,108 @@ func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganiza
 	return i, err
 }
 
-const getPrincipalGrants = `-- name: GetPrincipalGrants :many
-SELECT principal_urn, scope, selectors
+const getPendingAccessRequest = `-- name: GetPendingAccessRequest :one
+SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
+FROM access_requests
+WHERE organization_id = $1
+  AND requester_user_id = $2
+  AND scope = $3
+  AND selector = $4
+  AND status = 'pending'
+  AND deleted IS FALSE
+`
+
+type GetPendingAccessRequestParams struct {
+	OrganizationID  string
+	RequesterUserID string
+	Scope           string
+	Selector        []byte
+}
+
+func (q *Queries) GetPendingAccessRequest(ctx context.Context, arg GetPendingAccessRequestParams) (AccessRequest, error) {
+	row := q.db.QueryRow(ctx, getPendingAccessRequest,
+		arg.OrganizationID,
+		arg.RequesterUserID,
+		arg.Scope,
+		arg.Selector,
+	)
+	var i AccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.RequesterUserID,
+		&i.Scope,
+		&i.Selector,
+		&i.ResourceName,
+		&i.Message,
+		&i.Status,
+		&i.DecidedByUserID,
+		&i.DecidedVia,
+		&i.DecidedAt,
+		&i.TemporaryGrantID,
+		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getPrincipalGrantByIdentity = `-- name: GetPrincipalGrantByIdentity :one
+SELECT id, expires_at, clock_timestamp()::timestamptz AS observed_at
 FROM principal_grants
 WHERE organization_id = $1
-  AND COALESCE(effect, 'allow') = 'allow'
-  AND principal_urn = ANY($2::text[])
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+`
+
+type GetPrincipalGrantByIdentityParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+}
+
+type GetPrincipalGrantByIdentityRow struct {
+	ID         uuid.UUID
+	ExpiresAt  pgtype.Timestamptz
+	ObservedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetPrincipalGrantByIdentity(ctx context.Context, arg GetPrincipalGrantByIdentityParams) (GetPrincipalGrantByIdentityRow, error) {
+	row := q.db.QueryRow(ctx, getPrincipalGrantByIdentity,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	var i GetPrincipalGrantByIdentityRow
+	err := row.Scan(&i.ID, &i.ExpiresAt, &i.ObservedAt)
+	return i, err
+}
+
+const getPrincipalGrants = `-- name: GetPrincipalGrants :many
+SELECT g.principal_urn, g.scope, g.selectors,
+  EXISTS (
+    SELECT 1
+    FROM auth_permission_provisions p
+    WHERE p.organization_id = g.organization_id
+      AND p.principal_urn = g.principal_urn
+      AND p.scope = g.scope
+      AND p.selectors = g.selectors
+      AND p.taken_over_at IS NULL
+  )::boolean AS inferred
+FROM principal_grants g
+WHERE g.organization_id = $1
+  AND g.principal_urn = ANY($2::text[])
+  -- Grants are loaded per request, so an expired temporary grant stops
+  -- authorizing the next request without a sign-out or role change.
+  AND (g.expires_at IS NULL OR g.expires_at > clock_timestamp())
 `
 
 type GetPrincipalGrantsParams struct {
@@ -549,10 +1231,13 @@ type GetPrincipalGrantsRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
 	Selectors    []byte
+	Inferred     bool
 }
 
 // Returns all grant rows matching a set of principal URNs within an org.
 // Used by the access resolver to load grants for a user+role in a single query.
+// inferred marks a grant the default auth permission backfill wrote that no
+// explicit write has taken over, so it never outranks an inherited block.
 func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrantsParams) ([]GetPrincipalGrantsRow, error) {
 	rows, err := q.db.Query(ctx, getPrincipalGrants, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -562,7 +1247,12 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	var items []GetPrincipalGrantsRow
 	for rows.Next() {
 		var i GetPrincipalGrantsRow
-		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.Inferred,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -573,28 +1263,247 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	return items, nil
 }
 
+const getRemoteSessionRowDigestFixture = `-- name: GetRemoteSessionRowDigestFixture :one
+SELECT md5(row_to_json(s)::text) AS row_digest FROM remote_sessions s WHERE s.id = $1
+`
+
+// Test fixture: a digest of the whole stored row, so a test can prove it was
+// not touched without reading any credential value.
+func (q *Queries) GetRemoteSessionRowDigestFixture(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionRowDigestFixture, id)
+	var row_digest string
+	err := row.Scan(&row_digest)
+	return row_digest, err
+}
+
+const getTemporaryGrantForUpdate = `-- name: GetTemporaryGrantForUpdate :one
+SELECT id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE id = $1
+  AND organization_id = $2
+  AND expires_at IS NOT NULL
+FOR UPDATE
+`
+
+type GetTemporaryGrantForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetTemporaryGrantForUpdateRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Locks one temporary grant so a renewal or revocation sees the state it
+// changes. Permanent rows are never returned.
+func (q *Queries) GetTemporaryGrantForUpdate(ctx context.Context, arg GetTemporaryGrantForUpdateParams) (GetTemporaryGrantForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getTemporaryGrantForUpdate, arg.ID, arg.OrganizationID)
+	var i GetTemporaryGrantForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
+}
+
+const hasPermanentPrincipalGrants = `-- name: HasPermanentPrincipalGrants :one
+SELECT EXISTS (
+  SELECT 1
+  FROM principal_grants
+  WHERE organization_id = $1
+    AND principal_urn = $2
+    AND expires_at IS NULL
+)::boolean AS has_grants
+`
+
+type HasPermanentPrincipalGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+}
+
+// Reports whether a principal holds any permanent grant. Provisioning uses it
+// to decide whether default grants were already written, so a temporary grant
+// given to the principal never stands in for them.
+func (q *Queries) HasPermanentPrincipalGrants(ctx context.Context, arg HasPermanentPrincipalGrantsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPermanentPrincipalGrants, arg.OrganizationID, arg.PrincipalUrn)
+	var has_grants bool
+	err := row.Scan(&has_grants)
+	return has_grants, err
+}
+
+const insertAccessRequest = `-- name: InsertAccessRequest :one
+INSERT INTO access_requests (organization_id, requester_user_id, scope, selector, resource_name, message, challenge_ids, requested_duration_seconds, requested_until, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+ON CONFLICT (organization_id, requester_user_id, scope, selector) WHERE deleted IS FALSE AND status = 'pending'
+DO NOTHING
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type InsertAccessRequestParams struct {
+	OrganizationID           string
+	RequesterUserID          string
+	Scope                    string
+	Selector                 []byte
+	ResourceName             pgtype.Text
+	Message                  pgtype.Text
+	ChallengeIds             []string
+	RequestedDurationSeconds pgtype.Int4
+	RequestedUntil           pgtype.Timestamptz
+	ExpiresAt                pgtype.Timestamptz
+}
+
+// Stores a pending request. Returns no row when the requester already has a
+// pending request for the same access; the caller loads that one instead.
+func (q *Queries) InsertAccessRequest(ctx context.Context, arg InsertAccessRequestParams) (AccessRequest, error) {
+	row := q.db.QueryRow(ctx, insertAccessRequest,
+		arg.OrganizationID,
+		arg.RequesterUserID,
+		arg.Scope,
+		arg.Selector,
+		arg.ResourceName,
+		arg.Message,
+		arg.ChallengeIds,
+		arg.RequestedDurationSeconds,
+		arg.RequestedUntil,
+		arg.ExpiresAt,
+	)
+	var i AccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.RequesterUserID,
+		&i.Scope,
+		&i.Selector,
+		&i.ResourceName,
+		&i.Message,
+		&i.Status,
+		&i.DecidedByUserID,
+		&i.DecidedVia,
+		&i.DecidedAt,
+		&i.TemporaryGrantID,
+		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const insertAccessRequestMessage = `-- name: InsertAccessRequestMessage :one
+INSERT INTO access_request_messages (
+  organization_id
+  , access_request_id
+  , provider
+  , kind
+  , recipient_user_id
+  , slack_team_id
+  , slack_user_id
+  , slack_channel_id
+  , slack_message_ts
+) VALUES (
+  $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+)
+ON CONFLICT (access_request_id, provider, recipient_user_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING id, organization_id, access_request_id, provider, kind, recipient_user_id, slack_team_id, slack_user_id, slack_channel_id, slack_message_ts, created_at, updated_at, deleted_at, deleted
+`
+
+type InsertAccessRequestMessageParams struct {
+	OrganizationID  string
+	AccessRequestID uuid.UUID
+	Provider        string
+	Kind            string
+	RecipientUserID string
+	SlackTeamID     pgtype.Text
+	SlackUserID     pgtype.Text
+	SlackChannelID  pgtype.Text
+	SlackMessageTs  pgtype.Text
+}
+
+// Records a notification sent for an access request. One per recipient and
+// provider, so a retried send that already recorded its message inserts
+// nothing.
+func (q *Queries) InsertAccessRequestMessage(ctx context.Context, arg InsertAccessRequestMessageParams) (AccessRequestMessage, error) {
+	row := q.db.QueryRow(ctx, insertAccessRequestMessage,
+		arg.OrganizationID,
+		arg.AccessRequestID,
+		arg.Provider,
+		arg.Kind,
+		arg.RecipientUserID,
+		arg.SlackTeamID,
+		arg.SlackUserID,
+		arg.SlackChannelID,
+		arg.SlackMessageTs,
+	)
+	var i AccessRequestMessage
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.AccessRequestID,
+		&i.Provider,
+		&i.Kind,
+		&i.RecipientUserID,
+		&i.SlackTeamID,
+		&i.SlackUserID,
+		&i.SlackChannelID,
+		&i.SlackMessageTs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,
-  resource_kind, resource_id, resolution_type, role_slug, resolved_by
+  resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by
 )
 SELECT
   $1, unnest($2::text[]), $3, $4,
-  $5, $6, $7, $8, $9
+  $5, $6, $7, $8, $9::uuid, $10
 ON CONFLICT (organization_id, challenge_id) DO NOTHING
-RETURNING id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at
+RETURNING id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by, created_at
 `
 
 type InsertChallengeResolutionsParams struct {
-	OrganizationID string
-	ChallengeIds   []string
-	PrincipalUrn   string
-	Scope          string
-	ResourceKind   string
-	ResourceID     string
-	ResolutionType string
-	RoleSlug       pgtype.Text
-	ResolvedBy     string
+	OrganizationID   string
+	ChallengeIds     []string
+	PrincipalUrn     string
+	Scope            string
+	ResourceKind     string
+	ResourceID       string
+	ResolutionType   string
+	RoleSlug         pgtype.Text
+	TemporaryGrantID uuid.NullUUID
+	ResolvedBy       string
 }
 
 // Creates resolution records for one or more denied challenges.
@@ -609,6 +1518,7 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 		arg.ResourceID,
 		arg.ResolutionType,
 		arg.RoleSlug,
+		arg.TemporaryGrantID,
 		arg.ResolvedBy,
 	)
 	if err != nil {
@@ -628,6 +1538,7 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 			&i.ResourceID,
 			&i.ResolutionType,
 			&i.RoleSlug,
+			&i.TemporaryGrantID,
 			&i.ResolvedBy,
 			&i.CreatedAt,
 		); err != nil {
@@ -641,14 +1552,102 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 	return items, nil
 }
 
+const insertDirectoryAttributeRoleMapping = `-- name: InsertDirectoryAttributeRoleMapping :one
+INSERT INTO directory_role_mappings (
+  organization_id,
+  source_kind,
+  attribute_key,
+  attribute_value,
+  role_urn
+)
+VALUES (
+  $1,
+  'attribute',
+  $2,
+  $3,
+  $4
+)
+RETURNING id, role_urn, created_at, updated_at
+`
+
+type InsertDirectoryAttributeRoleMappingParams struct {
+	OrganizationID string
+	AttributeKey   pgtype.Text
+	AttributeValue pgtype.Text
+	RoleUrn        string
+}
+
+type InsertDirectoryAttributeRoleMappingRow struct {
+	ID        uuid.UUID
+	RoleUrn   string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) InsertDirectoryAttributeRoleMapping(ctx context.Context, arg InsertDirectoryAttributeRoleMappingParams) (InsertDirectoryAttributeRoleMappingRow, error) {
+	row := q.db.QueryRow(ctx, insertDirectoryAttributeRoleMapping,
+		arg.OrganizationID,
+		arg.AttributeKey,
+		arg.AttributeValue,
+		arg.RoleUrn,
+	)
+	var i InsertDirectoryAttributeRoleMappingRow
+	err := row.Scan(
+		&i.ID,
+		&i.RoleUrn,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertDirectoryGroupRoleMapping = `-- name: InsertDirectoryGroupRoleMapping :one
+INSERT INTO directory_role_mappings (
+  organization_id,
+  source_kind,
+  directory_group_id,
+  role_urn
+)
+VALUES (
+  $1,
+  'group',
+  $2,
+  $3
+)
+RETURNING id, role_urn, created_at, updated_at
+`
+
+type InsertDirectoryGroupRoleMappingParams struct {
+	OrganizationID   string
+	DirectoryGroupID uuid.NullUUID
+	RoleUrn          string
+}
+
+type InsertDirectoryGroupRoleMappingRow struct {
+	ID        uuid.UUID
+	RoleUrn   string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) InsertDirectoryGroupRoleMapping(ctx context.Context, arg InsertDirectoryGroupRoleMappingParams) (InsertDirectoryGroupRoleMappingRow, error) {
+	row := q.db.QueryRow(ctx, insertDirectoryGroupRoleMapping, arg.OrganizationID, arg.DirectoryGroupID, arg.RoleUrn)
+	var i InsertDirectoryGroupRoleMappingRow
+	err := row.Scan(
+		&i.ID,
+		&i.RoleUrn,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertPrincipalGrantIfAbsent = `-- name: InsertPrincipalGrantIfAbsent :execrows
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
-DO UPDATE SET
-  effect = NULL,
-  updated_at = clock_timestamp()
-WHERE principal_grants.effect IS NOT NULL
+DO UPDATE SET expires_at = NULL, updated_at = clock_timestamp()
+WHERE principal_grants.expires_at IS NOT NULL
 `
 
 type InsertPrincipalGrantIfAbsentParams struct {
@@ -658,8 +1657,9 @@ type InsertPrincipalGrantIfAbsentParams struct {
 	Selectors      []byte
 }
 
-// Creates a single grant row, leaves existing allow rows untouched, and converts
-// a conflicting legacy effect row to the allow-only NULL representation.
+// Creates a single permanent grant row and leaves an existing identical
+// permanent row untouched. An identical temporary row, live or expired, is
+// made permanent and counts as written: the permanent grant did not exist.
 func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPrincipalGrantIfAbsentParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertPrincipalGrantIfAbsent,
 		arg.OrganizationID,
@@ -673,47 +1673,355 @@ func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPr
 	return result.RowsAffected(), nil
 }
 
+const insertTemporaryGrant = `-- name: InsertTemporaryGrant :one
+
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  expires_at = EXCLUDED.expires_at,
+  created_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE principal_grants.expires_at IS NOT NULL
+  AND principal_grants.expires_at <= clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+`
+
+type InsertTemporaryGrantParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+}
+
+type InsertTemporaryGrantRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Queries for temporary grants: principal_grants rows with a non-NULL
+// expires_at. One row per org/principal/scope/selectors still holds, so a
+// temporary grant and a permanent grant for the same target never coexist.
+// Creates a temporary grant, or restarts an expired one for the same target.
+// Returns no row when the target is already held permanently or by a live
+// temporary grant; the caller reports which with GetPrincipalGrantByIdentity.
+func (q *Queries) InsertTemporaryGrant(ctx context.Context, arg InsertTemporaryGrantParams) (InsertTemporaryGrantRow, error) {
+	row := q.db.QueryRow(ctx, insertTemporaryGrant,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.ExpiresAt,
+	)
+	var i InsertTemporaryGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
+}
+
+const listAccessMemberDirectoryRoleSources = `-- name: ListAccessMemberDirectoryRoleSources :many
+WITH members AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  JOIN organization_user_relationships AS our
+    ON our.user_id = u.id
+    AND our.organization_id = $1
+    AND our.deleted IS FALSE
+  WHERE u.deleted_at IS NULL
+),
+profiles AS (
+  SELECT members.id AS user_id, p.id AS directory_user_id, p.attributes
+  FROM members
+  CROSS JOIN LATERAL (
+    SELECT d.id, d.attributes
+    FROM directory_users AS d
+    WHERE d.organization_id = $1
+      AND d.deleted IS FALSE
+      AND d.workos_deleted IS FALSE
+      AND (d.user_id = members.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(members.email)))
+    ORDER BY (d.user_id = members.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+    LIMIT 1
+  ) AS p
+)
+SELECT
+  profiles.user_id::text AS user_id,
+  COALESCE(mapped_org_role.id::text, mapped_global_role.id::text)::text AS role_id,
+  drm.id AS mapping_id,
+  drm.source_kind,
+  drm.directory_group_id
+FROM directory_role_mappings AS drm
+JOIN profiles
+  ON (
+    drm.source_kind = 'group'
+    AND EXISTS (
+      SELECT 1
+      FROM directory_user_group_memberships AS m
+      JOIN directory_groups AS dg
+        ON dg.id = m.directory_group_id
+        AND dg.organization_id = drm.organization_id
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+      WHERE m.directory_user_id = profiles.directory_user_id
+        AND m.directory_group_id = drm.directory_group_id
+        AND m.deleted IS FALSE
+    )
+  )
+  OR (
+    drm.source_kind = 'attribute'
+    AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+  )
+LEFT JOIN organization_roles AS mapped_org_role
+  ON drm.role_urn = 'role:organization:' || mapped_org_role.id::text
+  AND mapped_org_role.organization_id = drm.organization_id
+  AND mapped_org_role.deleted IS FALSE
+  AND mapped_org_role.workos_deleted IS FALSE
+LEFT JOIN global_roles AS mapped_global_role
+  ON drm.role_urn = 'role:global:' || mapped_global_role.id::text
+  AND mapped_global_role.deleted IS FALSE
+  AND mapped_global_role.workos_deleted IS FALSE
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+  AND COALESCE(mapped_org_role.id, mapped_global_role.id) IS NOT NULL
+ORDER BY profiles.user_id, role_id, drm.source_kind, drm.id
+`
+
+type ListAccessMemberDirectoryRoleSourcesRow struct {
+	UserID           string
+	RoleID           string
+	MappingID        uuid.UUID
+	SourceKind       string
+	DirectoryGroupID uuid.NullUUID
+}
+
+// For every active member, the directory role mappings that currently give
+// them a role: one row per member and matching mapping, so a role reached
+// through two groups is listed twice. This is the batch form of
+// ListUserDirectoryRoleMappingSources: each member's directory profile is
+// chosen and matched the same way as in ListUserRolePrincipals, and mappings
+// that point at a deleted role are skipped, as in the mapped half of
+// ListAccessMembers.
+func (q *Queries) ListAccessMemberDirectoryRoleSources(ctx context.Context, organizationID string) ([]ListAccessMemberDirectoryRoleSourcesRow, error) {
+	rows, err := q.db.Query(ctx, listAccessMemberDirectoryRoleSources, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessMemberDirectoryRoleSourcesRow
+	for rows.Next() {
+		var i ListAccessMemberDirectoryRoleSourcesRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.RoleID,
+			&i.MappingID,
+			&i.SourceKind,
+			&i.DirectoryGroupID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAccessMembers = `-- name: ListAccessMembers :many
+WITH members AS (
 SELECT
   users.id,
   users.display_name,
   users.email,
   users.photo_url,
-  COALESCE(organization_roles.id::text, global_roles.id::text, '')::text AS role_id,
-  COALESCE(ora.created_at, our.created_at)::timestamptz AS joined_at
+  COALESCE(direct_roles.role_ids, '{}'::text[])::text[] AS role_ids,
+  COALESCE(direct_roles.joined_at, our.created_at)::timestamptz AS joined_at,
+  -- The member's identity-provider profile, when the directory has synced one.
+  -- A member with no directory row, or one whose provider does not report the
+  -- attribute, comes back as an empty string.
+  COALESCE(du.attributes ->> 'department_name', '')::text AS department,
+  COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names,
+  -- The same groups by stable ID. group_ids and group_id_names are parallel
+  -- arrays: entry i of each describes the same group.
+  COALESCE(dg_names.group_ids, '{}'::uuid[])::uuid[] AS group_ids,
+  COALESCE(dg_names.group_id_names, '{}'::text[])::text[] AS group_id_names,
+  (du.id IS NOT NULL)::boolean AS in_directory,
+  COALESCE(mapped_roles.role_ids, '{}'::text[])::text[] AS directory_role_ids
 FROM organization_user_relationships AS our
 JOIN users
   ON users.id = our.user_id
-LEFT JOIN organization_role_assignments AS ora
-  ON ora.organization_id = our.organization_id
-  AND ora.workos_user_id = users.workos_id
-  AND ora.deleted_at IS NULL
-LEFT JOIN organization_roles
-  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
-  AND organization_roles.organization_id = our.organization_id
-  AND organization_roles.deleted IS FALSE
-  AND organization_roles.workos_deleted IS FALSE
-LEFT JOIN global_roles
-  ON ora.role_urn = 'role:global:' || global_roles.id::text
-  AND global_roles.deleted IS FALSE
-  AND global_roles.workos_deleted IS FALSE
-WHERE our.organization_id = $1
+LEFT JOIN LATERAL (
+  -- The member's directory profile, chosen the same way as in
+  -- ListUserRolePrincipals: the directory user linked to the member, falling
+  -- back to an unlinked directory user with the same email. A profile linked
+  -- to another user never matches. An email-matched row has a NULL user_id,
+  -- and NULLs sort first under DESC, so the link test needs NULLS LAST to
+  -- actually win; among equals the profile the directory updated most
+  -- recently is the current one.
+  SELECT d.id, d.attributes
+  FROM directory_users d
+  WHERE d.organization_id = our.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = users.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(users.email)))
+  ORDER BY (d.user_id = users.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+) du ON TRUE
+LEFT JOIN LATERAL (
+  SELECT
+    ARRAY_AGG(DISTINCT dg.name) AS group_names,
+    ARRAY_AGG(dg.id ORDER BY dg.name, dg.id) AS group_ids,
+    ARRAY_AGG(dg.name ORDER BY dg.name, dg.id) AS group_id_names
+  FROM directory_user_group_memberships m
+  INNER JOIN directory_groups dg
+    ON dg.id = m.directory_group_id
+    AND dg.organization_id = our.organization_id
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+  WHERE m.directory_user_id = du.id
+    AND m.deleted IS FALSE
+) dg_names ON TRUE
+LEFT JOIN LATERAL (
+  -- Roles granted to the member's directory profile through directory role
+  -- mappings, matched the same way as in ListUserRolePrincipals. Mappings that
+  -- point at a deleted role are skipped.
+  SELECT ARRAY_AGG(DISTINCT COALESCE(mapped_org_role.id::text, mapped_global_role.id::text)) AS role_ids
+  FROM directory_role_mappings AS drm
+  LEFT JOIN organization_roles AS mapped_org_role
+    ON drm.role_urn = 'role:organization:' || mapped_org_role.id::text
+    AND mapped_org_role.organization_id = drm.organization_id
+    AND mapped_org_role.deleted IS FALSE
+    AND mapped_org_role.workos_deleted IS FALSE
+  LEFT JOIN global_roles AS mapped_global_role
+    ON drm.role_urn = 'role:global:' || mapped_global_role.id::text
+    AND mapped_global_role.deleted IS FALSE
+    AND mapped_global_role.workos_deleted IS FALSE
+  WHERE drm.organization_id = our.organization_id
+    AND drm.deleted IS FALSE
+    AND COALESCE(mapped_org_role.id, mapped_global_role.id) IS NOT NULL
+    AND (
+      (
+        drm.source_kind = 'group'
+        AND EXISTS (
+          SELECT 1
+          FROM directory_user_group_memberships AS m
+          JOIN directory_groups AS dg
+            ON dg.id = m.directory_group_id
+            AND dg.organization_id = drm.organization_id
+            AND dg.deleted IS FALSE
+            AND dg.workos_deleted IS FALSE
+          WHERE m.directory_user_id = du.id
+            AND m.directory_group_id = drm.directory_group_id
+            AND m.deleted IS FALSE
+        )
+      )
+      OR (
+        drm.source_kind = 'attribute'
+        AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    )
+) mapped_roles ON TRUE
+LEFT JOIN LATERAL (
+  SELECT
+    ARRAY_AGG(DISTINCT COALESCE(organization_roles.id::text, global_roles.id::text))
+      FILTER (WHERE COALESCE(organization_roles.id, global_roles.id) IS NOT NULL) AS role_ids,
+    MIN(ora.created_at) AS joined_at
+  FROM organization_role_assignments AS ora
+  LEFT JOIN organization_roles
+    ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+    AND organization_roles.organization_id = our.organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  LEFT JOIN global_roles
+    ON ora.role_urn = 'role:global:' || global_roles.id::text
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+  WHERE ora.organization_id = our.organization_id
+    AND ora.workos_user_id = users.workos_id
+    AND ora.deleted_at IS NULL
+) direct_roles ON TRUE
+WHERE our.organization_id = $2
   AND our.deleted IS FALSE
   AND users.deleted_at IS NULL
-ORDER BY users.email, users.id
+), matched AS (
+  SELECT members.id, members.display_name, members.email, members.photo_url, members.role_ids, members.joined_at, members.department, members.group_names, members.group_ids, members.group_id_names, members.in_directory, members.directory_role_ids,
+    ($3::text <> '' AND
+      LOWER(BTRIM(REGEXP_REPLACE(email, '[[:space:]]+', ' ', 'g'))) = $3) AS exact_email_match
+  FROM members
+  WHERE ($4::text = '' OR $4 = ANY(role_ids || directory_role_ids))
+    AND (
+      $3::text = ''
+      OR STRPOS(LOWER(BTRIM(REGEXP_REPLACE(display_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      OR STRPOS(LOWER(BTRIM(REGEXP_REPLACE(email, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      OR EXISTS (
+        SELECT 1 FROM organization_roles AS role
+        WHERE role.organization_id = $2
+          AND role.id::text = ANY(role_ids || directory_role_ids)
+          AND STRPOS(LOWER(BTRIM(REGEXP_REPLACE(role.workos_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      )
+      OR EXISTS (
+        SELECT 1 FROM global_roles AS role
+        WHERE role.id::text = ANY(role_ids || directory_role_ids)
+          AND STRPOS(LOWER(BTRIM(REGEXP_REPLACE(role.workos_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      )
+    )
+)
+SELECT matched.id, matched.display_name, matched.email, matched.photo_url, matched.role_ids, matched.joined_at, matched.department, matched.group_names, matched.group_ids, matched.group_id_names, matched.in_directory, matched.directory_role_ids, matched.exact_email_match,
+  COUNT(*) OVER () AS total_matches,
+  COUNT(*) FILTER (WHERE exact_email_match) OVER () AS exact_email_matches
+FROM matched
+ORDER BY exact_email_match DESC, email, id
+LIMIT NULLIF($1::int, 0)
 `
 
-type ListAccessMembersRow struct {
-	ID          string
-	DisplayName string
-	Email       string
-	PhotoUrl    pgtype.Text
-	RoleID      string
-	JoinedAt    pgtype.Timestamptz
+type ListAccessMembersParams struct {
+	LimitValue     int32
+	OrganizationID string
+	QueryText      string
+	RoleID         string
 }
 
-func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) ([]ListAccessMembersRow, error) {
-	rows, err := q.db.Query(ctx, listAccessMembers, organizationID)
+type ListAccessMembersRow struct {
+	ID                string
+	DisplayName       string
+	Email             string
+	PhotoUrl          pgtype.Text
+	RoleIds           []string
+	JoinedAt          pgtype.Timestamptz
+	Department        string
+	GroupNames        []string
+	GroupIds          []uuid.UUID
+	GroupIDNames      []string
+	InDirectory       bool
+	DirectoryRoleIds  []string
+	ExactEmailMatch   pgtype.Bool
+	TotalMatches      int64
+	ExactEmailMatches int64
+}
+
+func (q *Queries) ListAccessMembers(ctx context.Context, arg ListAccessMembersParams) ([]ListAccessMembersRow, error) {
+	rows, err := q.db.Query(ctx, listAccessMembers,
+		arg.LimitValue,
+		arg.OrganizationID,
+		arg.QueryText,
+		arg.RoleID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -726,8 +2034,17 @@ func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) 
 			&i.DisplayName,
 			&i.Email,
 			&i.PhotoUrl,
-			&i.RoleID,
+			&i.RoleIds,
 			&i.JoinedAt,
+			&i.Department,
+			&i.GroupNames,
+			&i.GroupIds,
+			&i.GroupIDNames,
+			&i.InDirectory,
+			&i.DirectoryRoleIds,
+			&i.ExactEmailMatch,
+			&i.TotalMatches,
+			&i.ExactEmailMatches,
 		); err != nil {
 			return nil, err
 		}
@@ -768,6 +2085,417 @@ func (q *Queries) ListAccessNotificationUsers(ctx context.Context, organizationI
 	for rows.Next() {
 		var i ListAccessNotificationUsersRow
 		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessRequestMessages = `-- name: ListAccessRequestMessages :many
+SELECT id, organization_id, access_request_id, provider, kind, recipient_user_id, slack_team_id, slack_user_id, slack_channel_id, slack_message_ts, created_at, updated_at, deleted_at, deleted
+FROM access_request_messages
+WHERE organization_id = $1
+  AND access_request_id = $2
+  AND deleted IS FALSE
+ORDER BY created_at, id
+`
+
+type ListAccessRequestMessagesParams struct {
+	OrganizationID  string
+	AccessRequestID uuid.UUID
+}
+
+func (q *Queries) ListAccessRequestMessages(ctx context.Context, arg ListAccessRequestMessagesParams) ([]AccessRequestMessage, error) {
+	rows, err := q.db.Query(ctx, listAccessRequestMessages, arg.OrganizationID, arg.AccessRequestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AccessRequestMessage
+	for rows.Next() {
+		var i AccessRequestMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.AccessRequestID,
+			&i.Provider,
+			&i.Kind,
+			&i.RecipientUserID,
+			&i.SlackTeamID,
+			&i.SlackUserID,
+			&i.SlackChannelID,
+			&i.SlackMessageTs,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessRequestPeople = `-- name: ListAccessRequestPeople :many
+SELECT id, display_name, email
+FROM users
+WHERE id = ANY($1::text[])
+`
+
+type ListAccessRequestPeopleRow struct {
+	ID          string
+	DisplayName string
+	Email       string
+}
+
+// Names the requesters and deciders a list of requests mentions.
+func (q *Queries) ListAccessRequestPeople(ctx context.Context, ids []string) ([]ListAccessRequestPeopleRow, error) {
+	rows, err := q.db.Query(ctx, listAccessRequestPeople, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessRequestPeopleRow
+	for rows.Next() {
+		var i ListAccessRequestPeopleRow
+		if err := rows.Scan(&i.ID, &i.DisplayName, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessRequests = `-- name: ListAccessRequests :many
+SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.requested_duration_seconds, access_requests.requested_until, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
+FROM access_requests
+LEFT JOIN principal_grants
+  ON principal_grants.id = access_requests.temporary_grant_id
+  AND principal_grants.organization_id = access_requests.organization_id
+WHERE access_requests.organization_id = $1
+  AND access_requests.deleted IS FALSE
+  AND ($2::text IS NULL OR access_requests.requester_user_id = $2::text)
+  AND (
+    $3::text IS NULL
+    OR (CASE
+          WHEN access_requests.status = 'pending' AND access_requests.expires_at <= clock_timestamp() THEN 'expired'
+          ELSE access_requests.status
+        END) = $3::text
+  )
+ORDER BY access_requests.created_at DESC, access_requests.id DESC
+LIMIT $4
+`
+
+type ListAccessRequestsParams struct {
+	OrganizationID  string
+	RequesterUserID pgtype.Text
+	Status          pgtype.Text
+	MaxRows         int32
+}
+
+type ListAccessRequestsRow struct {
+	AccessRequest  AccessRequest
+	GrantExpiresAt pgtype.Timestamptz
+}
+
+// Lists an organization's requests, newest first. A pending request whose
+// window has passed counts as expired for the status filter.
+func (q *Queries) ListAccessRequests(ctx context.Context, arg ListAccessRequestsParams) ([]ListAccessRequestsRow, error) {
+	rows, err := q.db.Query(ctx, listAccessRequests,
+		arg.OrganizationID,
+		arg.RequesterUserID,
+		arg.Status,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessRequestsRow
+	for rows.Next() {
+		var i ListAccessRequestsRow
+		if err := rows.Scan(
+			&i.AccessRequest.ID,
+			&i.AccessRequest.OrganizationID,
+			&i.AccessRequest.RequesterUserID,
+			&i.AccessRequest.Scope,
+			&i.AccessRequest.Selector,
+			&i.AccessRequest.ResourceName,
+			&i.AccessRequest.Message,
+			&i.AccessRequest.Status,
+			&i.AccessRequest.DecidedByUserID,
+			&i.AccessRequest.DecidedVia,
+			&i.AccessRequest.DecidedAt,
+			&i.AccessRequest.TemporaryGrantID,
+			&i.AccessRequest.ChallengeIds,
+			&i.AccessRequest.RequestedDurationSeconds,
+			&i.AccessRequest.RequestedUntil,
+			&i.AccessRequest.ExpiresAt,
+			&i.AccessRequest.CreatedAt,
+			&i.AccessRequest.UpdatedAt,
+			&i.AccessRequest.DeletedAt,
+			&i.AccessRequest.Deleted,
+			&i.GrantExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessibleMCPServersForUser = `-- name: ListAccessibleMCPServersForUser :many
+WITH user_grants AS (
+  SELECT
+    pg.scope,
+    pg.selectors,
+    (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
+  FROM principal_grants pg
+  WHERE pg.organization_id = $1
+    AND pg.principal_urn = ANY($2::text[])
+    AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
+    AND pg.scope IN (
+      'mcp:connect', 'mcp:read', 'mcp:write',
+      'mcp:blocked_connect', 'mcp:blocked_read', 'mcp:blocked_write'
+    )
+), servers AS (
+  SELECT ms.id, ms.name, ms.slug, ms.project_id, p.slug AS project_slug
+  FROM mcp_servers ms
+  JOIN projects p ON p.id = ms.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
+  WHERE ms.deleted IS FALSE
+    AND ms.visibility <> 'disabled'
+), grant_matches AS (
+  -- Each grant paired with the servers its selector proves, so the allow and
+  -- the block are matched the same way rather than twice over.
+  --
+  -- This is Selector.Matches against a server-level check
+  -- {resource_kind: mcp, resource_id: <server>, project_id: <project>}: every
+  -- dimension the grant names must be the wildcard or equal to the check's
+  -- value, and a dimension the check does not constrain (tool, disposition) is
+  -- skipped. A project-scoped grant therefore reaches only its own project,
+  -- and a tool-scoped grant still proves reach to the server.
+  SELECT
+    s.id AS server_id,
+    ug.scope,
+    ug.direct,
+    COALESCE(ug.selectors->>'resource_id', '*') <> '*' AS concrete,
+    -- Whether this grant would also satisfy StrictMatches, which exclusions
+    -- use: every dimension it names must be one the check constrains. A
+    -- tool- or disposition-scoped block narrows something inside the server,
+    -- so it must not withdraw a server-level permission wholesale.
+    NOT EXISTS (
+      SELECT 1 FROM jsonb_object_keys(ug.selectors) AS key
+      WHERE key NOT IN ('resource_kind', 'resource_id', 'project_id')
+    ) AS strict
+  FROM servers s
+  JOIN user_grants ug ON (
+    ug.selectors->>'resource_kind' IN ('*', 'mcp')
+    AND ug.selectors->>'resource_id' IN ('*', s.id::text)
+    AND (
+      ug.selectors->>'project_id' IS NULL
+      OR ug.selectors->>'project_id' IN ('*', s.project_id::text)
+    )
+  )
+)
+SELECT DISTINCT
+  s.id,
+  s.name,
+  s.slug,
+  s.project_id,
+  s.project_slug
+FROM servers s
+JOIN grant_matches allowed
+  ON allowed.server_id = s.id
+  AND allowed.scope IN ('mcp:connect', 'mcp:read', 'mcp:write')
+WHERE NOT EXISTS (
+  SELECT 1 FROM grant_matches blocked
+  WHERE blocked.server_id = s.id
+    AND blocked.strict
+    AND (
+      blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+      OR (allowed.scope = 'mcp:write' AND blocked.scope = 'mcp:blocked_read')
+    )
+    AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
+)
+ORDER BY s.name
+`
+
+type ListAccessibleMCPServersForUserParams struct {
+	OrganizationID string
+	PrincipalUrns  []string
+}
+
+type ListAccessibleMCPServersForUserRow struct {
+	ID          uuid.UUID
+	Name        pgtype.Text
+	Slug        pgtype.Text
+	ProjectID   uuid.UUID
+	ProjectSlug string
+}
+
+// Returns the MCP servers a user can reach, scoped to the user's principals
+// (user:id and their assigned roles).
+//
+// Access here means authorization and nothing else. A plugin assignment is
+// distribution — it decides what a server is offered through, not who may call
+// it — and a user blocked by RBAC stays blocked however many plugins carry the
+// server, so plugin membership is deliberately not consulted.
+//
+// The shape mirrors the authorization engine's own: a permission is an allow
+// grant for a scope minus a blocked_ grant proving the same server for that
+// scope or for one it implies (see authz/expressions.go): mcp:blocked_write
+// withdraws mcp:write, and mcp:blocked_read withdraws mcp:read and also
+// mcp:write, because a write check honours a read block (see scopeExpansions
+// in authz/scopes.go). mcp:blocked_connect withdraws mcp:connect only;
+// connect is implied by neither read nor write. A grant made directly to the
+// user that names this server outranks a block inherited from a role or
+// user:all, while the user's own blocks always apply (authz/precedence.go).
+func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListAccessibleMCPServersForUserParams) ([]ListAccessibleMCPServersForUserRow, error) {
+	rows, err := q.db.Query(ctx, listAccessibleMCPServersForUser, arg.OrganizationID, arg.PrincipalUrns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessibleMCPServersForUserRow
+	for rows.Next() {
+		var i ListAccessibleMCPServersForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.ProjectID,
+			&i.ProjectSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessibleSkillsForUser = `-- name: ListAccessibleSkillsForUser :many
+WITH user_grants AS (
+  SELECT
+    pg.scope,
+    pg.selectors,
+    (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
+  FROM principal_grants pg
+  WHERE pg.organization_id = $1
+    AND pg.principal_urn = ANY($2::text[])
+    AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
+    AND pg.scope IN (
+      'skill:read', 'skill:write',
+      'skill:blocked_read', 'skill:blocked_write'
+    )
+), candidate_skills AS (
+  SELECT s.id, s.name, s.display_name, s.project_id, p.slug AS project_slug
+  FROM skills s
+  JOIN projects p ON p.id = s.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
+  WHERE s.archived_at IS NULL
+), grant_matches AS (
+  -- Selector.Matches against {resource_kind: skill, resource_id: <skill>}.
+  -- A skill scope permits no dimensions beyond those two (see
+  -- authz.allowedSelectorKeys), so there is no project_id to honour here and
+  -- no narrower block that could fail StrictMatches — the wildcard and the
+  -- per-skill grant are the only shapes a skill grant can take.
+  SELECT
+    cs.id AS skill_id,
+    ug.scope,
+    ug.direct,
+    COALESCE(ug.selectors->>'resource_id', '*') <> '*' AS concrete
+  FROM candidate_skills cs
+  JOIN user_grants ug ON (
+    ug.selectors->>'resource_kind' IN ('*', 'skill')
+    AND ug.selectors->>'resource_id' IN ('*', cs.id::text)
+  )
+)
+SELECT DISTINCT
+  cs.id,
+  cs.name,
+  cs.display_name,
+  cs.project_id,
+  cs.project_slug
+FROM candidate_skills cs
+JOIN grant_matches allowed
+  ON allowed.skill_id = cs.id
+  AND allowed.scope IN ('skill:read', 'skill:write')
+WHERE NOT EXISTS (
+  SELECT 1 FROM grant_matches blocked
+  WHERE blocked.skill_id = cs.id
+    AND (
+      blocked.scope = 'skill:blocked_read'
+      OR (blocked.scope = 'skill:blocked_write' AND allowed.scope = 'skill:write')
+    )
+    AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
+)
+ORDER BY cs.display_name, cs.name
+`
+
+type ListAccessibleSkillsForUserParams struct {
+	OrganizationID string
+	PrincipalUrns  []string
+}
+
+type ListAccessibleSkillsForUserRow struct {
+	ID          uuid.UUID
+	Name        string
+	DisplayName string
+	ProjectID   uuid.UUID
+	ProjectSlug string
+}
+
+// Returns the skills a user can reach, scoped to the user's principals
+// (user:id and their assigned roles).
+//
+// Authorization only, on the same terms as the MCP query above: a skill
+// distributed to a plugin the user holds is still unreachable if RBAC does not
+// allow it, so distribution is not consulted. Principal precedence also
+// matches: a direct grant naming the skill outranks an inherited block.
+//
+// Blocks pair with allows by scope: skill:blocked_read withdraws skill:read and
+// also skill:write, because a write check honours a read block (see
+// scopeExpansions in authz/scopes.go), and skill:blocked_write withdraws
+// skill:write. Callers read the result as "skills this user can reach", which
+// is the skill:read check, and the engine does not withdraw that on
+// skill:blocked_write. So a user whose only grant is skill:write, blocked by
+// skill:blocked_write, is left out here although the engine lets them read the
+// skill. That case is kept as it was until list and single-skill access are
+// reconciled.
+// SELECT DISTINCT only permits ORDER BY over selected columns, and
+// skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
+func (q *Queries) ListAccessibleSkillsForUser(ctx context.Context, arg ListAccessibleSkillsForUserParams) ([]ListAccessibleSkillsForUserRow, error) {
+	rows, err := q.db.Query(ctx, listAccessibleSkillsForUser, arg.OrganizationID, arg.PrincipalUrns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessibleSkillsForUserRow
+	for rows.Next() {
+		var i ListAccessibleSkillsForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.ProjectID,
+			&i.ProjectSlug,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -956,9 +2684,239 @@ func (q *Queries) ListActiveRoleIDsByWorkosUser(ctx context.Context, arg ListAct
 	return items, nil
 }
 
+const listAgentNames = `-- name: ListAgentNames :many
+SELECT id, name
+FROM agents
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY LOWER(name), id
+`
+
+type ListAgentNamesRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Every agent a rule or assignment can still name, including suspended and
+// revoked ones. Those keep the access they already hold, so a surface that
+// resolved names from the assignable set alone would render them as deleted.
+func (q *Queries) ListAgentNames(ctx context.Context, organizationID string) ([]ListAgentNamesRow, error) {
+	rows, err := q.db.Query(ctx, listAgentNames, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentNamesRow
+	for rows.Next() {
+		var i ListAgentNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentRoleAssignments = `-- name: ListAgentRoleAssignments :many
+
+SELECT
+  ara.agent_id,
+  ara.role_urn::text AS principal_urn,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug
+FROM agent_role_assignments AS ara
+LEFT JOIN organization_roles
+  ON ara.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ara.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ara.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+JOIN agents
+  ON agents.organization_id = ara.organization_id
+  AND agents.id = ara.agent_id
+  AND agents.deleted IS FALSE
+WHERE ara.organization_id = $1
+  AND ara.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY principal_urn, ara.agent_id
+`
+
+type ListAgentRoleAssignmentsRow struct {
+	AgentID      uuid.UUID
+	PrincipalUrn string
+	RoleSlug     string
+}
+
+// Agent role membership. Agents have no WorkOS identity, so these assignments
+// are local only and are never reconciled outward. The role joins mirror the
+// member queries above so a deleted role stops granting membership the moment
+// it is deleted, without a foreign key on role_urn.
+func (q *Queries) ListAgentRoleAssignments(ctx context.Context, organizationID string) ([]ListAgentRoleAssignmentsRow, error) {
+	rows, err := q.db.Query(ctx, listAgentRoleAssignments, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentRoleAssignmentsRow
+	for rows.Next() {
+		var i ListAgentRoleAssignmentsRow
+		if err := rows.Scan(&i.AgentID, &i.PrincipalUrn, &i.RoleSlug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentRolePrincipals = `-- name: ListAgentRolePrincipals :many
+SELECT ara.role_urn::text AS principal_urn
+FROM agent_role_assignments AS ara
+LEFT JOIN organization_roles
+  ON ara.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ara.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ara.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+JOIN agents
+  ON agents.organization_id = ara.organization_id
+  AND agents.id = ara.agent_id
+  AND agents.deleted IS FALSE
+WHERE ara.organization_id = $1
+  AND ara.agent_id = $2
+  AND ara.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY principal_urn
+`
+
+type ListAgentRolePrincipalsParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+}
+
+// The role principals one agent holds. Used on the request path to widen an
+// agent's own policy with the grants of the roles it belongs to.
+func (q *Queries) ListAgentRolePrincipals(ctx context.Context, arg ListAgentRolePrincipalsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listAgentRolePrincipals, arg.OrganizationID, arg.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var principal_urn string
+		if err := rows.Scan(&principal_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, principal_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssignableAgents = `-- name: ListAssignableAgents :many
+SELECT id, name
+FROM agents
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND suspended_at IS NULL
+  AND revoked_at IS NULL
+ORDER BY LOWER(name), id
+`
+
+type ListAssignableAgentsRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Agents that may be named in a role or resource audience. Suspended and
+// revoked agents keep the assignments they already hold, but cannot be given
+// new ones, so lifecycle is filtered here rather than at the call site.
+func (q *Queries) ListAssignableAgents(ctx context.Context, organizationID string) ([]ListAssignableAgentsRow, error) {
+	rows, err := q.db.Query(ctx, listAssignableAgents, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssignableAgentsRow
+	for rows.Next() {
+		var i ListAssignableAgentsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChallengeResolutionTemporaryGrants = `-- name: ListChallengeResolutionTemporaryGrants :many
+SELECT id, expires_at, created_at, (expires_at > clock_timestamp())::boolean AS active
+FROM principal_grants
+WHERE organization_id = $1
+  AND id = ANY($2::uuid[])
+  AND expires_at IS NOT NULL
+`
+
+type ListChallengeResolutionTemporaryGrantsParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+type ListChallengeResolutionTemporaryGrantsRow struct {
+	ID        uuid.UUID
+	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+	Active    bool
+}
+
+// Returns each temporary grant a challenge resolution points at, expired ones
+// included. A grant that is missing was revoked (revocation deletes the row).
+// active compares the deadline with the database clock, the same clock
+// authorization reads grants with. created_at moves when an expired grant is
+// restarted, which tells a resolution of the earlier grant from the new one.
+func (q *Queries) ListChallengeResolutionTemporaryGrants(ctx context.Context, arg ListChallengeResolutionTemporaryGrantsParams) ([]ListChallengeResolutionTemporaryGrantsRow, error) {
+	rows, err := q.db.Query(ctx, listChallengeResolutionTemporaryGrants, arg.OrganizationID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChallengeResolutionTemporaryGrantsRow
+	for rows.Next() {
+		var i ListChallengeResolutionTemporaryGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.Active,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChallengeResolutions = `-- name: ListChallengeResolutions :many
 
-SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at FROM authz_challenge_resolutions
+SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by, created_at FROM authz_challenge_resolutions
 WHERE organization_id = $1
   AND challenge_id = ANY($2::text[])
 `
@@ -990,8 +2948,296 @@ func (q *Queries) ListChallengeResolutions(ctx context.Context, arg ListChalleng
 			&i.ResourceID,
 			&i.ResolutionType,
 			&i.RoleSlug,
+			&i.TemporaryGrantID,
 			&i.ResolvedBy,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryMappedRoleMemberCounts = `-- name: ListDirectoryMappedRoleMemberCounts :many
+WITH members AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  JOIN organization_user_relationships AS our
+    ON our.user_id = u.id
+    AND our.organization_id = $1
+    AND our.deleted_at IS NULL
+  WHERE u.deleted_at IS NULL
+),
+profiles AS (
+  SELECT members.id AS user_id, p.id AS directory_user_id, p.attributes
+  FROM members
+  CROSS JOIN LATERAL (
+    SELECT d.id, d.attributes
+    FROM directory_users AS d
+    WHERE d.organization_id = $1
+      AND d.deleted IS FALSE
+      AND d.workos_deleted IS FALSE
+      AND (d.user_id = members.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(members.email)))
+    ORDER BY (d.user_id = members.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+    LIMIT 1
+  ) AS p
+)
+SELECT
+  drm.role_urn::text AS role_urn,
+  COUNT(DISTINCT profiles.user_id)::bigint AS member_count
+FROM directory_role_mappings AS drm
+JOIN profiles
+  ON (
+    drm.source_kind = 'group'
+    AND EXISTS (
+      SELECT 1
+      FROM directory_user_group_memberships AS m
+      JOIN directory_groups AS dg
+        ON dg.id = m.directory_group_id
+        AND dg.organization_id = drm.organization_id
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+      WHERE m.directory_user_id = profiles.directory_user_id
+        AND m.directory_group_id = drm.directory_group_id
+        AND m.deleted IS FALSE
+    )
+  )
+  OR (
+    drm.source_kind = 'attribute'
+    AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+  )
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+  AND ($2::text[] IS NULL OR drm.role_urn = ANY($2::text[]))
+  AND NOT EXISTS (
+    SELECT 1
+    FROM organization_role_assignments AS ora
+    WHERE ora.organization_id = drm.organization_id
+      AND ora.role_urn = drm.role_urn
+      AND ora.user_id = profiles.user_id
+      AND ora.deleted_at IS NULL
+  )
+GROUP BY drm.role_urn
+`
+
+type ListDirectoryMappedRoleMemberCountsParams struct {
+	OrganizationID string
+	RoleUrns       []string
+}
+
+type ListDirectoryMappedRoleMemberCountsRow struct {
+	RoleUrn     string
+	MemberCount int64
+}
+
+// Per role, the active members who hold it only through a directory role
+// mapping. Members with a live direct assignment of the same role are left
+// out, so callers add this to the direct member count. Each member's
+// directory profile is chosen the same way as in ListUserRolePrincipals.
+// A NULL role_urns counts every role; otherwise only the listed ones.
+func (q *Queries) ListDirectoryMappedRoleMemberCounts(ctx context.Context, arg ListDirectoryMappedRoleMemberCountsParams) ([]ListDirectoryMappedRoleMemberCountsRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryMappedRoleMemberCounts, arg.OrganizationID, arg.RoleUrns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectoryMappedRoleMemberCountsRow
+	for rows.Next() {
+		var i ListDirectoryMappedRoleMemberCountsRow
+		if err := rows.Scan(&i.RoleUrn, &i.MemberCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryRoleInventoryGroups = `-- name: ListDirectoryRoleInventoryGroups :many
+SELECT id, workos_directory_group_id
+FROM directory_groups
+WHERE organization_id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_directory_group_id = ANY($2::text[])
+ORDER BY id
+`
+
+type ListDirectoryRoleInventoryGroupsParams struct {
+	OrganizationID string
+	WorkosGroupIds []string
+}
+
+type ListDirectoryRoleInventoryGroupsRow struct {
+	ID                     uuid.UUID
+	WorkosDirectoryGroupID string
+}
+
+func (q *Queries) ListDirectoryRoleInventoryGroups(ctx context.Context, arg ListDirectoryRoleInventoryGroupsParams) ([]ListDirectoryRoleInventoryGroupsRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryRoleInventoryGroups, arg.OrganizationID, arg.WorkosGroupIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectoryRoleInventoryGroupsRow
+	for rows.Next() {
+		var i ListDirectoryRoleInventoryGroupsRow
+		if err := rows.Scan(&i.ID, &i.WorkosDirectoryGroupID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryRoleInventoryMembers = `-- name: ListDirectoryRoleInventoryMembers :many
+SELECT u.id
+FROM organization_user_relationships AS m
+JOIN users AS u ON u.id = m.user_id AND u.deleted_at IS NULL
+WHERE m.organization_id = $1 AND m.deleted IS FALSE
+ORDER BY u.id
+`
+
+func (q *Queries) ListDirectoryRoleInventoryMembers(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDirectoryRoleInventoryMembers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryRoleInventoryRoles = `-- name: ListDirectoryRoleInventoryRoles :many
+SELECT workos_slug::text AS role_slug, ('role:organization:' || id::text)::text AS role_urn
+FROM organization_roles
+WHERE organization_id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_slug = ANY($2::text[])
+UNION ALL
+SELECT workos_slug::text AS role_slug, ('role:global:' || id::text)::text AS role_urn
+FROM global_roles
+WHERE deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_slug = ANY($2::text[])
+ORDER BY role_slug, role_urn
+`
+
+type ListDirectoryRoleInventoryRolesParams struct {
+	OrganizationID string
+	RoleSlugs      []string
+}
+
+type ListDirectoryRoleInventoryRolesRow struct {
+	RoleSlug string
+	RoleUrn  string
+}
+
+func (q *Queries) ListDirectoryRoleInventoryRoles(ctx context.Context, arg ListDirectoryRoleInventoryRolesParams) ([]ListDirectoryRoleInventoryRolesRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryRoleInventoryRoles, arg.OrganizationID, arg.RoleSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectoryRoleInventoryRolesRow
+	for rows.Next() {
+		var i ListDirectoryRoleInventoryRolesRow
+		if err := rows.Scan(&i.RoleSlug, &i.RoleUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryRoleMappings = `-- name: ListDirectoryRoleMappings :many
+SELECT
+  drm.id,
+  drm.source_kind,
+  drm.directory_group_id,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value,
+  -- A missing source matches nobody: a group mapping whose group is gone or
+  -- tombstoned, or an attribute mapping no live directory user carries. The
+  -- group name is still returned so the mapping can be recognised.
+  (
+    CASE
+      WHEN drm.source_kind = 'group' THEN
+        dg.id IS NULL OR dg.deleted OR dg.workos_deleted
+      ELSE NOT EXISTS (
+        SELECT 1
+        FROM directory_users AS du
+        WHERE du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    END
+  )::boolean AS source_missing,
+  drm.role_urn,
+  drm.created_at,
+  drm.updated_at
+FROM directory_role_mappings AS drm
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+ORDER BY drm.source_kind, dg.name, drm.attribute_key, drm.attribute_value, drm.id
+`
+
+type ListDirectoryRoleMappingsRow struct {
+	ID                 uuid.UUID
+	SourceKind         string
+	DirectoryGroupID   uuid.NullUUID
+	DirectoryGroupName pgtype.Text
+	AttributeKey       pgtype.Text
+	AttributeValue     pgtype.Text
+	SourceMissing      bool
+	RoleUrn            string
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) ListDirectoryRoleMappings(ctx context.Context, organizationID string) ([]ListDirectoryRoleMappingsRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryRoleMappings, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectoryRoleMappingsRow
+	for rows.Next() {
+		var i ListDirectoryRoleMappingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourceKind,
+			&i.DirectoryGroupID,
+			&i.DirectoryGroupName,
+			&i.AttributeKey,
+			&i.AttributeValue,
+			&i.SourceMissing,
+			&i.RoleUrn,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1034,6 +3280,289 @@ func (q *Queries) ListGlobalRoles(ctx context.Context) ([]GlobalRole, error) {
 			&i.DeletedAt,
 			&i.Deleted,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveDirectoryMappingRoles = `-- name: ListLiveDirectoryMappingRoles :many
+WITH live_global_roles AS (
+  SELECT ('role:global:' || id::text)::text AS role_urn
+  FROM global_roles
+  WHERE ('role:global:' || id::text) = ANY($1::text[])
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  ORDER BY id
+  FOR SHARE
+), live_organization_roles AS (
+  SELECT ('role:organization:' || id::text)::text AS role_urn
+  FROM organization_roles
+  WHERE organization_id = $2
+    AND ('role:organization:' || id::text) = ANY($1::text[])
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  ORDER BY id
+  FOR SHARE
+)
+SELECT role_urn FROM live_global_roles
+UNION ALL
+SELECT role_urn FROM live_organization_roles
+`
+
+type ListLiveDirectoryMappingRolesParams struct {
+	RoleUrns       []string
+	OrganizationID string
+}
+
+func (q *Queries) ListLiveDirectoryMappingRoles(ctx context.Context, arg ListLiveDirectoryMappingRolesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listLiveDirectoryMappingRoles, arg.RoleUrns, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var role_urn string
+		if err := rows.Scan(&role_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, role_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveDirectoryRoleMappingsForSource = `-- name: ListLiveDirectoryRoleMappingsForSource :many
+SELECT id, role_urn, created_at, updated_at
+FROM directory_role_mappings
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND (
+    ($2::uuid IS NOT NULL AND directory_group_id = $2::uuid)
+    OR (
+      $3::text IS NOT NULL
+      AND attribute_key = $3::text
+      AND attribute_value = $4::text
+    )
+  )
+ORDER BY role_urn
+FOR UPDATE
+`
+
+type ListLiveDirectoryRoleMappingsForSourceParams struct {
+	OrganizationID   string
+	DirectoryGroupID uuid.NullUUID
+	AttributeKey     pgtype.Text
+	AttributeValue   pgtype.Text
+}
+
+type ListLiveDirectoryRoleMappingsForSourceRow struct {
+	ID        uuid.UUID
+	RoleUrn   string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListLiveDirectoryRoleMappingsForSource(ctx context.Context, arg ListLiveDirectoryRoleMappingsForSourceParams) ([]ListLiveDirectoryRoleMappingsForSourceRow, error) {
+	rows, err := q.db.Query(ctx, listLiveDirectoryRoleMappingsForSource,
+		arg.OrganizationID,
+		arg.DirectoryGroupID,
+		arg.AttributeKey,
+		arg.AttributeValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLiveDirectoryRoleMappingsForSourceRow
+	for rows.Next() {
+		var i ListLiveDirectoryRoleMappingsForSourceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RoleUrn,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listManagedAssistantAgentIDs = `-- name: ListManagedAssistantAgentIDs :many
+SELECT aab.agent_id::uuid AS agent_id
+FROM assistant_agent_bindings AS aab
+JOIN project_managed_assistants AS pma
+  ON pma.project_id = aab.project_id
+  AND pma.assistant_id = aab.assistant_id
+JOIN assistants
+  ON assistants.id = aab.assistant_id
+  AND assistants.project_id = aab.project_id
+  AND assistants.organization_id = aab.organization_id
+  AND assistants.deleted IS FALSE
+JOIN projects
+  ON projects.id = aab.project_id
+  AND projects.organization_id = aab.organization_id
+  AND projects.deleted IS FALSE
+JOIN agents
+  ON agents.id = aab.agent_id
+  AND agents.organization_id = aab.organization_id
+  AND agents.project_id = aab.project_id
+  AND agents.deleted IS FALSE
+WHERE aab.organization_id = $1
+  AND aab.deleted IS FALSE
+  AND aab.agent_id = ANY($2::uuid[])
+`
+
+type ListManagedAssistantAgentIDsParams struct {
+	OrganizationID string
+	AgentIds       []uuid.UUID
+}
+
+// The requested agents that are currently bound to a project's managed
+// assistant. Only these agents may hold organization-wide read policy; every
+// other agent has org:read filtered out of its runtime policy.
+func (q *Queries) ListManagedAssistantAgentIDs(ctx context.Context, arg ListManagedAssistantAgentIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listManagedAssistantAgentIDs, arg.OrganizationID, arg.AgentIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var agent_id uuid.UUID
+		if err := rows.Scan(&agent_id); err != nil {
+			return nil, err
+		}
+		items = append(items, agent_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemberPrincipalsByUsers = `-- name: ListMemberPrincipalsByUsers :many
+WITH active_users AS (
+  SELECT users.id AS user_id, users.email
+  FROM users
+  JOIN organization_user_relationships AS our ON our.user_id = users.id
+  WHERE our.organization_id = $1
+    AND users.id = ANY($2::text[])
+    AND users.deleted_at IS NULL
+    AND our.deleted_at IS NULL
+),
+profiles AS (
+  SELECT DISTINCT ON (active_users.user_id) active_users.user_id, d.id, d.attributes
+  FROM active_users
+  JOIN directory_users AS d
+    ON d.organization_id = $1
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = active_users.user_id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(active_users.email)))
+  ORDER BY active_users.user_id, (d.user_id = active_users.user_id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+)
+SELECT user_id, ('user:' || user_id)::text AS principal_urn
+FROM active_users
+UNION
+SELECT active_users.user_id, ora.role_urn::text AS principal_urn
+FROM active_users
+JOIN organization_role_assignments AS ora ON ora.user_id = active_users.user_id
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+UNION
+SELECT profiles.user_id, drm.role_urn::text AS principal_urn
+FROM profiles
+JOIN directory_role_mappings AS drm
+  ON drm.organization_id = $1
+  AND drm.deleted IS FALSE
+WHERE (
+    (
+      drm.source_kind = 'group'
+      AND EXISTS (
+        SELECT 1
+        FROM directory_user_group_memberships AS m
+        JOIN directory_groups AS dg
+          ON dg.id = m.directory_group_id
+          AND dg.organization_id = drm.organization_id
+          AND dg.deleted IS FALSE
+          AND dg.workos_deleted IS FALSE
+        WHERE m.directory_user_id = profiles.id
+          AND m.directory_group_id = drm.directory_group_id
+          AND m.deleted IS FALSE
+      )
+    )
+    OR (
+      drm.source_kind = 'attribute'
+      AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+    )
+  )
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM organization_roles AS r
+      WHERE drm.role_urn = 'role:organization:' || r.id::text
+        AND r.organization_id = drm.organization_id
+        AND r.deleted IS FALSE
+        AND r.workos_deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM global_roles AS g
+      WHERE drm.role_urn = 'role:global:' || g.id::text
+        AND g.deleted IS FALSE
+        AND g.workos_deleted IS FALSE
+    )
+  )
+`
+
+type ListMemberPrincipalsByUsersParams struct {
+	OrganizationID string
+	UserIds        []string
+}
+
+type ListMemberPrincipalsByUsersRow struct {
+	UserID       string
+	PrincipalUrn string
+}
+
+// Resolve active user and role principals together for a requested set of
+// owners. Roles come from direct assignments and from directory role
+// mappings, with the same rules as ListUserRolePrincipals: the profile is the
+// directory user linked to the member, falling back to an unlinked directory
+// user with the same email, and a mapping applies when its group contains the
+// profile or its attribute value matches it.
+func (q *Queries) ListMemberPrincipalsByUsers(ctx context.Context, arg ListMemberPrincipalsByUsersParams) ([]ListMemberPrincipalsByUsersRow, error) {
+	rows, err := q.db.Query(ctx, listMemberPrincipalsByUsers, arg.OrganizationID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemberPrincipalsByUsersRow
+	for rows.Next() {
+		var i ListMemberPrincipalsByUsersRow
+		if err := rows.Scan(&i.UserID, &i.PrincipalUrn); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1136,6 +3665,59 @@ func (q *Queries) ListMemberRolePrincipalsByWorkosUser(ctx context.Context, arg 
 	for rows.Next() {
 		var i ListMemberRolePrincipalsByWorkosUserRow
 		if err := rows.Scan(&i.RoleSlug, &i.PrincipalUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemberRolePrincipalsByWorkosUsers = `-- name: ListMemberRolePrincipalsByWorkosUsers :many
+SELECT
+  ora.workos_user_id,
+  ora.role_urn::text AS principal_urn
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.workos_user_id = ANY($2::text[])
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+  AND ora.deleted_at IS NULL
+ORDER BY ora.workos_user_id, ora.role_urn
+`
+
+type ListMemberRolePrincipalsByWorkosUsersParams struct {
+	OrganizationID string
+	WorkosUserIds  []string
+}
+
+type ListMemberRolePrincipalsByWorkosUsersRow struct {
+	WorkosUserID string
+	PrincipalUrn string
+}
+
+// The roles several members hold, in one read, for a role save that works
+// out what each member it assigns gains.
+func (q *Queries) ListMemberRolePrincipalsByWorkosUsers(ctx context.Context, arg ListMemberRolePrincipalsByWorkosUsersParams) ([]ListMemberRolePrincipalsByWorkosUsersRow, error) {
+	rows, err := q.db.Query(ctx, listMemberRolePrincipalsByWorkosUsers, arg.OrganizationID, arg.WorkosUserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemberRolePrincipalsByWorkosUsersRow
+	for rows.Next() {
+		var i ListMemberRolePrincipalsByWorkosUsersRow
+		if err := rows.Scan(&i.WorkosUserID, &i.PrincipalUrn); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1387,8 +3969,8 @@ const listPrincipalGrantsByOrg = `-- name: ListPrincipalGrantsByOrg :many
 SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = $1
-  AND COALESCE(effect, 'allow') = 'allow'
   AND ($2::text = '' OR principal_urn = $2)
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
 ORDER BY principal_urn, scope
 `
 
@@ -1410,7 +3992,16 @@ type ListPrincipalGrantsByOrgRow struct {
 
 // Queries for managing principal grants (RBAC).
 // principal_grants is org-scoped (no project_id); every query is scoped to organization_id.
-// Returns all grant rows for an organization, optionally filtered by principal URN.
+// Audience reads and replacements skip api_key rows: a key's policy is owned by the keys service.
+//
+// A row with a non-NULL expires_at is a temporary grant. Once expires_at has
+// passed it grants nothing: every read used for authorization or display
+// filters it out, and a permanent write of the same grant takes the row over
+// by clearing expires_at. Audience reads and replacements see permanent rows
+// only, so saving an audience never turns a temporary grant permanent or
+// removes one.
+// Returns all live grant rows for an organization, optionally filtered by
+// principal URN.
 func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipalGrantsByOrgParams) ([]ListPrincipalGrantsByOrgRow, error) {
 	rows, err := q.db.Query(ctx, listPrincipalGrantsByOrg, arg.OrganizationID, arg.PrincipalUrn)
 	if err != nil {
@@ -1444,12 +4035,13 @@ const listPrincipalGrantsByResource = `-- name: ListPrincipalGrantsByResource :m
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
-  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = $2
   AND selectors @> jsonb_build_object(
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn
 `
 
@@ -1496,12 +4088,13 @@ const listPrincipalGrantsByResourceIDs = `-- name: ListPrincipalGrantsByResource
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
-  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = $2
   AND selectors @> jsonb_build_object(
     'resource_kind', $3::text
   )
   AND selectors->>'resource_id' = ANY($4::text[])
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn
 `
 
@@ -1575,6 +4168,521 @@ func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organiza
 	return items, nil
 }
 
+const listTemporaryGrants = `-- name: ListTemporaryGrants :many
+SELECT id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE organization_id = $1
+  AND expires_at IS NOT NULL
+  AND ($2::text = '' OR principal_urn = $2)
+  AND ($3::boolean OR expires_at > clock_timestamp())
+ORDER BY expires_at, id
+LIMIT 500
+`
+
+type ListTemporaryGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	IncludeExpired bool
+}
+
+type ListTemporaryGrantsRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Lists an organization's temporary grants, soonest deadline first, optionally
+// for one principal. Expired grants are included only on request; revoked
+// grants are deleted and live on in the audit log.
+func (q *Queries) ListTemporaryGrants(ctx context.Context, arg ListTemporaryGrantsParams) ([]ListTemporaryGrantsRow, error) {
+	rows, err := q.db.Query(ctx, listTemporaryGrants, arg.OrganizationID, arg.PrincipalUrn, arg.IncludeExpired)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTemporaryGrantsRow
+	for rows.Next() {
+		var i ListTemporaryGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserDirectoryRoleMappingSources = `-- name: ListUserDirectoryRoleMappingSources :many
+WITH member AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  WHERE u.id = $2::text
+),
+profile AS (
+  SELECT d.id, d.attributes
+  FROM directory_users AS d
+  CROSS JOIN member
+  WHERE d.organization_id = $1
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = member.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(member.email)))
+  ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+)
+SELECT
+  drm.role_urn::text AS role_urn,
+  drm.source_kind,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value
+FROM directory_role_mappings AS drm
+CROSS JOIN profile
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+  AND (
+    (
+      drm.source_kind = 'group'
+      AND dg.id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM directory_user_group_memberships AS m
+        WHERE m.directory_user_id = profile.id
+          AND m.directory_group_id = drm.directory_group_id
+          AND m.deleted IS FALSE
+      )
+    )
+    OR (
+      drm.source_kind = 'attribute'
+      AND profile.attributes ->> drm.attribute_key = drm.attribute_value
+    )
+  )
+ORDER BY drm.role_urn, drm.source_kind, dg.name, drm.attribute_key, drm.attribute_value, drm.id
+`
+
+type ListUserDirectoryRoleMappingSourcesParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+type ListUserDirectoryRoleMappingSourcesRow struct {
+	RoleUrn            string
+	SourceKind         string
+	DirectoryGroupName pgtype.Text
+	AttributeKey       pgtype.Text
+	AttributeValue     pgtype.Text
+}
+
+// The directory role mappings that currently give a member each of their
+// mapped roles: one row per matching mapping, so a role reached through two
+// groups is listed twice. The profile and matching rules are the same as the
+// mapped half of ListUserRolePrincipals, which decides the roles themselves;
+// this read only says where they came from.
+func (q *Queries) ListUserDirectoryRoleMappingSources(ctx context.Context, arg ListUserDirectoryRoleMappingSourcesParams) ([]ListUserDirectoryRoleMappingSourcesRow, error) {
+	rows, err := q.db.Query(ctx, listUserDirectoryRoleMappingSources, arg.OrganizationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserDirectoryRoleMappingSourcesRow
+	for rows.Next() {
+		var i ListUserDirectoryRoleMappingSourcesRow
+		if err := rows.Scan(
+			&i.RoleUrn,
+			&i.SourceKind,
+			&i.DirectoryGroupName,
+			&i.AttributeKey,
+			&i.AttributeValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserRolePrincipals = `-- name: ListUserRolePrincipals :many
+WITH direct AS (
+  SELECT
+    COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+    ora.role_urn::text AS principal_urn
+  FROM organization_role_assignments AS ora
+  LEFT JOIN organization_roles
+    ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+    AND organization_roles.organization_id = ora.organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  LEFT JOIN global_roles
+    ON ora.role_urn = 'role:global:' || global_roles.id::text
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+  WHERE ora.organization_id = $1
+    AND ora.user_id = $2::text
+    AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+    AND ora.deleted_at IS NULL
+),
+member AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  WHERE u.id = $2::text
+),
+profile AS (
+  SELECT d.id, d.attributes
+  FROM directory_users AS d
+  CROSS JOIN member
+  WHERE d.organization_id = $1
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = member.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(member.email)))
+  ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+),
+mapped AS (
+  SELECT DISTINCT drm.role_urn::text AS principal_urn
+  FROM directory_role_mappings AS drm
+  CROSS JOIN profile
+  WHERE drm.organization_id = $1
+    AND drm.deleted IS FALSE
+    AND (
+      (
+        drm.source_kind = 'group'
+        AND EXISTS (
+          SELECT 1
+          FROM directory_user_group_memberships AS m
+          JOIN directory_groups AS dg
+            ON dg.id = m.directory_group_id
+            AND dg.organization_id = drm.organization_id
+            AND dg.deleted IS FALSE
+            AND dg.workos_deleted IS FALSE
+          WHERE m.directory_user_id = profile.id
+            AND m.directory_group_id = drm.directory_group_id
+            AND m.deleted IS FALSE
+        )
+      )
+      OR (
+        drm.source_kind = 'attribute'
+        AND profile.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    )
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM organization_roles AS r
+        WHERE drm.role_urn = 'role:organization:' || r.id::text
+          AND r.organization_id = drm.organization_id
+          AND r.deleted IS FALSE
+          AND r.workos_deleted IS FALSE
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM global_roles AS g
+        WHERE drm.role_urn = 'role:global:' || g.id::text
+          AND g.deleted IS FALSE
+          AND g.workos_deleted IS FALSE
+      )
+    )
+)
+SELECT
+  principal_urn::text AS principal_urn,
+  (source_rank = 1)::boolean AS from_directory_mapping
+FROM (
+  SELECT 0 AS source_rank, role_slug AS sort_key, principal_urn FROM direct
+  UNION ALL
+  SELECT 1 AS source_rank, principal_urn AS sort_key, principal_urn FROM mapped
+) AS roles
+ORDER BY source_rank, sort_key
+`
+
+type ListUserRolePrincipalsParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+type ListUserRolePrincipalsRow struct {
+	PrincipalUrn         string
+	FromDirectoryMapping bool
+}
+
+// Every role principal a member holds, in one read: direct role assignments
+// first (the same rows as ListMemberRolePrincipalsByUser), then roles granted
+// through directory role mappings. A mapping applies when its group contains
+// the member's directory profile, or its attribute value matches it. The
+// profile is the directory user linked to the member, falling back to an
+// unlinked directory user with the same email. A profile linked to another
+// user never matches. Mappings that point at a deleted role are skipped. Callers
+// dedupe roles that come from both sources; from_directory_mapping tells the
+// two apart.
+func (q *Queries) ListUserRolePrincipals(ctx context.Context, arg ListUserRolePrincipalsParams) ([]ListUserRolePrincipalsRow, error) {
+	rows, err := q.db.Query(ctx, listUserRolePrincipals, arg.OrganizationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserRolePrincipalsRow
+	for rows.Next() {
+		var i ListUserRolePrincipalsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.FromDirectoryMapping); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockAgentRoleAssignments = `-- name: LockAgentRoleAssignments :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))
+`
+
+type LockAgentRoleAssignmentsParams struct {
+	OrganizationID string
+	RoleUrn        string
+}
+
+// Serializes agent membership writes for one role, so a read-then-replace
+// cannot interleave with another administrator's. Held until the transaction
+// ends. The role row lock is not enough on its own: a system role lives in
+// global_roles and has no per-organization row to lock.
+func (q *Queries) LockAgentRoleAssignments(ctx context.Context, arg LockAgentRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, lockAgentRoleAssignments, arg.OrganizationID, arg.RoleUrn)
+	return err
+}
+
+const lockAuthPermissionBackfill = `-- name: LockAuthPermissionBackfill :exec
+SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
+`
+
+// Takes the organization's auth client backfill lock for the transaction's
+// life; the key must match authclientbackfill's LockOrganizationBackfill.
+func (q *Queries) LockAuthPermissionBackfill(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockAuthPermissionBackfill, organizationID)
+	return err
+}
+
+const lockChallengeResolutions = `-- name: LockChallengeResolutions :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+  jsonb_build_array('access.challenge-resolution', $1::text)::text, 0
+))
+`
+
+// One organization-scoped lock serializes challenge resolution without consuming
+// one shared lock entry per challenge in large buckets. Resolution traffic is rare,
+// and this keeps concurrent batches bounded and deterministic.
+func (q *Queries) LockChallengeResolutions(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockChallengeResolutions, organizationID)
+	return err
+}
+
+const lockDirectoryRoleMappingSource = `-- name: LockDirectoryRoleMappingSource :exec
+SELECT pg_advisory_xact_lock(hashtextextended('access.directory_role_mapping:' || $1::text, 0))
+`
+
+// Serializes mapping writes for one group or attribute value, so the prior
+// role read before an upsert is still current when the upsert lands. Row
+// locks cannot do this for a first-time mapping, which has no row yet. Held
+// until the transaction ends.
+func (q *Queries) LockDirectoryRoleMappingSource(ctx context.Context, sourceKey string) error {
+	_, err := q.db.Exec(ctx, lockDirectoryRoleMappingSource, sourceKey)
+	return err
+}
+
+const lockMemberRoleSync = `-- name: LockMemberRoleSync :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+  jsonb_build_array('access.member-role-sync', $1::text, $2::text)::text, 0
+))
+`
+
+type LockMemberRoleSyncParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+// Cross-process serialization of RoleManager sends, including legacy unlinked members.
+func (q *Queries) LockMemberRoleSync(ctx context.Context, arg LockMemberRoleSyncParams) error {
+	_, err := q.db.Exec(ctx, lockMemberRoleSync, arg.OrganizationID, arg.WorkosUserID)
+	return err
+}
+
+const lockMemberRoleSyncRelationship = `-- name: LockMemberRoleSyncRelationship :one
+SELECT our.user_id, our.workos_membership_id, our.deleted,
+  (users.deleted_at IS NOT NULL)::boolean AS user_deleted
+FROM organization_user_relationships AS our
+JOIN users ON users.id = our.user_id
+WHERE our.organization_id = $1
+  AND users.workos_id = $2::text
+FOR UPDATE OF our
+`
+
+type LockMemberRoleSyncRelationshipParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+type LockMemberRoleSyncRelationshipRow struct {
+	UserID             pgtype.Text
+	WorkosMembershipID pgtype.Text
+	Deleted            bool
+	UserDeleted        bool
+}
+
+// Keep a connected member's desired roles stable across the read and provider send.
+// Deleted relationships are returned so they cannot fall back to legacy assignments.
+func (q *Queries) LockMemberRoleSyncRelationship(ctx context.Context, arg LockMemberRoleSyncRelationshipParams) (LockMemberRoleSyncRelationshipRow, error) {
+	row := q.db.QueryRow(ctx, lockMemberRoleSyncRelationship, arg.OrganizationID, arg.WorkosUserID)
+	var i LockMemberRoleSyncRelationshipRow
+	err := row.Scan(
+		&i.UserID,
+		&i.WorkosMembershipID,
+		&i.Deleted,
+		&i.UserDeleted,
+	)
+	return i, err
+}
+
+const lockOrganizationRoleByID = `-- name: LockOrganizationRoleByID :one
+SELECT id
+FROM organization_roles
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+FOR UPDATE
+`
+
+type LockOrganizationRoleByIDParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+// Platform mutations call this inside their receipt transaction before checking
+// an optimistic role version. Only custom organization roles are eligible.
+func (q *Queries) LockOrganizationRoleByID(ctx context.Context, arg LockOrganizationRoleByIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationRoleByID, arg.OrganizationID, arg.ID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockOrganizationUserRelationship = `-- name: LockOrganizationUserRelationship :one
+SELECT our.id
+FROM organization_user_relationships AS our
+JOIN users ON users.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.user_id = $2::text
+  AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
+FOR UPDATE OF users, our
+`
+
+type LockOrganizationUserRelationshipParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+// Serializes AddMemberRoleTx, UpdateMemberRoles, and connected-member sends.
+// Lock both rows so membership deletion and user soft-deletion cannot race the
+// active-state check. User deletion and membership deletion each need one of
+// these rows and therefore wait until this role mutation commits.
+// Provider event ingestion does not participate; not a lock for all writers.
+func (q *Queries) LockOrganizationUserRelationship(ctx context.Context, arg LockOrganizationUserRelationshipParams) (int64, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockResourceAudience = `-- name: LockResourceAudience :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))
+`
+
+type LockResourceAudienceParams struct {
+	OrganizationID string
+	ResourceID     string
+}
+
+// Serializes audience saves for one resource, so the version check and the
+// replacement that follows it cannot interleave with another administrator's.
+// The lock is held until the transaction ends.
+func (q *Queries) LockResourceAudience(ctx context.Context, arg LockResourceAudienceParams) error {
+	_, err := q.db.Exec(ctx, lockResourceAudience, arg.OrganizationID, arg.ResourceID)
+	return err
+}
+
+const lockRolePrincipalGrants = `-- name: LockRolePrincipalGrants :exec
+SELECT pg_advisory_xact_lock(hashtextextended('role-grants:' || $1::text || ':' || $2::text, 0))
+`
+
+type LockRolePrincipalGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// Serializes grant writes for one role principal in an organization until the
+// transaction ends. Role edits and the assistant-role-grants backfill both take
+// it, so a backfill cannot recheck a role, lose a race with a revocation, and
+// then write grants back.
+func (q *Queries) LockRolePrincipalGrants(ctx context.Context, arg LockRolePrincipalGrantsParams) error {
+	_, err := q.db.Exec(ctx, lockRolePrincipalGrants, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
+const markAuthPermissionTakenOver = `-- name: MarkAuthPermissionTakenOver :exec
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+  AND taken_over_at IS NULL
+`
+
+type MarkAuthPermissionTakenOverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+}
+
+// An explicit grant write takes the grant over from the default auth
+// permission backfill: a rollback leaves it, and a rerun still never writes it
+// again. Run after the write, so a grant provisioned meanwhile is seen.
+func (q *Queries) MarkAuthPermissionTakenOver(ctx context.Context, arg MarkAuthPermissionTakenOverParams) error {
+	_, err := q.db.Exec(ctx, markAuthPermissionTakenOver,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	return err
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,
@@ -1646,6 +4754,158 @@ type MarkOrganizationRoleDeletedLocallyParams struct {
 
 func (q *Queries) MarkOrganizationRoleDeletedLocally(ctx context.Context, arg MarkOrganizationRoleDeletedLocallyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markOrganizationRoleDeletedLocally, arg.OrganizationID, arg.WorkosSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markPrincipalAuthPermissionsTakenOver = `-- name: MarkPrincipalAuthPermissionsTakenOver :exec
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND taken_over_at IS NULL
+`
+
+type MarkPrincipalAuthPermissionsTakenOverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// An explicit write of a principal's whole policy takes every grant the
+// backfill provisioned for it over, including ones since removed.
+func (q *Queries) MarkPrincipalAuthPermissionsTakenOver(ctx context.Context, arg MarkPrincipalAuthPermissionsTakenOverParams) error {
+	_, err := q.db.Exec(ctx, markPrincipalAuthPermissionsTakenOver, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
+const recordAuthPermissionDefault = `-- name: RecordAuthPermissionDefault :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+type RecordAuthPermissionDefaultParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records a default grant written at organization creation.
+func (q *Queries) RecordAuthPermissionDefault(ctx context.Context, arg RecordAuthPermissionDefaultParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionDefault,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
+}
+
+const recordAuthPermissionPolicyTakeover = `-- name: RecordAuthPermissionPolicyTakeover :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind, taken_over_at)
+VALUES ($1, $2, $3, $4, $5, clock_timestamp())
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO UPDATE
+SET taken_over_at = COALESCE(auth_permission_provisions.taken_over_at, EXCLUDED.taken_over_at),
+    updated_at = clock_timestamp()
+`
+
+type RecordAuthPermissionPolicyTakeoverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records that an explicit write owns the principal's policy even when it
+// leaves no grant to mark, so the backfill never treats the principal as
+// untouched.
+func (q *Queries) RecordAuthPermissionPolicyTakeover(ctx context.Context, arg RecordAuthPermissionPolicyTakeoverParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionPolicyTakeover,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
+}
+
+const renewTemporaryGrant = `-- name: RenewTemporaryGrant :one
+UPDATE principal_grants
+SET expires_at = $1, updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+`
+
+type RenewTemporaryGrantParams struct {
+	ExpiresAt      pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type RenewTemporaryGrantRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Moves a live temporary grant's deadline. The caller has locked it.
+func (q *Queries) RenewTemporaryGrant(ctx context.Context, arg RenewTemporaryGrantParams) (RenewTemporaryGrantRow, error) {
+	row := q.db.QueryRow(ctx, renewTemporaryGrant, arg.ExpiresAt, arg.ID, arg.OrganizationID)
+	var i RenewTemporaryGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
+}
+
+const repairOrganizationRoleAssignmentUserLink = `-- name: RepairOrganizationRoleAssignmentUserLink :execrows
+UPDATE organization_role_assignments
+SET user_id = $1::text, updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND workos_user_id = $3
+  AND role_urn = $4::text
+  AND user_id IS NULL
+  AND deleted_at IS NULL
+`
+
+type RepairOrganizationRoleAssignmentUserLinkParams struct {
+	UserID         string
+	OrganizationID string
+	WorkosUserID   string
+	RoleUrn        string
+}
+
+// Repair only linkage; preserve roles and provider event/version metadata.
+func (q *Queries) RepairOrganizationRoleAssignmentUserLink(ctx context.Context, arg RepairOrganizationRoleAssignmentUserLinkParams) (int64, error) {
+	result, err := q.db.Exec(ctx, repairOrganizationRoleAssignmentUserLink,
+		arg.UserID,
+		arg.OrganizationID,
+		arg.WorkosUserID,
+		arg.RoleUrn,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -1739,6 +4999,93 @@ func (q *Queries) ReplaceOrganizationRoleAssignment(ctx context.Context, arg Rep
 	return column_1, err
 }
 
+const revokeTemporaryGrant = `-- name: RevokeTemporaryGrant :one
+DELETE FROM principal_grants
+WHERE id = $1
+  AND organization_id = $2
+  AND expires_at IS NOT NULL
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+`
+
+type RevokeTemporaryGrantParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type RevokeTemporaryGrantRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Ends a live temporary grant early by deleting it. The expires_at condition
+// means a permanent grant is never removed this way.
+func (q *Queries) RevokeTemporaryGrant(ctx context.Context, arg RevokeTemporaryGrantParams) (RevokeTemporaryGrantRow, error) {
+	row := q.db.QueryRow(ctx, revokeTemporaryGrant, arg.ID, arg.OrganizationID)
+	var i RevokeTemporaryGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
+}
+
+const softDeleteAgentRoleAssignmentsByRole = `-- name: SoftDeleteAgentRoleAssignmentsByRole :exec
+UPDATE agent_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND role_urn = $2::text
+  AND deleted_at IS NULL
+`
+
+type SoftDeleteAgentRoleAssignmentsByRoleParams struct {
+	OrganizationID string
+	RoleUrn        string
+}
+
+func (q *Queries) SoftDeleteAgentRoleAssignmentsByRole(ctx context.Context, arg SoftDeleteAgentRoleAssignmentsByRoleParams) error {
+	_, err := q.db.Exec(ctx, softDeleteAgentRoleAssignmentsByRole, arg.OrganizationID, arg.RoleUrn)
+	return err
+}
+
+const softDeleteAgentRoleAssignmentsExcept = `-- name: SoftDeleteAgentRoleAssignmentsExcept :exec
+UPDATE agent_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND role_urn = $2::text
+  AND deleted_at IS NULL
+  AND NOT (agent_id = ANY($3::uuid[]))
+`
+
+type SoftDeleteAgentRoleAssignmentsExceptParams struct {
+	OrganizationID   string
+	RoleUrn          string
+	RetainedAgentIds []uuid.UUID
+}
+
+// Removes the role from every agent not in the retained set, so one write can
+// express the complete agent membership of a role.
+func (q *Queries) SoftDeleteAgentRoleAssignmentsExcept(ctx context.Context, arg SoftDeleteAgentRoleAssignmentsExceptParams) error {
+	_, err := q.db.Exec(ctx, softDeleteAgentRoleAssignmentsExcept, arg.OrganizationID, arg.RoleUrn, arg.RetainedAgentIds)
+	return err
+}
+
 const softDeleteAllRoleAssignmentsByWorkosUser = `-- name: SoftDeleteAllRoleAssignmentsByWorkosUser :execrows
 UPDATE organization_role_assignments
 SET deleted_at = clock_timestamp(),
@@ -1796,7 +5143,33 @@ func (q *Queries) SoftDeleteRoleAssignmentsBySlug(ctx context.Context, arg SoftD
 	return result.RowsAffected(), nil
 }
 
-const upsertGlobalRole = `-- name: UpsertGlobalRole :exec
+const upsertAgentRoleAssignment = `-- name: UpsertAgentRoleAssignment :execrows
+INSERT INTO agent_role_assignments (organization_id, agent_id, role_urn)
+SELECT $1, agents.id, $2::text
+FROM agents
+WHERE agents.organization_id = $1
+  AND agents.id = $3
+  AND agents.deleted IS FALSE
+ON CONFLICT (organization_id, agent_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
+  updated_at = clock_timestamp()
+`
+
+type UpsertAgentRoleAssignmentParams struct {
+	OrganizationID string
+	RoleUrn        string
+	AgentID        uuid.UUID
+}
+
+func (q *Queries) UpsertAgentRoleAssignment(ctx context.Context, arg UpsertAgentRoleAssignmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertAgentRoleAssignment, arg.OrganizationID, arg.RoleUrn, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertGlobalRoleWithRequests = `-- name: UpsertGlobalRoleWithRequests :one
+WITH upserted AS (
 INSERT INTO global_roles (
     workos_slug,
     workos_name,
@@ -1820,9 +5193,12 @@ ON CONFLICT (workos_slug) DO UPDATE SET
     deleted_at = NULL,
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
+RETURNING id, (xmax = 0) AS inserted
+)
+SELECT (SELECT COALESCE(jsonb_agg(jsonb_build_object('global_role_id', id)), '[]'::jsonb) FROM upserted WHERE inserted)::jsonb AS requests
 `
 
-type UpsertGlobalRoleParams struct {
+type UpsertGlobalRoleWithRequestsParams struct {
 	WorkosSlug        string
 	WorkosName        string
 	WorkosDescription pgtype.Text
@@ -1833,8 +5209,9 @@ type UpsertGlobalRoleParams struct {
 
 // Upsert an environment-level role. WorkOS sync callers pass an event ID;
 // local/bootstrap callers pass NULL so an existing WorkOS event cursor is preserved.
-func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRoleParams) error {
-	_, err := q.db.Exec(ctx, upsertGlobalRole,
+// Only inserts emit fanout requests; the outbox consumer paginates organizations.
+func (q *Queries) UpsertGlobalRoleWithRequests(ctx context.Context, arg UpsertGlobalRoleWithRequestsParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, upsertGlobalRoleWithRequests,
 		arg.WorkosSlug,
 		arg.WorkosName,
 		arg.WorkosDescription,
@@ -1842,108 +5219,9 @@ func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRolePara
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 	)
-	return err
-}
-
-const upsertOrganizationRole = `-- name: UpsertOrganizationRole :one
-WITH upserted AS (
-INSERT INTO organization_roles (
-    organization_id,
-    workos_slug,
-    workos_name,
-    workos_description,
-    workos_created_at,
-    workos_updated_at,
-    workos_last_event_id
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7
-)
-ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
-    workos_name = EXCLUDED.workos_name,
-    workos_description = EXCLUDED.workos_description,
-    workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_roles.workos_last_event_id),
-    deleted_at = NULL,
-    workos_deleted_at = NULL,
-    updated_at = clock_timestamp()
-RETURNING
-    id,
-    organization_id,
-    workos_slug,
-    workos_name,
-    workos_description,
-    workos_created_at,
-    workos_updated_at
-)
-SELECT
-  upserted.id,
-  ('role:organization:' || upserted.id::text)::text AS role_urn,
-  upserted.workos_slug,
-  upserted.workos_name,
-  upserted.workos_description,
-  upserted.workos_created_at,
-  upserted.workos_updated_at,
-  COUNT(ora.id)::bigint AS member_count
-FROM upserted
-LEFT JOIN organization_role_assignments AS ora
-  ON ora.organization_id = upserted.organization_id
-  AND ora.role_urn = 'role:organization:' || upserted.id::text
-  AND ora.user_id IS NOT NULL
-  AND ora.deleted_at IS NULL
-GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at
-`
-
-type UpsertOrganizationRoleParams struct {
-	OrganizationID    string
-	WorkosSlug        string
-	WorkosName        string
-	WorkosDescription pgtype.Text
-	WorkosCreatedAt   pgtype.Timestamptz
-	WorkosUpdatedAt   pgtype.Timestamptz
-	WorkosLastEventID pgtype.Text
-}
-
-type UpsertOrganizationRoleRow struct {
-	ID                uuid.UUID
-	RoleUrn           string
-	WorkosSlug        string
-	WorkosName        string
-	WorkosDescription pgtype.Text
-	WorkosCreatedAt   pgtype.Timestamptz
-	WorkosUpdatedAt   pgtype.Timestamptz
-	MemberCount       int64
-}
-
-// Upsert an org-scoped role. WorkOS sync callers pass an event ID; local role
-// lifecycle callers pass NULL so an existing WorkOS event cursor is preserved.
-func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganizationRoleParams) (UpsertOrganizationRoleRow, error) {
-	row := q.db.QueryRow(ctx, upsertOrganizationRole,
-		arg.OrganizationID,
-		arg.WorkosSlug,
-		arg.WorkosName,
-		arg.WorkosDescription,
-		arg.WorkosCreatedAt,
-		arg.WorkosUpdatedAt,
-		arg.WorkosLastEventID,
-	)
-	var i UpsertOrganizationRoleRow
-	err := row.Scan(
-		&i.ID,
-		&i.RoleUrn,
-		&i.WorkosSlug,
-		&i.WorkosName,
-		&i.WorkosDescription,
-		&i.WorkosCreatedAt,
-		&i.WorkosUpdatedAt,
-		&i.MemberCount,
-	)
-	return i, err
+	var requests []byte
+	err := row.Scan(&requests)
+	return requests, err
 }
 
 const upsertOrganizationRoleAssignment = `-- name: UpsertOrganizationRoleAssignment :execrows
@@ -2019,12 +5297,118 @@ func (q *Queries) UpsertOrganizationRoleAssignment(ctx context.Context, arg Upse
 	return result.RowsAffected(), nil
 }
 
+const upsertOrganizationRoleWithRequests = `-- name: UpsertOrganizationRoleWithRequests :one
+WITH upserted AS (
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_roles.workos_last_event_id),
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING
+    id,
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    (xmax = 0) AS inserted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('organization_id', organization_id, 'role_urn', 'role:organization:' || id::text)), '[]'::jsonb) FROM upserted WHERE inserted)::jsonb AS requests,
+  upserted.id,
+  ('role:organization:' || upserted.id::text)::text AS role_urn,
+  upserted.workos_slug,
+  upserted.workos_name,
+  upserted.workos_description,
+  upserted.workos_created_at,
+  upserted.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM upserted
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = upserted.organization_id
+  AND ora.role_urn = 'role:organization:' || upserted.id::text
+  AND ora.user_id IS NOT NULL
+  AND ora.deleted_at IS NULL
+GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at
+`
+
+type UpsertOrganizationRoleWithRequestsParams struct {
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+type UpsertOrganizationRoleWithRequestsRow struct {
+	Requests          []byte
+	ID                uuid.UUID
+	RoleUrn           string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	MemberCount       int64
+}
+
+// Upsert an org-scoped role. WorkOS sync callers pass an event ID; local role
+// lifecycle callers pass NULL so an existing WorkOS event cursor is preserved.
+// Ordinary sync updates do not create distribution setup requests.
+func (q *Queries) UpsertOrganizationRoleWithRequests(ctx context.Context, arg UpsertOrganizationRoleWithRequestsParams) (UpsertOrganizationRoleWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationRoleWithRequests,
+		arg.OrganizationID,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	var i UpsertOrganizationRoleWithRequestsRow
+	err := row.Scan(
+		&i.Requests,
+		&i.ID,
+		&i.RoleUrn,
+		&i.WorkosSlug,
+		&i.WorkosName,
+		&i.WorkosDescription,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.MemberCount,
+	)
+	return i, err
+}
+
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
 DO UPDATE SET
-  effect = NULL,
+  expires_at = NULL,
   updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 `
@@ -2047,8 +5431,10 @@ type UpsertPrincipalGrantRow struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
-// Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
-// any legacy effect is normalized to the allow-only NULL representation.
+// Creates or updates a single permanent grant row. On conflict (same
+// org/principal/scope/selectors), the existing row is kept and its updated_at
+// is bumped; a temporary row becomes permanent, since this write asks for
+// access with no deadline.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,
@@ -2066,6 +5452,51 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 		&i.Selectors,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const withdrawAccessRequest = `-- name: WithdrawAccessRequest :one
+UPDATE access_requests
+SET status = 'withdrawn', updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND id = $2
+  AND requester_user_id = $3
+  AND status = 'pending'
+  AND deleted IS FALSE
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type WithdrawAccessRequestParams struct {
+	OrganizationID  string
+	ID              uuid.UUID
+	RequesterUserID string
+}
+
+func (q *Queries) WithdrawAccessRequest(ctx context.Context, arg WithdrawAccessRequestParams) (AccessRequest, error) {
+	row := q.db.QueryRow(ctx, withdrawAccessRequest, arg.OrganizationID, arg.ID, arg.RequesterUserID)
+	var i AccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.RequesterUserID,
+		&i.Scope,
+		&i.Selector,
+		&i.ResourceName,
+		&i.Message,
+		&i.Status,
+		&i.DecidedByUserID,
+		&i.DecidedVia,
+		&i.DecidedAt,
+		&i.TemporaryGrantID,
+		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

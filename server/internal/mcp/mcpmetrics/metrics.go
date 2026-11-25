@@ -14,8 +14,72 @@ import (
 )
 
 // InstrumentMCPRequestRejected is the OTel instrument name for the counter of
-// requests the Session OAuth authentication gate rejected before dispatch.
+// requests rejected before dispatch, by the Session OAuth authentication gate
+// or by request validation.
 const InstrumentMCPRequestRejected = "mcp.request.rejected"
+
+// InstrumentOAuthIDJAGExchange is the OTel instrument name for the counter of
+// ID-JAG token exchanges by outcome and rejection reason. Only exchanges that
+// reach the jwt-bearer grant handler are counted, plus a shared token
+// endpoint's refusal of one naming no resource. Refusals during client
+// authentication, client admission, AI tool blocking, or another shared
+// resource check happen earlier and are not counted.
+const InstrumentOAuthIDJAGExchange = "oauth.id_jag.exchange"
+
+// InstrumentOAuthIDJAGReleaseFailed counts assertions a failed exchange could not give back.
+const InstrumentOAuthIDJAGReleaseFailed = "oauth.id_jag.release_failed"
+
+// RequestRejectionReason is the closed set of reasons [Metrics] records on
+// mcp.request.rejected under gram.mcp.rejection_reason. It stays coarse so
+// the counter's per-server URL dimension does not multiply into many series.
+type RequestRejectionReason string
+
+const (
+	// RequestRejectionReasonAuthentication: the Session OAuth gate rejected
+	// the request; gram.oauth.failure_reason carries the detail.
+	RequestRejectionReasonAuthentication RequestRejectionReason = "authentication"
+
+	// RequestRejectionReasonHeaderMismatch: an MCP standard request header
+	// was missing, malformed, or disagreed with the body (-32020).
+	RequestRejectionReasonHeaderMismatch RequestRejectionReason = "header_mismatch"
+
+	// RequestRejectionReasonMetadataInvalid: required per-request `_meta`
+	// was missing or malformed (-32602).
+	RequestRejectionReasonMetadataInvalid RequestRejectionReason = "metadata_invalid"
+
+	// RequestRejectionReasonProtocolVersionUnsupported: the declared protocol
+	// revision is outside the surface's supported set (-32022). These
+	// requests are also counted by mcp.request.protocol_version_rejected.
+	RequestRejectionReasonProtocolVersionUnsupported RequestRejectionReason = "protocol_version_unsupported"
+)
+
+// InstrumentMCPProtocolVersionRejected is the OTel instrument name for the
+// counter of otherwise valid requests rejected before authentication because
+// their declared protocol revision is outside the terminating surface's
+// supported set.
+const InstrumentMCPProtocolVersionRejected = "mcp.request.protocol_version_rejected"
+
+// InstrumentMCPSkillRead is the OTel instrument name for the counter of
+// skills served over MCP: one increment per `resources/read` of a `skill://`
+// URI that returned the skill's SKILL.md.
+const InstrumentMCPSkillRead = "mcp.skill.read"
+
+// SkillOrigin is the closed set of origins [Metrics.RecordSkillRead] records
+// on mcp.skill.read under gram.mcp.skill.origin. It names where the served
+// bytes came from, not which surface served them; the surface is a separate
+// dimension because the platform surface may one day serve distributed
+// skills too.
+type SkillOrigin string
+
+const (
+	// SkillOriginDistribution: a managed skill reached the endpoint through
+	// an active plugin skill distribution.
+	SkillOriginDistribution SkillOrigin = "distribution"
+
+	// SkillOriginEmbedded: a reviewed skill compiled into the server and
+	// served by the platform toolset.
+	SkillOriginEmbedded SkillOrigin = "embedded"
+)
 
 // OAuthFlowStage is the closed set of coarse stages at which a user-facing
 // OAuth flow can terminally resolve to a non-completion outcome (failed or
@@ -45,9 +109,8 @@ const (
 )
 
 // Metrics is the mcp service's full instrument set. A nil *Metrics is valid —
-// every Record method becomes a no-op — and each method is also
-// nil-instrument-safe, so a partially constructed value still records what
-// it can.
+// metric recording becomes a no-op. Each method is also
+// nil-instrument-safe, so a partially constructed value still records what it can.
 type Metrics struct {
 	// mcpInitializeCounter is the unsampled census of observed handshakes by
 	// protocol revision. A counter rather than a span attribute because traces
@@ -58,17 +121,49 @@ type Metrics struct {
 
 	// requestCensus is the unsampled per-request census (mcp.request) emitted
 	// at the JSON-RPC dispatch sites for the hosted and platform surfaces. The
-	// remote/tunnel /x/mcp backends publish the same instrument from the
+	// remote/tunnel /mcp backends publish the same instrument from the
 	// proxy's request interceptor, which constructs its own [RequestCounter].
 	requestCensus *RequestCounter
 
-	// mcpRequestRejectedCounter is the unsampled census of requests the issuer
-	// gate turned away before dispatch: the population that never reaches
-	// requestCensus. It carries a per-server URL because "which server is
-	// rejecting" is the operational question; the URL is rebuilt from the
-	// resolved endpoint rather than taken from the request so an
-	// unauthenticated caller cannot mint series through the query string.
+	// metaMemberDispatchCounter counts proxied meta member dials by backend
+	// kind and credential routing outcome. No per-gateway dimension: that
+	// view lives in ClickHouse.
+	metaMemberDispatchCounter metric.Int64Counter
+
+	// mcpRequestRejectedCounter is the unsampled census of requests turned
+	// away before dispatch, by the issuer gate or by request validation: the
+	// population that never reaches requestCensus. It carries a per-server
+	// URL because "which server is rejecting" is the operational question;
+	// the URL is built from the resolved endpoint's path rather than the raw
+	// request URL so an unauthenticated caller cannot mint series through the
+	// query string.
 	mcpRequestRejectedCounter metric.Int64Counter
+
+	// upstreamIssuerParityCounter counts comparisons of a server's column
+	// upstream issuer against the one its client associations give, by
+	// surface, site, outcome, and authoritative source.
+	upstreamIssuerParityCounter metric.Int64Counter
+	// upstreamIssuerReconsentCounter counts consent checks by whether taking
+	// the upstream issuer from the other source would have forced a new consent.
+	upstreamIssuerReconsentCounter metric.Int64Counter
+	// metaStaleChoiceRefusalCounter counts gateway member calls and describes refused for a stale choice, by reason.
+	metaStaleChoiceRefusalCounter metric.Int64Counter
+	// mandatoryAuthzShadowCounter counts shadowed mandatory checks.
+	mandatoryAuthzShadowCounter metric.Int64Counter
+
+	// mcpProtocolVersionRejectedCounter partitions terminating-surface traffic
+	// with requestCensus: rejected declarations land here before authentication,
+	// while accepted declarations reach requestCensus at dispatch. Remote and
+	// tunneled proxy traffic is outside this counter by design.
+	mcpProtocolVersionRejectedCounter metric.Int64Counter
+
+	// mcpSkillReadCounter is the unsampled census of skills served over MCP
+	// (mcp.skill.read), by serving surface and skill origin. It deliberately
+	// carries no per-server, per-skill, or per-organization dimension: the
+	// activation question ("are agents loading skills over MCP at all, and
+	// from which surface?") needs fleet-wide aggregation, and per-skill
+	// activation is recorded durably as skill observations instead.
+	mcpSkillReadCounter metric.Int64Counter
 
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
@@ -94,9 +189,40 @@ type Metrics struct {
 	oauthFlowFailedCounter    metric.Int64Counter
 	oauthFlowDeclinedCounter  metric.Int64Counter
 
+	// connectionRefusalsWithoutRow counts requests with no proof of a real flow.
+	// These write no connection attempt row and are not OAuth flow endings.
+	connectionRefusalsWithoutRow metric.Int64Counter
+
 	// oauthRefreshTokenReplayServedCounter counts refresh responses served from
 	// the encrypted replay cache rather than by rotating the database session.
 	oauthRefreshTokenReplayServedCounter metric.Int64Counter
+
+	// oauthAuthorityUnavailableCounter counts transient private-authority lookup
+	// failures. These remain retryable and are therefore intentionally separate
+	// from the terminal oauth.flow.failed population.
+	oauthAuthorityUnavailableCounter metric.Int64Counter
+
+	// oauthResourceRejectedCounter counts RFC 8707 resource indicators a
+	// shared authorization server refused, by issuer, reason, and stage.
+	oauthResourceRejectedCounter metric.Int64Counter
+
+	// oauthIDJAGExchangeCounter counts ID-JAG token exchanges by issuer,
+	// outcome, and rejection reason.
+	oauthIDJAGExchangeCounter metric.Int64Counter
+
+	// oauthIDJAGReleaseFailedCounter counts assertions left spent by a failed release.
+	oauthIDJAGReleaseFailedCounter metric.Int64Counter
+
+	// tunnelPublicRejectedCounter counts anonymous public tunnel requests the
+	// admission gate rejected with 429 before they reached the tunnel gateway.
+	tunnelPublicRejectedCounter metric.Int64Counter
+
+	// shutdownInterruptedCounter counts tool calls and resource reads the
+	// gateway was running when the shutdown drain abandoned them, by MCP
+	// method and tool kind. It carries no per-organization, per-server or
+	// per-tool dimension: the question it answers is how often deploys cut
+	// calls short, and the warning log names each one.
+	shutdownInterruptedCounter metric.Int64Counter
 }
 
 // NewMetrics constructs every instrument the mcp service publishes. Each
@@ -115,12 +241,21 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 
 	mcpRequestDuration, err := meter.Float64Histogram(
 		"mcp.request.duration",
-		metric.WithDescription("Duration of mcp request in seconds"),
+		metric.WithDescription("Duration of MCP requests by server URL and public/private network surface"),
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.1, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 240),
 	)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create mcp request duration", attr.SlogError(err))
+	}
+
+	metaMemberDispatchCounter, err := meter.Int64Counter(
+		"mcp.meta.member.dispatch",
+		metric.WithDescription("Proxied meta MCP member dispatch attempts by backend kind and credential routing outcome"),
+		metric.WithUnit("{dispatch}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create meta member dispatch counter", attr.SlogError(err))
 	}
 
 	mcpInitializeCounter, err := meter.Int64Counter(
@@ -159,6 +294,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth flow failed counter", attr.SlogError(err))
 	}
 
+	connectionRefusalsWithoutRow, err := meter.Int64Counter(
+		"mcp.connection.refusals_without_row",
+		metric.WithDescription("Sign-in requests refused with no proof of a real flow, so no connection attempt row was written."),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName("mcp.connection.refusals_without_row"), attr.SlogError(err))
+	}
+
 	oauthFlowDeclinedCounter, err := meter.Int64Counter(
 		"oauth.flow.declined",
 		metric.WithDescription("User-facing OAuth flow declined by the user at a decision point (consent deny, IDP access_denied)"),
@@ -177,31 +321,199 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth refresh token replay served counter", attr.SlogError(err))
 	}
 
+	oauthAuthorityUnavailableCounter, err := meter.Int64Counter(
+		"oauth.authority.unavailable",
+		metric.WithDescription("Retryable private OAuth endpoint authority lookup failures by issuer, MCP slug, and OAuth flow stage"),
+		metric.WithUnit("{failure}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create oauth authority unavailable counter", attr.SlogError(err))
+	}
+
+	oauthResourceRejectedCounter, err := meter.Int64Counter(
+		"oauth.resource.rejected",
+		metric.WithDescription("RFC 8707 resource indicators a shared authorization server refused, by issuer, reason, and OAuth flow stage"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create oauth resource rejected counter", attr.SlogError(err))
+	}
+
+	oauthIDJAGExchangeCounter, err := meter.Int64Counter(
+		InstrumentOAuthIDJAGExchange,
+		metric.WithDescription("ID-JAG token exchanges reaching Speakeasy's jwt-bearer grant handler, by user session issuer, outcome, and rejection reason; refusals during client authentication, client admission, AI tool blocking, or a shared token endpoint's resource check happen earlier and are not counted, except a request naming no resource"),
+		metric.WithUnit("{exchange}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentOAuthIDJAGExchange), attr.SlogError(err))
+	}
+
+	oauthIDJAGReleaseFailedCounter, err := meter.Int64Counter(
+		InstrumentOAuthIDJAGReleaseFailed,
+		metric.WithDescription("ID-JAG assertions a failed exchange could not return to unused, so their retry is refused as a replay"),
+		metric.WithUnit("{assertion}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentOAuthIDJAGReleaseFailed), attr.SlogError(err))
+	}
+
 	mcpRequestRejectedCounter, err := meter.Int64Counter(
 		InstrumentMCPRequestRejected,
-		metric.WithDescription("MCP requests rejected by the Session OAuth authentication gate before dispatch, by failure reason, server URL, and surface"),
+		metric.WithDescription("MCP requests rejected before dispatch by the Session OAuth authentication gate or by request validation, by rejection reason, OAuth failure reason, server URL, serving surface, and public/private network surface"),
 		metric.WithUnit("{request}"),
 	)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPRequestRejected), attr.SlogError(err))
 	}
 
+	mcpProtocolVersionRejectedCounter, err := meter.Int64Counter(
+		InstrumentMCPProtocolVersionRejected,
+		metric.WithDescription("MCP requests rejected before authentication because the declared protocol revision is unsupported, by revision, method, serving surface, and public/private network surface"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPProtocolVersionRejected), attr.SlogError(err))
+	}
+
+	mcpSkillReadCounter, err := meter.Int64Counter(
+		InstrumentMCPSkillRead,
+		metric.WithDescription("Skills served over MCP through resources/read of a skill:// URI, by serving surface, skill origin, and public/private network surface"),
+		metric.WithUnit("{read}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPSkillRead), attr.SlogError(err))
+	}
+
+	upstreamIssuerParityCounter, err := meter.Int64Counter(
+		"mcp.upstream_issuer.parity",
+		metric.WithDescription("Comparisons of an MCP server's column upstream issuer against its client associations' provider, by surface, site, outcome, and authoritative source"),
+		metric.WithUnit("{comparison}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create upstream issuer parity counter", attr.SlogError(err))
+	}
+
+	upstreamIssuerReconsentCounter, err := meter.Int64Counter(
+		"mcp.upstream_issuer.reconsent_forecast",
+		metric.WithDescription("Consent checks by whether taking the upstream issuer from the other source would force a new consent, by site and outcome"),
+		metric.WithUnit("{check}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create upstream issuer re-consent forecast counter", attr.SlogError(err))
+	}
+
+	metaStaleChoiceRefusalCounter, err := meter.Int64Counter(
+		"mcp.meta.stale_choice_refusal",
+		metric.WithDescription("Calls and describes on a gateway member refused because its stored connection choice is stale, by reason"),
+		metric.WithUnit("{attempt}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create meta stale choice refusal counter", attr.SlogError(err))
+	}
+
+	mandatoryAuthzShadowCounter, err := meter.Int64Counter(
+		"mcp.authz.mandatory_shadow",
+		metric.WithDescription("Shadowed mandatory server and auth client checks beside today's decision, by organization, surface, caller, both outcomes, policy source and deny reason"),
+		metric.WithUnit("{check}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create mandatory authz shadow counter", attr.SlogError(err))
+	}
+
+	tunnelPublicRejectedCounter, err := meter.Int64Counter(
+		"mcp.tunnel_public.rejected",
+		metric.WithDescription("Anonymous public tunnel requests rejected before proxying, by MCP server and reason"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create tunnel public rejected counter", attr.SlogError(err))
+	}
+
+	shutdownInterruptedCounter, err := meter.Int64Counter(
+		"mcp.tool_call.shutdown_interrupted",
+		metric.WithDescription("Tool calls and resource reads abandoned by the shutdown drain, by MCP method and tool kind"),
+		metric.WithUnit("{call}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create shutdown interrupted counter", attr.SlogError(err))
+	}
+
 	return &Metrics{
 		mcpToolCallCounter:                   mcpToolCallCounter,
 		mcpRequestDuration:                   mcpRequestDuration,
 		mcpInitializeCounter:                 mcpInitializeCounter,
+		metaMemberDispatchCounter:            metaMemberDispatchCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
+		upstreamIssuerParityCounter:          upstreamIssuerParityCounter,
+		upstreamIssuerReconsentCounter:       upstreamIssuerReconsentCounter,
+		metaStaleChoiceRefusalCounter:        metaStaleChoiceRefusalCounter,
+		mandatoryAuthzShadowCounter:          mandatoryAuthzShadowCounter,
+		mcpProtocolVersionRejectedCounter:    mcpProtocolVersionRejectedCounter,
+		mcpSkillReadCounter:                  mcpSkillReadCounter,
 		requestCensus:                        NewRequestCounter(meter, logger),
 		identityCoverage:                     NewIdentityCoverageCounter(meter, logger),
 		oauthFlowStartedCounter:              oauthFlowStartedCounter,
 		oauthFlowCompletedCounter:            oauthFlowCompletedCounter,
 		oauthFlowFailedCounter:               oauthFlowFailedCounter,
 		oauthFlowDeclinedCounter:             oauthFlowDeclinedCounter,
+		connectionRefusalsWithoutRow:         connectionRefusalsWithoutRow,
 		oauthRefreshTokenReplayServedCounter: oauthRefreshTokenReplayServedCounter,
+		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
+		oauthResourceRejectedCounter:         oauthResourceRejectedCounter,
+		oauthIDJAGExchangeCounter:            oauthIDJAGExchangeCounter,
+		oauthIDJAGReleaseFailedCounter:       oauthIDJAGReleaseFailedCounter,
+		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
+		shutdownInterruptedCounter:           shutdownInterruptedCounter,
 	}
 }
 
-func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, toolName string) {
+// RecordShutdownInterrupted counts one tool call or resource read the
+// shutdown drain abandoned. method is the MCP method that ran it and toolKind
+// the kind of tool or resource the gateway was calling.
+func (m *Metrics) RecordShutdownInterrupted(ctx context.Context, method string, toolKind string) {
+	if m == nil || m.shutdownInterruptedCounter == nil {
+		return
+	}
+
+	m.shutdownInterruptedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.McpMethod(method),
+		attr.ToolCallKind(toolKind),
+	))
+}
+
+// TunnelPublicRejectReason is the closed set of pre-proxy rejection causes on
+// the anonymous public tunnel path. Bounded so the metric dimension stays
+// low-cardinality; add a value only when a new admission gate is instrumented.
+type TunnelPublicRejectReason string
+
+const (
+	// TunnelPublicRejectRequestRate: the per-tunnel all-request bucket was empty.
+	TunnelPublicRejectRequestRate TunnelPublicRejectReason = "request_rate"
+	// TunnelPublicRejectInitializeRate: the per-tunnel initialize bucket was empty.
+	TunnelPublicRejectInitializeRate TunnelPublicRejectReason = "initialize_rate"
+	// TunnelPublicRejectSessionCapacity: the tunnel is at its live anonymous
+	// session cap.
+	TunnelPublicRejectSessionCapacity TunnelPublicRejectReason = "session_capacity"
+)
+
+// RecordTunnelPublicRejection counts one anonymous public tunnel request the
+// admission gate rejected with 429 before it reached the tunnel gateway.
+// ratelimit.decisions already counts limiter throttles by limiter name; this
+// counter adds the endpoint slug and the rejection reason (which also covers
+// the session cap, not a limiter) so a saturated tunnel is attributable.
+func (m *Metrics) RecordTunnelPublicRejection(ctx context.Context, mcpSlug string, reason TunnelPublicRejectReason) {
+	if m == nil || m.tunnelPublicRejectedCounter == nil {
+		return
+	}
+
+	m.tunnelPublicRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.ToolsetMCPSlug(mcpSlug),
+		attr.TunnelPublicRejectionReason(string(reason)),
+	))
+}
+
+// RecordMCPToolCall omits an empty mcpServerID; each URL fronts one server, so series stay bounded.
+func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, mcpServerID string, toolName string) {
 	if m == nil || m.mcpToolCallCounter == nil {
 		return
 	}
@@ -211,7 +523,28 @@ func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 		attr.ToolName(toolName),
 		attr.OrganizationID(orgID),
 	}
+	if mcpServerID != "" {
+		kv = append(kv, attr.McpServerID(mcpServerID))
+	}
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordSkillRead counts one skill served over MCP: a `resources/read` of a
+// `skill://` URI that returned the skill's SKILL.md on the given surface,
+// from the given origin. Reads that fail (unknown URI, caller not assigned,
+// extension not enabled) are not counted; they stay on the span. Like
+// `mcp.request` it carries the network surface so private-network and public
+// activation can be told apart, and nothing per server or per skill.
+func (m *Metrics) RecordSkillRead(ctx context.Context, surface Surface, origin SkillOrigin) {
+	if m == nil || m.mcpSkillReadCounter == nil {
+		return
+	}
+
+	m.mcpSkillReadCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.McpSurface(string(surface)),
+		attr.McpSkillOrigin(origin),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
+	))
 }
 
 // RecordKillswitchIdentityCoverage records the bounded coverage classes for
@@ -255,7 +588,7 @@ func (m *Metrics) RecordMCPInitialize(ctx context.Context, requested, negotiated
 // surface. The census semantics — what counts, what the version dimension
 // means, and how this relates to `mcp.initialize` and `mcp.request.duration` —
 // are documented on [RequestCounter.Record], which the remote proxy's
-// interceptor invokes directly for the /x/mcp traffic that never reaches the
+// interceptor invokes directly for the proxied traffic that never reaches the
 // mcp dispatch.
 func (m *Metrics) RecordMCPRequest(ctx context.Context, protocolVersion, method string, surface Surface) {
 	if m == nil {
@@ -265,8 +598,112 @@ func (m *Metrics) RecordMCPRequest(ctx context.Context, protocolVersion, method 
 	m.requestCensus.Record(ctx, protocolVersion, method, surface)
 }
 
+// RecordMCPProtocolVersionRejected counts one parsed, non-initialize request
+// rejected before authentication because its declared revision is outside the
+// terminating surface's supported set. Its bounded dimensions match the
+// request census, so accepted and version-rejected traffic can be combined
+// without introducing client-controlled cardinality.
+func (m *Metrics) RecordMCPProtocolVersionRejected(ctx context.Context, protocolVersion, method string, surface Surface) {
+	if m == nil || m.mcpProtocolVersionRejectedCounter == nil {
+		return
+	}
+
+	m.mcpProtocolVersionRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Clamp(mcpversions.Sanitize(protocolVersion))),
+		attr.McpMethod(mcprequests.ClampMethod(method)),
+		attr.McpSurface(string(surface)),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
+	))
+}
+
+// UpstreamIssuerParity is one comparison of a server's column upstream issuer
+// against its associations' provider. Every field is a closed set; there is
+// no organization label because every organization reports.
+type UpstreamIssuerParity struct {
+	// Surface is the serving surface the comparison ran on.
+	Surface string
+
+	// Site is the code site within the surface.
+	Site string
+
+	// Outcome is how the two sources compared.
+	Outcome string
+
+	// Source is which upstream issuer was authoritative: column or associations.
+	Source string
+}
+
+// RecordUpstreamIssuerParity counts one upstream issuer comparison.
+func (m *Metrics) RecordUpstreamIssuerParity(ctx context.Context, p UpstreamIssuerParity) {
+	if m == nil || m.upstreamIssuerParityCounter == nil {
+		return
+	}
+	m.upstreamIssuerParityCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.UpstreamIssuerSurface(p.Surface),
+		attr.UpstreamIssuerSite(p.Site),
+		attr.UpstreamIssuerOutcome(p.Outcome),
+		attr.UpstreamIssuerSource(p.Source),
+	))
+}
+
+// RecordUpstreamIssuerReconsent counts one consent check of the re-consent
+// forecast. Sites and outcomes are closed sets.
+func (m *Metrics) RecordUpstreamIssuerReconsent(ctx context.Context, site, outcome string) {
+	if m == nil || m.upstreamIssuerReconsentCounter == nil {
+		return
+	}
+	m.upstreamIssuerReconsentCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.UpstreamIssuerSite(site),
+		attr.UpstreamIssuerOutcome(outcome),
+	))
+}
+
+// RecordMetaStaleChoiceRefusal counts one call or describe refused for a stale choice. Reasons are a closed set.
+func (m *Metrics) RecordMetaStaleChoiceRefusal(ctx context.Context, reason string) {
+	if m == nil || m.metaStaleChoiceRefusalCounter == nil {
+		return
+	}
+	m.metaStaleChoiceRefusalCounter.Add(ctx, 1, metric.WithAttributes(attr.AuthClientReason(reason)))
+}
+
+// MandatoryAuthzShadow is one shadowed mandatory check. Every field but
+// OrganizationID is a closed set, and organizations only report while the
+// shadow flag targets them, so the series stay bounded.
+type MandatoryAuthzShadow struct {
+	OrganizationID string
+	Surface        string
+	Caller         string
+	Principal      string
+	LegacyAllowed  bool
+	// LegacyAuthCeiling separates coverage resting on a pre-version-5
+	// credential's derived auth client ceiling from explicit grants.
+	LegacyAuthCeiling bool
+	Outcome           string
+	Source            string
+	Reason            string
+}
+
+// RecordMandatoryAuthzShadow counts one shadowed mandatory check.
+func (m *Metrics) RecordMandatoryAuthzShadow(ctx context.Context, shadow MandatoryAuthzShadow) {
+	if m == nil || m.mandatoryAuthzShadowCounter == nil {
+		return
+	}
+	m.mandatoryAuthzShadowCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(shadow.OrganizationID),
+		attr.MandatoryAuthzSurface(shadow.Surface),
+		attr.MandatoryAuthzCaller(shadow.Caller),
+		attr.MandatoryAuthzPrincipal(shadow.Principal),
+		attr.MandatoryAuthzLegacyAllowed(shadow.LegacyAllowed),
+		attr.MandatoryAuthzLegacyAuthCeiling(shadow.LegacyAuthCeiling),
+		attr.MandatoryAuthzOutcome(shadow.Outcome),
+		attr.MandatoryAuthzSource(shadow.Source),
+		attr.MandatoryAuthzReason(shadow.Reason),
+	))
+}
+
 // RecordMCPRequestRejected counts one MCP request the Session OAuth
-// authentication gate turned away before dispatch. reason is the closed set
+// authentication gate turned away before dispatch, under the rejection reason
+// [RequestRejectionReasonAuthentication]. reason is the closed set
 // the gate logs under gram.oauth.failure_reason; mcpURL is the same
 // gram.mcp.url key `mcp.request.duration` and `mcp.tool.call` carry, so every
 // per-server MCP metric groups the same way; surface is the same value the
@@ -283,17 +720,39 @@ func (m *Metrics) RecordMCPRequestRejected(ctx context.Context, reason string, m
 	}
 
 	m.mcpRequestRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.McpRejectionReason(RequestRejectionReasonAuthentication),
 		attr.OAuthFailureReason(reason),
 		attr.McpURL(mcpURL),
 		attr.McpSurface(string(surface)),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
+	))
+}
+
+// RecordMCPRequestValidationRejected counts one MCP request rejected before
+// dispatch because it failed request validation. It shares
+// mcp.request.rejected with the authentication gate, so a single query by
+// gram.mcp.rejection_reason answers how often, and why, each server refuses
+// requests; mcpURL and surface follow [Metrics.RecordMCPRequestRejected].
+func (m *Metrics) RecordMCPRequestValidationRejected(ctx context.Context, reason RequestRejectionReason, mcpURL string, surface Surface) {
+	if m == nil || m.mcpRequestRejectedCounter == nil {
+		return
+	}
+
+	m.mcpRequestRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.McpRejectionReason(reason),
+		attr.McpURL(mcpURL),
+		attr.McpSurface(string(surface)),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
 	))
 }
 
 // RecordMCPRequestDuration records one dispatched request's duration. The
 // method label is clamped to the known method set: it is client-supplied
 // JSON-RPC input, and unclamped it would let a client mint unbounded series
-// against a histogram that already carries a per-server URL dimension.
-func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, duration time.Duration) {
+// against a histogram that already carries a per-server URL dimension. The
+// histogram count by URL and network surface shows public/private traffic per
+// endpoint without another per-server counter. Empty mcpServerID is omitted.
+func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, mcpServerID string, duration time.Duration) {
 	if m == nil || m.mcpRequestDuration == nil {
 		return
 	}
@@ -301,6 +760,10 @@ func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string
 	kv := []attribute.KeyValue{
 		attr.McpMethod(mcprequests.ClampMethod(mcpMethod)),
 		attr.McpURL(mcpURL),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
+	}
+	if mcpServerID != "" {
+		kv = append(kv, attr.McpServerID(mcpServerID))
 	}
 
 	m.mcpRequestDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(kv...))
@@ -361,6 +824,41 @@ func (m *Metrics) RecordOAuthFlowDeclined(ctx context.Context, issuerID, mcpSlug
 	m.oauthFlowDeclinedCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
 
+// RecordConnectionRefusalWithoutRow counts a sign-in request refused with no proof
+// of a real flow. Reason is a fixed label.
+func (m *Metrics) RecordConnectionRefusalWithoutRow(ctx context.Context, reason string) {
+	if m == nil || m.connectionRefusalsWithoutRow == nil {
+		return
+	}
+	m.connectionRefusalsWithoutRow.Add(ctx, 1, metric.WithAttributes(attr.OAuthFailureReason(reason)))
+}
+
+// RecordOAuthAuthorityUnavailable records a retryable private endpoint
+// authority lookup failure. It is separate from terminal flow failures because
+// the in-flight challenge or grant remains available for a later retry.
+func (m *Metrics) RecordOAuthAuthorityUnavailable(ctx context.Context, issuerID, mcpSlug string, stage OAuthFlowStage) {
+	if m == nil || m.oauthAuthorityUnavailableCounter == nil {
+		return
+	}
+	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
+	m.oauthAuthorityUnavailableCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordOAuthResourceRejected records an RFC 8707 resource indicator a shared
+// authorization server refused. reason is one of a closed set of rejection
+// reasons and issuerID is recorded only once the issuer has been resolved, so
+// both dimensions stay bounded.
+func (m *Metrics) RecordOAuthResourceRejected(ctx context.Context, issuerID, reason string, stage OAuthFlowStage) {
+	if m == nil || m.oauthResourceRejectedCounter == nil {
+		return
+	}
+	m.oauthResourceRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.UserSessionIssuerID(issuerID),
+		attr.OAuthFailureReason(reason),
+		attr.OAuthFlowStage(string(stage)),
+	))
+}
+
 // RecordOAuthRefreshTokenReplayServed records a successful response from the
 // refresh replay cache, dimensioned by issuer and MCP endpoint.
 func (m *Metrics) RecordOAuthRefreshTokenReplayServed(ctx context.Context, issuerID, mcpSlug string) {
@@ -368,4 +866,28 @@ func (m *Metrics) RecordOAuthRefreshTokenReplayServed(ctx context.Context, issue
 		return
 	}
 	m.oauthRefreshTokenReplayServedCounter.Add(ctx, 1, metric.WithAttributes(oauthFlowDimensions(issuerID, mcpSlug)...))
+}
+
+// MetaDispatchOutcome classifies how a meta member dispatch was credentialed.
+type MetaDispatchOutcome string
+
+const (
+	// MetaDispatchCredentialed: a member-qualified credential was forwarded.
+	MetaDispatchCredentialed MetaDispatchOutcome = "credentialed"
+	// MetaDispatchAnonymous: no credential matched; the call went out bare.
+	MetaDispatchAnonymous MetaDispatchOutcome = "anonymous"
+	// MetaDispatchAmbiguous: several credentials claimed the member; the
+	// dispatch failed closed.
+	MetaDispatchAmbiguous MetaDispatchOutcome = "ambiguous"
+)
+
+// RecordMetaMemberDispatch counts one meta member dispatch.
+func (m *Metrics) RecordMetaMemberDispatch(ctx context.Context, backend string, outcome MetaDispatchOutcome) {
+	if m == nil || m.metaMemberDispatchCounter == nil {
+		return
+	}
+	m.metaMemberDispatchCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.MetaMemberBackend(backend),
+		attr.MetaDispatchOutcome(outcome),
+	))
 }

@@ -16,7 +16,11 @@ import (
 // CreateUserSessionIssuerRequestBody is the type of the "userSessionIssuers"
 // service "createUserSessionIssuer" endpoint HTTP request body.
 type CreateUserSessionIssuerRequestBody struct {
-	// Project-unique slug.
+	// Authorization-server topology. Shared mode supports standalone workload
+	// token exchange without an MCP server.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// How multi-remote authn challenges are presented: chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
@@ -36,7 +40,7 @@ type UpdateUserSessionIssuerRequestBody struct {
 	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 	// Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits.
-	// 'presets' admits Gram's curated catalog plus this issuer's custom URLs;
+	// 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs;
 	// 'open' admits any spec-valid document; 'disabled' admits none and stops
 	// advertising CIMD support. Omit to leave unchanged.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
@@ -47,9 +51,12 @@ type UpdateUserSessionIssuerRequestBody struct {
 type CreateUserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -64,8 +71,52 @@ type CreateUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool  `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -73,9 +124,12 @@ type CreateUserSessionIssuerResponseBody struct {
 type UpdateUserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -90,8 +144,52 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool  `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -107,9 +205,12 @@ type ListUserSessionIssuersResponseBody struct {
 type GetUserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -124,8 +225,71 @@ type GetUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool  `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// GetAttachImpactResponseBody is the type of the "userSessionIssuers" service
+// "getAttachImpact" endpoint HTTP response body.
+type GetAttachImpactResponseBody struct {
+	// The issuer the server uses now. Absent when it has none.
+	CurrentIssuer *UserSessionIssuerResponseBody `form:"current_issuer,omitempty" json:"current_issuer,omitempty" xml:"current_issuer,omitempty"`
+	// The issuer that would be attached. Absent when previewing a detach.
+	CandidateIssuer *UserSessionIssuerResponseBody `form:"candidate_issuer,omitempty" json:"candidate_issuer,omitempty" xml:"candidate_issuer,omitempty"`
+	// True when the server has an issuer and the change replaces or removes it.
+	// Its clients' registrations and sessions belong to the current issuer, so
+	// every client must register and authorize again.
+	ReauthorizationRequired bool `form:"reauthorization_required" json:"reauthorization_required" xml:"reauthorization_required"`
+	// True when the authorization server the server advertises to clients changes:
+	// its own per-server authorization server, a shared authorization server's
+	// issuer URL, or none. Anything configured with the current authorization
+	// server, such as an identity provider or a federated platform, must be
+	// updated.
+	AuthorizationServerChanges bool `form:"authorization_server_changes" json:"authorization_server_changes" xml:"authorization_server_changes"`
 }
 
 // CreateUserSessionIssuerUnauthorizedResponseBody is the type of the
@@ -888,6 +1052,196 @@ type GetUserSessionIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetAttachImpactUnauthorizedResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetAttachImpactUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactForbiddenResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "forbidden"
+// error.
+type GetAttachImpactForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactBadRequestResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "bad_request" error.
+type GetAttachImpactBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactNotFoundResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "not_found"
+// error.
+type GetAttachImpactNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactConflictResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "conflict"
+// error.
+type GetAttachImpactConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactUnsupportedMediaResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetAttachImpactUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactInvalidResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "invalid"
+// error.
+type GetAttachImpactInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactInvariantViolationResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetAttachImpactInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactUnexpectedResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "unexpected" error.
+type GetAttachImpactUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactGatewayErrorResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetAttachImpactGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteUserSessionIssuerUnauthorizedResponseBody is the type of the
 // "userSessionIssuers" service "deleteUserSessionIssuer" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -1083,9 +1437,12 @@ type DeleteUserSessionIssuerGatewayErrorResponseBody struct {
 type UserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -1100,8 +1457,52 @@ type UserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool  `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateUserSessionIssuerResponseBody builds the HTTP response body from
@@ -1109,14 +1510,25 @@ type UserSessionIssuerResponseBody struct {
 // "userSessionIssuers" service.
 func NewCreateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *CreateUserSessionIssuerResponseBody {
 	body := &CreateUserSessionIssuerResponseBody{
-		ID:                            res.ID,
-		ProjectID:                     res.ProjectID,
-		Slug:                          res.Slug,
-		AuthnChallengeMode:            res.AuthnChallengeMode,
-		SessionDurationHours:          res.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
-		CreatedAt:                     res.CreatedAt,
-		UpdatedAt:                     res.UpdatedAt,
+		ID:                                   res.ID,
+		ProjectID:                            res.ProjectID,
+		OrganizationID:                       res.OrganizationID,
+		Slug:                                 res.Slug,
+		AuthnChallengeMode:                   res.AuthnChallengeMode,
+		SessionDurationHours:                 res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              res.AuthorizationServerMode,
+		UseAuthenticationHost:                res.UseAuthenticationHost,
+		IssuerURLPinned:                      res.IssuerURLPinned,
+		IssuerURL:                            res.IssuerURL,
+		TokenEndpoint:                        res.TokenEndpoint,
+		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
+		ProjectName:                          res.ProjectName,
+		AuthenticationHostAvailable:          res.AuthenticationHostAvailable,
+		CreatedAt:                            res.CreatedAt,
+		UpdatedAt:                            res.UpdatedAt,
 	}
 	return body
 }
@@ -1126,14 +1538,25 @@ func NewCreateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Creat
 // "userSessionIssuers" service.
 func NewUpdateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *UpdateUserSessionIssuerResponseBody {
 	body := &UpdateUserSessionIssuerResponseBody{
-		ID:                            res.ID,
-		ProjectID:                     res.ProjectID,
-		Slug:                          res.Slug,
-		AuthnChallengeMode:            res.AuthnChallengeMode,
-		SessionDurationHours:          res.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
-		CreatedAt:                     res.CreatedAt,
-		UpdatedAt:                     res.UpdatedAt,
+		ID:                                   res.ID,
+		ProjectID:                            res.ProjectID,
+		OrganizationID:                       res.OrganizationID,
+		Slug:                                 res.Slug,
+		AuthnChallengeMode:                   res.AuthnChallengeMode,
+		SessionDurationHours:                 res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              res.AuthorizationServerMode,
+		UseAuthenticationHost:                res.UseAuthenticationHost,
+		IssuerURLPinned:                      res.IssuerURLPinned,
+		IssuerURL:                            res.IssuerURL,
+		TokenEndpoint:                        res.TokenEndpoint,
+		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
+		ProjectName:                          res.ProjectName,
+		AuthenticationHostAvailable:          res.AuthenticationHostAvailable,
+		CreatedAt:                            res.CreatedAt,
+		UpdatedAt:                            res.UpdatedAt,
 	}
 	return body
 }
@@ -1165,14 +1588,41 @@ func NewListUserSessionIssuersResponseBody(res *usersessionissuers.ListUserSessi
 // service.
 func NewGetUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *GetUserSessionIssuerResponseBody {
 	body := &GetUserSessionIssuerResponseBody{
-		ID:                            res.ID,
-		ProjectID:                     res.ProjectID,
-		Slug:                          res.Slug,
-		AuthnChallengeMode:            res.AuthnChallengeMode,
-		SessionDurationHours:          res.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
-		CreatedAt:                     res.CreatedAt,
-		UpdatedAt:                     res.UpdatedAt,
+		ID:                                   res.ID,
+		ProjectID:                            res.ProjectID,
+		OrganizationID:                       res.OrganizationID,
+		Slug:                                 res.Slug,
+		AuthnChallengeMode:                   res.AuthnChallengeMode,
+		SessionDurationHours:                 res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              res.AuthorizationServerMode,
+		UseAuthenticationHost:                res.UseAuthenticationHost,
+		IssuerURLPinned:                      res.IssuerURLPinned,
+		IssuerURL:                            res.IssuerURL,
+		TokenEndpoint:                        res.TokenEndpoint,
+		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
+		ProjectName:                          res.ProjectName,
+		AuthenticationHostAvailable:          res.AuthenticationHostAvailable,
+		CreatedAt:                            res.CreatedAt,
+		UpdatedAt:                            res.UpdatedAt,
+	}
+	return body
+}
+
+// NewGetAttachImpactResponseBody builds the HTTP response body from the result
+// of the "getAttachImpact" endpoint of the "userSessionIssuers" service.
+func NewGetAttachImpactResponseBody(res *usersessionissuers.UserSessionIssuerAttachImpact) *GetAttachImpactResponseBody {
+	body := &GetAttachImpactResponseBody{
+		ReauthorizationRequired:    res.ReauthorizationRequired,
+		AuthorizationServerChanges: res.AuthorizationServerChanges,
+	}
+	if res.CurrentIssuer != nil {
+		body.CurrentIssuer = marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(res.CurrentIssuer)
+	}
+	if res.CandidateIssuer != nil {
+		body.CandidateIssuer = marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(res.CandidateIssuer)
 	}
 	return body
 }
@@ -1777,6 +2227,155 @@ func NewGetUserSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *Get
 	return body
 }
 
+// NewGetAttachImpactUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getAttachImpact" endpoint of the
+// "userSessionIssuers" service.
+func NewGetAttachImpactUnauthorizedResponseBody(res *goa.ServiceError) *GetAttachImpactUnauthorizedResponseBody {
+	body := &GetAttachImpactUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactForbiddenResponseBody builds the HTTP response body from
+// the result of the "getAttachImpact" endpoint of the "userSessionIssuers"
+// service.
+func NewGetAttachImpactForbiddenResponseBody(res *goa.ServiceError) *GetAttachImpactForbiddenResponseBody {
+	body := &GetAttachImpactForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactBadRequestResponseBody builds the HTTP response body from
+// the result of the "getAttachImpact" endpoint of the "userSessionIssuers"
+// service.
+func NewGetAttachImpactBadRequestResponseBody(res *goa.ServiceError) *GetAttachImpactBadRequestResponseBody {
+	body := &GetAttachImpactBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactNotFoundResponseBody builds the HTTP response body from
+// the result of the "getAttachImpact" endpoint of the "userSessionIssuers"
+// service.
+func NewGetAttachImpactNotFoundResponseBody(res *goa.ServiceError) *GetAttachImpactNotFoundResponseBody {
+	body := &GetAttachImpactNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactConflictResponseBody builds the HTTP response body from
+// the result of the "getAttachImpact" endpoint of the "userSessionIssuers"
+// service.
+func NewGetAttachImpactConflictResponseBody(res *goa.ServiceError) *GetAttachImpactConflictResponseBody {
+	body := &GetAttachImpactConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getAttachImpact" endpoint of the
+// "userSessionIssuers" service.
+func NewGetAttachImpactUnsupportedMediaResponseBody(res *goa.ServiceError) *GetAttachImpactUnsupportedMediaResponseBody {
+	body := &GetAttachImpactUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactInvalidResponseBody builds the HTTP response body from the
+// result of the "getAttachImpact" endpoint of the "userSessionIssuers" service.
+func NewGetAttachImpactInvalidResponseBody(res *goa.ServiceError) *GetAttachImpactInvalidResponseBody {
+	body := &GetAttachImpactInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getAttachImpact" endpoint of the
+// "userSessionIssuers" service.
+func NewGetAttachImpactInvariantViolationResponseBody(res *goa.ServiceError) *GetAttachImpactInvariantViolationResponseBody {
+	body := &GetAttachImpactInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getAttachImpact" endpoint of the "userSessionIssuers"
+// service.
+func NewGetAttachImpactUnexpectedResponseBody(res *goa.ServiceError) *GetAttachImpactUnexpectedResponseBody {
+	body := &GetAttachImpactUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getAttachImpact" endpoint of the
+// "userSessionIssuers" service.
+func NewGetAttachImpactGatewayErrorResponseBody(res *goa.ServiceError) *GetAttachImpactGatewayErrorResponseBody {
+	body := &GetAttachImpactGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteUserSessionIssuerUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "deleteUserSessionIssuer" endpoint of the
 // "userSessionIssuers" service.
@@ -1935,6 +2534,12 @@ func NewCreateUserSessionIssuerPayload(body *CreateUserSessionIssuerRequestBody,
 		AuthnChallengeMode:   *body.AuthnChallengeMode,
 		SessionDurationHours: *body.SessionDurationHours,
 	}
+	if body.AuthorizationServerMode != nil {
+		v.AuthorizationServerMode = *body.AuthorizationServerMode
+	}
+	if body.AuthorizationServerMode == nil {
+		v.AuthorizationServerMode = "endpoint"
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1961,10 +2566,11 @@ func NewUpdateUserSessionIssuerPayload(body *UpdateUserSessionIssuerRequestBody,
 
 // NewListUserSessionIssuersPayload builds a userSessionIssuers service
 // listUserSessionIssuers endpoint payload.
-func NewListUserSessionIssuersPayload(cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionissuers.ListUserSessionIssuersPayload {
+func NewListUserSessionIssuersPayload(cursor *string, limit *int, mcpResourceID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionissuers.ListUserSessionIssuersPayload {
 	v := &usersessionissuers.ListUserSessionIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.McpResourceID = mcpResourceID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1978,6 +2584,21 @@ func NewGetUserSessionIssuerPayload(id *string, slug *string, sessionToken *stri
 	v := &usersessionissuers.GetUserSessionIssuerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetAttachImpactPayload builds a userSessionIssuers service
+// getAttachImpact endpoint payload.
+func NewGetAttachImpactPayload(mcpServerID *string, toolsetID *string, metaMcpServerID *string, userSessionIssuerID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionissuers.GetAttachImpactPayload {
+	v := &usersessionissuers.GetAttachImpactPayload{}
+	v.McpServerID = mcpServerID
+	v.ToolsetID = toolsetID
+	v.MetaMcpServerID = metaMcpServerID
+	v.UserSessionIssuerID = userSessionIssuerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2009,9 +2630,24 @@ func ValidateCreateUserSessionIssuerRequestBody(body *CreateUserSessionIssuerReq
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
+	}
 	if body.AuthnChallengeMode != nil {
 		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
 		}
 	}
 	return
@@ -2029,6 +2665,16 @@ func ValidateUpdateUserSessionIssuerRequestBody(body *UpdateUserSessionIssuerReq
 	if body.AuthnChallengeMode != nil {
 		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
 		}
 	}
 	if body.ClientIDMetadataAdmissionMode != nil {

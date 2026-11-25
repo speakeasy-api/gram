@@ -17,6 +17,7 @@ import (
 type Client struct {
 	GetProjectEndpoint               goa.Endpoint
 	CreateProjectEndpoint            goa.Endpoint
+	UpdateProjectEndpoint            goa.Endpoint
 	ListProjectsEndpoint             goa.Endpoint
 	SetLogoEndpoint                  goa.Endpoint
 	ListAllowedOriginsEndpoint       goa.Endpoint
@@ -26,10 +27,11 @@ type Client struct {
 }
 
 // NewClient initializes a "projects" service client given the endpoints.
-func NewClient(getProject, createProject, listProjects, setLogo, listAllowedOrigins, upsertAllowedOrigin, deleteProject, setOrganizationWhitelist goa.Endpoint) *Client {
+func NewClient(getProject, createProject, updateProject, listProjects, setLogo, listAllowedOrigins, upsertAllowedOrigin, deleteProject, setOrganizationWhitelist goa.Endpoint) *Client {
 	return &Client{
 		GetProjectEndpoint:               getProject,
 		CreateProjectEndpoint:            createProject,
+		UpdateProjectEndpoint:            updateProject,
 		ListProjectsEndpoint:             listProjects,
 		SetLogoEndpoint:                  setLogo,
 		ListAllowedOriginsEndpoint:       listAllowedOrigins,
@@ -81,6 +83,28 @@ func (c *Client) CreateProject(ctx context.Context, p *CreateProjectPayload) (re
 		return
 	}
 	return ires.(*CreateProjectResult), nil
+}
+
+// UpdateProject calls the "updateProject" endpoint of the "projects" service.
+// UpdateProject may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateProject(ctx context.Context, p *UpdateProjectPayload) (res *UpdateProjectResult, err error) {
+	var ires any
+	ires, err = c.UpdateProjectEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*UpdateProjectResult), nil
 }
 
 // ListProjects calls the "listProjects" endpoint of the "projects" service.

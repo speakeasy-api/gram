@@ -17,47 +17,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ExecPostgresScript applies a multi-statement SQL script using the simple
-// query protocol, mirroring how demoseed.Run applies the real seed.
-func ExecPostgresScript(ctx context.Context, db *pgxpool.Pool, script string) error {
-	conn, err := db.Acquire(ctx)
-	if err != nil {
-		return fmt.Errorf("acquire postgres connection: %w", err)
-	}
-	defer conn.Release()
-
-	if err := conn.Conn().PgConn().Exec(ctx, script).Close(); err != nil {
-		return fmt.Errorf("exec postgres script: %w", err)
-	}
-	return nil
-}
-
-// ExecClickHouseStatements runs pre-split statements one by one, skipping SET
-// lines, mirroring how demoseed.Run applies the ClickHouse seed.
-func ExecClickHouseStatements(ctx context.Context, ch driver.Conn, stmts []string) error {
-	for _, stmt := range stmts {
-		if strings.HasPrefix(strings.ToUpper(stmt), "SET ") {
-			continue
-		}
-		if err := ch.Exec(ctx, stmt); err != nil {
-			return fmt.Errorf("exec clickhouse statement: %w: %.120s", err, stmt)
-		}
-	}
-	return nil
-}
-
 // PostgresSnapshot is a per-table multiset of full row fingerprints:
 // table name -> row JSON -> occurrence count. Full row text (not a digest) is
 // kept so tests can inspect rows that appear between snapshots.
 type PostgresSnapshot map[string]map[string]int
 
-// SnapshotPostgres fingerprints every row of every public base table. Row
+// SnapshotPostgres fingerprints every row of every base table in the current schema. Row
 // identity is the record's JSON representation, so ANY column change, delete,
 // or insert is visible in the multiset.
 func SnapshotPostgres(ctx context.Context, db *pgxpool.Pool) (PostgresSnapshot, error) {
 	rows, err := db.Query(ctx, `
 		SELECT table_name FROM information_schema.tables
-		WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+		WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'
 		ORDER BY table_name`)
 	if err != nil {
 		return nil, fmt.Errorf("list postgres tables: %w", err)
@@ -78,7 +49,7 @@ func SnapshotPostgres(ctx context.Context, db *pgxpool.Pool) (PostgresSnapshot, 
 	snap := make(PostgresSnapshot, len(tables))
 	for _, table := range tables {
 		hashes := map[string]int{}
-		q := fmt.Sprintf(`SELECT to_jsonb(t)::text FROM %s t`, pgx.Identifier{"public", table}.Sanitize())
+		q := fmt.Sprintf(`SELECT to_jsonb(t)::text FROM %s t`, pgx.Identifier{table}.Sanitize())
 		rows, err := db.Query(ctx, q)
 		if err != nil {
 			return nil, fmt.Errorf("hash rows of %s: %w", table, err)
@@ -99,6 +70,66 @@ func SnapshotPostgres(ctx context.Context, db *pgxpool.Pool) (PostgresSnapshot, 
 	return snap, nil
 }
 
+// ProjectOrganizationMismatchCounts reports seeded project rows whose
+// denormalized organization_id does not match the owning project. It checks
+// every table in the current schema that carries both tenant columns so new seeded row types
+// are covered automatically.
+func ProjectOrganizationMismatchCounts(
+	ctx context.Context,
+	db *pgxpool.Pool,
+	projectIDs []string,
+) (map[string]int64, error) {
+	rows, err := db.Query(ctx, `
+		SELECT c.table_name
+		FROM information_schema.columns c
+		JOIN information_schema.tables t
+		  ON t.table_schema = c.table_schema
+		 AND t.table_name = c.table_name
+		WHERE c.table_schema = current_schema()
+		  AND t.table_type = 'BASE TABLE'
+		  AND c.column_name IN ('project_id', 'organization_id')
+		GROUP BY c.table_name
+		HAVING count(*) = 2
+		ORDER BY c.table_name`)
+	if err != nil {
+		return nil, fmt.Errorf("list project and organization scoped postgres tables: %w", err)
+	}
+
+	var tables []string
+	for rows.Next() {
+		var table string
+		if err := rows.Scan(&table); err != nil {
+			return nil, fmt.Errorf("scan project and organization scoped postgres table: %w", err)
+		}
+		tables = append(tables, table)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate project and organization scoped postgres tables: %w", err)
+	}
+
+	mismatches := map[string]int64{}
+	for _, table := range tables {
+		q := fmt.Sprintf(`
+			SELECT count(*)
+			FROM %s AS seeded
+			JOIN projects AS project ON project.id = seeded.project_id
+			WHERE project.id::text = ANY($1::text[])
+			  AND seeded.organization_id IS DISTINCT FROM project.organization_id`,
+			pgx.Identifier{table}.Sanitize())
+
+		var count int64
+		if err := db.QueryRow(ctx, q, projectIDs).Scan(&count); err != nil {
+			return nil, fmt.Errorf("count project organization mismatches in %s: %w", table, err)
+		}
+		if count > 0 {
+			mismatches[table] = count
+		}
+	}
+
+	return mismatches, nil
+}
+
 // ClickHouseTableState captures one table's demo/non-demo split. Rows are
 // classified by the table's organization_id / gram_project_id columns; tables
 // with neither column treat every row as outside the demo scope.
@@ -113,14 +144,15 @@ type ClickHouseTableState struct {
 	DemoCount uint64
 }
 
-// SnapshotClickHouse captures the state of every MergeTree-family table in the
-// current database. Each table is OPTIMIZE ... FINAL'd first so background
-// merges (which collapse rows in Summing/Aggregating tables) cannot shift
-// counts between two snapshots.
+// SnapshotClickHouse captures every MergeTree-family table in the current
+// database. Engines that collapse same-key rows are OPTIMIZE ... FINAL'd first
+// so background merges cannot shift counts between snapshots. Plain MergeTree
+// rows are already stable without merging.
 func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, projectIDs []string) (map[string]ClickHouseTableState, error) {
 	rows, err := ch.Query(ctx, `
 		SELECT name, engine FROM system.tables
-		WHERE database = currentDatabase() AND engine LIKE '%MergeTree%'
+		WHERE database = currentDatabase()
+			AND engine LIKE '%MergeTree%'
 		ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list clickhouse tables: %w", err)
@@ -149,8 +181,10 @@ func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, proje
 
 	snap := make(map[string]ClickHouseTableState, len(tables))
 	for _, t := range tables {
-		if err := ch.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE `%s` FINAL", t.name)); err != nil {
-			return nil, fmt.Errorf("optimize %s: %w", t.name, err)
+		if t.engine != "MergeTree" && t.engine != "ReplicatedMergeTree" && t.engine != "SharedMergeTree" {
+			if err := ch.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE `%s` FINAL", t.name)); err != nil {
+				return nil, fmt.Errorf("optimize %s: %w", t.name, err)
+			}
 		}
 
 		cols, err := ch.Query(ctx, `
@@ -231,7 +265,7 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 	// duplicated row is built column by column from the non-generated set.
 	colRows, err := db.Query(ctx, `
 		SELECT column_name FROM information_schema.columns
-		WHERE table_schema = 'public' AND table_name = 'chats' AND is_generated = 'NEVER'
+		WHERE table_schema = current_schema() AND table_name = 'chats' AND is_generated = 'NEVER'
 		ORDER BY ordinal_position`)
 	if err != nil {
 		return fmt.Errorf("list chats columns: %w", err)
@@ -283,11 +317,182 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 		return fmt.Errorf("tamper postgres api key: %w", err)
 	}
 
+	if err := PlantPrivateNetworkState(ctx, db, orgID); err != nil {
+		return fmt.Errorf("tamper postgres private network ingress: %w", err)
+	}
+
+	if err := PlantMCPServerDependents(ctx, db, orgID, projectID); err != nil {
+		return fmt.Errorf("tamper postgres MCP server dependents: %w", err)
+	}
+
 	err = ch.Exec(ctx, fmt.Sprintf(`
 		INSERT INTO telemetry_logs
 		SELECT * FROM telemetry_logs WHERE gram_project_id = toUUID('%s') LIMIT 1`, projectID))
 	if err != nil {
 		return fmt.Errorf("tamper clickhouse telemetry row: %w", err)
+	}
+	return nil
+}
+
+// PlantPrivateNetworkState adds the private-network rows that are intentionally
+// absent from the seed. The entitlement and ingress are both tombstoned so the
+// reseed must delete retained state, not merely hide it from active-row queries.
+func PlantPrivateNetworkState(ctx context.Context, db *pgxpool.Pool, orgID string) error {
+	if _, err := db.Exec(ctx, `
+		INSERT INTO organization_features (organization_id, feature_name, deleted_at)
+		VALUES ($1, 'network_ingress', clock_timestamp())`, orgID); err != nil {
+		return fmt.Errorf("insert private network entitlement: %w", err)
+	}
+
+	if _, err := db.Exec(ctx, `
+		INSERT INTO network_ingresses (
+			organization_id, provider, hostname, endpoint_namespace_kind,
+			credentials_encrypted, attestor_namespace, attestor_service_account,
+			status, deleted_at
+		) VALUES (
+			$1, 'tailscale', 'demo-tamper', 'platform',
+			'DEMO-ENCRYPTED-TAMPER', 'gram-netingress-demo-tamper',
+			'gram-netingress-demo-tamper-attestor', 'deleted', clock_timestamp()
+		)`, orgID); err != nil {
+		return fmt.Errorf("insert private network ingress: %w", err)
+	}
+
+	return nil
+}
+
+// PlantMCPServerDependents adds realistic tenant-owned rows across the full
+// catalog-registration FK closure. Every insert is gated on target_server so a
+// project without an MCP server cannot retain unattached fixture parents.
+func PlantMCPServerDependents(ctx context.Context, db *pgxpool.Pool, orgID, projectID string) error {
+	tag, err := db.Exec(ctx, `
+		WITH target_server AS MATERIALIZED (
+			SELECT id FROM mcp_servers WHERE project_id = $2::uuid ORDER BY id LIMIT 1
+		), new_assistant AS (
+			INSERT INTO assistants (project_id, organization_id, name, model, instructions)
+			SELECT $2::uuid, $1, 'Reseed safety assistant', 'openai/gpt-4o-mini', 'Test reseed cleanup.'
+			FROM target_server
+			RETURNING id
+		), assistant_attachment AS (
+			INSERT INTO assistant_mcp_servers (assistant_id, mcp_server_id, project_id)
+			SELECT new_assistant.id, target_server.id, $2::uuid
+			FROM new_assistant CROSS JOIN target_server
+			RETURNING id
+		), new_plugin AS (
+			INSERT INTO plugins (organization_id, project_id, name, slug)
+			SELECT $1, $2::uuid, 'Reseed safety plugin', 'reseed-safety-plugin'
+			FROM target_server
+			RETURNING id
+		), plugin_attachment AS (
+			INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
+			SELECT new_plugin.id, target_server.id, 'Reseed safety server'
+			FROM new_plugin CROSS JOIN target_server
+			RETURNING id
+		), registration AS (
+			INSERT INTO platform_mcp_catalog_registrations (
+				organization_id, project_id, source_kind, catalog_provider,
+				catalog_reference, status, mcp_server_id, acting_surface
+			)
+			SELECT $1, $2::uuid, 'catalog', 'reseed-safety',
+				'reseed-safety-server', 'ready', target_server.id, 'dashboard'
+			FROM target_server
+			RETURNING id
+		), receipt AS (
+			INSERT INTO platform_mcp_operation_receipts (
+				organization_id, project_id, registration_id, user_id, acting_surface,
+				operation, idempotency_key, input_hash, status, expires_at
+			)
+			SELECT $1, $2::uuid, registration.id, 'user_reseed_safety', 'dashboard',
+				'install', 'reseed-safety-install', 'reseed-safety-input', 'completed',
+				clock_timestamp() + interval '1 day'
+			FROM registration
+			RETURNING id
+		), workflow AS (
+			INSERT INTO platform_mcp_onboarding_workflows (
+				organization_id, initiating_subject_urn, source_surface, client_family,
+				selected_project_id, selected_registration_id, expires_at
+			)
+			SELECT $1, 'user:user_reseed_safety', 'dashboard', 'claude',
+				$2::uuid, registration.id, clock_timestamp() + interval '1 day'
+			FROM registration
+			RETURNING id
+		), milestone AS (
+			INSERT INTO platform_mcp_onboarding_milestones (
+				organization_id, milestone, project_id, mcp_key, attempt_id
+			)
+			SELECT $1, 'registration_succeeded', $2::uuid,
+				'reseed-safety:reseed-safety-server', registration.id
+			FROM registration
+			RETURNING id
+		), distribution AS (
+			INSERT INTO platform_mcp_distributions (
+				organization_id, project_id, registration_id, default_plugin_id, plugin_id,
+				plugin_server_id, state, version, attachment_was_created, publication_state,
+				user_id, acting_surface
+			)
+			SELECT $1, $2::uuid, registration.id, new_plugin.id, new_plugin.id,
+				plugin_attachment.id, 'installed', 1, true, 'published',
+				'user_reseed_safety', 'dashboard'
+			FROM registration CROSS JOIN new_plugin CROSS JOIN plugin_attachment
+			RETURNING id, registration_id, version
+		), feedback AS (
+			INSERT INTO platform_mcp_feedback (
+				organization_id, subject_urn, project_id, workflow_id, category,
+				idempotency_key, input_hash, rating, success, expires_at
+			)
+			SELECT $1, 'user:user_reseed_safety', $2::uuid, workflow.id, 'onboarding',
+				'reseed-safety-feedback', 'reseed-safety-feedback-input', 5, true,
+				clock_timestamp() + interval '1 day'
+			FROM workflow
+			RETURNING id
+		)
+		INSERT INTO platform_mcp_selected_use_evidence (
+			organization_id, project_id, registration_id, distribution_id,
+			distribution_version, workflow_id, tool_name, tool_category, succeeded_at
+		)
+		SELECT $1, $2::uuid, distribution.registration_id, distribution.id,
+			distribution.version, workflow.id, 'reseed_safety_tool', 'productivity',
+			clock_timestamp()
+		FROM distribution CROSS JOIN workflow CROSS JOIN receipt CROSS JOIN feedback
+			CROSS JOIN assistant_attachment CROSS JOIN milestone`, orgID, projectID)
+	if err != nil {
+		return fmt.Errorf("plant MCP server dependents: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("plant MCP server dependents: expected 1 complete dependent set, got %d", tag.RowsAffected())
+	}
+	return nil
+}
+
+// CountReseedSafetyProjectMilestones returns the number of project-scoped
+// onboarding milestones planted by PlantMCPServerDependents.
+func CountReseedSafetyProjectMilestones(ctx context.Context, db *pgxpool.Pool, orgID, projectID string) (int, error) {
+	var count int
+	err := db.QueryRow(ctx, `
+		SELECT count(*)
+		FROM platform_mcp_onboarding_milestones
+		WHERE organization_id = $1
+		  AND project_id = $2::uuid
+		  AND milestone = 'registration_succeeded'
+		  AND mcp_key = 'reseed-safety:reseed-safety-server'`, orgID, projectID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count reseed safety project milestones: %w", err)
+	}
+	return count, nil
+}
+
+// CreateProjectWithoutMCPServer adds a project used to prove the dependent
+// fixture is a no-op when its required target server is absent.
+func CreateProjectWithoutMCPServer(ctx context.Context, db *pgxpool.Pool, orgID, projectID string) error {
+	tag, err := db.Exec(ctx, `
+		INSERT INTO projects (id, organization_id, name, slug)
+		VALUES ($2::uuid, $1, 'Reseed safety no-server project', 'reseed-safety-no-server')`,
+		orgID, projectID,
+	)
+	if err != nil {
+		return fmt.Errorf("create project without MCP server: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("create project without MCP server: expected 1 project, got %d", tag.RowsAffected())
 	}
 	return nil
 }

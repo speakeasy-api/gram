@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,11 +13,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -89,11 +95,17 @@ func (testIdentity) BuildAuthorizationURL(_ context.Context, params identity.Aut
 	}
 	return parsed, nil
 }
+
+// testVerifiedEmail is the email testIdentity reports as verified.
+const testVerifiedEmail = "user-1@example.test"
+
 func (testIdentity) ExchangeCodeForTokens(_ context.Context, _ string) (*identity.IDPUserInfo, error) {
-	return &identity.IDPUserInfo{}, nil
+	var user identity.IDPUserInfo
+	user.Evidence.VerifiedEmail = testVerifiedEmail
+	return &user, nil
 }
-func (testIdentity) UpsertUserFromIDP(_ context.Context, _ *identity.IDPUserInfo) (string, error) {
-	return "user-1", nil
+func (testIdentity) CompleteIDPLogin(_ context.Context, _ *identity.IDPUserInfo, _ identity.IDPLoginOptions) (identity.IDPLoginResult, error) {
+	return identity.IDPLoginResult{UserID: "user-1", Reactivated: false, UserInfo: nil}, nil
 }
 
 type allowGate struct{}
@@ -109,17 +121,37 @@ func (g oauthTestGate) Enabled(context.Context, string) (bool, error) { return g
 
 type allowAuthorizer struct{}
 
-func (allowAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return nil }
+func (allowAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	return contextWithPrincipal(ctx, principal), nil
+}
+func (allowAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
+	return nil
+}
+func (allowAuthorizer) RequireLiveMembership(context.Context, Principal) error { return nil }
+func (allowAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error   { return nil }
 
 type oauthTestAuthorizer struct {
 	err error
 }
 
+func (a oauthTestAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	return contextWithPrincipal(ctx, principal), a.err
+}
+func (a oauthTestAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
+	return a.err
+}
+func (a oauthTestAuthorizer) RequireLiveMembership(context.Context, Principal) error {
+	return a.err
+}
 func (a oauthTestAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return a.err }
 
 type testOrganizationSelector struct {
 	organizations []OrganizationOption
 }
+
+// twoTestOrganizations keeps the organization picker in a flow whose identity
+// provider reports no organization.
+var twoTestOrganizations = []OrganizationOption{{ID: "org-1", Name: "Organization one", WorkOSID: "org_workos_1"}, {ID: "org-2", Name: "Organization two", WorkOSID: "org_workos_2"}}
 
 func (s testOrganizationSelector) EligibleOrganizations(context.Context, string) ([]OrganizationOption, error) {
 	return s.organizations, nil
@@ -135,7 +167,7 @@ func TestOAuthHTTPProviderSetupCompletionDoesNotExposeState(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 	require.NotContains(t, response.Body.String(), "secret")
-	require.Contains(t, response.Body.String(), "setting up Platform MCP")
+	require.Contains(t, response.Body.String(), "Go back to your chat to finish setting")
 	require.NotContains(t, response.Body.String(), "AICP")
 }
 
@@ -147,6 +179,7 @@ func TestOAuthHTTPMetadataAndClientRegistration(t *testing.T) {
 	service.AuthorizationServerHandler().ServeHTTP(metadata, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/platform-mcp", nil))
 	require.Equal(t, http.StatusOK, metadata.Code)
 	require.Contains(t, metadata.Body.String(), `"registration_endpoint"`)
+	require.NotContains(t, metadata.Body.String(), oauthwire.GrantTypeJWTBearer)
 
 	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/register", strings.NewReader(`{"client_name":"test client","redirect_uris":["http://127.0.0.1:3000/callback"],"token_endpoint_auth_method":"none"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -155,6 +188,20 @@ func TestOAuthHTTPMetadataAndClientRegistration(t *testing.T) {
 	require.Equal(t, http.StatusCreated, response.Code)
 	require.Contains(t, response.Body.String(), `"client_id"`)
 	require.NotContains(t, response.Body.String(), `"client_secret"`)
+}
+
+func TestOAuthHTTPClientRegistrationRejectsIDJAG(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	body := fmt.Sprintf(`{"client_name":"ID-JAG client","grant_types":[%q],"token_endpoint_auth_method":"client_secret_basic"}`, oauthwire.GrantTypeJWTBearer)
+	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/register", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	service.RegisterHandler().ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), `"invalid_client_metadata"`)
 }
 
 func TestOAuthHTTPRequireJSONAcceptsMediaTypeParameters(t *testing.T) {
@@ -197,7 +244,7 @@ func TestOAuthHTTPRejectsUnknownTokenClient(t *testing.T) {
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	service.TokenHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client"`)
 }
 
@@ -205,7 +252,7 @@ func TestOAuthHTTPSelectsOrganizationAfterIDPCallback(t *testing.T) {
 	t.Parallel()
 
 	service := newTestOAuthHTTP(t)
-	service.organizations = testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}}
+	service.organizations = testOrganizationSelector{organizations: twoTestOrganizations}
 	store := testStore(t, service)
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 
@@ -224,10 +271,10 @@ func TestOAuthHTTPSelectsOrganizationAfterIDPCallback(t *testing.T) {
 	require.Equal(t, http.StatusOK, selection.Code)
 	require.Contains(t, selection.Body.String(), "Organization one")
 	require.Contains(t, selection.Body.String(), "Choose an organization")
-	require.Contains(t, selection.Body.String(), "requests access to Platform MCP")
+	require.Contains(t, selection.Body.String(), "will work in")
 	require.NotContains(t, selection.Body.String(), "AICP")
-	require.Contains(t, selection.Body.String(), "auth-consent-container")
-	require.Contains(t, selection.Body.String(), "font-diatype-mono")
+	require.Contains(t, selection.Body.String(), `aria-label="Speakeasy"`)
+	require.Contains(t, selection.Body.String(), "/mcp/consent-fonts/")
 	require.NotContains(t, selection.Body.String(), "fonts.googleapis.com")
 }
 
@@ -241,7 +288,7 @@ func TestOAuthHTTPRejectsConsentBeforeOrganizationSelection(t *testing.T) {
 	response := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/platform-mcp/connect?state=challenge-1", nil))
 
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_request"`)
 }
 
@@ -249,6 +296,7 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	t.Parallel()
 
 	service := newTestOAuthHTTP(t)
+	service.organizations = testOrganizationSelector{organizations: twoTestOrganizations}
 	store := testStore(t, service)
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 
@@ -281,6 +329,8 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 
 	connectURL, err := url.Parse(selected.Header().Get("Location"))
 	require.NoError(t, err)
+	require.NotEqual(t, state, connectURL.Query().Get("state"), "the consent step continues under a fresh state")
+	state = connectURL.Query().Get("state")
 	connect := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(connect, httptest.NewRequest(http.MethodGet, connectURL.String(), nil))
 	require.Equal(t, http.StatusOK, connect.Code)
@@ -293,12 +343,12 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	scriptNonce, _, found := strings.Cut(noncePart, "'")
 	require.True(t, found)
 	require.NotEmpty(t, scriptNonce)
-	require.Contains(t, connect.Body.String(), `nonce="`+scriptNonce+`"`)
-	require.Contains(t, connect.Body.String(), `action.name = "action"`)
+	require.Contains(t, connect.Body.String(), `<script nonce="`+scriptNonce+`" src="`+oauthPageScriptURL+`"></script>`)
+	require.NotContains(t, connect.Body.String(), `action.name = "action"`, "the ingress CSP blocks inline scripts")
 	require.Contains(t, contentSecurityPolicy, "form-action 'self' http://127.0.0.1:3000")
 
 	approve := httptest.NewRecorder()
-	approveForm := url.Values{"state": {state}, "csrf_token": {csrf}, "action": {"approve"}}
+	approveForm := url.Values{"state": {state}, "csrf_token": {csrf}, "organization_id": {"org-1"}, "action": {"approve"}}
 	approveRequest := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(approveForm.Encode()))
 	approveRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	service.ConnectHandler().ServeHTTP(approve, approveRequest)
@@ -310,16 +360,34 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 
 	replayed := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(replayed, approveRequest)
-	require.Equal(t, http.StatusUnauthorized, replayed.Code)
+	require.Equal(t, http.StatusBadRequest, replayed.Code)
 }
 
-func TestOAuthPageContentSecurityPolicyOnlyAllowsHTTPRedirectOrigins(t *testing.T) {
+func TestOAuthPageScriptIsServedFromHashedURL(t *testing.T) {
+	t.Parallel()
+
+	require.Regexp(t, `^/platform-mcp/oauth-page-[0-9a-f]{8}\.js$`, oauthPageScriptURL)
+	mux := goahttp.NewMuxer()
+	newTestOAuthHTTP(t).Attach(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, oauthPageScriptURL, nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "application/javascript; charset=utf-8", w.Header().Get("Content-Type"))
+	require.Contains(t, w.Header().Get("Cache-Control"), "immutable")
+	require.Contains(t, w.Body.String(), `action.name = "action"`)
+	require.Contains(t, w.Body.String(), "window.close()")
+}
+
+func TestOAuthPageContentSecurityPolicyAllowsSafeRedirectSources(t *testing.T) {
 	t.Parallel()
 
 	policy := oauthPageContentSecurityPolicy("https://client.example/callback?next=unexpected", "nonce")
 	require.Contains(t, policy, "form-action 'self' https://client.example")
 	require.NotContains(t, policy, "/callback")
 	require.NotContains(t, policy, "?next")
+
+	policy = oauthPageContentSecurityPolicy("com.example.client:/oauth/callback", "nonce")
+	require.Contains(t, policy, "form-action 'self' com.example.client:;")
 
 	policy = oauthPageContentSecurityPolicy("javascript:alert(1)", "nonce")
 	require.Contains(t, policy, "form-action 'self';")
@@ -356,7 +424,7 @@ func TestOAuthHTTPConnectPostRedirectsTransientGateError(t *testing.T) {
 	require.NoError(t, service.cache.Store(t.Context(), challenge))
 	service.gate = oauthTestGate{err: errors.New("feature provider unavailable")}
 
-	form := url.Values{"state": {challenge.ID}, "csrf_token": {challenge.CSRFToken}, "action": {"approve"}}
+	form := url.Values{"state": {challenge.ID}, "csrf_token": {challenge.CSRFToken}, "organization_id": {challenge.OrganizationID}, "action": {"approve"}}
 	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
@@ -379,7 +447,7 @@ func TestOAuthHTTPRefreshReturnsTransientGateError(t *testing.T) {
 	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	require.NoError(t, store.RegisterConnection(t.Context(), connection))
-	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID, "")
 	require.NoError(t, err)
 	require.NoError(t, store.CreateSession(t.Context(), platformoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: "jti-1", RefreshHash: opaqueHash(refreshToken), ExpiresAt: time.Now().Add(time.Hour), RefreshExpiresAt: time.Now().Add(time.Hour)}))
 	service.gate = oauthTestGate{err: errors.New("feature provider unavailable")}
@@ -400,7 +468,7 @@ func TestOAuthHTTPNeverRedirectsToUnregisteredURI(t *testing.T) {
 	response := httptest.NewRecorder()
 	service.AuthorizeHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=token&client_id=unknown&redirect_uri=https%3A%2F%2Fevil.example%2F&organization_id=org-1", nil))
 
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Empty(t, response.Header().Get("Location"))
 }
 
@@ -413,9 +481,9 @@ func TestOAuthHTTPRefreshReplayIsRejectedBeforeAuthorization(t *testing.T) {
 	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	require.NoError(t, store.RegisterConnection(context.Background(), connection))
-	refreshOld, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	refreshOld, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID, "")
 	require.NoError(t, err)
-	refreshNew, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	refreshNew, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID, "")
 	require.NoError(t, err)
 	old := platformoauth.Session{ID: "session-old", ClientID: "client-1", Connection: connection, JTI: "jti-old", RefreshHash: opaqueHash(refreshOld), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}
 	require.NoError(t, store.CreateSession(context.Background(), old))
@@ -443,11 +511,11 @@ func TestOAuthHTTPRevokesExpiredAccessToken(t *testing.T) {
 	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	require.NoError(t, store.RegisterConnection(t.Context(), connection))
-	jti, err := service.credentials.Issue(accessJTICredential, connection.OrganizationID)
+	jti, err := service.credentials.Issue(accessJTICredential, connection.OrganizationID, "")
 	require.NoError(t, err)
-	accessToken, _, err := service.signer.Mint(sessiontokens.MintParams{Subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: "user-1"}, Audience: service.audience, Issuer: service.issuer, Lifetime: -time.Minute, ClientID: "client-1", JTI: jti})
+	accessToken, _, err := service.signer.Mint(sessiontokens.MintParams{Subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: "user-1"}, Audience: platformResource(service.baseURL), Issuer: platformResource(service.baseURL), Lifetime: -time.Minute, ClientID: "client-1", JTI: jti})
 	require.NoError(t, err)
-	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID, "")
 	require.NoError(t, err)
 	require.NoError(t, store.CreateSession(t.Context(), platformoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}))
 
@@ -472,7 +540,7 @@ func TestOAuthHTTPRejectsMalformedRefreshSubject(t *testing.T) {
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "malformed", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterConnection(context.Background(), connection))
-	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID, "")
 	require.NoError(t, err)
 	require.NoError(t, store.CreateSession(context.Background(), platformoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: "jti-1", RefreshHash: opaqueHash(refreshToken), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}))
 
@@ -497,6 +565,7 @@ func newTestOAuthHTTP(t *testing.T) *OAuthHTTP {
 	base, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
 	service, err := NewOAuthHTTP(OAuthHTTPConfig{
+		AICatalog:     aivendorstest.NewStore(),
 		BaseURL:       base,
 		Cache:         &memoryCache{values: map[string]any{}},
 		Store:         platformoauth.NewInMemoryStore(),
@@ -517,4 +586,363 @@ func testEncryption(t *testing.T) *encryption.Client {
 	client, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
 	return client
+}
+
+// callbackRecordingIdentity records the callback URL sent to the identity
+// provider.
+type callbackRecordingIdentity struct {
+	testIdentity
+	callbacks *[]string
+}
+
+func (i callbackRecordingIdentity) BuildAuthorizationURL(ctx context.Context, params identity.AuthorizationURLParams) (*url.URL, error) {
+	*i.callbacks = append(*i.callbacks, params.CallbackURL)
+	return i.testIdentity.BuildAuthorizationURL(ctx, params)
+}
+
+func TestOAuthHTTPPinsIDPCallbackToOutboundOrigin(t *testing.T) {
+	t.Parallel()
+
+	base, err := url.Parse("https://ai.example.test")
+	require.NoError(t, err)
+	outbound, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name     string
+		pinned   *url.URL
+		callback string
+	}{
+		{name: "default", pinned: nil, callback: "https://ai.example.test/platform-mcp/idp_callback"},
+		{name: "pinned", pinned: outbound, callback: "https://app.example.test/platform-mcp/idp_callback"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var callbacks []string
+			service, err := NewOAuthHTTP(OAuthHTTPConfig{
+				AICatalog:          aivendorstest.NewStore(),
+				BaseURL:            base,
+				IDPCallbackBaseURL: tc.pinned,
+				Cache:              &memoryCache{values: map[string]any{}},
+				Store:              platformoauth.NewInMemoryStore(),
+				Identity:           callbackRecordingIdentity{callbacks: &callbacks},
+				Gate:               allowGate{},
+				Authorizer:         allowAuthorizer{},
+				Organizations:      testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
+				Signer:             sessiontokens.NewSigner("test-key"),
+				Encryption:         testEncryption(t),
+			})
+			require.NoError(t, err)
+			require.NoError(t, testStore(t, service).RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
+
+			authorize := httptest.NewRecorder()
+			service.AuthorizeHandler().ServeHTTP(authorize, httptest.NewRequest(http.MethodGet, "https://ai.example.test/platform-mcp/authorize?response_type=code&client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Fcallback&code_challenge=challenge&code_challenge_method=S256", nil))
+			require.Equal(t, http.StatusFound, authorize.Code)
+			require.Equal(t, []string{tc.callback}, callbacks)
+			idpURL, err := url.Parse(authorize.Header().Get("Location"))
+			require.NoError(t, err)
+
+			// The callback host returns the browser to the origin it started on.
+			callback := httptest.NewRecorder()
+			service.IDPCallbackHandler().ServeHTTP(callback, httptest.NewRequest(http.MethodGet, tc.callback+"?state="+url.QueryEscape(idpURL.Query().Get("state"))+"&code=idp-code", nil))
+			require.Equal(t, http.StatusFound, callback.Code)
+			selection, err := url.Parse(callback.Header().Get("Location"))
+			require.NoError(t, err)
+			require.Equal(t, "ai.example.test", selection.Host)
+		})
+	}
+}
+
+func TestOAuthHTTPClientErrorResponses(t *testing.T) {
+	t.Parallel()
+
+	for _, endpoint := range []string{"token", "revoke"} {
+		for _, tc := range []struct {
+			name      string
+			header    string
+			status    int
+			challenge string
+		}{
+			{name: "form client", status: http.StatusBadRequest},
+			{name: "basic", header: "Basic dW5rbm93bjp3cm9uZw==", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+			{name: "lowercase basic", header: "basic dW5rbm93bjp3cm9uZw==", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+			{name: "malformed basic", header: "Basic invalid", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+			{name: "missing basic credentials", header: "Basic", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+			{name: "unsupported scheme", header: "Bearer token", status: http.StatusUnauthorized, challenge: `Bearer realm="Speakeasy"`},
+		} {
+			t.Run(endpoint+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				service := newTestOAuthHTTP(t)
+				request := httptest.NewRequest(http.MethodPost, "/platform-mcp/"+endpoint, strings.NewReader("grant_type=refresh_token&refresh_token=x&client_id=unknown"))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				if tc.header != "" {
+					request.Header.Set("Authorization", tc.header)
+				}
+				response := httptest.NewRecorder()
+				if endpoint == "token" {
+					service.TokenHandler().ServeHTTP(response, request)
+				} else {
+					service.RevokeHandler().ServeHTTP(response, request)
+				}
+				require.Equal(t, tc.status, response.Code, response.Body.String())
+				require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
+				require.Contains(t, response.Body.String(), `"error_description":"client authentication failed"`)
+				require.Equal(t, tc.challenge, response.Header().Get("WWW-Authenticate"))
+				require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+			})
+		}
+	}
+}
+
+type clientLookupErrorStore struct {
+	platformoauth.Store
+	err error
+}
+
+func (s clientLookupErrorStore) GetClient(context.Context, string) (platformoauth.Client, error) {
+	return platformoauth.Client{}, s.err
+}
+
+func TestOAuthHTTPAuthorizeClientLookupErrors(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{name: "unknown", err: platformoauth.ErrNotFound, status: http.StatusBadRequest, code: "invalid_client"},
+		{name: "revoked", err: platformoauth.ErrRevoked, status: http.StatusBadRequest, code: "invalid_client"},
+		{name: "outage", err: errors.New("database unavailable"), status: http.StatusServiceUnavailable, code: "temporarily_unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			service := newTestOAuthHTTP(t)
+			service.store = clientLookupErrorStore{Store: service.store, err: tc.err}
+			request := httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=code&client_id=test-client&redirect_uri=http%3A%2F%2Flocalhost%2Fcallback&code_challenge="+strings.Repeat("a", 43)+"&code_challenge_method=S256", nil)
+			response := httptest.NewRecorder()
+			service.AuthorizeHandler().ServeHTTP(response, request)
+			require.Equal(t, tc.status, response.Code, response.Body.String())
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, tc.status)
+			require.Equal(t, tc.code, body.Code)
+			require.Empty(t, response.Header().Get("WWW-Authenticate"))
+			require.Empty(t, response.Header().Get("Location"))
+			require.NotContains(t, response.Body.String(), "database unavailable")
+		})
+	}
+}
+
+func TestOAuthHTTPRejectsMultipleValidCredentials(t *testing.T) {
+	t.Parallel()
+	for _, endpoint := range []string{"token", "revoke"} {
+		for _, tc := range []struct {
+			name           string
+			repeatedHeader bool
+			fields         url.Values
+		}{
+			{name: "repeated authorization", repeatedHeader: true},
+			{name: "body secret", fields: url.Values{"client_secret": {"test-secret"}}},
+			{name: "assertion", fields: url.Values{"client_assertion": {"assertion"}}},
+			{name: "repeated client id", fields: url.Values{"client_id": {"test-client", "test-client"}}},
+			{name: "repeated secret", fields: url.Values{"client_secret": {"test-secret", "test-secret"}}},
+		} {
+			t.Run(endpoint+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				service := newTestOAuthHTTP(t)
+				hash, err := bcrypt.GenerateFromPassword([]byte("test-secret"), bcrypt.MinCost)
+				require.NoError(t, err)
+				require.NoError(t, testStore(t, service).RegisterClient(t.Context(), platformoauth.Client{ID: "test-client", SecretHash: string(hash)}))
+				form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {"unknown-token"}, "token": {"unknown-token"}, "client_id": {"test-client"}}
+				validForm := form.Encode()
+				maps.Copy(form, tc.fields)
+				handler := service.TokenHandler()
+				if endpoint == "revoke" {
+					handler = service.RevokeHandler()
+				}
+				request := httptest.NewRequest(http.MethodPost, "/platform-mcp/"+endpoint, strings.NewReader(form.Encode()))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				request.SetBasicAuth("test-client", "test-secret")
+				if tc.repeatedHeader {
+					request.Header.Add("Authorization", request.Header.Get("Authorization"))
+				}
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+				require.Contains(t, response.Body.String(), `"error":"invalid_request"`)
+				require.Empty(t, response.Header().Get("WWW-Authenticate"))
+				require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+
+				request = httptest.NewRequest(http.MethodPost, "/platform-mcp/"+endpoint, strings.NewReader(validForm))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				request.SetBasicAuth("test-client", "test-secret")
+				response = httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				if endpoint == "revoke" {
+					require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+				} else {
+					require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+					require.Contains(t, response.Body.String(), `"error":"invalid_grant"`)
+				}
+			})
+		}
+	}
+}
+
+func TestOAuthHTTPUnsupportedAuthenticationCannotFallBackToPublicClient(t *testing.T) {
+	t.Parallel()
+	for _, endpoint := range []string{"token", "revoke"} {
+		for _, tc := range []struct {
+			name      string
+			header    string
+			form      string
+			status    int
+			challenge string
+		}{
+			{name: "bearer", header: "Bearer token", status: http.StatusUnauthorized, challenge: `Bearer realm="Speakeasy"`},
+			{name: "malformed basic", header: "Basic invalid", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+			{name: "unsupported assertion", form: "&client_assertion=assertion&client_assertion_type=jwt", status: http.StatusBadRequest},
+		} {
+			t.Run(endpoint+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				service := newTestOAuthHTTP(t)
+				require.NoError(t, testStore(t, service).RegisterClient(t.Context(), platformoauth.Client{ID: "public-client"}))
+				request := httptest.NewRequest(http.MethodPost, "/platform-mcp/"+endpoint, strings.NewReader("client_id=public-client&grant_type=refresh_token&refresh_token=unknown&token=unknown"+tc.form))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				if tc.header != "" {
+					request.Header.Set("Authorization", tc.header)
+				}
+				response := httptest.NewRecorder()
+				handler := service.TokenHandler()
+				if endpoint == "revoke" {
+					handler = service.RevokeHandler()
+				}
+				handler.ServeHTTP(response, request)
+				require.Equal(t, tc.status, response.Code, response.Body.String())
+				require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
+				require.Equal(t, tc.challenge, response.Header().Get("WWW-Authenticate"))
+			})
+		}
+	}
+}
+
+func TestOAuthHTTPClientAuthenticationLookupErrors(t *testing.T) {
+	t.Parallel()
+	for _, endpoint := range []string{"token", "revoke"} {
+		for _, basic := range []bool{false, true} {
+			for _, tc := range []struct {
+				name   string
+				err    error
+				status int
+				code   string
+			}{
+				{name: "unknown", err: platformoauth.ErrNotFound, status: http.StatusBadRequest, code: "invalid_client"},
+				{name: "expired", err: platformoauth.ErrExpired, status: http.StatusBadRequest, code: "invalid_client"},
+				{name: "revoked", err: platformoauth.ErrRevoked, status: http.StatusBadRequest, code: "invalid_client"},
+				{name: "mismatch", err: platformoauth.ErrClientMismatch, status: http.StatusBadRequest, code: "invalid_client"},
+				{name: "outage", err: errors.New("database unavailable"), status: http.StatusServiceUnavailable, code: "temporarily_unavailable"},
+			} {
+				t.Run(fmt.Sprintf("%s/basic=%t/%s", endpoint, basic, tc.name), func(t *testing.T) {
+					t.Parallel()
+					service := newTestOAuthHTTP(t)
+					service.store = clientLookupErrorStore{Store: service.store, err: tc.err}
+					request := httptest.NewRequest(http.MethodPost, "/platform-mcp/"+endpoint, strings.NewReader("grant_type=refresh_token&refresh_token=unknown&token=unknown&client_id=test-client"))
+					request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+					status := tc.status
+					challenge := ""
+					if basic {
+						request.SetBasicAuth("test-client", "test-secret")
+						if tc.code == "invalid_client" {
+							status = http.StatusUnauthorized
+							challenge = `Basic realm="Speakeasy"`
+						}
+					}
+					handler := service.TokenHandler()
+					if endpoint == "revoke" {
+						handler = service.RevokeHandler()
+					}
+					response := httptest.NewRecorder()
+					handler.ServeHTTP(response, request)
+					require.Equal(t, status, response.Code, response.Body.String())
+					require.Contains(t, response.Body.String(), `"error":"`+tc.code+`"`)
+					require.Equal(t, challenge, response.Header().Get("WWW-Authenticate"))
+					require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+					require.NotContains(t, response.Body.String(), "database unavailable")
+				})
+			}
+		}
+	}
+}
+
+type revocationErrorStore struct {
+	platformoauth.Store
+	err          error
+	refreshCalls int
+	accessCalls  int
+}
+
+func (s *revocationErrorStore) RevokeSession(context.Context, string, string, string, time.Time) (platformoauth.Session, error) {
+	s.refreshCalls++
+	return platformoauth.Session{}, s.err
+}
+
+func (s *revocationErrorStore) RevokeAccessSession(context.Context, string, string, string, time.Time) (platformoauth.Session, error) {
+	s.accessCalls++
+	return platformoauth.Session{}, s.err
+}
+
+func TestOAuthHTTPRevocationStorageErrors(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"refresh_token", "access_token", "access_without_hint"} {
+		for _, tc := range []struct {
+			name   string
+			err    error
+			status int
+		}{
+			{name: "success", status: http.StatusOK},
+			{name: "unknown", err: platformoauth.ErrNotFound, status: http.StatusOK},
+			{name: "outage", err: errors.New("database unavailable"), status: http.StatusServiceUnavailable},
+		} {
+			t.Run(kind+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				service := newTestOAuthHTTP(t)
+				require.NoError(t, testStore(t, service).RegisterClient(t.Context(), platformoauth.Client{ID: "test-client"}))
+				store := &revocationErrorStore{Store: service.store, err: tc.err}
+				service.store = store
+				var token string
+				var err error
+				if kind == "refresh_token" {
+					token, err = service.credentials.Issue(refreshTokenCredential, "org-1", "")
+					require.NoError(t, err)
+				} else {
+					jti, err := service.credentials.Issue(accessJTICredential, "org-1", "")
+					require.NoError(t, err)
+					token, _, err = service.signer.Mint(sessiontokens.MintParams{Subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: "user-1"}, Audience: platformResource(service.baseURL), Issuer: platformResource(service.baseURL), Lifetime: time.Hour, ClientID: "test-client", JTI: jti})
+					require.NoError(t, err)
+				}
+				form := url.Values{"token": {token}, "client_id": {"test-client"}}
+				if kind != "access_without_hint" {
+					form.Set("token_type_hint", kind)
+				}
+				request := httptest.NewRequest(http.MethodPost, "/platform-mcp/revoke", strings.NewReader(form.Encode()))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				response := httptest.NewRecorder()
+				service.RevokeHandler().ServeHTTP(response, request)
+				require.Equal(t, tc.status, response.Code, response.Body.String())
+				require.Empty(t, response.Header().Get("WWW-Authenticate"))
+				require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+				require.NotContains(t, response.Body.String(), "database unavailable")
+				if tc.status == http.StatusServiceUnavailable {
+					require.Contains(t, response.Body.String(), `"error":"temporarily_unavailable"`)
+				} else {
+					require.Empty(t, response.Body.String())
+				}
+				if kind == "refresh_token" {
+					require.Equal(t, 1, store.refreshCalls)
+					require.Zero(t, store.accessCalls)
+				} else {
+					require.Equal(t, 1, store.accessCalls)
+					require.Zero(t, store.refreshCalls)
+				}
+			})
+		}
+	}
 }

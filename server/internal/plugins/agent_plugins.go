@@ -50,6 +50,12 @@ type agentPluginManifest struct {
 	Description string            `json:"description,omitempty"`
 	Author      agentPluginAuthor `json:"author"`
 	Homepage    string            `json:"homepage,omitempty"`
+	// Extensions carries client-specific manifest data keyed by reverse-domain
+	// namespace. The vendored schema leaves each namespace's object
+	// uninterpreted (extensions.additionalProperties: object), so Vibe's
+	// "ai.mistral.vibe" extension — which gates loading the plugin's native
+	// hooks.toml — validates without any schema change.
+	Extensions map[string]any `json:"extensions,omitempty"`
 }
 
 type agentPluginAuthor struct {
@@ -144,7 +150,7 @@ func classifyAgentPlugin(p PluginInfo) agentPluginCompatibility {
 		}
 		seenServers[server.DisplayName] = struct{}{}
 		if !server.IsUnproxied && !server.IsPublic && !server.IsOAuth {
-			reasons = append(reasons, "server requires a Gram credential")
+			reasons = append(reasons, "server requires a Speakeasy credential")
 		}
 		if len(server.EnvConfigs) > 0 {
 			reasons = append(reasons, "server requires environment-backed headers")
@@ -159,7 +165,7 @@ func classifyAgentPlugin(p PluginInfo) agentPluginCompatibility {
 		}
 	}
 
-	manifest := agentPluginManifest{Schema: agentPluginSchemaID, Name: p.Slug, Version: "0.1.0", Description: p.Description, Author: agentPluginAuthor{Name: "", URL: ""}, Homepage: ""}
+	manifest := agentPluginManifest{Schema: agentPluginSchemaID, Name: p.Slug, Version: "0.1.0", Description: p.Description, Author: agentPluginAuthor{Name: "", URL: ""}, Homepage: "", Extensions: nil}
 	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {
 		reasons = append(reasons, "plugin manifest is invalid: "+err.Error())
 	}
@@ -168,7 +174,7 @@ func classifyAgentPlugin(p PluginInfo) agentPluginCompatibility {
 
 func validateAgentPluginRemoteURL(raw string) error {
 	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" {
+	if err != nil || u.Host == "" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
 		return errors.New("url must be absolute and must not contain user information or a fragment")
 	}
 	if u.Scheme == "https" {
@@ -186,6 +192,17 @@ func validateAgentPluginRemoteURL(raw string) error {
 		return errors.New("non-loopback HTTP URL")
 	}
 	return nil
+}
+
+// validateAgentPluginName checks just a manifest name against the vendored
+// schema's name rules (maxLength 64, the name pattern, no "--"/".."). It runs
+// the same schema document validation generation uses, so the standalone
+// check and the full-document check cannot drift apart.
+func validateAgentPluginName(name string) error {
+	return validateAgentPluginDocument(agentPluginSchemaID, map[string]any{
+		"$schema": agentPluginSchemaID,
+		"name":    name,
+	})
 }
 
 func validateAgentPluginDocument(schemaID string, document any) error {
@@ -222,6 +239,7 @@ func compileAgentPlugin(p PluginInfo, cfg GenerateConfig, mode agentPluginCreden
 		Description: p.Description,
 		Author:      agentPluginAuthor{Name: cfg.OrgName, URL: "https://www.speakeasy.com/"},
 		Homepage:    "https://www.speakeasy.com/product/gram",
+		Extensions:  nil,
 	}
 	manifestJSON, err := marshalJSON(manifest)
 	if err != nil {
@@ -229,26 +247,9 @@ func compileAgentPlugin(p PluginInfo, cfg GenerateConfig, mode agentPluginCreden
 	}
 	files["plugin.json"] = manifestJSON
 
-	mcpServers := make(map[string]agentMCPServer, len(p.Servers)+1)
+	mcpServers := make(map[string]agentMCPServer, len(p.Servers))
 	for _, server := range p.Servers {
 		mcpServers[server.DisplayName] = agentMCPServer{Type: "streamable-http", Command: "", Args: nil, Env: nil, CWD: "", URL: server.MCPURL, Headers: nil}
-	}
-	if bundleSkillFeedbackMCP(p) {
-		mcpServers[skillFeedbackMCPServerName] = agentMCPServer{
-			Type:    "stdio",
-			Command: "bash",
-			Args: []string{
-				"-c",
-				`exec "${PLUGIN_ROOT:-${CURSOR_PLUGIN_ROOT}}/hooks/bootstrap.sh" skill-feedback "--config=${PLUGIN_ROOT:-${CURSOR_PLUGIN_ROOT}}/speakeasy.json"`,
-			},
-			Env:     nil,
-			CWD:     "",
-			URL:     "",
-			Headers: nil,
-		}
-		if err := writeHooksRuntimeFiles(files, "", cfg); err != nil {
-			return nil, err
-		}
 	}
 	mcpConfig := agentMCPConfig{Schema: agentMCPSchemaID, MCPServers: mcpServers}
 	mcpJSON, err := marshalJSON(mcpConfig)
@@ -259,18 +260,19 @@ func compileAgentPlugin(p PluginInfo, cfg GenerateConfig, mode agentPluginCreden
 	emitPluginSkills(files, "", p)
 
 	if mode == agentPluginCredentialsPackage {
-		cursorJSON, err := marshalJSON(cursorPluginMeta{Name: p.Slug + "-cursor", DisplayName: p.Name + " (Cursor)", Description: p.Description, Version: pluginManifestVersion(cfg), Author: cursorAuthor{Name: cfg.OrgName, Email: ""}, Homepage: "https://getgram.ai"})
+		cursorJSON, err := marshalJSON(cursorPluginMeta{Name: p.Slug + "-cursor", DisplayName: p.Name + " (Cursor)", Description: p.Description, Version: pluginManifestVersion(cfg), Author: cursorAuthor{Name: cfg.OrgName, Email: ""}, Homepage: speakeasyHomepageURL})
 		if err != nil {
 			return nil, fmt.Errorf("marshal shared Cursor plugin.json: %w", err)
 		}
 		files[".cursor-plugin/plugin.json"] = cursorJSON
 
-		legacyCodexFiles := make(map[string][]byte)
-		if err := generateCodexPluginInDir(legacyCodexFiles, "", p.Slug+"-codex", p, cfg); err != nil {
-			return nil, fmt.Errorf("generate shared Codex legacy overlay: %w", err)
+		// Retain the native MCP config for Cursor, but not a Codex manifest.
+		// Codex must use its dedicated native package, not this AP1.0 root.
+		cursorMCPFiles := make(map[string][]byte)
+		if err := generateCodexPluginInDir(cursorMCPFiles, "", p.Slug+"-codex", p, cfg); err != nil {
+			return nil, fmt.Errorf("generate shared Cursor MCP config: %w", err)
 		}
-		files[".codex-plugin/plugin.json"] = legacyCodexFiles[".codex-plugin/plugin.json"]
-		files[".mcp.json"] = legacyCodexFiles[".mcp.json"]
+		files[".mcp.json"] = cursorMCPFiles[".mcp.json"]
 	}
 
 	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {

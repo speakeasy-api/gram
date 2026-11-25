@@ -33,8 +33,8 @@ func newTestServiceForProbe(t *testing.T) (context.Context, *testInstance) {
 }
 
 // seedRemoteMcpServerWithURL inserts a remote_mcp_server row pointing at url
-// and returns the inserted row. The slug is derived from the row id so tests
-// can seed multiple rows in the same database without collisions.
+// and returns the inserted row. The slug is random so tests can seed multiple
+// rows in the same database without collisions.
 func seedRemoteMcpServerWithURL(t *testing.T, ctx context.Context, ti *testInstance, url string) repo.RemoteMcpServer {
 	t.Helper()
 
@@ -47,7 +47,7 @@ func seedRemoteMcpServerWithURL(t *testing.T, ctx context.Context, ti *testInsta
 		ID:            id,
 		ProjectID:     *authCtx.ProjectID,
 		Name:          pgtype.Text{String: "", Valid: false},
-		Slug:          conv.ToPGText("probe-" + id.String()[:8]),
+		Slug:          conv.ToPGText("probe-" + uuid.NewString()[:8]),
 		TransportType: "streamable-http",
 		Url:           url,
 	})
@@ -70,6 +70,10 @@ func TestDiscoverProtectedResourceMetadata_HappyPath(t *testing.T) {
 		ScopesSupported:        []string{"read"},
 		BearerMethodsSupported: []string{"header"},
 		ResourceDocumentation:  "https://docs.example.com",
+		ResourceName:           "",
+		ResourcePolicyURI:      "",
+		ResourceTosURI:         "",
+		Raw:                    nil,
 	}
 	server := oauthtest.LaunchProtectedResourceServer(t, oauthtest.ProtectedResourceServerOpts{
 		Metadata:   metadata,
@@ -223,6 +227,10 @@ func TestDiscoverProtectedResourceMetadata_DiscoveryWarnings(t *testing.T) {
 			ScopesSupported:        nil,
 			BearerMethodsSupported: nil,
 			ResourceDocumentation:  "",
+			ResourceName:           "",
+			ResourcePolicyURI:      "",
+			ResourceTosURI:         "",
+			Raw:                    nil,
 		},
 		StatusCode: 0,
 		Body:       nil,

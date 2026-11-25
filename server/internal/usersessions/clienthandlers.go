@@ -18,12 +18,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -60,7 +60,7 @@ func (s *Service) ListUserSessionClients(ctx context.Context, payload *gen.ListU
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -79,6 +79,7 @@ func (s *Service) ListUserSessionClients(ctx context.Context, payload *gen.ListU
 
 	rows, err := queries.ListUserSessionClientsByProjectID(ctx, repo.ListUserSessionClientsByProjectIDParams{
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: issuerFilter,
 		Cursor:              cursor,
 		LimitValue:          limit,
@@ -121,7 +122,7 @@ func (s *Service) GetUserSessionClient(ctx context.Context, payload *gen.GetUser
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -133,8 +134,9 @@ func (s *Service) GetUserSessionClient(ctx context.Context, payload *gen.GetUser
 	queries := repo.New(s.db)
 
 	row, err := queries.GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -192,7 +194,7 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -212,8 +214,9 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 	// and audit entry need, through the same project-scoped read the get
 	// endpoint uses. The mutations below carry their own project guard too.
 	row, err := queries.GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -227,14 +230,15 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 	}
 
 	// The issuer-level off switch applies to this fetch surface like it does
-	// to /authorize: a `disabled` issuer must not have Gram fetch documents
+	// to /authorize: a `disabled` issuer must not have Speakeasy fetch documents
 	// on its behalf, refresh included. Only `disabled` blocks here — a
 	// presets catalog miss stays refreshable, mirroring the /token asymmetry
 	// where de-listing a client stops new authorize flows without breaking
 	// its existing rows. An unrecognized stored mode fails closed.
 	issuer, err := queries.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
-		ID:        row.UserSessionIssuerID,
-		ProjectID: *authCtx.ProjectID,
+		ID:             row.UserSessionIssuerID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -273,8 +277,9 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 	txRepo := repo.New(dbtx)
 
 	if _, err := txRepo.PurgeUserSessionClientCIMDCache(ctx, repo.PurgeUserSessionClientCIMDCacheParams{
-		ID:        row.ID,
-		ProjectID: *authCtx.ProjectID,
+		ID:             row.ID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// The row stopped being a live CIMD row between the read above and
@@ -309,7 +314,7 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			// A spec/policy rejection of the document itself, with a
 			// client-safe description: the operator's fix is at the document
-			// host, not at Gram.
+			// host, not at Speakeasy.
 			return nil, oops.E(oops.CodeInvalid, err, "metadata document failed validation: %s; the cached copy was discarded and the document will be re-read on the client's next authorization", oauthErr.Description).LogError(ctx, logger)
 		}
 		// The message carries the post-purge state because the operator's
@@ -343,6 +348,7 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 	fresh, err := queries.UpdateUserSessionClientFromCIMD(ctx, repo.UpdateUserSessionClientFromCIMDParams{
 		ID:                      row.ID,
 		ProjectID:               *authCtx.ProjectID,
+		OrganizationID:          authCtx.ActiveOrganizationID,
 		ClientName:              result.Document.ClientName,
 		RedirectUris:            result.Document.RedirectURIs,
 		CacheTtlSeconds:         result.TTL.Seconds(),
@@ -377,7 +383,7 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -397,8 +403,9 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 	txRepo := repo.New(dbtx)
 
 	revoked, err := txRepo.RevokeUserSessionClient(ctx, repo.RevokeUserSessionClientParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -448,21 +455,28 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		return oops.E(oops.CodeUnexpected, err, "log user session client revocation").LogError(ctx, logger)
 	}
 
-	// Tombstone the upstream grants of every subject whose session just
-	// cascaded, deduplicated: one client can hold a session per user, and a
-	// subject's grants hang off (subject, issuer) rather than off the session,
-	// so without this the same grants would be soft-deleted — and revoked
-	// upstream — once per session the subject held.
-	seenSubjects := make(map[string]struct{}, len(revokedSessions))
-	var revokedUpstream []remotesessions.RevokedCredentials
+	// Each downstream credential can have different choices. Group the IDs
+	// by their actual project scope without dropping any choices.
+	type subjectIssuer struct {
+		subject string
+		issuer  uuid.UUID
+		project uuid.UUID
+	}
+	var order []subjectIssuer
+	groups := make(map[subjectIssuer][]uuid.UUID, len(revokedSessions))
+	subjects := make(map[subjectIssuer]urn.SessionSubject, len(revokedSessions))
 	for _, session := range revokedSessions {
-		key := session.SubjectUrn.String() + "\x00" + session.UserSessionIssuerID.String()
-		if _, seen := seenSubjects[key]; seen {
-			continue
+		key := subjectIssuer{subject: session.SubjectUrn.String(), issuer: session.UserSessionIssuerID, project: session.ProjectID.UUID}
+		if _, ok := groups[key]; !ok {
+			order = append(order, key)
+			subjects[key] = session.SubjectUrn
 		}
-		seenSubjects[key] = struct{}{}
+		groups[key] = append(groups[key], session.ID)
+	}
+	var revokedUpstream []remotesessions.RevokedCredentials
+	for _, key := range order {
+		creds, err := s.revoker.SoftDeleteSubjectSessionsForCredentials(ctx, dbtx, subjects[key], key.issuer, key.project, authCtx.ActiveOrganizationID, groups[key])
 
-		creds, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, session.SubjectUrn, session.UserSessionIssuerID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
 		}
@@ -513,7 +527,7 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 	// Strictly after the jti pushes, and attempted even when some failed. This
 	// fan-out is synchronous, so running it first would hold every one of the
 	// client's already-issued access tokens valid for the length of the batch
-	// budget — a slow issuer would delay Gram's own security control. The two
+	// budget — a slow issuer would delay Speakeasy's own security control. The two
 	// are independent, so a cache outage must not also cost the upstream
 	// revocations.
 	s.revoker.RevokeAllDetached(ctx, revokedUpstream)

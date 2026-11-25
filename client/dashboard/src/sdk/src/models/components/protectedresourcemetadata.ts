@@ -29,6 +29,18 @@ export type ProtectedResourceMetadata = {
    */
   resourceDocumentation?: string | undefined;
   /**
+   * Human-readable display name of the resource server.
+   */
+  resourceName?: string | undefined;
+  /**
+   * URL of the resource server's data-usage policy.
+   */
+  resourcePolicyUri?: string | undefined;
+  /**
+   * URL of the resource server's terms of service.
+   */
+  resourceTosUri?: string | undefined;
+  /**
    * Scopes advertised by the resource server.
    */
   scopesSupported?: Array<string> | undefined;
@@ -44,6 +56,9 @@ export const ProtectedResourceMetadata$inboundSchema: z.ZodMiniType<
     bearer_methods_supported: z.optional(z.array(z.string())),
     resource: z.optional(z.string()),
     resource_documentation: z.optional(z.string()),
+    resource_name: z.optional(z.string()),
+    resource_policy_uri: z.optional(z.string()),
+    resource_tos_uri: z.optional(z.string()),
     scopes_supported: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
@@ -51,6 +66,9 @@ export const ProtectedResourceMetadata$inboundSchema: z.ZodMiniType<
       "authorization_servers": "authorizationServers",
       "bearer_methods_supported": "bearerMethodsSupported",
       "resource_documentation": "resourceDocumentation",
+      "resource_name": "resourceName",
+      "resource_policy_uri": "resourcePolicyUri",
+      "resource_tos_uri": "resourceTosUri",
       "scopes_supported": "scopesSupported",
     });
   }),

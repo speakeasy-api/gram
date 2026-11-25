@@ -1043,6 +1043,15 @@ func EncodeListRemoteSessionIssuersRequest(encoder func(*http.Request) goahttp.E
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		if p.UpstreamHost != nil {
+			values.Add("upstream_host", *p.UpstreamHost)
+		}
+		if p.Tier != nil {
+			values.Add("tier", *p.Tier)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1994,14 +2003,23 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		RevocationEndpoint:                v.RevocationEndpoint,
 		RegistrationEndpoint:              v.RegistrationEndpoint,
 		JwksURI:                           v.JwksURI,
+		JwksFetchedAt:                     v.JwksFetchedAt,
+		JwksCacheExpiresAt:                v.JwksCacheExpiresAt,
 		ServiceDocumentation:              v.ServiceDocumentation,
 		OpPolicyURI:                       v.OpPolicyURI,
 		OpTosURI:                          v.OpTosURI,
 		Oidc:                              *v.Oidc,
 		Passthrough:                       *v.Passthrough,
 		ClientIDMetadataDocumentSupported: *v.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         *v.CreatedAt,
-		UpdatedAt:                         *v.UpdatedAt,
+		TunneledMcpServerID:               v.TunneledMcpServerID,
+		UserinfoEndpoint:                  v.UserinfoEndpoint,
+		IntrospectionEndpoint:             v.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          v.OmitScopeFallback,
+		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
+		CreatedAt:                                  *v.CreatedAt,
+		UpdatedAt:                                  *v.UpdatedAt,
 	}
 	if v.ScopesSupported != nil {
 		res.ScopesSupported = make([]string, len(v.ScopesSupported))
@@ -2013,6 +2031,12 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
 		for i, val := range v.GrantTypesSupported {
 			res.GrantTypesSupported[i] = val
+		}
+	}
+	if v.AuthorizationGrantProfilesSupported != nil {
+		res.AuthorizationGrantProfilesSupported = make([]string, len(v.AuthorizationGrantProfilesSupported))
+		for i, val := range v.AuthorizationGrantProfilesSupported {
+			res.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if v.ResponseTypesSupported != nil {
@@ -2032,6 +2056,70 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		for i, val := range v.CodeChallengeMethodsSupported {
 			res.CodeChallengeMethodsSupported[i] = val
 		}
+	}
+	if v.IntrospectionEndpointAuthMethodsSupported != nil {
+		res.IntrospectionEndpointAuthMethodsSupported = make([]string, len(v.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range v.IntrospectionEndpointAuthMethodsSupported {
+			res.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.IDTokenSigningAlgValuesSupported != nil {
+		res.IDTokenSigningAlgValuesSupported = make([]string, len(v.IDTokenSigningAlgValuesSupported))
+		for i, val := range v.IDTokenSigningAlgValuesSupported {
+			res.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if v.ClaimsSupported != nil {
+		res.ClaimsSupported = make([]string, len(v.ClaimsSupported))
+		for i, val := range v.ClaimsSupported {
+			res.ClaimsSupported[i] = val
+		}
+	}
+	if v.ScopeOverride != nil {
+		res.ScopeOverride = make([]string, len(v.ScopeOverride))
+		for i, val := range v.ScopeOverride {
+			res.ScopeOverride[i] = val
+		}
+	}
+	if v.EmaProviders != nil {
+		res.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v.EmaProviders)
+	}
+
+	return res
+}
+
+// unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder builds a value
+// of type *types.EMAProviderOrder from a value of type
+// *EMAProviderOrderResponseBody.
+func unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v *EMAProviderOrderResponseBody) *types.EMAProviderOrder {
+	if v == nil {
+		return nil
+	}
+	res := &types.EMAProviderOrder{
+		VendorIssuer: *v.VendorIssuer,
+		IsDefault:    *v.IsDefault,
+	}
+	res.Providers = make([]*types.EMAProvider, len(v.Providers))
+	for i, val := range v.Providers {
+		if val == nil {
+			res.Providers[i] = nil
+			continue
+		}
+		res.Providers[i] = unmarshalEMAProviderResponseBodyToTypesEMAProvider(val)
+	}
+
+	return res
+}
+
+// unmarshalEMAProviderResponseBodyToTypesEMAProvider builds a value of type
+// *types.EMAProvider from a value of type *EMAProviderResponseBody.
+func unmarshalEMAProviderResponseBodyToTypesEMAProvider(v *EMAProviderResponseBody) *types.EMAProvider {
+	res := &types.EMAProvider{
+		Kind:                    *v.Kind,
+		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
+		InternalSessionIssuerID: v.InternalSessionIssuerID,
+		UnavailableReason:       v.UnavailableReason,
+		LastAcceptedAt:          v.LastAcceptedAt,
 	}
 
 	return res

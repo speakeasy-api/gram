@@ -17,23 +17,27 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/users"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // IDPClient is the slim interface for IDP code exchange. Wraps the WorkOS
-// user-management SDK so Gram doesn't leak SDK types with irrelevant
+// user-management SDK so Speakeasy doesn't leak SDK types with irrelevant
 // browser-flow fields (CodeVerifier, IPAddress, UserAgent).
 type IDPClient interface {
 	AuthenticateWithCode(ctx context.Context, clientID, code string) (*AuthenticateResult, error)
@@ -55,14 +59,25 @@ type AuthorizationURLParams struct {
 	// ScreenHint selects which AuthKit screen to land on. Only "sign-up" is
 	// used, and only while provider is "authkit". Omitted when empty.
 	ScreenHint string
+
+	// Prompt "login" forces the user to authenticate again rather than
+	// reuse an existing session. Omitted when empty.
+	Prompt string
+
+	// OrganizationID is a WorkOS organization AuthKit selects for the user,
+	// skipping its organization picker. Omitted when empty.
+	OrganizationID string
 }
 
-// AuthenticateResult holds the fields Gram uses from the IDP code exchange.
+// AuthenticateResult holds the fields Speakeasy uses from the IDP code exchange.
 type AuthenticateResult struct {
-	AccessToken       string
-	OrganizationID    string // WorkOS org ID the user selected during auth (may be empty)
-	User              AuthenticatedUser
-	impersonatorEmail string
+	AccessToken    string
+	OrganizationID string // WorkOS org ID the user selected during auth (may be empty)
+	// AuthenticationMethod is WorkOS's method for this sign-in, e.g. "SSO".
+	AuthenticationMethod string
+	Evidence             SignInEvidence
+	User                 AuthenticatedUser
+	impersonatorEmail    string
 }
 
 type MagicAuthChallenge struct {
@@ -70,7 +85,7 @@ type MagicAuthChallenge struct {
 	Code  string
 }
 
-// AuthenticatedUser holds the user fields Gram reads after IDP authentication.
+// AuthenticatedUser holds the user fields Speakeasy reads after IDP authentication.
 type AuthenticatedUser struct {
 	ID                string
 	FirstName         string
@@ -92,7 +107,7 @@ type WorkOSClient interface {
 	EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgID string) error
 	UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error
 	CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error)
-	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
+	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (*workos.Member, error)
 	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 	GetUserByEmail(ctx context.Context, email string) (*workos.User, error)
@@ -100,14 +115,17 @@ type WorkOSClient interface {
 
 // IDPUserInfo represents the user identity returned by the IDP after code exchange.
 type IDPUserInfo struct {
-	Sub               string  `json:"sub"`
-	Email             string  `json:"email"`
-	Name              string  `json:"name"`
-	Picture           *string `json:"picture,omitempty"`
-	ExternalID        string  `json:"-"`
-	WorkOSSessionID   string  `json:"-"`
-	OrganizationID    string  `json:"-"` // WorkOS org ID selected during auth
-	impersonatorEmail string
+	Sub             string  `json:"sub"`
+	Email           string  `json:"email"`
+	Name            string  `json:"name"`
+	Picture         *string `json:"picture,omitempty"`
+	ExternalID      string  `json:"-"`
+	WorkOSSessionID string  `json:"-"`
+	OrganizationID  string  `json:"-"` // WorkOS org ID selected during auth
+	// AuthenticationMethod is WorkOS's method for this sign-in, e.g. "SSO".
+	AuthenticationMethod string         `json:"-"`
+	Evidence             SignInEvidence `json:"-"`
+	impersonatorEmail    string
 }
 
 // ImpersonatorEmail returns the WorkOS Dashboard operator who initiated an
@@ -133,6 +151,11 @@ type Resolver struct {
 	userRepo      *userRepo.Queries
 	pylon         *pylon.Pylon
 	posthog       *posthog.Posthog
+	growth        *growthsignals.Emitter
+
+	// newOrganizationDefaultHost is recorded as the default host of
+	// organizations membership sync creates.
+	newOrganizationDefaultHost pgtype.Text
 }
 
 func NewResolver(
@@ -147,6 +170,7 @@ func NewResolver(
 	userRepo *userRepo.Queries,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
+	growth *growthsignals.Emitter,
 	suffix cache.Suffix,
 ) *Resolver {
 	logger = logger.With(attr.SlogComponent("identity"))
@@ -162,7 +186,16 @@ func NewResolver(
 		userRepo:      userRepo,
 		pylon:         pylon,
 		posthog:       posthog,
+		growth:        growth,
+
+		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 	}
+}
+
+// SetNewOrganizationDefaultHost sets the default host recorded on
+// organizations membership sync creates. Unset records none.
+func (r *Resolver) SetNewOrganizationDefaultHost(host pgtype.Text) {
+	r.newOrganizationDefaultHost = host
 }
 
 // ExchangeCodeForTokens exchanges an authorization code for user identity
@@ -178,7 +211,7 @@ func (r *Resolver) ExchangeCodeForTokens(ctx context.Context, code string) (_ *I
 
 	resp, err := r.idpClient.AuthenticateWithCode(ctx, r.idpClientID, code)
 	if err != nil {
-		return nil, fmt.Errorf("workos authenticate with code: %w", err)
+		return nil, &providerError{operation: "code exchange", cause: err}
 	}
 	if resp == nil {
 		return nil, errors.New("workos authenticate with code: empty response")
@@ -198,7 +231,7 @@ func (r *Resolver) AuthenticateWithMagicAuth(ctx context.Context, email string) 
 
 	challenge, err := r.idpClient.CreateMagicAuth(ctx, email)
 	if err != nil {
-		return nil, fmt.Errorf("workos create magic auth: %w", err)
+		return nil, &providerError{operation: "magic auth creation", cause: err}
 	}
 	if challenge == nil || challenge.Code == "" {
 		return nil, errors.New("workos create magic auth: empty code")
@@ -206,14 +239,14 @@ func (r *Resolver) AuthenticateWithMagicAuth(ctx context.Context, email string) 
 
 	resp, err := r.idpClient.AuthenticateWithMagicAuth(ctx, r.idpClientID, challenge.Email, challenge.Code)
 	if err != nil {
-		return nil, fmt.Errorf("workos authenticate with magic auth: %w", err)
+		return nil, &providerError{operation: "magic auth", cause: err}
 	}
 	if resp == nil {
 		return nil, errors.New("workos authenticate with magic auth: empty response")
 	}
 	if !resp.User.EmailVerified {
 		if err := r.idpClient.SetEmailVerified(ctx, resp.User.ID); err != nil {
-			return nil, fmt.Errorf("workos mark email verified: %w", err)
+			return nil, &providerError{operation: "email verification", cause: err}
 		}
 	}
 
@@ -228,14 +261,16 @@ func idpUserInfoFromAuthenticateResult(resp *AuthenticateResult) *IDPUserInfo {
 	}
 
 	return &IDPUserInfo{
-		Sub:               resp.User.ID,
-		Email:             resp.User.Email,
-		Name:              name,
-		Picture:           picture,
-		ExternalID:        resp.User.ExternalID,
-		WorkOSSessionID:   extractSessionIDFromJWT(resp.AccessToken),
-		OrganizationID:    resp.OrganizationID,
-		impersonatorEmail: resp.impersonatorEmail,
+		Sub:                  resp.User.ID,
+		Email:                resp.User.Email,
+		Name:                 name,
+		Picture:              picture,
+		ExternalID:           resp.User.ExternalID,
+		WorkOSSessionID:      extractSessionIDFromJWT(resp.AccessToken),
+		OrganizationID:       resp.OrganizationID,
+		AuthenticationMethod: resp.AuthenticationMethod,
+		Evidence:             resp.Evidence,
+		impersonatorEmail:    resp.impersonatorEmail,
 	}
 }
 
@@ -257,9 +292,29 @@ func extractSessionIDFromJWT(token string) string {
 	return claims.SID
 }
 
+// UpsertUserResult describes the Speakeasy user selected for an IDP identity.
+type UpsertUserResult struct {
+	UserID      string
+	Reactivated bool
+}
+
 // UpsertUserFromIDP upserts a user record from OIDC identity claims and
 // returns the user ID.
-func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (_ string, err error) {
+func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (string, error) {
+	result, err := r.UpsertUserFromIDPWithResult(ctx, idpUser)
+	return result.UserID, err
+}
+
+// UpsertUserFromIDPWithResult also reports whether login reactivated a user
+// previously deleted by WorkOS.
+func (r *Resolver) UpsertUserFromIDPWithResult(ctx context.Context, idpUser *IDPUserInfo) (UpsertUserResult, error) {
+	return r.upsertUserFromIDP(ctx, idpUser, nil)
+}
+
+// upsertUserFromIDP is UpsertUserFromIDPWithResult with optional sign-up
+// attribution, which is attached to the first-time sign-up event when this
+// call creates the user.
+func (r *Resolver) upsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo, attribution *SignupAttribution) (_ UpsertUserResult, err error) {
 	ctx, span := r.tracer.Start(ctx, "identity.upsertUserFromIDP")
 	defer func() {
 		if err != nil {
@@ -268,7 +323,7 @@ func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) 
 		span.End()
 	}()
 
-	gramUserID, admin := r.resolveGramUserID(ctx, idpUser)
+	gramUserID, admin, reactivated := r.resolveGramUserID(ctx, idpUser)
 	span.SetAttributes(
 		attr.AuthUserID(gramUserID),
 		attr.WorkOSUserID(idpUser.Sub),
@@ -283,14 +338,17 @@ func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) 
 		Admin:       admin,
 	})
 	if err != nil {
-		return "", fmt.Errorf("upsert user: %w", err)
+		return UpsertUserResult{}, fmt.Errorf("upsert user: %w", err)
 	}
 
 	if err := r.userRepo.OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
 		ID:       gramUserID,
 		WorkosID: pgtype.Text{String: idpUser.Sub, Valid: true},
 	}); err != nil {
-		r.logger.ErrorContext(ctx, "failed to set workos_id on user", attr.SlogError(err))
+		return UpsertUserResult{}, fmt.Errorf("set workos_id on user: %w", err)
+	}
+	if err := r.reassignWorkOSIdentity(ctx, gramUserID, idpUser.Sub); err != nil {
+		return UpsertUserResult{}, err
 	}
 
 	if r.workosClient != nil {
@@ -304,25 +362,67 @@ func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) 
 	}
 
 	if user.WasCreated {
-		if err := r.posthog.CaptureEvent(ctx, "is_first_time_user_signup", user.Email, map[string]any{
-			"email":        user.Email,
-			"display_name": user.DisplayName,
-		}); err != nil {
+		properties := attribution.Properties()
+		properties["email"] = user.Email
+		properties["display_name"] = user.DisplayName
+		if err := r.posthog.CaptureEvent(ctx, "is_first_time_user_signup", user.Email, properties); err != nil {
 			r.logger.ErrorContext(ctx, "failed to capture is_first_time_user_signup event", attr.SlogError(err))
 		}
+
+		r.emitSignup(ctx, user.Email, user.DisplayName)
 	}
 
-	return user.ID, nil
+	return UpsertUserResult{UserID: user.ID, Reactivated: reactivated}, nil
 }
 
-func (r *Resolver) resolveGramUserID(ctx context.Context, idpUser *IDPUserInfo) (string, bool) {
+func (r *Resolver) reassignWorkOSIdentity(ctx context.Context, gramUserID, newWorkosID string) error {
+	if gramUserID == "" || newWorkosID == "" {
+		return nil
+	}
+
+	if err := r.orgRepo.ReassignOrganizationUserWorkOSID(ctx, orgRepo.ReassignOrganizationUserWorkOSIDParams{
+		NewWorkosUserID: conv.ToPGText(newWorkosID),
+		UserID:          conv.ToPGText(gramUserID),
+	}); err != nil {
+		return fmt.Errorf("reassign organization memberships to workos user: %w", err)
+	}
+
+	if err := r.orgRepo.LinkRoleAssignmentsToUser(ctx, orgRepo.LinkRoleAssignmentsToUserParams{
+		UserID:       conv.ToPGText(gramUserID),
+		WorkosUserID: newWorkosID,
+	}); err != nil {
+		return fmt.Errorf("link organization role assignments to user: %w", err)
+	}
+	if err := r.orgRepo.RetireCollidingOrganizationRoleAssignments(ctx, orgRepo.RetireCollidingOrganizationRoleAssignmentsParams{
+		UserID:          conv.ToPGText(gramUserID),
+		NewWorkosUserID: newWorkosID,
+	}); err != nil {
+		return fmt.Errorf("retire colliding organization role assignments: %w", err)
+	}
+	if err := r.orgRepo.RetireDuplicateLeftoverOrganizationRoleAssignments(ctx, orgRepo.RetireDuplicateLeftoverOrganizationRoleAssignmentsParams{
+		UserID:          conv.ToPGText(gramUserID),
+		NewWorkosUserID: newWorkosID,
+	}); err != nil {
+		return fmt.Errorf("retire duplicate leftover organization role assignments: %w", err)
+	}
+	if err := r.orgRepo.ReassignOrganizationRoleAssignmentWorkOSID(ctx, orgRepo.ReassignOrganizationRoleAssignmentWorkOSIDParams{
+		NewWorkosUserID: newWorkosID,
+		UserID:          conv.ToPGText(gramUserID),
+	}); err != nil {
+		return fmt.Errorf("reassign organization role assignments to workos user: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Resolver) resolveGramUserID(ctx context.Context, idpUser *IDPUserInfo) (string, bool, bool) {
 	if existing, err := r.userRepo.GetUserByEmail(ctx, idpUser.Email); err == nil {
-		return existing.ID, existing.Admin
+		return existing.ID, existing.Admin, existing.WorkosDeletedAt.Valid
 	}
 	if idpUser.ExternalID != "" {
-		return idpUser.ExternalID, false
+		return idpUser.ExternalID, false, false
 	}
-	return users.UserIDFromWorkOSID(idpUser.Sub), false
+	return users.UserIDFromWorkOSID(idpUser.Sub), false, false
 }
 
 // BuildUserInfoFromDB constructs a CachedUserInfo by querying user data and
@@ -384,21 +484,137 @@ func (r *Resolver) BuildUserInfoFromDB(ctx context.Context, userID string) (*ses
 	}, nil
 }
 
+// IDPLoginOptions controls the bootstrap that follows a successful IDP code
+// exchange.
+type IDPLoginOptions struct {
+	// SkipMembershipSync leaves local organization memberships as they are.
+	// Support logins set it so a platform admin's session never reconciles
+	// memberships against WorkOS.
+	SkipMembershipSync bool
+
+	// Attribution is where a dashboard sign-up came from. Attached to the
+	// first-time sign-up event when this login creates the user; nil for
+	// ordinary logins and for flows that don't start on the sign-up page.
+	Attribution *SignupAttribution
+}
+
+// IDPLoginResult is the Speakeasy identity established by CompleteIDPLogin.
+type IDPLoginResult struct {
+	// UserID is the Speakeasy user selected for the IDP identity.
+	UserID string
+
+	// Reactivated reports that the login revived a user previously deleted
+	// by WorkOS.
+	Reactivated bool
+
+	// UserInfo is the user's fresh profile and organization list, read after
+	// memberships were reconciled.
+	UserInfo *sessions.CachedUserInfo
+
+	// MembershipRoles are the identity-provider role slugs observed while
+	// reconciling memberships. Nil when membership sync did not run.
+	MembershipRoles []IDPMembershipRole
+}
+
+// IDPMembershipRole is one identity-provider membership and the roles on it.
+type IDPMembershipRole struct {
+	// WorkOSOrganizationID is the identity-provider organization id.
+	WorkOSOrganizationID string
+
+	// WorkOSMembershipID is the identity-provider membership id.
+	WorkOSMembershipID string
+
+	// WorkOSUserID is the identity-provider user id on the membership.
+	WorkOSUserID string
+
+	// RoleSlugs are the roles reported for the membership. An empty list means
+	// none were reported, and must not be applied as "remove every role".
+	RoleSlugs []string
+}
+
+// CompleteIDPLogin is the single bootstrap every IDP-backed login runs after
+// the code exchange: it upserts the user, reconciles local organization
+// memberships from WorkOS, and returns user info that reflects those rows.
+// Every login surface (dashboard, MCP server, Platform MCP) goes through it so
+// an organization access check made right after cannot disagree with WorkOS
+// or with a cached organization list.
+func (r *Resolver) CompleteIDPLogin(ctx context.Context, idpUser *IDPUserInfo, opts IDPLoginOptions) (IDPLoginResult, error) {
+	upserted, err := r.upsertUserFromIDP(ctx, idpUser, opts.Attribution)
+	if err != nil {
+		return IDPLoginResult{}, err
+	}
+
+	var membershipRoles []IDPMembershipRole
+	if !opts.SkipMembershipSync && idpUser.Sub != "" {
+		members, err := r.syncMembershipsFromWorkOS(ctx, upserted.UserID, idpUser.Sub, upserted.Reactivated)
+		if err != nil {
+			return IDPLoginResult{}, err
+		}
+		membershipRoles = idpMembershipRoles(members)
+	}
+	// Read the login result directly from the database, independent of cache
+	// freshness. Refreshing the cache is best-effort: a concurrent cache-miss
+	// reader can still store an older snapshot afterward. Login membership
+	// gates must use IsOrganizationMember rather than the cached org list.
+	userInfo, err := r.BuildUserInfoFromDB(ctx, upserted.UserID)
+	if err != nil {
+		return IDPLoginResult{}, err
+	}
+	if err := r.userInfoCache.Store(ctx, *userInfo); err != nil {
+		r.logger.ErrorContext(ctx, "failed to store user info in cache", attr.SlogError(err))
+	}
+
+	return IDPLoginResult{
+		UserID:          upserted.UserID,
+		Reactivated:     upserted.Reactivated,
+		UserInfo:        userInfo,
+		MembershipRoles: membershipRoles,
+	}, nil
+}
+
+func idpMembershipRoles(members []workos.Member) []IDPMembershipRole {
+	if len(members) == 0 {
+		return nil
+	}
+	roles := make([]IDPMembershipRole, 0, len(members))
+	for _, member := range members {
+		roles = append(roles, IDPMembershipRole{
+			WorkOSOrganizationID: member.OrganizationID,
+			WorkOSMembershipID:   member.ID,
+			WorkOSUserID:         member.UserID,
+			RoleSlugs:            append([]string(nil), member.RoleSlugs...),
+		})
+	}
+	return roles
+}
+
 // SyncMembershipsFromWorkOS refreshes local WorkOS organization memberships
 // and invalidates cached user info so the next read observes the synced rows.
 func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) error {
+	_, err := r.syncMembershipsFromWorkOS(ctx, gramUserID, workosUserID, false)
+	return err
+}
+
+// SyncMembershipsFromWorkOSPreservingExisting imports current WorkOS
+// memberships without pruning access restored from a deleted WorkOS identity.
+func (r *Resolver) SyncMembershipsFromWorkOSPreservingExisting(ctx context.Context, gramUserID, workosUserID string) error {
+	_, err := r.syncMembershipsFromWorkOS(ctx, gramUserID, workosUserID, true)
+	return err
+}
+
+func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string, preserveExisting bool) ([]workos.Member, error) {
 	if r.workosClient == nil || workosUserID == "" {
-		return nil
+		return nil, nil
 	}
 
 	members, err := r.workosClient.ListUserMemberships(ctx, workosUserID)
 	if err != nil {
-		return fmt.Errorf("list workos memberships: %w", err)
+		return nil, fmt.Errorf("list workos memberships: %w", err)
 	}
 
 	for _, m := range members {
 		if err := r.upsertOrgFromMembership(ctx, m); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -408,18 +624,34 @@ func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 		workosOrgIDs[i] = m.OrganizationID
 		membershipIDs[i] = m.ID
 	}
-	if err := r.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
+	tx, err := r.orgRepo.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin membership reconciliation: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	qtx := orgRepo.New(tx)
+	lost, err := qtx.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
 		UserID:              pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
+		PreserveExisting:    preserveExisting,
 		WorkosOrgIds:        workosOrgIDs,
 		WorkosMembershipIds: membershipIDs,
-	}); err != nil {
-		return fmt.Errorf("set user workos memberships: %w", err)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("set user workos memberships: %w", err)
+	}
+	for _, membership := range lost {
+		if err := agentownership.LatchOwnerLossByMembership(ctx, tx, membership.OrganizationID, gramUserID, agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil); err != nil {
+			return nil, fmt.Errorf("latch agent owner membership loss: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit membership reconciliation: %w", err)
 	}
 
 	if err := r.InvalidateUserInfoCache(ctx, gramUserID); err != nil {
-		return fmt.Errorf("invalidate user info cache: %w", err)
+		return nil, fmt.Errorf("invalidate user info cache: %w", err)
 	}
-	return nil
+	return members, nil
 }
 
 func (r *Resolver) UpdateOrganizationMembershipRole(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
@@ -513,6 +745,11 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 			Slug:        uniqueSlug,
 			WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
 			Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+			// Null, not a source of its own. WorkOS tells this path that an
+			// organization exists, never what asked for it, and a row it
+			// inserts first is filled in by the flow that did know.
+			CreationSource: pgtype.Text{String: "", Valid: false},
+			DefaultHost:    r.newOrganizationDefaultHost,
 		}); err != nil {
 			return fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
 		}
@@ -547,6 +784,20 @@ func (r *Resolver) GetUserInfo(ctx context.Context, userID string) (*sessions.Ca
 	}
 
 	return userInfo, false, nil
+}
+
+// IsOrganizationMember reports whether the user holds an active membership in
+// an enabled organization, read from the database. Login gates use it instead
+// of HasAccessToOrganization so a stale cached organization list can never
+// deny a member who was just synced.
+func (r *Resolver) IsOrganizationMember(ctx context.Context, organizationID, userID string) (bool, error) {
+	orgs, err := r.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
+	if err != nil {
+		return false, fmt.Errorf("list organizations for user: %w", err)
+	}
+	return slices.ContainsFunc(orgs, func(org orgRepo.ListOrganizationsForUserRow) bool {
+		return org.ID == organizationID
+	}), nil
 }
 
 // HasAccessToOrganization checks whether the user belongs to the given org.
@@ -627,6 +878,12 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params Authorizati
 	if params.ScreenHint != "" {
 		q.Set("screen_hint", params.ScreenHint)
 	}
+	if params.Prompt != "" {
+		q.Set("prompt", params.Prompt)
+	}
+	if params.OrganizationID != "" {
+		q.Set("organization_id", params.OrganizationID)
+	}
 
 	authorizeBase := workosAuthorizeEndpoint
 	if !strings.HasPrefix(r.idpClientID, "client_") {
@@ -650,8 +907,8 @@ type ProvisionedOrganization struct {
 }
 
 // ProvisionOrgInWorkOS creates a WorkOS organization, derives a deterministic
-// Gram org ID (UUIDv5) from the returned WorkOS org ID, sets the external_id
-// on the WorkOS org to the derived Gram ID, and creates an admin membership
+// Speakeasy org ID (UUIDv5) from the returned WorkOS org ID, sets the external_id
+// on the WorkOS org to the derived Speakeasy ID, and creates an admin membership
 // linking the first user.
 // When no WorkOS client is configured (tests, OSS), returns a random UUID as gramOrgID.
 func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID string) (ProvisionedOrganization, error) {
@@ -678,7 +935,7 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID
 		return ProvisionedOrganization{}, fmt.Errorf("provision organization in WorkOS: %w", err)
 	}
 
-	membershipID, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, created.WorkOSOrganizationID, "admin")
+	membership, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, created.WorkOSOrganizationID, "admin")
 	if err != nil {
 		return ProvisionedOrganization{}, fmt.Errorf("create WorkOS organization membership: %w", err)
 	}
@@ -687,6 +944,46 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID
 		WorkOSOrganizationID: created.WorkOSOrganizationID,
 		GramOrganizationID:   created.GramOrganizationID,
 		WorkOSUserID:         user.WorkosID.String,
-		WorkOSMembershipID:   membershipID,
+		WorkOSMembershipID:   membership.ID,
 	}, nil
+}
+
+// emitSignup reports a first-time signup and says whether it was invited or
+// organic. The distinction is asked for at exactly this moment because it is
+// only knowable here: the user row has just been created, so a live invitation
+// addressed to them means somebody asked them to join, and its absence means
+// they arrived on their own. A moment later the invitation is accepted and the
+// evidence is gone.
+//
+// A failed lookup reports neither, rather than guessing "organic" and
+// overstating self-serve growth.
+func (r *Resolver) emitSignup(ctx context.Context, email, displayName string) {
+	extra := map[string]string{}
+	// Invitations are stored normalized, and the address arriving from the IDP
+	// is not. Comparing them raw classified an invited user with a mixed-case
+	// address as organic, which is the exact distinction this event exists for.
+	invited, err := r.orgRepo.HasPendingInvitationForEmail(ctx, conv.NormalizeEmail(email))
+	switch {
+	case err != nil:
+		r.logger.ErrorContext(ctx, "failed to classify signup source", attr.SlogError(err))
+	case invited:
+		extra[growthsignals.PropertySignupSource] = growthsignals.SignupSourceInvited
+	default:
+		extra[growthsignals.PropertySignupSource] = growthsignals.SignupSourceOrganic
+	}
+
+	r.growth.Emit(ctx, growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityUserSignedUp,
+		OrganizationID: "",
+		ProjectID:      uuid.Nil,
+		ActorID:        email,
+		ActorType:      urn.PrincipalTypeEmail,
+		ActorEmail:     email,
+		ActorName:      displayName,
+		SubjectName:    displayName,
+		ActingSurface:  "",
+		AuditAction:    "",
+		DashboardURL:   "",
+		Extra:          extra,
+	})
 }

@@ -182,11 +182,14 @@ func TestSyncIdentityMap_FoldRules(t *testing.T) {
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 
 	// A held replacement claim defers the sync instead of interleaving with
-	// the holder's statements; releasing it lets the retry proceed.
+	// the holder's statements, and deferral is a success, not a retryable
+	// failure; releasing the claim lets the next pass proceed.
 	require.NoError(t, cacheAdapter.Set(ctx, "identity-map:replace-lock", "held", time.Minute))
 	act := activities.NewSyncIdentityMap(logger, conn, chConn, cacheAdapter)
-	_, err = act.Do(ctx)
-	require.ErrorContains(t, err, "already in progress")
+	deferred, err := act.Do(ctx)
+	require.NoError(t, err)
+	require.True(t, deferred.Deferred)
+	require.Zero(t, deferred.Entries)
 	require.NoError(t, cacheAdapter.Delete(ctx, "identity-map:replace-lock"))
 	result, err := act.Do(ctx)
 	require.NoError(t, err)

@@ -9,7 +9,7 @@ import (
 type IngestRequestBody struct {
 	// Feature-specific payloads. Hooks populate only the blocks needed for the event.
 	Data *HookIngestData `json:"data,omitzero"`
-	// Canonical Gram feature event.
+	// Canonical Speakeasy feature event.
 	Event HookIngestEvent `json:"event"`
 	// Original provider payload for debugging. The backend does not use this for feature behavior.
 	Raw any `json:"raw,omitzero"`
@@ -17,7 +17,7 @@ type IngestRequestBody struct {
 	SchemaVersion string `json:"schema_version"`
 	// Agent session and turn identity, independent of provider naming.
 	Session *HookIngestSession `json:"session,omitzero"`
-	// Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
+	// Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.
 	Source HookIngestSource `json:"source"`
 }
 

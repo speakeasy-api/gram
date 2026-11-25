@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -24,14 +26,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -64,6 +73,7 @@ type Service struct {
 	authz              *authz.Engine
 	audit              *audit.Logger
 	cache              cache.Cache
+	ahpUploadLimiter   *ratelimit.Limiter
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
@@ -72,6 +82,7 @@ type Service struct {
 	// piScanner flags captured skill manifests that read as prompt injections.
 	// Optional: when nil, skill capture stores content and scans nothing.
 	piScanner       *promptinjection.Scanner
+	riskRecorder    *metering.RiskRecorder
 	policyBypass    *risk.PolicyBypassEvaluator
 	spendGate       *spendrules.Gate
 	shadowMCPClient *shadowmcp.Client
@@ -87,14 +98,30 @@ type Service struct {
 	// suggestion-analysis wake.
 	suggestionSignaler suggest.Signaler
 	serverURL          *url.URL
-	siteURL            *url.URL
-	jwtSecret          string
+	orgHosts           *orghost.Resolver
+	// orgHostCache keeps deny-link host lookups off the database on the deny
+	// hot path; nil disables caching.
+	orgHostCache *orgDefaultHostCache
+	jwtSecret    string
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the
 	// Codex/OTEL fallbacks). Injectable so tests can pin telemetry event time
 	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
 	// time.Now via NewService; access through now() for nil-safety.
 	nowFunc func() time.Time
+	// versionPolicy classifies the sender's hooks version for the
+	// hooks_version effect. Zero leaves the effect off.
+	versionPolicy hookversions.Policy
+	// claudeBudget bounds how long the legacy /rpc/hooks.claude endpoint waits
+	// for a verdict before it answers from the org's fail-open posture.
+	claudeBudget time.Duration
+	// claudeDrains tracks legacy Claude handlers and posture reads that can
+	// outlive the response, so tests can await them deterministically.
+	claudeDrains sync.WaitGroup
+
+	// deviceAgentTokens authenticates headless devices that present a
+	// device-agent token instead of an agent API key. Nil refuses them.
+	deviceAgentTokens *deviceagenttoken.Issuer
 }
 
 // now returns the current time via the injected clock, falling back to
@@ -108,11 +135,15 @@ func (s *Service) now() time.Time {
 
 type authorizer interface {
 	Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
+
+	// AuthorizeWithHandlerProjectAccess resolves the project like Authorize
+	// but leaves the project permission check to the caller.
+	AuthorizeWithHandlerProjectAccess(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint.
 //
-// Beyond the Gram identity (UserID/GramOrgID/ProjectID) it carries the provider's
+// Beyond the Speakeasy identity (UserID/GramOrgID/ProjectID) it carries the provider's
 // own account identity, normalized into provider-agnostic fields, so personal vs
 // team AI-account usage can be attributed and tracked. For Claude these map from
 // organization.id, user.account_uuid, user.account_id, and the per-device user.id.
@@ -224,6 +255,9 @@ func (s *Service) signalIdentityMapRefresh(ctx context.Context) {
 // client disconnect must not drop it. Failures are logged and swallowed —
 // no hook decision, response or tool flow depends on a wake landing.
 func (s *Service) signalSkillEfficacy(ctx context.Context, projectID uuid.UUID) {
+	ctx, span := s.tracer.Start(ctx, "hooks.signalSkillEfficacy")
+	defer span.End()
+
 	if s.efficacySignaler == nil || projectID == uuid.Nil {
 		return
 	}
@@ -249,6 +283,7 @@ func NewService(
 	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
+	uploadLimitStore ratelimit.Store,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
@@ -265,8 +300,10 @@ func NewService(
 	suggestionSignaler suggest.Signaler,
 	identityMapRefresh IdentityMapRefreshSignaler,
 	serverURL *url.URL,
-	siteURL *url.URL,
+	orgHosts *orghost.Resolver,
 	jwtSecret string,
+	riskRecorder *metering.RiskRecorder,
+	deviceAgentTokens *deviceagenttoken.Issuer,
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -280,12 +317,14 @@ func NewService(
 		authz:              authz,
 		audit:              auditLogger,
 		cache:              cacheAdapter,
+		ahpUploadLimiter:   ratelimit.New(uploadLimitStore, "ahp-upload", ratelimit.Rate{Tokens: ahpUploadBurst, Interval: ahpUploadTTL, Burst: ahpUploadBurst}, ratelimit.WithMetrics(meterProvider)),
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
 		piScanner:          piScanner,
+		riskRecorder:       riskRecorder,
 		policyBypass:       policyBypass,
 		spendGate:          spendGate,
 		shadowMCPClient:    shadowMCPClient,
@@ -294,28 +333,138 @@ func NewService(
 		suggestionSignaler: suggestionSignaler,
 		identityMapRefresh: identityMapRefresh,
 		serverURL:          serverURL,
-		siteURL:            siteURL,
+		orgHosts:           orgHosts,
+		orgHostCache:       newOrgDefaultHostCache(),
 		jwtSecret:          jwtSecret,
 		nowFunc:            time.Now,
+		claudeBudget:       legacyClaudeHookDecisionBudget,
+		claudeDrains:       sync.WaitGroup{},
+		deviceAgentTokens:  deviceAgentTokens,
+		versionPolicy:      hookversions.Policy{Latest: nil, Minimum: nil},
 	}
 }
 
+// SetVersionPolicy turns on the hooks_version effect on ingest responses.
+func (s *Service) SetVersionPolicy(policy hookversions.Policy) {
+	s.versionPolicy = policy
+}
+
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	// A refused device-agent token is the better answer than a missing key
+	// for a device that sent no key.
+	if key == "" && schema.Name == constants.KeySecurityScheme {
+		if err := deviceagenttoken.AuthFailure(ctx); err != nil {
+			return ctx, fmt.Errorf("device-agent token refused: %w", err)
+		}
+	}
+	// A workload admitted by its token and refused at its project reaches the
+	// key requirement with its admission still on the context. A key cannot
+	// authorize on top of that admission, so the workload's refusal stands.
+	if schema.Name == constants.KeySecurityScheme && deviceagenttoken.IsWorkloadActor(ctx) {
+		if err := deviceagenttoken.AuthFailure(ctx); err != nil {
+			return ctx, fmt.Errorf("device-agent token refused: %w", err)
+		}
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	if schema.Name == constants.ProjectSlugSecuritySchema && deviceagenttoken.IsWorkloadActor(ctx) {
+		return s.authorizeWorkloadProject(ctx, key, schema)
+	}
+	if schema.Name == constants.ProjectSlugSecuritySchema {
+		// Every method an agent key reaches pairs the key with this scheme, so
+		// the project-scoped hooks check runs here, once the project resolves.
+		// An agent skips project:read only on an ingestion method.
+		if isAgentActor(ctx) && !isAgentIngestMethod(ctx) {
+			return ctx, oops.C(oops.CodeForbidden)
+		}
+		return s.authorizeHooksProject(ctx, key, schema)
+	}
+
 	ctx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize hooks api key: %w", err)
 	}
+	// Agent-principal keys may only reach the ingestion methods.
+	if schema.Name == constants.KeySecurityScheme && isAgentActor(ctx) && !isAgentIngestMethod(ctx) {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
 	return ctx, nil
+}
+
+// isAgentIngestMethod reports whether the Goa method on ctx ingests events,
+// the only hooks methods an agent actor may call through Goa security. The
+// claude and ingest methods authenticate inside their handlers instead.
+func isAgentIngestMethod(ctx context.Context) bool {
+	switch method, _ := ctx.Value(goa.MethodKey).(string); method {
+	case "cursor", "codex", "logs", "metrics":
+		return true
+	default:
+		return false
+	}
+}
+
+// JWTAuth admits a device-agent token on the ingestion methods; the project step
+// that follows binds the request. Without a token the context passes to the API
+// key scheme.
+func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
+	if token == "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if !deviceagenttoken.IsToken(token) {
+		// A bearer is presented but is not a device-agent token.
+		deviceagenttoken.MarkInvalidToken(ctx)
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if s.deviceAgentTokens == nil {
+		refusal := oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
+		return deviceagenttoken.WithAuthFailure(ctx, refusal), refusal
+	}
+	if !isAgentIngestMethod(ctx) {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	if err != nil {
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	return admitted, nil
+}
+
+// authorizeWorkloadProject binds a workload's hooks to the Gram-Project named;
+// requireAgentHooksIngest decides whether it may send there.
+func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	if _, ok := deviceagenttoken.AssignedAgentFromContext(ctx); !ok {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	// Refused here rather than left to project resolution, which would bind
+	// an organization's only project when none is named.
+	if strings.TrimSpace(key) == "" {
+		err := oops.E(oops.CodeForbidden, nil, "hooks must name the project they are sent to")
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+
+	// The workload stays the actor; attribution, spend and session scoping read
+	// the agent it acts for through deviceagenttoken.EffectiveAgent.
+	authorized, err := s.authorizeHooksProject(ctx, key, schema)
+	if err != nil {
+		err = fmt.Errorf("authorize workload hooks project: %w", err)
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	return authorized, nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, nil),
-	)
+	server := srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, hooksErrorFormatter)
+	// Only these methods accept device-agent tokens.
+	server.Cursor = deviceagenttoken.BearerChallenge(server.Cursor)
+	server.Codex = deviceagenttoken.BearerChallenge(server.Codex)
+	server.Logs = deviceagenttoken.BearerChallenge(server.Logs)
+	server.Metrics = deviceagenttoken.BearerChallenge(server.Metrics)
+	server.Claude = deviceagenttoken.BearerChallenge(server.Claude)
+	server.Ingest = deviceagenttoken.BearerChallenge(server.Ingest)
+	srv.Mount(mux, server)
 	AttachServerNames(mux, service)
 }
 
@@ -380,12 +529,15 @@ func (s *Service) withAuthContext(ctx context.Context, logger *slog.Logger) *slo
 	return logger
 }
 
-// lookupShadowMCPBlockingPolicy returns the first enabled shadow_mcp policy
-// with action=block for the given project, or nil when no such policy exists.
-// A nil scanner (test setups) or lookup failure returns nil so the hook falls
-// back to permissive behaviour. Flag-action policies are intentionally ignored
-// here — they surface as findings via the batch scanner instead of denying at
-// the hook layer.
+// lookupShadowMCPBlockingPolicy returns the shadow_mcp policy that governs a
+// user's MCP calls in a project. An enabled blocking policy that applies to
+// the user wins. Without one the project is in the built-in blocklist mode:
+// an implicit allow-all policy whose blocked list is the servers an
+// administrator denied, so a denial and a link to an official version take
+// effect with no policy to set up. Flag-action policies are intentionally
+// ignored here; they surface as findings via the batch scanner instead of
+// denying at the hook layer. A nil scanner (test setups) or a lookup failure
+// returns nil so the hook falls back to permissive behaviour.
 func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizationID, projectID, userID string) *risk.ShadowMCPPolicy {
 	if s.riskScanner == nil || projectID == "" {
 		return nil
@@ -401,5 +553,36 @@ func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 		)
 		return nil
 	}
-	return policy
+	if policy != nil {
+		return policy
+	}
+	return s.implicitShadowMCPPolicy(ctx, organizationID, pid, userID)
+}
+
+// implicitShadowMCPPolicy is the built-in blocklist for a user no blocking
+// policy covers. Its blocked URLs are this user's own: servers denied for
+// everyone or for a person or role the user holds, and servers approved only
+// for people or roles the user holds none of. It has no ID: blocks it causes
+// are recorded without a policy, and the block message offers no request
+// link, since a server is only on this list because of an administrator's
+// decision.
+func (s *Service) implicitShadowMCPPolicy(ctx context.Context, organizationID string, projectID uuid.UUID, userID string) *risk.ShadowMCPPolicy {
+	if s.shadowMCPClient == nil {
+		return nil
+	}
+	denied, err := s.shadowMCPClient.BlockedServerURLs(ctx, organizationID, projectID, userID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to list denied shadow mcp servers; defaulting to off",
+			attr.SlogError(err),
+		)
+		return nil
+	}
+	return &risk.ShadowMCPPolicy{
+		ID:          "",
+		Name:        shadowmcp.ImplicitPolicyName,
+		Version:     0,
+		UserMessage: nil,
+		Disposition: risk.ShadowMCPDispositionAllowAll,
+		BlockedURLs: denied,
+	}
 }

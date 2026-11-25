@@ -8,7 +8,7 @@ func NewNoopPublisher[M any]() *NoopPublisher[M] {
 	return &NoopPublisher[M]{}
 }
 
-func (n *NoopPublisher[M]) Publish(ctx context.Context, msg M) PublishResult {
+func (n *NoopPublisher[M]) Publish(ctx context.Context, msg M, _ ...PublishOption) PublishResult {
 	return NewSuccessPublishResult()
 }
 

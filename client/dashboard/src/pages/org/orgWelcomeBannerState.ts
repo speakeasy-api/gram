@@ -56,7 +56,7 @@ export function welcomeHeadline({
   if (columnCount === 1 && (isTrial || isZeroData))
     return ["Let’s get started"];
   if (isTrial || isZeroData) return ["Choose your", "first move"];
-  return ["Pick up where", "you left off"];
+  return ["Pick up where you left off"];
 }
 
 /**

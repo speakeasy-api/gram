@@ -178,6 +178,7 @@ There are %d messages total (indices 0-%d).%s`, conversationText, numMessages, n
 	response, err := s.chatClient.GetObjectCompletion(
 		analysisCtx,
 		openrouter.ObjectCompletionRequest{
+			MaxTokens:              nil,
 			OrgID:                  orgID,
 			ProjectID:              projectID.String(),
 			Model:                  "anthropic/claude-haiku-4.5",

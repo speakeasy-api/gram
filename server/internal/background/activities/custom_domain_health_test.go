@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/netip"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/testsuite"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -23,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
@@ -39,6 +42,9 @@ func noopEmailService(t *testing.T) *email.Service {
 }
 
 type stubInfrastructureChecker struct {
+	issue       k8s.CustomDomainInfrastructureIssue
+	err         error
+	checks      int
 	resources   []k8s.ManagedCustomDomainResource
 	provisioner k8s.CustomDomainProvisioner
 }
@@ -79,7 +85,8 @@ func createActivatedCustomDomainResource(
 }
 
 func (s *stubInfrastructureChecker) CheckCustomDomainInfrastructure(ctx context.Context, check k8s.CustomDomainInfrastructureCheck) (k8s.CustomDomainInfrastructureHealth, error) {
-	return k8s.CustomDomainInfrastructureHealth{Issue: "", CertificateExpiresAt: nil}, nil
+	s.checks++
+	return k8s.CustomDomainInfrastructureHealth{Issue: s.issue, CertificateExpiresAt: nil}, s.err
 }
 
 func (s *stubInfrastructureChecker) ListManagedCustomDomainResources(ctx context.Context) ([]k8s.ManagedCustomDomainResource, error) {
@@ -91,7 +98,7 @@ func TestCustomDomainHealthCheckMissingDomainIsNoop(t *testing.T) {
 
 	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_missing")
 	require.NoError(t, err)
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, nil, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, nil, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 
 	_, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: uuid.New(),
@@ -131,9 +138,9 @@ func createActivatedCustomDomain(t *testing.T, repository *customdomainsrepo.Que
 // the domain itself and its A records do not intersect the expected target's.
 func mismatchResolverConfig(domainName string) dns.MockResolverConfig {
 	return dns.MockResolverConfig{
-		LookupCNAMEFunc: func(_ context.Context, host string) (string, error) { return host + ".", nil },
+		LookupCNAMERecordFunc: func(_ context.Context, host string) (string, error) { return "", nil },
 		LookupNetIPFunc: func(_ context.Context, _ string, host string) ([]netip.Addr, error) {
-			if host == domainName {
+			if strings.TrimSuffix(host, ".") == domainName {
 				return []netip.Addr{netip.MustParseAddr("1.2.3.4")}, nil
 			}
 			return []netip.Addr{netip.MustParseAddr("5.6.7.8")}, nil
@@ -142,7 +149,7 @@ func mismatchResolverConfig(domainName string) dns.MockResolverConfig {
 	}
 }
 
-func TestCustomDomainHealthCheckProbeRescuesDNSMismatch(t *testing.T) {
+func TestCustomDomainHealthCheckProxyDNSIsAdvisory(t *testing.T) {
 	t.Parallel()
 
 	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_probe_rescue")
@@ -150,9 +157,8 @@ func TestCustomDomainHealthCheckProbeRescuesDNSMismatch(t *testing.T) {
 	repository := customdomainsrepo.New(conn)
 	domainID := createActivatedCustomDomain(t, repository, "test-organization", "proxied.example.com")
 
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("proxied.example.com")))
-	checker.SetProbe(func(context.Context, string) error { return nil })
 
 	notification, err := checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: domainID,
@@ -168,9 +174,11 @@ func TestCustomDomainHealthCheckProbeRescuesDNSMismatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "healthy", domain.HealthStatus.String)
+	require.Equal(t, "unconfirmed", domain.DnsConfigurationStatus.String)
+	require.Equal(t, "unknown", domain.DnsRoutingMethod.String)
 }
 
-func TestCustomDomainHealthCheckProbeFailureKeepsDNSMismatch(t *testing.T) {
+func TestCustomDomainHealthCheckReportsInfrastructureDespiteDNSMismatch(t *testing.T) {
 	t.Parallel()
 
 	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_probe_fail")
@@ -178,9 +186,8 @@ func TestCustomDomainHealthCheckProbeFailureKeepsDNSMismatch(t *testing.T) {
 	repository := customdomainsrepo.New(conn)
 	domainID := createActivatedCustomDomain(t, repository, "test-organization", "broken.example.com")
 
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{issue: k8s.CustomDomainInfrastructureIssueCertificateExpired, resources: nil, provisioner: nil}, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("broken.example.com")))
-	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
 
 	notification, err := checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: domainID,
@@ -188,7 +195,7 @@ func TestCustomDomainHealthCheckProbeFailureKeepsDNSMismatch(t *testing.T) {
 		CheckedAt:      time.Now().UTC(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, customdomains.HealthIssueDNSTargetMismatch, notification.Issue)
+	require.Equal(t, customdomains.HealthIssueCertificateExpired, notification.Issue)
 
 	domain, err := repository.GetCustomDomainByIDAndOrganization(t.Context(), customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
 		ID:             domainID,
@@ -196,7 +203,60 @@ func TestCustomDomainHealthCheckProbeFailureKeepsDNSMismatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "unhealthy", domain.HealthStatus.String)
-	require.Equal(t, string(customdomains.HealthIssueDNSTargetMismatch), domain.HealthIssue.String)
+	require.Equal(t, string(customdomains.HealthIssueCertificateExpired), domain.HealthIssue.String)
+}
+
+func TestCustomDomainHealthCheckHoldsCertificateAlertUntilDNSMatches(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_cert_hold")
+	require.NoError(t, err)
+	repository := customdomainsrepo.New(conn)
+	domainID := createActivatedCustomDomain(t, repository, "test-organization", "migrating.example.com")
+
+	// Verified ahead of a migration: DNS still points at the previous
+	// provider, so the certificate cannot issue yet.
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{issue: k8s.CustomDomainInfrastructureIssueCertificateNotReady, resources: nil, provisioner: nil}, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
+	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("migrating.example.com")))
+	firstCheck := time.Now().UTC().Truncate(time.Microsecond)
+
+	notification, err := checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
+		CustomDomainID: domainID,
+		OrganizationID: "test-organization",
+		CheckedAt:      firstCheck,
+	})
+	require.NoError(t, err)
+	require.Empty(t, notification.Issue, "no alert while DNS does not point at Speakeasy")
+
+	domain, err := repository.GetCustomDomainByIDAndOrganization(t.Context(), customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
+		ID:             domainID,
+		OrganizationID: "test-organization",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "unhealthy", domain.HealthStatus.String)
+	require.Equal(t, string(customdomains.HealthIssueCertificateNotReady), domain.HealthIssue.String)
+
+	// After the cutover DNS matches, but the certificate is still not ready.
+	checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{
+		LookupCNAMERecordFunc: func(_ context.Context, host string) (string, error) {
+			if host == "migrating.example.com." {
+				return "custom-domain.example.com.", nil
+			}
+			return "", nil
+		},
+		LookupNetIPFunc: func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("5.6.7.8")}, nil
+		},
+		LookupTXTFunc: func(context.Context, string) ([]string, error) { return nil, nil },
+	}))
+
+	notification, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
+		CustomDomainID: domainID,
+		OrganizationID: "test-organization",
+		CheckedAt:      firstCheck.Add(time.Hour),
+	})
+	require.NoError(t, err)
+	require.Equal(t, customdomains.HealthIssueCertificateNotReady, notification.Issue)
 }
 
 func TestCustomDomainHealthCheckRetryReemitsNotification(t *testing.T) {
@@ -207,9 +267,8 @@ func TestCustomDomainHealthCheckRetryReemitsNotification(t *testing.T) {
 	repository := customdomainsrepo.New(conn)
 	domainID := createActivatedCustomDomain(t, repository, "test-organization", "retry.example.com")
 
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{issue: k8s.CustomDomainInfrastructureIssueCertificateExpired, resources: nil, provisioner: nil}, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("retry.example.com")))
-	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
 
 	// Match the workflow's pinned timestamp precision.
 	checkedAt := time.Now().UTC().Truncate(time.Microsecond)
@@ -221,7 +280,7 @@ func TestCustomDomainHealthCheckRetryReemitsNotification(t *testing.T) {
 
 	first, err := checker.Check(t.Context(), args)
 	require.NoError(t, err)
-	require.Equal(t, customdomains.HealthIssueDNSTargetMismatch, first.Issue)
+	require.Equal(t, customdomains.HealthIssueCertificateExpired, first.Issue)
 
 	// A retry after the transition committed must return the same answer.
 	second, err := checker.Check(t.Context(), args)
@@ -290,11 +349,9 @@ func TestCustomDomainNotifyOrgAdminsSendsIdempotentEmail(t *testing.T) {
 	adminEmail := seedCustomDomainAdminRecipient(t, conn, organizationID)
 
 	captured := &captureLoopsClient{sent: nil, failNext: 0}
-	siteURL, err := url.Parse("https://app.example.com")
-	require.NoError(t, err)
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, "", email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
 		"custom_domain_unhealthy": "domain-unhealthy-test-id",
-	}), true), siteURL, nil)
+	}), true), customDomainTestOrgHosts(t))
 
 	err = checker.NotifyOrgAdmins(t.Context(), activities.NotifyCustomDomainUnhealthyArgs{
 		CustomDomainID: uuid.New(),
@@ -309,9 +366,56 @@ func TestCustomDomainNotifyOrgAdminsSendsIdempotentEmail(t *testing.T) {
 	require.Len(t, sent, 1)
 	require.Equal(t, adminEmail, sent[0].Email)
 	require.NotEmpty(t, sent[0].IdempotencyKey)
+	require.Equal(t, "https://app.example.com/"+organizationID+"/domains", sent[0].DataVariables["domain_link"])
 }
 
-func TestCustomDomainHealthCheckAutoDisablesAfterProlongedFailure(t *testing.T) {
+func TestCustomDomainNotifyOrgAdminsLinksToOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "custom_domain_notify_default_host")
+	require.NoError(t, err)
+	organizationID := "org-custom-domain-health-default-host"
+	seedCustomDomainAdminRecipient(t, conn, organizationID)
+	require.NoError(t, orgrepo.New(conn).SetOrganizationDefaultHostForTest(t.Context(), orgrepo.SetOrganizationDefaultHostForTestParams{
+		DefaultHost: conv.ToPGText("https://platform.example.com"),
+		ID:          organizationID,
+	}))
+
+	captured := &captureLoopsClient{sent: nil, failNext: 0}
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, "", email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
+		"custom_domain_unhealthy": "domain-unhealthy-test-id",
+	}), true), customDomainTestOrgHosts(t))
+
+	err = checker.NotifyOrgAdmins(t.Context(), activities.NotifyCustomDomainUnhealthyArgs{
+		CustomDomainID: uuid.New(),
+		OrganizationID: organizationID,
+		Domain:         "live.example.com",
+		Issue:          customdomains.HealthIssueDNSNotFound,
+		CheckedAt:      time.Now().UTC().Truncate(time.Microsecond),
+	})
+	require.NoError(t, err)
+
+	sent := captured.Sent()
+	require.Len(t, sent, 1)
+	require.Equal(t, "https://platform.example.com/"+organizationID+"/domains", sent[0].DataVariables["domain_link"])
+}
+
+// customDomainTestOrgHosts serves the dashboard on app.example.com and accepts
+// platform.example.com as a recorded default host.
+func customDomainTestOrgHosts(t *testing.T) *orghost.Resolver {
+	t.Helper()
+	siteURL, err := url.Parse("https://app.example.com")
+	require.NoError(t, err)
+	return orghost.New(orghost.Config{
+		ServerURL:                  siteURL,
+		SiteURL:                    siteURL,
+		PlatformHosts:              map[string]string{"platform.example.com": "https://platform.example.com"},
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
+}
+
+func TestCustomDomainHealthCheckProlongedInfrastructureFailureDoesNotDisable(t *testing.T) {
 	t.Parallel()
 
 	conn, err := infra.CloneTestDatabase(t, "custom_domain_auto_disable")
@@ -323,20 +427,19 @@ func TestCustomDomainHealthCheckAutoDisablesAfterProlongedFailure(t *testing.T) 
 	unhealthySince := checkedAt.Add(-8 * 24 * time.Hour)
 	_, err = repository.UpdateCustomDomainHealth(t.Context(), customdomainsrepo.UpdateCustomDomainHealthParams{
 		HealthStatus:         conv.ToPGText("unhealthy"),
-		HealthIssue:          conv.ToPGTextEmpty("dns_target_mismatch"),
+		HealthIssue:          conv.ToPGTextEmpty("certificate_expired"),
 		CheckedAt:            conv.ToPGTimestamptz(checkedAt.Add(-24 * time.Hour)),
 		UnhealthySince:       conv.PtrToPGTimestamptz(&unhealthySince),
 		CertificateExpiresAt: conv.PtrToPGTimestamptz(nil),
-		ConsecutiveFailures:  pgtype.Int4{Int32: customdomains.AutoDisableConsecutiveFailures - 1, Valid: true},
+		ConsecutiveFailures:  pgtype.Int4{Int32: 6, Valid: true},
 		ID:                   domainID,
 		OrganizationID:       "test-organization",
 	})
 	require.NoError(t, err)
 
 	stubProvisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{issue: k8s.CustomDomainInfrastructureIssueCertificateExpired, resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("prolonged.example.com")))
-	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
 
 	notification, err := checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: domainID,
@@ -347,14 +450,12 @@ func TestCustomDomainHealthCheckAutoDisablesAfterProlongedFailure(t *testing.T) 
 	require.Empty(t, notification.Issue, "an old transition must not re-notify on disable")
 
 	calls := stubProvisioner.Calls()
-	require.Len(t, calls, 1)
-	require.Equal(t, "Delete", calls[0].Method)
-	require.Equal(t, "prolonged.example.com-resource", calls[0].ResourceName)
+	require.Empty(t, calls)
 
 	domain, err := repository.GetCustomDomainByDomain(t.Context(), "prolonged.example.com")
 	require.NoError(t, err)
-	require.False(t, domain.Verified, "auto-disable returns the domain to the reverify flow")
-	require.False(t, domain.Activated, "auto-disable removes the domain from health sweeps")
+	require.True(t, domain.Verified)
+	require.True(t, domain.Activated)
 	require.Equal(t, "unhealthy", domain.HealthStatus.String, "health state stays visible for the dashboard")
 }
 
@@ -374,16 +475,15 @@ func TestCustomDomainHealthCheckNoAutoDisableBelowFailureThreshold(t *testing.T)
 		CheckedAt:            conv.ToPGTimestamptz(checkedAt.Add(-24 * time.Hour)),
 		UnhealthySince:       conv.PtrToPGTimestamptz(&unhealthySince),
 		CertificateExpiresAt: conv.PtrToPGTimestamptz(nil),
-		ConsecutiveFailures:  pgtype.Int4{Int32: customdomains.AutoDisableConsecutiveFailures - 2, Valid: true},
+		ConsecutiveFailures:  pgtype.Int4{Int32: 5, Valid: true},
 		ID:                   domainID,
 		OrganizationID:       "test-organization",
 	})
 	require.NoError(t, err)
 
 	stubProvisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("belowbar.example.com")))
-	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
 
 	_, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: domainID,
@@ -422,11 +522,11 @@ func TestCustomDomainHealthCheckFailedNeverAutoDisables(t *testing.T) {
 	require.NoError(t, err)
 
 	stubProvisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 	checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{
-		LookupCNAMEFunc: func(context.Context, string) (string, error) { return "", errors.New("dns timeout") },
-		LookupNetIPFunc: func(context.Context, string, string) ([]netip.Addr, error) { return nil, errors.New("dns timeout") },
-		LookupTXTFunc:   func(context.Context, string) ([]string, error) { return nil, nil },
+		LookupCNAMERecordFunc: func(context.Context, string) (string, error) { return "", errors.New("dns timeout") },
+		LookupNetIPFunc:       func(context.Context, string, string) ([]netip.Addr, error) { return nil, errors.New("dns timeout") },
+		LookupTXTFunc:         func(context.Context, string) ([]string, error) { return nil, nil },
 	}))
 
 	_, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
@@ -440,7 +540,40 @@ func TestCustomDomainHealthCheckFailedNeverAutoDisables(t *testing.T) {
 	domain, err := repository.GetCustomDomainByDomain(t.Context(), "gramside.example.com")
 	require.NoError(t, err)
 	require.True(t, domain.Activated)
-	require.Equal(t, "check_failed", domain.HealthIssue.String)
+	require.Equal(t, "healthy", domain.HealthStatus.String)
+	require.Equal(t, "check_failed", domain.DnsConfigurationStatus.String)
+}
+
+func TestCustomDomainHealthCheckRetriesDNSFailureBeforeFinalAttempt(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "custom_domain_dns_failure_retry")
+	require.NoError(t, err)
+	repository := customdomainsrepo.New(conn)
+	domainID := createActivatedCustomDomain(t, repository, "test-organization", "dns-retry.example.com")
+
+	stubProvisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
+	checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{
+		LookupCNAMERecordFunc: func(context.Context, string) (string, error) { return "", errors.New("dns servfail") },
+		LookupNetIPFunc:       func(context.Context, string, string) ([]netip.Addr, error) { return nil, errors.New("dns servfail") },
+		LookupTXTFunc:         func(context.Context, string) ([]string, error) { return nil, nil },
+	}))
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(checker.Check)
+	_, err = env.ExecuteActivity(checker.Check, activities.CheckCustomDomainHealthArgs{
+		CustomDomainID: domainID,
+		OrganizationID: "test-organization",
+		CheckedAt:      time.Now().UTC().Truncate(time.Microsecond),
+	})
+	require.ErrorContains(t, err, "observe custom domain DNS")
+
+	domain, err := repository.GetCustomDomainByDomain(t.Context(), "dns-retry.example.com")
+	require.NoError(t, err)
+	require.False(t, domain.DnsConfigurationStatus.Valid, "a retried attempt must not record the failed observation")
+	require.False(t, domain.DnsCheckedAt.Valid)
 }
 
 func TestFindOrphanCustomDomainResourcesFlagsUnknownDomains(t *testing.T) {
@@ -454,7 +587,7 @@ func TestFindOrphanCustomDomainResourcesFlagsUnknownDomains(t *testing.T) {
 		{Kind: k8s.ProvisionerKindIngress, Name: "active-example-com", Domain: "active.example.com"},
 		{Kind: k8s.ProvisionerKindIngress, Name: "orphan-example-com", Domain: "orphan.example.com"},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
@@ -473,7 +606,7 @@ func TestFindOrphanCustomDomainResourcesAllResourcesAccountedFor(t *testing.T) {
 	stub := &stubInfrastructureChecker{provisioner: nil, resources: []k8s.ManagedCustomDomainResource{
 		{Kind: k8s.ProvisionerKindIngress, Name: "active-example-com", Domain: "active.example.com"},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 
 	require.NoError(t, checker.FindOrphanResources(t.Context()))
 }
@@ -492,7 +625,7 @@ func TestFindOrphanCustomDomainResourcesFlagsClearedRootIngress(t *testing.T) {
 		{Kind: k8s.ProvisionerKindIngress, Name: "cleared-root-example-com", Domain: domainName},
 		{Kind: k8s.ProvisionerKindIngress, Name: rootName, Domain: domainName},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
@@ -514,7 +647,7 @@ func TestFindOrphanCustomDomainResourcesFlagsClearedWellKnownRootIngress(t *test
 		{Kind: k8s.ProvisionerKindIngress, Name: "cleared-wellknown-root-example-com", Domain: domainName},
 		{Kind: k8s.ProvisionerKindIngress, Name: wellKnownRootName, Domain: domainName},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
@@ -540,7 +673,7 @@ func TestFindOrphanCustomDomainResourcesFlagsUnactivatedDomain(t *testing.T) {
 	stub := &stubInfrastructureChecker{provisioner: nil, resources: []k8s.ManagedCustomDomainResource{
 		{Kind: k8s.ProvisionerKindIngress, Name: "pending-example-com", Domain: "pending.example.com"},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
@@ -559,7 +692,7 @@ func TestFindOrphanCustomDomainResourcesFlagsMismatchedIdentity(t *testing.T) {
 		{Kind: k8s.ProvisionerKindIngress, Name: "active-example-com", Domain: "active.example.com"},
 		{Kind: k8s.ProvisionerKindIngress, Name: "duplicate-active-example-com", Domain: "active.example.com"},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
@@ -567,10 +700,8 @@ func TestFindOrphanCustomDomainResourcesFlagsMismatchedIdentity(t *testing.T) {
 	require.Contains(t, err.Error(), "duplicate-active-example-com")
 }
 
-// A provider serving address records alongside a matching CNAME (illegal per
-// RFC 1034 §3.6.2, but observed in the wild) diverts resolvers that prefer
-// the address records, so a matching CNAME must not skip RRset validation.
-func TestCustomDomainHealthCheckCNAMEMatchWithForeignAddressesIsMismatch(t *testing.T) {
+// Rotating addresses must not contradict an observed alias to the configured target.
+func TestCustomDomainHealthCheckSharedAliasIsIndependentOfAddressSnapshots(t *testing.T) {
 	t.Parallel()
 
 	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_cname_coexist")
@@ -578,18 +709,17 @@ func TestCustomDomainHealthCheckCNAMEMatchWithForeignAddressesIsMismatch(t *test
 	repository := customdomainsrepo.New(conn)
 	domainID := createActivatedCustomDomain(t, repository, "test-organization", "coexist.example.com")
 
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
 	checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{
-		LookupCNAMEFunc: func(context.Context, string) (string, error) { return "custom-domain.example.com.", nil },
+		LookupCNAMERecordFunc: func(context.Context, string) (string, error) { return "custom-domain.example.com.", nil },
 		LookupNetIPFunc: func(_ context.Context, _ string, host string) ([]netip.Addr, error) {
-			if host == "coexist.example.com" {
+			if strings.TrimSuffix(host, ".") == "coexist.example.com" {
 				return []netip.Addr{netip.MustParseAddr("9.9.9.9")}, nil
 			}
 			return []netip.Addr{netip.MustParseAddr("1.2.3.4")}, nil
 		},
 		LookupTXTFunc: func(context.Context, string) ([]string, error) { return nil, nil },
 	}))
-	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
 
 	checkedAt := time.Now().UTC().Truncate(time.Microsecond)
 	_, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
@@ -601,6 +731,124 @@ func TestCustomDomainHealthCheckCNAMEMatchWithForeignAddressesIsMismatch(t *test
 
 	domain, err := repository.GetCustomDomainByDomain(t.Context(), "coexist.example.com")
 	require.NoError(t, err)
-	require.Equal(t, "unhealthy", domain.HealthStatus.String)
-	require.Equal(t, "dns_target_mismatch", domain.HealthIssue.String)
+	require.Equal(t, "healthy", domain.HealthStatus.String)
+	require.Empty(t, domain.HealthIssue.String)
+	require.Equal(t, "matched", domain.DnsConfigurationStatus.String)
+}
+
+func TestCustomDomainHealthCheckDoesNotReactivateDisabledDomain(t *testing.T) {
+	t.Parallel()
+	conn, err := infra.CloneTestDatabase(t, "domain_stays_disabled")
+	require.NoError(t, err)
+	repository := customdomainsrepo.New(conn)
+	domain, err := repository.CreateCustomDomain(t.Context(), customdomainsrepo.CreateCustomDomainParams{OrganizationID: "org-disabled", Domain: "disabled.example.com", ProvisionerKind: "local", IpAllowlist: []string{}})
+	require.NoError(t, err)
+	infrastructure := &stubInfrastructureChecker{}
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, infrastructure, "shared.example.com", nil, "", noopEmailService(t), nil)
+	checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{}))
+	_, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{CustomDomainID: domain.ID, OrganizationID: domain.OrganizationID, CheckedAt: time.Now()})
+	require.NoError(t, err)
+	require.Zero(t, infrastructure.checks)
+	got, err := repository.GetCustomDomainByID(t.Context(), domain.ID)
+	require.NoError(t, err)
+	require.False(t, got.Verified)
+	require.False(t, got.Activated)
+	require.False(t, got.HealthCheckedAt.Valid)
+}
+
+func TestCustomDomainHealthCheckOlderObservationKeepsDNSFinding(t *testing.T) {
+	t.Parallel()
+	conn, err := infra.CloneTestDatabase(t, "domain_dns_order")
+	require.NoError(t, err)
+	repository := customdomainsrepo.New(conn)
+	id := createActivatedCustomDomain(t, repository, "org-order", "order.example.com")
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{}, "shared.example.com", nil, "", noopEmailService(t), nil)
+	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("order.example.com")))
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	_, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{CustomDomainID: id, OrganizationID: "org-order", CheckedAt: now})
+	require.NoError(t, err)
+	checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{}))
+	_, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{CustomDomainID: id, OrganizationID: "org-order", CheckedAt: now.Add(-time.Hour)})
+	require.NoError(t, err)
+	got, err := repository.GetCustomDomainByID(t.Context(), id)
+	require.NoError(t, err)
+	require.Equal(t, "unconfirmed", got.DnsConfigurationStatus.String)
+	require.Equal(t, now, got.HealthCheckedAt.Time.UTC())
+	require.Equal(t, now, got.DnsCheckedAt.Time.UTC())
+}
+
+func TestCustomDomainHealthCheckDNSFailureDoesNotSuppressInfrastructureAlert(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, status, issue string }{
+		{"before observations", "", "dns_target_mismatch"},
+		{"mixed worker DNS failure", "matched", "dns_target_mismatch"},
+		{"mixed worker check failure", "matched", "check_failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			conn, err := infra.CloneTestDatabase(t, "domain_legacy_dns")
+			require.NoError(t, err)
+			repository := customdomainsrepo.New(conn)
+			id := createActivatedCustomDomain(t, repository, "org-legacy", "legacy.example.com")
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			_, err = repository.UpdateCustomDomainHealth(t.Context(), customdomainsrepo.UpdateCustomDomainHealthParams{
+				ID: id, OrganizationID: "org-legacy",
+				DnsConfigurationStatus: pgtype.Text{String: tc.status, Valid: tc.status != ""},
+				HealthStatus:           pgtype.Text{String: "unhealthy", Valid: true},
+				HealthIssue:            pgtype.Text{String: tc.issue, Valid: true},
+				DnsCheckedAt:           pgtype.Timestamptz{Time: now.Add(-2 * time.Hour), Valid: tc.status != ""},
+				CheckedAt:              pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
+				UnhealthySince:         pgtype.Timestamptz{Time: now.Add(-10 * 24 * time.Hour), Valid: true},
+				ConsecutiveFailures:    pgtype.Int4{Int32: 20, Valid: true},
+			})
+			require.NoError(t, err)
+			checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{issue: k8s.CustomDomainInfrastructureIssueCertificateExpired}, "shared.example.com", nil, "", noopEmailService(t), nil)
+			checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("legacy.example.com")))
+			args := activities.CheckCustomDomainHealthArgs{CustomDomainID: id, OrganizationID: "org-legacy", CheckedAt: now}
+			notification, err := checker.Check(t.Context(), args)
+			require.NoError(t, err)
+			require.Equal(t, customdomains.HealthIssueCertificateExpired, notification.Issue)
+			got, err := repository.GetCustomDomainByID(t.Context(), id)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, got.ConsecutiveFailures.Int32)
+			require.Equal(t, now, got.UnhealthySince.Time.UTC())
+			require.True(t, got.Verified && got.Activated)
+			retry, err := checker.Check(t.Context(), args)
+			require.NoError(t, err)
+			require.Equal(t, notification, retry)
+		})
+	}
+}
+
+func TestCustomDomainHealthCheckPerDomainTargetsAreAdvisory(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ target, status, method string }{
+		{"abcdefghij.domains.example.", "matched", "per_domain_cname"},
+		{"klmnopqrst.domains.example.", "wrong_target", "unknown"},
+	} {
+		t.Run(tc.status, func(t *testing.T) {
+			t.Parallel()
+			conn, err := infra.CloneTestDatabase(t, "domain_target_observation")
+			require.NoError(t, err)
+			repository := customdomainsrepo.New(conn)
+			id := createActivatedCustomDomain(t, repository, "org-target", "domain.example")
+			_, err = repository.AssignCustomDomainDNSTargetToken(t.Context(), customdomainsrepo.AssignCustomDomainDNSTargetTokenParams{ID: id, OrganizationID: "org-target", DnsTargetToken: "abcdefghij"})
+			require.NoError(t, err)
+			infrastructure := &stubInfrastructureChecker{}
+			checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, infrastructure, "shared.example", nil, "domains.example", noopEmailService(t), nil)
+			checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{LookupCNAMERecordFunc: func(context.Context, string) (string, error) { return tc.target, nil }}))
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			notification, err := checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{CustomDomainID: id, OrganizationID: "org-target", CheckedAt: now})
+			require.NoError(t, err)
+			require.Empty(t, notification.Issue)
+			require.Equal(t, 1, infrastructure.checks)
+			got, err := repository.GetCustomDomainByID(t.Context(), id)
+			require.NoError(t, err)
+			require.Equal(t, tc.status, got.DnsConfigurationStatus.String)
+			require.Equal(t, tc.method, got.DnsRoutingMethod.String)
+			require.Equal(t, "healthy", got.HealthStatus.String)
+			require.Equal(t, now, got.DnsCheckedAt.Time.UTC())
+			require.True(t, got.Verified && got.Activated)
+		})
+	}
 }

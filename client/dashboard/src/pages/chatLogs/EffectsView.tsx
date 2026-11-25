@@ -14,7 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Bot, Loader2, Wrench } from "lucide-react";
+import { Bot, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ToolUIGroup, ToolUISection } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -30,7 +30,9 @@ import { RiskBadge, RevealSecretButton } from "./chatRisk";
 import {
   getMatchStrings,
   highlightMatches,
+  needsWholeMessageMask,
   resultsAreSensitive,
+  sectionRiskLabel,
   useRowReveal,
 } from "./chatHelpers";
 import { toolSectionRiskMatches, type ToolRiskField } from "./toolRisk";
@@ -40,7 +42,10 @@ import type { SectionMatch } from "@/elements";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
 import type { ClaudeTurnUsage } from "@gram/client/models/components/claudeturnusage.js";
 import { userInitials } from "./chatTranscriptUtils";
+import { parseOpenClawContext } from "@/lib/openclawContext";
 import { useSummarizeToolCallMutation } from "@gram/client/react-query/summarizeToolCall.js";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 
 const summaryQueue: Array<{ key: string; start: () => void }> = [];
 const scheduledSummaries = new Set<string>();
@@ -82,6 +87,8 @@ interface EffectsViewContext {
   claudeTurnByPromptId: Map<string, ClaudeTurnUsage>;
   userLabel?: string;
   userLabelOverride?: string;
+  /** True when OpenClaw captured the session; see `RowContext.openClawSession`. */
+  openClawSession?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,10 +109,7 @@ function toSectionRisk(
     matchingResults.set(result.id, result);
     return {
       value,
-      label:
-        result.ruleId && result.ruleId !== "llm_judge"
-          ? result.ruleId
-          : result.source,
+      label: sectionRiskLabel(result),
       onExclude:
         openExclusion && result.ruleId !== "llm_judge"
           ? () => openExclusion(result)
@@ -130,13 +134,21 @@ function CompactMessageRow({
   const [expanded, setExpanded] = useState(false);
   const [truncatable, setTruncatable] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
-  const text = messageText(row.message.content);
   const riskResults = ctx.riskResultsByMessage.get(row.message.id);
   const hasDetailedRisk = (riskResults?.length ?? 0) > 0;
+  const isUser = row.entryType === "user";
+  const rawText = messageText(row.message.content);
+  // Preview the request OpenClaw wrapped, not its context. Only user turns of
+  // an OpenClaw session carry the wrapper, and a flagged row keeps the full
+  // text so a finding inside the context stays highlighted.
+  const openClaw =
+    ctx.openClawSession && isUser && !hasDetailedRisk
+      ? parseOpenClawContext(rawText)
+      : null;
+  const text = openClaw?.request ?? rawText;
   const flagged = rowHasRiskFlag(row) || hasDetailedRisk;
   const sensitive = hasDetailedRisk && resultsAreSensitive(riskResults!);
   const { revealed, setRevealed } = useRowReveal(sensitive);
-  const isUser = row.entryType === "user";
   const displayId = ctx.userLabelOverride ?? ctx.userLabel;
   const matches = hasDetailedRisk ? getMatchStrings(riskResults!) : [];
 
@@ -187,7 +199,13 @@ function CompactMessageRow({
           )}
         >
           {hasDetailedRisk
-            ? highlightMatches(text, matches, sensitive && !revealed, sensitive)
+            ? highlightMatches(
+                text,
+                matches,
+                sensitive && !revealed,
+                sensitive,
+                needsWholeMessageMask(riskResults),
+              )
             : text}
         </p>
 
@@ -326,9 +344,9 @@ function EffectsToolRow({
           />
         )}
         {canSummarize && summarize.isPending && (
-          <Loader2
-            className="text-muted-foreground size-3 animate-spin"
-            aria-label="Generating summary"
+          <Spinner
+            className="text-muted-foreground mr-0 size-3"
+            label="Generating summary"
           />
         )}
         {summarize.data && (
@@ -484,6 +502,7 @@ export function EffectsView({
   claudeTurnByPromptId,
   userLabel,
   userLabelOverride,
+  openClawSession,
   isLoading,
 }: {
   chatId: string;
@@ -493,6 +512,7 @@ export function EffectsView({
   claudeTurnByPromptId: Map<string, ClaudeTurnUsage>;
   userLabel?: string;
   userLabelOverride?: string;
+  openClawSession?: boolean;
   isLoading?: boolean;
 }): JSX.Element {
   const ctx: EffectsViewContext = useMemo(
@@ -503,6 +523,7 @@ export function EffectsView({
       claudeTurnByPromptId,
       userLabel,
       userLabelOverride,
+      openClawSession,
     }),
     [
       chatId,
@@ -511,6 +532,7 @@ export function EffectsView({
       claudeTurnByPromptId,
       userLabel,
       userLabelOverride,
+      openClawSession,
     ],
   );
 
@@ -518,8 +540,12 @@ export function EffectsView({
 
   if (isLoading) {
     return (
-      <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
-        Loading…
+      <div className="flex-1 p-4">
+        <Skeleton label="Loading messages">
+          <div className="h-12 w-full" />
+          <div className="h-12 w-full" />
+          <div className="h-12 w-full" />
+        </Skeleton>
       </div>
     );
   }

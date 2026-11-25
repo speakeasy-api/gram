@@ -1,45 +1,38 @@
 import { asResource, asTools } from "@/lib/toolTypes";
-import { Tool as GeneratedTool } from "@gram/client/models/components/tool.js";
-import {
+import type {
   ListToolsRequest,
   ListToolsSecurity,
 } from "@gram/client/models/operations/listtools.js";
-import {
+import type {
   ListResourcesRequest,
   ListResourcesSecurity,
 } from "@gram/client/models/operations/listresources.js";
-import { QueryHookOptions } from "@gram/client/react-query/_types.js";
-import {
+import type { QueryHookOptions } from "@gram/client/react-query/_types.js";
+import type {
+  ActiveDeploymentQueryData,
+  ActiveDeploymentQueryError,
+} from "@gram/client/react-query/activeDeployment.js";
+import { useActiveDeployment as useActiveDeploymentQuery } from "@gram/client/react-query/activeDeployment.js";
+import type {
   LatestDeploymentQueryData,
   LatestDeploymentQueryError,
-  useLatestDeployment as useLatestDeploymentQuery,
 } from "@gram/client/react-query/latestDeployment.js";
-import {
+import { useLatestDeployment as useLatestDeploymentQuery } from "@gram/client/react-query/latestDeployment.js";
+import type {
   ListResourcesQueryData,
   ListResourcesQueryError,
-  useListResources as useListResourcesQuery,
 } from "@gram/client/react-query/listResources.js";
-import {
+import { useListResources as useListResourcesQuery } from "@gram/client/react-query/listResources.js";
+import type {
   ListToolsQueryData,
   ListToolsQueryError,
-  useListTools as useListToolsQuery,
 } from "@gram/client/react-query/listTools.js";
-import {
+import { useListTools as useListToolsQuery } from "@gram/client/react-query/listTools.js";
+import type {
   ToolsetQueryData,
   ToolsetQueryError,
-  useToolset as useToolsetQuery,
 } from "@gram/client/react-query/toolset.js";
-
-type ToolsetKind = "default" | "external-mcp-proxy";
-
-function detectToolsetKind(tools: GeneratedTool[]): ToolsetKind {
-  const hasExternalMcpProxy = tools.some(
-    (t) =>
-      t.externalMcpToolDefinition !== undefined &&
-      t.externalMcpToolDefinition.type === "proxy",
-  );
-  return hasExternalMcpProxy ? "external-mcp-proxy" : "default";
-}
+import { useToolset as useToolsetQuery } from "@gram/client/react-query/toolset.js";
 
 function useToolsetImpl(
   toolsetSlug: string | undefined,
@@ -50,7 +43,6 @@ function useToolsetImpl(
     enabled: !!toolsetSlug && (options?.enabled ?? true),
   });
 
-  const kind = detectToolsetKind(result.data?.tools ?? []);
   const tools = asTools(result.data?.tools ?? []);
 
   return {
@@ -58,7 +50,6 @@ function useToolsetImpl(
     data: result.data
       ? {
           ...result.data,
-          kind,
           tools,
           rawTools: result.data.tools ?? [],
           resources: result.data.resources?.map(asResource) ?? [],
@@ -141,4 +132,22 @@ export function useLatestDeployment(
     staleTime: 1000 * 60 * 60, // 1 hour
     ...options,
   });
+}
+
+/**
+ * Hook for fetching the active deployment: the newest one that completed.
+ *
+ * This is the deployment tools are generated from, and the one `tools.list`
+ * reads by default. Anything that joins deployment assets to tools — the
+ * sources pages, tool counts per source — must key on this rather than on
+ * the latest deployment, which may be a failed push whose assets carry fresh
+ * ids that no tool refers to.
+ */
+export function useActiveDeployment(
+  options?: QueryHookOptions<
+    ActiveDeploymentQueryData,
+    ActiveDeploymentQueryError
+  >,
+): ReturnType<typeof useActiveDeploymentQuery> {
+  return useActiveDeploymentQuery(undefined, undefined, options);
 }

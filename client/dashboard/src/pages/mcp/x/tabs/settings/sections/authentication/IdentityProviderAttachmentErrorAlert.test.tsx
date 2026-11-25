@@ -38,7 +38,7 @@ describe("IdentityProviderAttachmentErrorAlert", () => {
         error={
           new ProxyRegistrationError(
             400,
-            "the callback URL is not allowed by this identity provider.",
+            "the callback URL is not allowed by this authorization server.",
           )
         }
       />,
@@ -47,7 +47,7 @@ describe("IdentityProviderAttachmentErrorAlert", () => {
     expect(screen.getByText("Registration failed (HTTP 400)")).toBeDefined();
     expect(
       screen.getByText(
-        "The callback URL is not allowed by this identity provider.",
+        "The callback URL is not allowed by this authorization server.",
       ),
     ).toBeDefined();
   });
@@ -60,7 +60,7 @@ describe("IdentityProviderAttachmentErrorAlert", () => {
     );
 
     expect(
-      screen.getByText("Failed to attach identity provider"),
+      screen.getByText("Failed to attach authorization server"),
     ).toBeDefined();
     expect(screen.getByText("The provider could not be saved.")).toBeDefined();
   });

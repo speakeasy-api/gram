@@ -6,8 +6,6 @@ package mcp
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,14 +16,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -66,7 +66,7 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}
@@ -75,15 +75,34 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 
 // ServeRegister implements RFC 7591 Dynamic Client Registration for
 // issuer-gated MCP servers. Post-resolution entry point shared by
-// /mcp's HandleRegister (toolset-keyed) and /x/mcp's mcp_endpoint-keyed
-// route registration. Public endpoint (no caller auth); the issuer's
+// HandleRegister after slug resolution. Public endpoint (no caller auth); the issuer's
 // metadata document advertises this URL via `registration_endpoint`.
 //
 // Generated client_secret is returned plaintext exactly once; only its
 // bcrypt hash is persisted in user_session_clients.client_secret_hash.
 func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	refused := func(ctx context.Context, code string) {
+		what := mcpconnectionattempts.CodeRegistrationInvalid
+		if code == "internal_error" {
+			what = mcpconnectionattempts.CodeInternalError
+		}
+		s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppDCR), mcpconnectionattempts.StepInboundAuthorize, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Detail(code))
+	}
+	return s.serveRegister(w, r, endpoint.LogWith(s.logger).With(attr.SlogToolsetMCPSlug(endpoint.Slug)), endpoint.UserSessionIssuerID, refused)
+}
+
+// serveRegister registers a client with the issuer. Clients belong to the
+// issuer, not to an MCP server, so per-endpoint and shared authorization
+// servers share it.
+// refused records registration metadata that parsed but was rejected, where a server is known.
+func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID, refused func(ctx context.Context, code string)) (retErr error) {
 	ctx := r.Context()
-	logger := endpoint.LogWith(s.logger)
+	refusalRecorded := false
+	refuse := func(code, description string) error {
+		refused(ctx, code)
+		refusalRecorded = true
+		return writeDCRError(ctx, w, logger, code, description)
+	}
 
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		mediaType, _, err := mime.ParseMediaType(ct)
@@ -102,10 +121,19 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 		return writeDCRError(ctx, w, logger, "invalid_client_metadata", "request body is not valid JSON")
 	}
 
+	defer func() {
+		panicked := recover()
+		if (retErr != nil || panicked != nil) && !refusalRecorded && !errors.Is(ctx.Err(), context.Canceled) {
+			refused(ctx, "internal_error")
+		}
+		if panicked != nil {
+			panic(panicked)
+		}
+	}()
 	req.SetDefaults()
-	if err := req.Validate(usersessions.SupportedAuthMethods); err != nil {
+	if err := req.Validate(usersessions.RegistrableGrantTypes, usersessions.SupportedAuthMethods); err != nil {
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
-			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
+			return refuse(oauthErr.Code, oauthErr.Description)
 		}
 		return oops.E(oops.CodeUnexpected, err, "validate DCR request").LogError(ctx, logger)
 	}
@@ -123,25 +151,21 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 	var clientSecretHash pgtype.Text
 	switch req.TokenEndpointAuthMethod {
 	case oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost:
-		var err error
-		clientSecret, err = generateClientSecret()
+		secret, hashed, err := usersessions.MintClientSecret()
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to generate client secret").LogError(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to mint client secret").LogError(ctx, logger)
 		}
-		hashed, hashErr := bcrypt.GenerateFromPassword([]byte(clientSecret), bcrypt.DefaultCost)
-		if hashErr != nil {
-			return oops.E(oops.CodeUnexpected, hashErr, "failed to hash client secret").LogError(ctx, logger)
-		}
-		clientSecretHash = pgtype.Text{String: string(hashed), Valid: true}
+		clientSecret = secret
+		clientSecretHash = pgtype.Text{String: hashed, Valid: true}
 	case oauthwire.AuthMethodNone, oauthwire.AuthMethodPrivateKeyJWT:
 		// Public clients prove PKCE possession; asymmetric clients prove
 		// possession of a key the server never holds. Neither gets a secret.
 	default:
-		return writeDCRError(ctx, w, logger, "invalid_client_metadata", fmt.Sprintf("unsupported token_endpoint_auth_method %q", req.TokenEndpointAuthMethod))
+		return refuse("invalid_client_metadata", fmt.Sprintf("unsupported token_endpoint_auth_method %q", req.TokenEndpointAuthMethod))
 	}
 
 	row, err := usersessions_repo.New(s.db).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		UserSessionIssuerID: issuerID,
 		ClientID:            clientID,
 		ClientSecretHash:    clientSecretHash,
 		ClientName:          req.ClientName,
@@ -153,13 +177,18 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 		ClientJwksUri:           conv.ToPGTextEmpty(req.JWKSURI),
 	})
 	if err != nil {
+		// The insert re-reads the issuer under lock, so a registration that
+		// resolved the endpoint before a migration or delete retired its
+		// issuer lands here instead of on a tombstone.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, logger)
+		}
 		return oops.E(oops.CodeUnexpected, err, "failed to create user session client").LogError(ctx, logger)
 	}
 
 	logger.InfoContext(ctx, "user session client registered",
 		attr.SlogOAuthClientID(clientID),
 		attr.SlogOAuthClientName(req.ClientName),
-		attr.SlogToolsetMCPSlug(endpoint.Slug),
 		attr.SlogOAuthRegisteredAuthMethod(req.TokenEndpointAuthMethod),
 		attr.SlogOAuthClientSecretGenerated(clientSecretHash.Valid),
 		attr.SlogOAuthRedirectURICount(len(req.RedirectURIs)),
@@ -231,14 +260,4 @@ func writeDCRError(ctx context.Context, w http.ResponseWriter, logger *slog.Logg
 		return oops.E(oops.CodeUnexpected, werr, "failed to write DCR error body").LogError(ctx, logger)
 	}
 	return nil
-}
-
-// generateClientSecret produces 32 bytes of cryptographically random data
-// and base64url-encodes them.
-func generateClientSecret() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("read random bytes: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
 }

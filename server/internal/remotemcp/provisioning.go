@@ -3,7 +3,9 @@ package remotemcp
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -18,9 +20,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 )
 
 const dashboardRemoteMCPInitialVisibility = "disabled"
@@ -42,9 +48,10 @@ type RemoteMCPProvisioningService struct {
 }
 
 type DashboardRemoteMCPProvisioningInput struct {
-	Name          *string
-	URL           string
-	TransportType string
+	Name                *string
+	URL                 string
+	TransportType       string
+	UserSessionIssuerID *string
 }
 
 type RemoteMCPProvisioningResult struct {
@@ -67,12 +74,16 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 	if s == nil || s.db == nil || s.policy == nil || s.audit == nil || authCtx == nil || authCtx.ProjectID == nil || input.URL == "" || !dashboardRemoteMCPTransportSupported(input.TransportType) {
 		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeBadRequest, nil, "invalid dashboard remote MCP provisioning input")
 	}
-	if _, err := s.policy.ValidateHTTPURL(ctx, input.URL); err != nil {
+	if _, err := proxy.ValidateRemoteMCPURL(ctx, s.policy, input.URL); err != nil {
 		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeBadRequest, err, "invalid url")
 	}
 
 	remoteName := normalizedRemoteMCPSourceName(input.Name)
 	displayName := remoteMCPDisplayName(input.URL, remoteName)
+	userSessionIssuerID, err := conv.PtrToNullUUID(input.UserSessionIssuerID)
+	if err != nil {
+		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id")
+	}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -80,17 +91,21 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "lock provisioning writer scope")
+	}
 	if err := requireLiveProjectForActiveOrganization(ctx, tx, authCtx); err != nil {
 		return RemoteMCPProvisioningResult{}, err
 	}
-	remote, err := createRemoteMCPSource(ctx, tx, s.audit, authCtx, remoteMCPSourceInput(input))
+	remote, err := createRemoteMCPSource(ctx, tx, s.audit, authCtx, remoteMCPSourceInput{
+		Name:          input.Name,
+		URL:           input.URL,
+		TransportType: input.TransportType,
+	})
 	if err != nil {
 		return RemoteMCPProvisioningResult{}, err
 	}
 
-	if err := mcpservers.VerifyLiveRemoteMCPSourceInTransaction(ctx, tx, *authCtx.ProjectID, remote.ID); err != nil {
-		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "verify remote MCP source")
-	}
 	mcpServer, err := mcpservers.CreateMCPServerInTransaction(ctx, tx, s.audit, mcpservers.MCPServerTransactionInput{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
@@ -98,7 +113,9 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 		ActorEmail:            authCtx.Email,
 		Name:                  displayName,
 		Visibility:            dashboardRemoteMCPInitialVisibility,
+		NetworkAccessMode:     networkaccess.ModePublicOnly,
 		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   userSessionIssuerID,
 		RemoteMCPServerID:     uuid.NullUUID{UUID: remote.ID, Valid: true},
 		TunneledMCPServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -106,6 +123,9 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
+		if errors.Is(err, usersessionbindings.ErrNotFound) {
+			return RemoteMCPProvisioningResult{}, oops.E(oops.CodeNotFound, err, "user session issuer not found")
+		}
 		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "materialize remote-backed MCP server")
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -130,11 +150,75 @@ func normalizedRemoteMCPSourceName(name *string) pgtype.Text {
 	return pgtype.Text{String: trimmed, Valid: trimmed != ""}
 }
 
+// remoteMCPDisplayName is the name the server is shown with: the one given,
+// or else one read from its address.
 func remoteMCPDisplayName(rawURL string, name pgtype.Text) string {
 	if name.Valid {
 		return name.String
 	}
+	if readable := readableServiceName(rawURL); readable != "" {
+		return readable
+	}
 	return strings.TrimPrefix(strings.TrimPrefix(rawURL, "https://"), "http://")
+}
+
+// sharedHostingDomains are domains under which anyone can host a site, so the
+// label before them names the platform, not the service.
+var sharedHostingDomains = []string{
+	"amazonaws.com", "appspot.com", "azurecontainerapps.io", "azurewebsites.net",
+	"cloudfunctions.net", "deno.dev", "firebaseapp.com", "fly.dev", "github.io",
+	"herokuapp.com", "modal.run", "netlify.app", "ngrok-free.app", "ngrok.app",
+	"ngrok.io", "onrender.com", "pages.dev", "railway.app", "replit.app",
+	"run.app", "trycloudflare.com", "vercel.app", "web.app", "workers.dev",
+}
+
+// secondLevelSuffixes precede a two-letter country code in public suffixes
+// such as co.uk, or.jp or edu.au.
+var secondLevelSuffixes = map[string]bool{
+	"ac": true, "co": true, "com": true, "edu": true, "go": true, "gob": true, "gov": true, "ltd": true, "me": true, "mil": true, "ne": true, "net": true, "nom": true, "or": true, "org": true, "plc": true, "sch": true,
+}
+
+// readableServiceName reads the service's name from a URL's host:
+// https://mcp.ramp.com/mcp reads "Ramp" and mcp.acme-wiki.example reads
+// "Acme Wiki". It gives "" when the host does not name a service: IP
+// addresses, single-label hosts such as localhost, internationalised
+// domains, and sites on shared hosting domains such as vercel.app. The
+// dashboard suggests names by the same rules (readableServiceNameFromUrl).
+func readableServiceName(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	labels := strings.Split(host, ".")
+	last := labels[len(labels)-1]
+	if len(labels) < 2 || strings.Trim(last, "0123456789") == "" || strings.Contains(host, ":") {
+		return ""
+	}
+	for _, r := range host {
+		if r > unicode.MaxASCII {
+			return ""
+		}
+	}
+	for _, label := range labels {
+		if strings.HasPrefix(label, "xn--") {
+			return ""
+		}
+	}
+	for _, domain := range sharedHostingDomains {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return ""
+		}
+	}
+	suffix := 1
+	if len(labels) >= 3 && len(last) == 2 && secondLevelSuffixes[labels[len(labels)-2]] {
+		suffix = 2
+	}
+	words := strings.FieldsFunc(labels[len(labels)-1-suffix], func(r rune) bool { return r == '-' || r == '_' })
+	for i, word := range words {
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 // createRemoteMCPSource owns the source row, its derived identifier, and the
@@ -188,14 +272,7 @@ func requireLiveProjectForActiveOrganization(ctx context.Context, tx pgx.Tx, aut
 	if tx == nil || authCtx == nil || authCtx.ProjectID == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.E(oops.CodeBadRequest, nil, "invalid project ownership check")
 	}
-	var projectID uuid.UUID
-	err := tx.QueryRow(ctx, `
-SELECT id
-FROM projects
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-FOR UPDATE`, *authCtx.ProjectID, authCtx.ActiveOrganizationID).Scan(&projectID)
+	_, err := repo.New(tx).LockLiveProjectForRemoteMCPProvisioning(ctx, repo.LockLiveProjectForRemoteMCPProvisioningParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return oops.E(oops.CodeNotFound, err, "project not found in active organization")
 	}

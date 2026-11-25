@@ -5,6 +5,7 @@
 import { tunneledMcpCreateServer } from "../funcs/tunneledMcpCreateServer.js";
 import { tunneledMcpDeleteServer } from "../funcs/tunneledMcpDeleteServer.js";
 import { tunneledMcpGetServer } from "../funcs/tunneledMcpGetServer.js";
+import { tunneledMcpGetServerMetrics } from "../funcs/tunneledMcpGetServerMetrics.js";
 import { tunneledMcpListServerConnections } from "../funcs/tunneledMcpListServerConnections.js";
 import { tunneledMcpListServers } from "../funcs/tunneledMcpListServers.js";
 import { tunneledMcpRotateServerKey } from "../funcs/tunneledMcpRotateServerKey.js";
@@ -15,6 +16,7 @@ import { ListTunneledMcpServersResult } from "../models/components/listtunneledm
 import { RotateTunneledMcpServerKeyResult } from "../models/components/rotatetunneledmcpserverkeyresult.js";
 import { TunneledMcpServer } from "../models/components/tunneledmcpserver.js";
 import { TunneledMcpServerConnections } from "../models/components/tunneledmcpserverconnections.js";
+import { TunnelMetrics } from "../models/components/tunnelmetrics.js";
 import {
   CreateTunneledMcpServerRequest,
   CreateTunneledMcpServerSecurity,
@@ -27,6 +29,10 @@ import {
   GetTunneledMcpServerRequest,
   GetTunneledMcpServerSecurity,
 } from "../models/operations/gettunneledmcpserver.js";
+import {
+  GetTunneledMcpServerMetricsRequest,
+  GetTunneledMcpServerMetricsSecurity,
+} from "../models/operations/gettunneledmcpservermetrics.js";
 import {
   ListTunneledMcpServerConnectionsRequest,
   ListTunneledMcpServerConnectionsSecurity,
@@ -96,6 +102,25 @@ export class TunneledMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<TunneledMcpServer> {
     return unwrapAsync(tunneledMcpGetServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getServerMetrics tunneledMcp
+   *
+   * @remarks
+   * Read seven-day payload-free tunnel activity aggregates
+   */
+  async getServerMetrics(
+    request: GetTunneledMcpServerMetricsRequest,
+    security?: GetTunneledMcpServerMetricsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<TunnelMetrics> {
+    return unwrapAsync(tunneledMcpGetServerMetrics(
       this,
       request,
       security,

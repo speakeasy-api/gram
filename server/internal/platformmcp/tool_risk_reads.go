@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests and JSON schemas rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests and JSON schemas rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -7,18 +7,24 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
+	"github.com/speakeasy-api/gram/server/internal/risk/presets"
 )
 
 // registerRiskToolsWithMutations is the single handler-selection seam used by
 // the external endpoint and assistant catalogue. Policy callbacks may be live
 // while exclusion callbacks remain stable unavailable stubs during rollout.
-func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutations *RiskMutationHandlers) {
+func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, status *RiskAnalysisStatusService, mutations *RiskMutationHandlers) {
+	// The analysis status read does not depend on the policy reader, so it is
+	// registered on its own: a deployment whose policy reads are unavailable
+	// still answers "when did the Watchdog last run" when it can.
+	registerRiskAnalysisStatusTool(reg, status)
 	if risk == nil || !risk.valid() {
 		registerUnavailableRiskToolsWithMutations(reg, mutations)
 		return
@@ -26,21 +32,21 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 	addTool(reg, &mcp.Tool{
 		Name:        "list_risk_policies",
 		Title:       "List Risk Policies",
-		Description: "List bounded, privacy-safe risk policy summaries in an exact project or the organization's literal default project.",
+		Description: "List bounded, privacy-safe risk policy summaries in an exact project or the organization's literal default project. Blocking Shadow MCP policies include their configured default posture and distinct explicit target counts, not effective access.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskListSchema(false),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskPoliciesInput) (*mcp.CallToolResult, ListRiskPoliciesOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskPoliciesInput) (*mcp.CallToolResult, ListRiskPoliciesOutput, error) {
 		return riskReadToolCall(ctx, reg.riskTelemetry, "list_risk_policies", func(principal Principal) (ListRiskPoliciesOutput, error) {
 			return risk.ListPolicies(ctx, principal, input)
 		})
 	})
 	addTool(reg, &mcp.Tool{
 		Name:        "get_risk_policy",
-		Title:       "Get Risk Policy",
-		Description: "Read one risk policy from an exact project or the organization's literal default project, with closed compatibility metadata.",
+		Title:       "Get a Risk Policy",
+		Description: "Read one risk policy's own settings: what it detects, what happens when it fires, its severity, scope and audience, and the version a change needs. Exceptions that stop findings are separate rules; list them with list_risk_exclusions. Reads from an exact project or the organization's literal default project, with closed compatibility metadata. Shadow target counts describe stored policy configuration, not effective access.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskGetPolicySchema(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskPolicyInput) (*mcp.CallToolResult, GetRiskPolicyOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskPolicyInput) (*mcp.CallToolResult, GetRiskPolicyOutput, error) {
 		return riskReadToolCall(ctx, reg.riskTelemetry, "get_risk_policy", func(principal Principal) (GetRiskPolicyOutput, error) {
 			return risk.GetPolicy(ctx, principal, input)
 		})
@@ -48,10 +54,10 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 	addTool(reg, &mcp.Tool{
 		Name:        "list_risk_exclusions",
 		Title:       "List Risk Exclusions",
-		Description: "List bounded, privacy-safe risk exclusions in an exact project or the organization's literal default project. Exact and legacy regex values are never returned.",
+		Description: "List a project's risk exclusions: the exceptions that stop a known value, rule, detector source or entity type from producing findings, for every policy or for one (filter with policy_id). To read a policy's own detectors, action, severity or audience, use get_risk_policy. Lists bounded, privacy-safe exclusions in an exact project or the organization's literal default project. Exact and legacy regex values are never returned.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskListSchema(true),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskExclusionsInput) (*mcp.CallToolResult, ListRiskExclusionsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskExclusionsInput) (*mcp.CallToolResult, ListRiskExclusionsOutput, error) {
 		return riskReadToolCall(ctx, reg.riskTelemetry, "list_risk_exclusions", func(principal Principal) (ListRiskExclusionsOutput, error) {
 			return risk.ListExclusions(ctx, principal, input)
 		})
@@ -59,7 +65,37 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 	registerRiskMutationHandlers(reg, risk.catalog, true, mutations)
 }
 
+const (
+	riskAnalysisStatusToolName  = "get_risk_analysis_status"
+	riskAnalysisStatusToolTitle = "Check Watchdog Analysis Status"
+	// riskAnalysisStatusToolStub is the description served when the analysis
+	// run state cannot be described in this deployment.
+	riskAnalysisStatusToolStub = "Report when the Watchdog analysis last ran for a project. Analysis status is unavailable in this deployment."
+)
+
+// registerRiskAnalysisStatusTool serves get_risk_analysis_status live when the
+// analysis run state can be described, and as a stub otherwise, so the tool
+// always exists in the manifest.
+func registerRiskAnalysisStatusTool(reg *Registrar, status *RiskAnalysisStatusService) {
+	if !status.valid() {
+		addTool(reg, &mcp.Tool{Name: riskAnalysisStatusToolName, Title: riskAnalysisStatusToolTitle, Description: riskAnalysisStatusToolStub, Annotations: readOnlyAnnotations(), InputSchema: riskAnalysisStatusSchema()}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, riskAnalysisStatusToolName))
+		return
+	}
+	addTool(reg, &mcp.Tool{
+		Name:        riskAnalysisStatusToolName,
+		Title:       riskAnalysisStatusToolTitle,
+		Description: "Report whether the Watchdog analysis is running for an exact project or the organization's literal default project, and when it last ran. The analysis is event-driven: it starts shortly after new chat traffic is captured rather than on a schedule, so a project with no recent traffic has no recent run. A run that hit a failure waits about five minutes before retrying and still reports as running during that wait. Use this when an administrator asks whether risk findings are up to date or why none have appeared.",
+		Annotations: readOnlyAnnotations(),
+		InputSchema: riskAnalysisStatusSchema(),
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskAnalysisStatusInput) (*mcp.CallToolResult, GetRiskAnalysisStatusOutput, error) {
+		return riskReadToolCall(ctx, reg.riskTelemetry, riskAnalysisStatusToolName, func(principal Principal) (GetRiskAnalysisStatusOutput, error) {
+			return status.Get(ctx, principal, input)
+		})
+	})
+}
+
 func registerUnavailableRiskTools(reg *Registrar) {
+	registerRiskAnalysisStatusTool(reg, nil)
 	registerUnavailableRiskToolsWithMutations(reg, nil)
 }
 
@@ -77,10 +113,10 @@ func registerUnavailableRiskToolsWithCatalogAndMutations(reg *Registrar, buildCa
 		schema                   *jsonschema.Schema
 	}{
 		{"list_risk_policies", "List Risk Policies", "List risk policy summaries. Risk reads are unavailable in this deployment.", riskListSchema(false)},
-		{"get_risk_policy", "Get Risk Policy", "Read one risk policy. Risk reads are unavailable in this deployment.", riskGetPolicySchema()},
+		{"get_risk_policy", "Get a Risk Policy", "Read one risk policy. Risk reads are unavailable in this deployment.", riskGetPolicySchema()},
 		{"list_risk_exclusions", "List Risk Exclusions", "List risk exclusions. Risk reads are unavailable in this deployment.", riskListSchema(true)},
 	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations(), InputSchema: tool.schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, tool.name))
+		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations(), InputSchema: tool.schema}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, tool.name))
 	}
 	catalog, err := buildCatalog()
 	registerRiskMutationHandlers(reg, catalog, err == nil, mutations)
@@ -111,18 +147,25 @@ type UpdateRiskExclusionToolOutput struct {
 	Receipt RiskMutationToolReceipt `json:"receipt"`
 }
 
-// RiskMutationHandlers names the four independently selectable callbacks.
+// RiskMutationHandlers names the independently selectable write callbacks.
 // Every callback has an exported success type that composition code can
-// construct, while the schemas remain owned by this package.
+// construct, while the schemas remain owned by this package. A nil callback
+// keeps its tool in the catalogue as a stable "not enabled" stub.
 type RiskMutationHandlers struct {
-	Controls        *RiskMutationControls
-	CreatePolicy    mcp.ToolHandlerFor[map[string]any, CreateRiskPolicyToolOutput]
-	UpdatePolicy    mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
-	CreateExclusion mcp.ToolHandlerFor[map[string]any, CreateRiskExclusionToolOutput]
-	UpdateExclusion mcp.ToolHandlerFor[map[string]any, UpdateRiskExclusionToolOutput]
+	ChangeAudience              mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
+	RemoveSelf                  mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
+	Controls                    *RiskMutationControls
+	CreatePolicy                mcp.ToolHandlerFor[map[string]any, CreateRiskPolicyToolOutput]
+	UpdatePolicy                mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
+	CreateExclusion             mcp.ToolHandlerFor[map[string]any, CreateRiskExclusionToolOutput]
+	UpdateExclusion             mcp.ToolHandlerFor[map[string]any, UpdateRiskExclusionToolOutput]
+	MarkFindingsFalsePositive   mcp.ToolHandlerFor[map[string]any, MarkRiskFindingsFalsePositiveToolOutput]
+	UnmarkFindingsFalsePositive mcp.ToolHandlerFor[map[string]any, UnmarkRiskFindingsFalsePositiveToolOutput]
 }
 
 func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog, catalogAvailable bool, handlers *RiskMutationHandlers) {
+	registerRemoveSelfFromRiskPolicy(reg, catalogAvailable, handlers)
+	registerChangeRiskPolicyAudience(reg, catalogAvailable, handlers)
 	createPolicySchema := fallbackCreateRiskPolicySchema()
 	updatePolicySchema := fallbackUpdateRiskPolicySchema()
 	createExclusionSchema := fallbackCreateRiskExclusionSchema()
@@ -136,17 +179,31 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 	createExclusion := unavailableRiskMutationTool[CreateRiskExclusionToolOutput]()
 	updateExclusion := unavailableRiskMutationTool[UpdateRiskExclusionToolOutput]()
 	createPolicyDescription := "Create a risk policy in an explicit project. Risk policy mutations are not enabled in this rollout."
-	updatePolicyDescription := "Patch a risk policy in an explicit project. Risk policy mutations are not enabled in this rollout."
+	updatePolicyDescription := "Patch a risk policy in an explicit project. MCP-scoped policies support flag and block actions only. Risk policy mutations are not enabled in this rollout."
 	createExclusionDescription := "Create a non-regex risk exclusion in an explicit project. Exclusion mutations are not enabled in this rollout."
 	updateExclusionDescription := "Enable or disable one risk exclusion without changing its definition. Exclusion mutations are not enabled in this rollout."
+	markFindings := unavailableRiskMutationTool[MarkRiskFindingsFalsePositiveToolOutput]()
+	unmarkFindings := unavailableRiskMutationTool[UnmarkRiskFindingsFalsePositiveToolOutput]()
+	markFindingsDescription := "Dismiss specific Watchdog findings as reviewed false positives in an explicit project. Finding dismissal is not enabled in this rollout."
+	unmarkFindingsDescription := "Restore previously dismissed Watchdog findings in an explicit project. Finding restore is not enabled in this rollout."
+	if handlers != nil && handlers.Controls != nil {
+		if handlers.MarkFindingsFalsePositive != nil {
+			markFindings = handlers.MarkFindingsFalsePositive
+			markFindingsDescription = riskFindingsMarkDescription
+		}
+		if handlers.UnmarkFindingsFalsePositive != nil {
+			unmarkFindings = handlers.UnmarkFindingsFalsePositive
+			unmarkFindingsDescription = riskFindingsUnmarkDescription
+		}
+	}
 	if catalogAvailable && handlers != nil && handlers.Controls != nil {
 		if handlers.CreatePolicy != nil {
 			createPolicy = handlers.CreatePolicy
-			createPolicyDescription = "Create an allowlisted standard or prompt-based risk policy in an explicit project with idempotent replay safety."
+			createPolicyDescription = "Create a risk policy in an explicit project with idempotent replay safety: a standard policy from allowlisted detectors, a prompt-based policy from a judge instruction, or a policy expanded from a use-case preset (see list_risk_presets and suggest_risk_policy) with optional overrides. A preset policy is enabled unless enabled is false."
 		}
 		if handlers.UpdatePolicy != nil {
 			updatePolicy = handlers.UpdatePolicy
-			updatePolicyDescription = "Patch allowlisted fields on a risk policy in an explicit project using an opaque expected version; omitted fields are preserved."
+			updatePolicyDescription = "Patch allowlisted fields on a risk policy in an explicit project using an opaque expected version; omitted fields are preserved. MCP-scoped policies support flag and block actions only. The audience patch is available only to external OAuth administrators and replaces positive user/role grants, requires confirm=true, and never creates exclusions. Inspect get_risk_policy first. Targeted audiences must remain nonempty; everyone requires an empty principal_urns array. Removing a direct user grant does not remove role-derived access. Never represent everyone-except-one or role exclusions as supported."
 		}
 		if handlers.CreateExclusion != nil {
 			createExclusion = handlers.CreateExclusion
@@ -157,11 +214,35 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 			updateExclusionDescription = "Enable or disable one risk exclusion without changing its definition using an opaque expected version."
 		}
 	}
-	meta := ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
-	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: createPolicyDescription, InputSchema: createPolicySchema}, meta, instrumentRiskMutation(reg, "create_risk_policy", createPolicy))
-	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: updatePolicyDescription, InputSchema: updatePolicySchema}, meta, instrumentRiskMutation(reg, "update_risk_policy", updatePolicy))
-	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: createExclusionDescription, InputSchema: createExclusionSchema}, meta, instrumentRiskMutation(reg, "create_risk_exclusion", createExclusion))
-	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: updateExclusionDescription, InputSchema: updateRiskExclusionSchema()}, meta, instrumentRiskMutation(reg, "update_risk_exclusion", updateExclusion))
+	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
+	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create a Risk Policy", Description: createPolicyDescription, Annotations: writeAnnotations(false, true, false), InputSchema: createPolicySchema}, meta, instrumentRiskMutation(reg, "create_risk_policy", createPolicy))
+	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update a Risk Policy", Description: updatePolicyDescription, Annotations: writeAnnotations(true, true, false), InputSchema: updatePolicySchema}, meta, instrumentRiskMutation(reg, "update_risk_policy", updatePolicy))
+	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create a Risk Exclusion", Description: createExclusionDescription, Annotations: writeAnnotations(false, true, false), InputSchema: createExclusionSchema}, meta, instrumentRiskMutation(reg, "create_risk_exclusion", createExclusion))
+	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update a Risk Exclusion", Description: updateExclusionDescription, Annotations: writeAnnotations(true, true, false), InputSchema: updateRiskExclusionSchema()}, meta, instrumentRiskMutation(reg, "update_risk_exclusion", updateExclusion))
+	// Dismissing hides findings from the active list, so clients should
+	// treat mark as destructive; restoring only re-surfaces them.
+	addTool(reg, &mcp.Tool{Name: operationMarkRiskFindingsFalsePositive, Title: "Mark Risk Findings as False Positives", Description: markFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)}, InputSchema: riskFindingsFalsePositiveSchema(true)}, meta, instrumentRiskMutation(reg, operationMarkRiskFindingsFalsePositive, markFindings))
+	addTool(reg, &mcp.Tool{Name: operationUnmarkRiskFindingsFalsePositive, Title: "Unmark Risk Findings as False Positives", Description: unmarkFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)}, InputSchema: riskFindingsFalsePositiveSchema(false)}, meta, instrumentRiskMutation(reg, operationUnmarkRiskFindingsFalsePositive, unmarkFindings))
+}
+
+const (
+	riskFindingsMarkDescription   = "Dismiss specific Watchdog findings as reviewed false positives in an explicit project, moving them to the Dismissed tab. Finding ids are the ids the dashboard and finding listings return. This suppresses only the findings named, not future findings that match the same rule; where create_risk_exclusion is available, use it for a whole class. Requires confirmed: true after the user approves the exact findings. The receipt lists which ids changed, which were already dismissed, and which are not in the project; unknown ids never fail the call. Reversible with unmark_risk_findings_false_positive."
+	riskFindingsUnmarkDescription = "Restore previously dismissed Watchdog findings in an explicit project so they return to the active findings list. Finding ids are the ids the dashboard and finding listings return. Requires confirmed: true after the user approves the exact findings. The receipt lists which ids changed, which were already active, and which are not in the project; unknown ids never fail the call."
+)
+
+// riskFindingsFalsePositiveSchema is shared by mark and unmark; only mark
+// accepts a free-text reason.
+func riskFindingsFalsePositiveSchema(withReason bool) *jsonschema.Schema {
+	properties := map[string]*jsonschema.Schema{
+		"project_slug":    stringSchema(projectSlugDescription, 1, 128),
+		"finding_ids":     boundedArraySchema(uuidSchema("Exact finding id as returned by the dashboard or finding listings."), 1, maxRiskFindingFalsePositiveBatch, true),
+		"confirmed":       {Type: "boolean", Description: "Set true only after the user confirms the exact project and the exact findings to dismiss or restore."},
+		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
+	}
+	if withReason {
+		properties["reason"] = stringSchema("Optional reason recorded on the dismissal.", 0, maxRiskFindingFalsePositiveReasonRunes)
+	}
+	return closedObject(properties, []string{"project_slug", "finding_ids", "confirmed", "idempotency_key"})
 }
 
 func unavailableRiskMutationTool[Out any]() mcp.ToolHandlerFor[map[string]any, Out] {
@@ -221,6 +302,10 @@ func riskMutationSuccessEvent[Out any](tool string, output Out) RiskToolEvent {
 	case UpdateRiskExclusionToolOutput:
 		event.Replay = riskMutationReplayState(typed.Receipt.Replayed, false)
 		event.Reconciliation = typed.Reconciliation
+	case MarkRiskFindingsFalsePositiveToolOutput:
+		event.Replay = riskMutationReplayState(typed.Receipt.Replayed, false)
+	case UnmarkRiskFindingsFalsePositiveToolOutput:
+		event.Replay = riskMutationReplayState(typed.Receipt.Replayed, false)
 	}
 	return event
 }
@@ -264,6 +349,13 @@ func riskReadToolCall[Out any](ctx context.Context, telemetry RiskTelemetry, too
 		event.Outcome = "succeeded"
 		return nil, output, nil
 	}
+	if errors.Is(err, ErrOperationRateLimited) || errors.Is(err, ErrOperationBudgetUnavailable) {
+		if errors.Is(err, ErrOperationRateLimited) {
+			event.Outcome = "rate_limited"
+		}
+		result, _ := operationBudgetToolResult(err)
+		return result, zero, nil
+	}
 	var refusal featureUnavailableResult
 	switch {
 	case errors.Is(err, ErrRiskReadInvalid), errors.Is(err, ErrRiskCursorInvalid):
@@ -298,40 +390,49 @@ func riskListSchema(withPolicy bool) *jsonschema.Schema {
 	return projectSelectorSchema(properties, nil)
 }
 
+func riskAnalysisStatusSchema() *jsonschema.Schema {
+	return projectSelectorSchema(map[string]*jsonschema.Schema{}, nil)
+}
+
 func riskGetPolicySchema() *jsonschema.Schema {
 	return projectSelectorSchema(map[string]*jsonschema.Schema{
 		"policy_id": uuidSchema("Exact policy ID to read."),
 	}, []string{"policy_id"})
 }
 
+// createRiskPolicySchema is one flat object: Anthropic rejects a top-level
+// oneOf, so the three kinds of request (preset, standard, prompt_based) share
+// one property list, each property says which kind it belongs to, and
+// validateCreateRiskPolicyKind enforces the rules in the handler.
 func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
-	standard := riskPolicyCreateCommonProperties(catalog)
-	standard["policy_type"] = constSchema("standard")
-	standard["sources"] = arraySchema(catalogEnumSchema(catalog, catalog.Sources), 1, true)
-	standard["presidio_entities"] = arraySchema(catalogEnumSchema(catalog, catalog.PresidioEntities), 0, true)
-	standard["presidio_score_threshold"] = &jsonschema.Schema{Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1))}
-	standard["prompt_injection_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.PromptInjectionRules), 0, true)
-	standard["disabled_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.DisabledRules), 0, true)
-	standard["approved_email_domains"] = boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true)
-	standard["detection_scopes"] = detectionScopesSchema(catalog)
-
-	prompt := riskPolicyCreateCommonProperties(catalog)
-	prompt["policy_type"] = constSchema("prompt_based")
-	prompt["prompt"] = stringSchema("Prompt-policy instruction; never logged or placed in receipts.", 1, 4000)
-	return &jsonschema.Schema{Type: "object", OneOf: []*jsonschema.Schema{
-		closedObject(standard, []string{"project_slug", "policy_type", "name", "enabled", "sources", "idempotency_key"}),
-		closedObject(prompt, []string{"project_slug", "policy_type", "name", "enabled", "prompt", "idempotency_key"}),
-	}}
+	properties := riskPolicyCreateCommonProperties(catalog)
+	properties["policy_type"] = describedEnumSchema([]string{"standard", "prompt_based"}, "Kind of policy to build by hand; required unless preset is named, and left out when it is. One of:", func(value string) string { return policycatalog.PolicyTypeDescriptions[value] })
+	properties["preset"] = describedEnumSchema(presets.IDs(), "Use-case preset to expand into a complete policy, instead of policy_type; see list_risk_presets. With a preset, only name, enabled, action, score, user_message and mcp_scope may override it, plus presidio_entities and approved_email_domains for a standard preset or prompt for a prompt-based preset. One of:", riskPresetDescription)
+	properties["name"] = stringSchema("Policy name. Required with policy_type; with preset it defaults to the preset label.", 1, 100)
+	properties["enabled"] = &jsonschema.Schema{Type: "boolean", Description: "Whether the policy runs once created. Required with policy_type; with preset it defaults to true."}
+	properties["sources"] = describedArraySchema(describedCatalogEnumSchema(catalog, catalog.Sources, "Detector sources to enable. Required for policy_type standard, and only allowed there. One of:", func(value string) string { return policycatalog.SourceDescriptions[value] }), 0)
+	properties["presidio_entities"] = describedArraySchema(describedCatalogEnumSchema(catalog, catalog.PresidioEntities, "Personal-data entities to detect: required for policy_type standard when sources include presidio; with a standard preset, replaces the preset's entities. Not allowed for prompt_based. One of:", policycatalog.PresidioEntityDescription), 0)
+	properties["presidio_score_threshold"] = &jsonschema.Schema{Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1)), Description: "policy_type standard only, with the presidio source: minimum Presidio confidence (0-1) a personal-data match must clear; default 0.5."}
+	properties["prompt_injection_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.PromptInjectionRules), 0, true)
+	properties["prompt_injection_rules"].Description = "policy_type standard only: prompt-injection rules to enable."
+	properties["disabled_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.DisabledRules), 0, true)
+	properties["disabled_rules"].Description = "policy_type standard only: individual rules to switch off within the enabled sources, such as secret.aws-access-key or pii.email_address. Leave empty to keep every rule on."
+	properties["approved_email_domains"] = boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true)
+	properties["approved_email_domains"].Description = "policy_type standard or a preset: email domains treated as corporate by the account_identity source; sessions from other domains are flagged. The non_corporate_accounts preset detects nothing without them."
+	properties["detection_scopes"] = detectionScopesSchema(catalog)
+	properties["detection_scopes"].Description = "policy_type standard only. " + properties["detection_scopes"].Description
+	properties["prompt"] = stringSchema("Instruction the judge applies to each in-scope message: required for policy_type prompt_based; with a prompt-based preset, replaces the preset's instruction. Not allowed for standard. Never logged or placed in receipts.", 1, 4000)
+	return closedObject(properties, []string{"project_slug", "idempotency_key"})
 }
 
 func updateRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	patch := closedObject(map[string]*jsonschema.Schema{
+		"audience":                 riskPolicyAudienceReplacementSchema(),
 		"name":                     stringSchema("Policy name.", 1, 100),
 		"enabled":                  {Type: "boolean"},
-		"action":                   catalogEnumSchema(catalog, catalog.Actions),
+		"action":                   riskPolicyActionSchema(catalog),
 		"score":                    {Type: "number", Minimum: new(0.1), Maximum: new(float64(10))},
 		"prompt":                   stringSchema("Replacement prompt-policy instruction.", 1, 4000),
-		"message_types":            arraySchema(catalogEnumSchema(catalog, catalog.PolicyMessageTypes), 0, true),
 		"sources":                  arraySchema(catalogEnumSchema(catalog, catalog.Sources), 0, true),
 		"presidio_entities":        arraySchema(catalogEnumSchema(catalog, catalog.PresidioEntities), 0, true),
 		"presidio_score_threshold": {Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1))},
@@ -343,41 +444,39 @@ func updateRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	}, nil)
 	patch.MinProperties = new(1)
 	return closedObject(map[string]*jsonschema.Schema{
-		"project_slug": stringSchema("Exact project slug; writes never default a project.", 1, 0), "policy_id": uuidSchema("Exact policy ID."),
+		"project_slug": stringSchema(projectSlugDescription, 1, 0), "policy_id": uuidSchema("Exact policy ID."),
 		"expected_version": stringSchema("Opaque version returned by get_risk_policy.", 1, 0), "idempotency_key": stringSchema("Caller replay key.", 1, 128), "patch": patch,
 	}, []string{"project_slug", "policy_id", "expected_version", "idempotency_key", "patch"})
 }
 
+// createRiskExclusionSchema is one flat object: Anthropic rejects a top-level
+// oneOf, so match_type selects the kind and each property says which kinds
+// take it. The handler enforces the per-kind rules.
 func createRiskExclusionSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
-	common := func(matchType string, matchValue *jsonschema.Schema) map[string]*jsonschema.Schema {
-		return map[string]*jsonschema.Schema{
-			"project_slug": stringSchema("Exact project slug; writes never default a project.", 1, 0), "policy_id": uuidSchema("Optional policy binding."),
-			"match_type": constSchema(matchType), "match_value": matchValue,
-			"enabled": {Type: "boolean"}, "idempotency_key": stringSchema("Caller replay key.", 1, 128),
-		}
+	matchType := enumSchema("exact", "rule_id", "source", "entity_type")
+	matchType.Description = "What match_value names. exact: one literal value, such as a known test key. rule_id: one detector rule. source: one detector source. entity_type: one personal-data entity type."
+	ruleIDFilter := catalogEnumSchema(catalog, catalog.DisabledRules)
+	ruleIDFilter.Description = "Optional: limit the exclusion to one detector rule. Only for match_type exact or source."
+	sourceFilter := catalogEnumSchema(catalog, catalog.Sources)
+	sourceFilter.Description = "Optional: limit the exclusion to one detector source. Only for match_type exact or rule_id; entity_type always uses presidio."
+	matchValue := "For exact, the literal value; it is never returned or logged. For rule_id, one detector rule. For source, one detector source. For entity_type, one Presidio entity type."
+	if catalog.Schema != "" {
+		matchValue = "For exact, the literal value; it is never returned or logged. For rule_id, one detector rule: " + strings.Join(catalog.DisabledRules, ", ") +
+			". For source, one detector source: " + strings.Join(catalog.Sources, ", ") +
+			". For entity_type, one Presidio entity type: " + strings.Join(catalog.PresidioEntities, ", ") + "."
 	}
-	exact := common("exact", stringSchema("Exact match value; never returned or logged.", 1, 256))
-	exact["rule_id_filter"] = catalogEnumSchema(catalog, catalog.DisabledRules)
-	exact["source_filter"] = catalogEnumSchema(catalog, catalog.Sources)
-	ruleID := common("rule_id", catalogEnumSchema(catalog, catalog.DisabledRules))
-	ruleID["source_filter"] = catalogEnumSchema(catalog, catalog.Sources)
-	source := common("source", catalogEnumSchema(catalog, catalog.Sources))
-	source["rule_id_filter"] = catalogEnumSchema(catalog, catalog.DisabledRules)
-	entityType := common("entity_type", catalogEnumSchema(catalog, catalog.PresidioEntities))
-	entityType["source_filter"] = constSchema("presidio")
-
-	required := []string{"project_slug", "match_type", "match_value", "enabled", "idempotency_key"}
-	return &jsonschema.Schema{Type: "object", OneOf: []*jsonschema.Schema{
-		closedObject(exact, required),
-		closedObject(ruleID, required),
-		closedObject(source, required),
-		closedObject(entityType, required),
-	}}
+	return closedObject(map[string]*jsonschema.Schema{
+		"project_slug": stringSchema(projectSlugDescription, 1, 0), "policy_id": uuidSchema("Optional policy binding."),
+		"match_type":  matchType,
+		"match_value": stringSchema(matchValue, 1, 256),
+		"enabled":     {Type: "boolean"}, "idempotency_key": stringSchema("Caller replay key.", 1, 128),
+		"rule_id_filter": ruleIDFilter, "source_filter": sourceFilter,
+	}, []string{"project_slug", "match_type", "match_value", "enabled", "idempotency_key"})
 }
 
 func updateRiskExclusionSchema() *jsonschema.Schema {
 	return closedObject(map[string]*jsonschema.Schema{
-		"project_slug": stringSchema("Exact project slug; writes never default a project.", 1, 0), "exclusion_id": uuidSchema("Exact exclusion ID."),
+		"project_slug": stringSchema(projectSlugDescription, 1, 0), "exclusion_id": uuidSchema("Exact exclusion ID."),
 		"enabled": {Type: "boolean"}, "expected_version": stringSchema("Opaque version returned by list_risk_exclusions.", 1, 0),
 		"idempotency_key": stringSchema("Caller replay key.", 1, 128),
 	}, []string{"project_slug", "exclusion_id", "enabled", "expected_version", "idempotency_key"})
@@ -385,15 +484,42 @@ func updateRiskExclusionSchema() *jsonschema.Schema {
 
 func riskPolicyCreateCommonProperties(catalog policycatalog.Catalog) map[string]*jsonschema.Schema {
 	return map[string]*jsonschema.Schema{
-		"project_slug":    stringSchema("Exact project slug; writes never default a project.", 1, 0),
+		"project_slug":    stringSchema(projectSlugDescription, 1, 0),
 		"name":            stringSchema("Policy name.", 1, 100),
 		"enabled":         {Type: "boolean"},
-		"action":          catalogEnumSchema(catalog, catalog.Actions),
-		"score":           {Type: "number", Minimum: new(0.1), Maximum: new(float64(10))},
-		"message_types":   arraySchema(catalogEnumSchema(catalog, catalog.PolicyMessageTypes), 1, true),
+		"action":          riskPolicyActionSchema(catalog),
+		"score":           {Type: "number", Minimum: new(0.1), Maximum: new(float64(10)), Description: "CVSS-style severity shown on findings (0.1-10); default 5. Does not change what is detected."},
 		"user_message":    stringSchema("Optional user-facing enforcement message.", 0, 500),
 		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
+		"mcp_scope":       riskPolicyMCPScopeSchema(),
 	}
+}
+
+func riskPolicyMCPScopeSchema() *jsonschema.Schema {
+	annotations := arraySchema(&jsonschema.Schema{Type: "string", Enum: []any{"destructiveHint", "readOnlyHint", "idempotentHint", "openWorldHint"}}, 0, true)
+	annotations.Description = "Limit the policy to tools carrying any of these annotations. Tools without annotations never match. Omit to cover every tool."
+	tools := boundedArraySchema(stringSchema("Exact tool name on this server.", 1, 200), 0, 200, true)
+	tools.Description = "Exact tools on this server to cover instead of following tool_annotations. Omit to follow tool_annotations."
+	servers := boundedArraySchema(closedObject(map[string]*jsonschema.Schema{
+		"mcp_server_id": uuidSchema("ID of an MCP server in this project, as returned by find_mcp or get_mcp."),
+		"tools":         tools,
+	}, []string{"mcp_server_id"}), 0, 100, false)
+	servers.Description = "MCP servers the policy covers. Required unless all_servers is true."
+	schema := closedObject(map[string]*jsonschema.Schema{
+		"all_servers":      {Type: "boolean", Description: "Cover every MCP server in the project, including servers added later."},
+		"tool_annotations": annotations,
+		"servers":          servers,
+	}, nil)
+	schema.Description = "Limit the policy to MCP tool calls through chosen servers, checked at the gateway before the tool runs. Omit to apply the policy to agent sessions instead; an unscoped policy is enforced inside observed agent sessions, including their tool calls, but not at an MCP server for callers outside one. A scoped policy only checks calls through its servers, supports only the flag and block actions here, and cannot use the shadow_mcp or account_identity sources. Tool approval policies (require_approval) are also scoped but are read-only through these tools."
+	return schema
+}
+func riskPolicyActionSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
+	const mcpNote = "MCP-scoped policies support flag and block only. Tool approval policies (require_approval) are read-only through these tools."
+	schema := describedCatalogEnumSchema(catalog, catalog.Actions, "What happens when the policy fires; default flag. "+mcpNote+" One of:", func(value string) string { return policycatalog.ActionDescriptions[value] })
+	if schema.Description == "" {
+		schema.Description = "Policy action. " + mcpNote
+	}
+	return schema
 }
 
 func fallbackCreateRiskPolicySchema() *jsonschema.Schema {
@@ -409,21 +535,50 @@ func fallbackCreateRiskExclusionSchema() *jsonschema.Schema {
 }
 
 func detectionScopesSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
+	categoryDescriptions := policycatalog.CategoryDescriptions()
 	scope := closedObject(map[string]*jsonschema.Schema{
-		"category":      catalogEnumSchema(catalog, catalog.DetectionScopeCategories),
+		"category":      describedCatalogEnumSchema(catalog, catalog.DetectionScopeCategories, "Detector category the scope applies to. One of:", func(value string) string { return categoryDescriptions[value] }),
 		"message_types": arraySchema(catalogEnumSchema(catalog, catalog.PolicyMessageTypes), 1, true),
 	}, []string{"category", "message_types"})
-	return arraySchema(scope, 0, true)
+	schema := arraySchema(scope, 0, true)
+	schema.Description = "Optional per-category override of which message surfaces are scanned. Omit to use the recommended scope for each category."
+	return schema
 }
 
-func projectSelectorSchema(common map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
-	properties := make(map[string]*jsonschema.Schema, len(common)+2)
-	maps.Copy(properties, common)
-	properties["project_id"] = uuidSchema("Optional exact project ID. Omit both project selectors to use the literal default project.")
-	properties["project_slug"] = stringSchema("Optional exact project slug. Omit both project selectors to use the literal default project.", 1, 128)
-	schema := closedObject(properties, required)
-	schema.Not = &jsonschema.Schema{Required: []string{"project_id", "project_slug"}}
+func describedArraySchema(items *jsonschema.Schema, minItems int) *jsonschema.Schema {
+	schema := arraySchema(items, minItems, true)
+	schema.Description = items.Description
 	return schema
+}
+
+func describedCatalogEnumSchema(catalog policycatalog.Catalog, values []string, lead string, describe func(string) string) *jsonschema.Schema {
+	if catalog.Schema == "" {
+		return catalogEnumSchema(catalog, values)
+	}
+	return describedEnumSchema(values, lead, describe)
+}
+
+func describedEnumSchema(values []string, lead string, describe func(string) string) *jsonschema.Schema {
+	schema := enumSchema(values...)
+	schema.Description = lead + "\n" + policycatalog.DescribeValues(values, describe)
+	return schema
+}
+
+// projectSelectorSchema is a closed object schema whose optional project_slug
+// selects the project, defaulting to the organization's Default project.
+func projectSelectorSchema(common map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
+	properties := make(map[string]*jsonschema.Schema, len(common)+1)
+	maps.Copy(properties, common)
+	properties["project_slug"] = stringSchema(defaultableProjectSlugDescription, 1, 128)
+	return closedObject(properties, required)
+}
+
+// explicitProjectSchema is a closed object schema that requires project_slug.
+func explicitProjectSchema(common map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
+	properties := make(map[string]*jsonschema.Schema, len(common)+1)
+	maps.Copy(properties, common)
+	properties["project_slug"] = stringSchema(projectSlugDescription, 1, 128)
+	return closedObject(properties, append([]string{"project_slug"}, required...))
 }
 
 func closedObject(properties map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {

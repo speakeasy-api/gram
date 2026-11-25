@@ -11,47 +11,50 @@ import (
 // field corresponds to a [Resolver] method. Nil fields receive defaults that
 // return a "not implemented" error.
 type MockResolverConfig struct {
-	LookupAddrFunc   func(ctx context.Context, addr string) ([]string, error)
-	LookupCNAMEFunc  func(ctx context.Context, host string) (string, error)
-	LookupHostFunc   func(ctx context.Context, host string) ([]string, error)
-	LookupIPFunc     func(ctx context.Context, network, host string) ([]net.IP, error)
-	LookupIPAddrFunc func(ctx context.Context, host string) ([]net.IPAddr, error)
-	LookupMXFunc     func(ctx context.Context, name string) ([]*net.MX, error)
-	LookupNetIPFunc  func(ctx context.Context, network, host string) ([]netip.Addr, error)
-	LookupNSFunc     func(ctx context.Context, name string) ([]*net.NS, error)
-	LookupSRVFunc    func(ctx context.Context, service, proto, name string) (string, []*net.SRV, error)
-	LookupTXTFunc    func(ctx context.Context, name string) ([]string, error)
+	LookupAddrFunc        func(ctx context.Context, addr string) ([]string, error)
+	LookupCNAMERecordFunc func(ctx context.Context, host string) (string, error)
+	LookupCNAMEFunc       func(ctx context.Context, host string) (string, error)
+	LookupHostFunc        func(ctx context.Context, host string) ([]string, error)
+	LookupIPFunc          func(ctx context.Context, network, host string) ([]net.IP, error)
+	LookupIPAddrFunc      func(ctx context.Context, host string) ([]net.IPAddr, error)
+	LookupMXFunc          func(ctx context.Context, name string) ([]*net.MX, error)
+	LookupNetIPFunc       func(ctx context.Context, network, host string) ([]netip.Addr, error)
+	LookupNSFunc          func(ctx context.Context, name string) ([]*net.NS, error)
+	LookupSRVFunc         func(ctx context.Context, service, proto, name string) (string, []*net.SRV, error)
+	LookupTXTFunc         func(ctx context.Context, name string) ([]string, error)
 }
 
 // MockResolver implements [Resolver] with configurable function fields for
 // testing. Create one with [NewMockResolver].
 type MockResolver struct {
-	lookupAddrFunc   func(ctx context.Context, addr string) ([]string, error)
-	lookupCNAMEFunc  func(ctx context.Context, host string) (string, error)
-	lookupHostFunc   func(ctx context.Context, host string) ([]string, error)
-	lookupIPFunc     func(ctx context.Context, network, host string) ([]net.IP, error)
-	lookupIPAddrFunc func(ctx context.Context, host string) ([]net.IPAddr, error)
-	lookupMXFunc     func(ctx context.Context, name string) ([]*net.MX, error)
-	lookupNetIPFunc  func(ctx context.Context, network, host string) ([]netip.Addr, error)
-	lookupNSFunc     func(ctx context.Context, name string) ([]*net.NS, error)
-	lookupSRVFunc    func(ctx context.Context, service, proto, name string) (string, []*net.SRV, error)
-	lookupTXTFunc    func(ctx context.Context, name string) ([]string, error)
+	lookupAddrFunc        func(ctx context.Context, addr string) ([]string, error)
+	lookupCNAMERecordFunc func(ctx context.Context, host string) (string, error)
+	lookupCNAMEFunc       func(ctx context.Context, host string) (string, error)
+	lookupHostFunc        func(ctx context.Context, host string) ([]string, error)
+	lookupIPFunc          func(ctx context.Context, network, host string) ([]net.IP, error)
+	lookupIPAddrFunc      func(ctx context.Context, host string) ([]net.IPAddr, error)
+	lookupMXFunc          func(ctx context.Context, name string) ([]*net.MX, error)
+	lookupNetIPFunc       func(ctx context.Context, network, host string) ([]netip.Addr, error)
+	lookupNSFunc          func(ctx context.Context, name string) ([]*net.NS, error)
+	lookupSRVFunc         func(ctx context.Context, service, proto, name string) (string, []*net.SRV, error)
+	lookupTXTFunc         func(ctx context.Context, name string) ([]string, error)
 }
 
 // NewMockResolver creates a [MockResolver] from the given configuration. Any
 // nil function fields in cfg are replaced with safe no-op defaults.
 func NewMockResolver(cfg MockResolverConfig) *MockResolver {
 	m := &MockResolver{
-		lookupAddrFunc:   cfg.LookupAddrFunc,
-		lookupCNAMEFunc:  cfg.LookupCNAMEFunc,
-		lookupHostFunc:   cfg.LookupHostFunc,
-		lookupIPFunc:     cfg.LookupIPFunc,
-		lookupIPAddrFunc: cfg.LookupIPAddrFunc,
-		lookupMXFunc:     cfg.LookupMXFunc,
-		lookupNetIPFunc:  cfg.LookupNetIPFunc,
-		lookupNSFunc:     cfg.LookupNSFunc,
-		lookupSRVFunc:    cfg.LookupSRVFunc,
-		lookupTXTFunc:    cfg.LookupTXTFunc,
+		lookupAddrFunc:        cfg.LookupAddrFunc,
+		lookupCNAMEFunc:       cfg.LookupCNAMEFunc,
+		lookupCNAMERecordFunc: cfg.LookupCNAMERecordFunc,
+		lookupHostFunc:        cfg.LookupHostFunc,
+		lookupIPFunc:          cfg.LookupIPFunc,
+		lookupIPAddrFunc:      cfg.LookupIPAddrFunc,
+		lookupMXFunc:          cfg.LookupMXFunc,
+		lookupNetIPFunc:       cfg.LookupNetIPFunc,
+		lookupNSFunc:          cfg.LookupNSFunc,
+		lookupSRVFunc:         cfg.LookupSRVFunc,
+		lookupTXTFunc:         cfg.LookupTXTFunc,
 	}
 
 	if m.lookupAddrFunc == nil {
@@ -156,4 +159,11 @@ func (m *MockResolver) LookupSRV(ctx context.Context, service, proto, name strin
 
 func (m *MockResolver) LookupTXT(ctx context.Context, name string) ([]string, error) {
 	return m.lookupTXTFunc(ctx, name)
+}
+
+func (m *MockResolver) LookupCNAMERecord(ctx context.Context, host string) (string, error) {
+	if m.lookupCNAMERecordFunc == nil {
+		return "", errors.New("MockResolver: LookupCNAMERecordFunc not implemented")
+	}
+	return m.lookupCNAMERecordFunc(ctx, host)
 }

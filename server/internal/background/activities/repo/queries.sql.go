@@ -48,6 +48,7 @@ WITH assignments AS (
       ) AS destination_invoice_id
   FROM stripe_invoice_allocations allocation
   WHERE allocation.organization_id = $1
+    AND allocation.source_kind = 'openrouter_daily_spend'
     AND allocation.amount_usd > 0
     AND allocation.destination_invoice_id IS NULL
     AND allocation.original_invoice_id IS NOT NULL
@@ -74,28 +75,6 @@ func (q *Queries) AssignPositiveCarryToStripeInvoice(ctx context.Context, organi
 	return result.RowsAffected(), nil
 }
 
-const attachTUMCarryToOriginalInvoice = `-- name: AttachTUMCarryToOriginalInvoice :execrows
-UPDATE stripe_invoice_allocations allocation
-SET original_invoice_id = invoice.stripe_invoice_id,
-    destination_invoice_id = CASE WHEN allocation.amount_usd < 0 THEN invoice.stripe_invoice_id END,
-    updated_at = clock_timestamp()
-FROM stripe_invoices invoice
-WHERE allocation.organization_id = $1
-  AND allocation.source_kind = 'tum_cycle'
-  AND allocation.original_invoice_id IS NULL
-  AND invoice.organization_id = allocation.organization_id
-  AND invoice.service_period_start = allocation.source_period_start
-  AND invoice.service_period_end = allocation.source_period_end
-`
-
-func (q *Queries) AttachTUMCarryToOriginalInvoice(ctx context.Context, organizationID pgtype.Text) (int64, error) {
-	result, err := q.db.Exec(ctx, attachTUMCarryToOriginalInvoice, organizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const claimNextStripeInvoiceAllocation = `-- name: ClaimNextStripeInvoiceAllocation :one
 WITH candidate AS (
   SELECT
@@ -107,6 +86,7 @@ WITH candidate AS (
     ON destination.stripe_invoice_id = allocation.destination_invoice_id
    AND destination.organization_id = allocation.organization_id
   WHERE allocation.organization_id = $1
+    AND allocation.source_kind = 'openrouter_daily_spend'
     AND allocation.delivery_state IN ('pending', 'ambiguous')
     AND allocation.amount_usd <> 0
     AND (
@@ -132,8 +112,6 @@ WITH candidate AS (
   , allocation.source_key
   , allocation.seq
   , allocation.source_day
-  , allocation.source_period_start
-  , allocation.source_period_end
   , allocation.amount_usd
   , allocation.original_invoice_id
   , allocation.destination_invoice_id
@@ -143,7 +121,7 @@ WITH candidate AS (
   , candidate.previous_delivery_state
 )
 SELECT
-    claimed.id, claimed.organization_id, claimed.source_kind, claimed.source_key, claimed.seq, claimed.source_day, claimed.source_period_start, claimed.source_period_end, claimed.amount_usd, claimed.original_invoice_id, claimed.destination_invoice_id, claimed.idempotency_key, claimed.delivery_state, claimed.previous_first_attempted_at, claimed.previous_delivery_state
+    claimed.id, claimed.organization_id, claimed.source_kind, claimed.source_key, claimed.seq, claimed.source_day, claimed.amount_usd, claimed.original_invoice_id, claimed.destination_invoice_id, claimed.idempotency_key, claimed.delivery_state, claimed.previous_first_attempted_at, claimed.previous_delivery_state
   , destination.stripe_customer_id
   , destination.stripe_subscription_id
   , destination.service_period_start AS destination_period_start
@@ -168,8 +146,6 @@ type ClaimNextStripeInvoiceAllocationRow struct {
 	SourceKey                string
 	Seq                      int32
 	SourceDay                pgtype.Date
-	SourcePeriodStart        pgtype.Timestamptz
-	SourcePeriodEnd          pgtype.Timestamptz
 	AmountUsd                pgtype.Numeric
 	OriginalInvoiceID        pgtype.Text
 	DestinationInvoiceID     pgtype.Text
@@ -194,8 +170,6 @@ func (q *Queries) ClaimNextStripeInvoiceAllocation(ctx context.Context, arg Clai
 		&i.SourceKey,
 		&i.Seq,
 		&i.SourceDay,
-		&i.SourcePeriodStart,
-		&i.SourcePeriodEnd,
 		&i.AmountUsd,
 		&i.OriginalInvoiceID,
 		&i.DestinationInvoiceID,
@@ -373,8 +347,22 @@ const countOpenRouterInvoiceSpendGaps = `-- name: CountOpenRouterInvoiceSpendGap
 SELECT COUNT(*)::bigint AS missing_count
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
-  invoice.service_period_start,
-  invoice.service_period_end - interval '1 day',
+  GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
   interval '1 day'
 ) AS generated(source_timestamp)
 LEFT JOIN openrouter_spend_daily spend
@@ -555,59 +543,6 @@ func (q *Queries) CreateStripeInvoiceFixture(ctx context.Context, arg CreateStri
 	return err
 }
 
-const createTUMInvoiceAllocationFixture = `-- name: CreateTUMInvoiceAllocationFixture :exec
-INSERT INTO stripe_invoice_allocations (
-    organization_id
-  , source_kind
-  , source_key
-  , seq
-  , source_period_start
-  , source_period_end
-  , source_snapshot_usd
-  , delta_tokens
-  , original_tum_unit_price_usd
-  , amount_usd
-  , idempotency_key
-  , delivery_state
-) VALUES (
-    $1
-  , 'tum_cycle'
-  , $2
-  , 1
-  , $3
-  , $4
-  , $5
-  , 1
-  , 0.000000350000
-  , $6
-  , $7
-  , 'pending'
-)
-`
-
-type CreateTUMInvoiceAllocationFixtureParams struct {
-	OrganizationID    pgtype.Text
-	SourceKey         string
-	SourcePeriodStart pgtype.Timestamptz
-	SourcePeriodEnd   pgtype.Timestamptz
-	SourceSnapshotUsd pgtype.Numeric
-	AmountUsd         pgtype.Numeric
-	IdempotencyKey    string
-}
-
-func (q *Queries) CreateTUMInvoiceAllocationFixture(ctx context.Context, arg CreateTUMInvoiceAllocationFixtureParams) error {
-	_, err := q.db.Exec(ctx, createTUMInvoiceAllocationFixture,
-		arg.OrganizationID,
-		arg.SourceKey,
-		arg.SourcePeriodStart,
-		arg.SourcePeriodEnd,
-		arg.SourceSnapshotUsd,
-		arg.AmountUsd,
-		arg.IdempotencyKey,
-	)
-	return err
-}
-
 const deadLetterPublishOutboxRows = `-- name: DeadLetterPublishOutboxRows :execrows
 WITH failures AS (
   SELECT unnest($1::bigint[]) AS id,
@@ -703,135 +638,6 @@ func (q *Queries) DeleteStripeInvoiceAllocationFixture(ctx context.Context, arg 
 	return result.RowsAffected(), nil
 }
 
-const fetchOutboxRowsByIDs = `-- name: FetchOutboxRowsByIDs :many
-SELECT
-    o.id,
-    o.public_id,
-    o.organization_id,
-    o.event_type,
-    o.payload,
-    COALESCE(r.attempts, 0)::int AS attempts
-FROM outbox o
-LEFT JOIN outbox_relays r ON r.outbox_id = o.id
-WHERE o.id = ANY($1::bigint[])
-ORDER BY o.id ASC
-`
-
-type FetchOutboxRowsByIDsRow struct {
-	ID             int64
-	PublicID       uuid.UUID
-	OrganizationID string
-	EventType      string
-	Payload        []byte
-	Attempts       int32
-}
-
-// Hydrate a set of outbox IDs back into full rows along with their current
-// relay attempt count. Intended to be called inside the relay activity after
-// the workflow has handed it a batch of IDs.
-func (q *Queries) FetchOutboxRowsByIDs(ctx context.Context, ids []int64) ([]FetchOutboxRowsByIDsRow, error) {
-	rows, err := q.db.Query(ctx, fetchOutboxRowsByIDs, ids)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []FetchOutboxRowsByIDsRow
-	for rows.Next() {
-		var i FetchOutboxRowsByIDsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.PublicID,
-			&i.OrganizationID,
-			&i.EventType,
-			&i.Payload,
-			&i.Attempts,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const fetchPendingOutboxIDs = `-- name: FetchPendingOutboxIDs :many
-SELECT o.id, o.organization_id, om.svix_app_id, om.webhooks_enabled
-FROM outbox o
-LEFT JOIN organization_metadata om ON o.organization_id = om.id
-LEFT JOIN outbox_relays r ON r.outbox_id = o.id
-WHERE r.outbox_id IS NULL OR (r.processed_at IS NULL AND r.dead_lettered IS FALSE AND (r.retry_after IS NULL OR r.retry_after <= clock_timestamp()))
-ORDER BY o.id ASC
-LIMIT $1
-`
-
-type FetchPendingOutboxIDsRow struct {
-	ID              int64
-	OrganizationID  string
-	SvixAppID       pgtype.Text
-	WebhooksEnabled pgtype.Bool
-}
-
-// Fetch the next batch of outbox row IDs (across all organizations) that the
-// Svix relay has not finished processing. A row is "pending" when no relay
-// tracking row exists OR a tracking row exists with processed_at IS NULL and
-// not dead-lettered. Returns only IDs to keep the activity payload small —
-// workflows pass IDs to RelayBatch which re-queries the full rows.
-func (q *Queries) FetchPendingOutboxIDs(ctx context.Context, batchSize int32) ([]FetchPendingOutboxIDsRow, error) {
-	rows, err := q.db.Query(ctx, fetchPendingOutboxIDs, batchSize)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []FetchPendingOutboxIDsRow
-	for rows.Next() {
-		var i FetchPendingOutboxIDsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.SvixAppID,
-			&i.WebhooksEnabled,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const gCProcessedOutboxRows = `-- name: GCProcessedOutboxRows :execrows
-DELETE FROM outbox
-WHERE id IN (
-  SELECT o.id
-  FROM outbox o
-  JOIN outbox_relays r ON r.outbox_id = o.id
-  WHERE o.created_at < $1
-    AND (r.processed_at IS NOT NULL OR r.noop = TRUE OR r.dead_lettered = TRUE)
-  ORDER BY o.id ASC
-  LIMIT $2
-)
-`
-
-type GCProcessedOutboxRowsParams struct {
-	Cutoff    pgtype.Timestamptz
-	BatchSize int32
-}
-
-// Hard-deletes terminal outbox rows older than @cutoff. Terminal means the
-// relay row is processed, noop, or dead-lettered. The cascade FK removes the
-// outbox_relays row automatically. Batched via LIMIT to bound lock time.
-func (q *Queries) GCProcessedOutboxRows(ctx context.Context, arg GCProcessedOutboxRowsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, gCProcessedOutboxRows, arg.Cutoff, arg.BatchSize)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const gCPublishOutboxDeadLetters = `-- name: GCPublishOutboxDeadLetters :execrows
 DELETE FROM publish_outbox_dead_letters
 WHERE id IN (
@@ -855,51 +661,6 @@ func (q *Queries) GCPublishOutboxDeadLetters(ctx context.Context, arg GCPublishO
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const getAllOrganizationsWithToolsets = `-- name: GetAllOrganizationsWithToolsets :many
-SELECT
-    organization_metadata.id,
-    organization_metadata.name,
-    organization_metadata.slug,
-    gram_account_type
-FROM organization_metadata
-JOIN toolsets ON organization_metadata.id = toolsets.organization_id
-WHERE toolsets.deleted = false
-GROUP BY organization_metadata.id
-HAVING COUNT(toolsets.id) > 0
-`
-
-type GetAllOrganizationsWithToolsetsRow struct {
-	ID              string
-	Name            string
-	Slug            string
-	GramAccountType string
-}
-
-func (q *Queries) GetAllOrganizationsWithToolsets(ctx context.Context) ([]GetAllOrganizationsWithToolsetsRow, error) {
-	rows, err := q.db.Query(ctx, getAllOrganizationsWithToolsets)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetAllOrganizationsWithToolsetsRow
-	for rows.Next() {
-		var i GetAllOrganizationsWithToolsetsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Slug,
-			&i.GramAccountType,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getOpenRouterCreditsAlertRecipients = `-- name: GetOpenRouterCreditsAlertRecipients :many
@@ -985,24 +746,26 @@ SELECT
     k.key_type,
     k.monthly_credits,
     (extract(epoch FROM k.updated_at) * 1000000)::bigint AS limit_generation,
-    k.key_encrypted AS api_key_encrypted
+    k.key_encrypted AS api_key_encrypted,
+    k.key_org_encrypted AS api_key_org_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
 WHERE om.disabled_at IS NULL
-  AND k.disabled = FALSE
+  AND CASE WHEN k.disable_causes IS NULL THEN k.disabled ELSE cardinality(k.disable_causes) > 0 END = FALSE
   AND k.deleted = FALSE
   AND om.gram_account_type = ANY($1::text[])
 ORDER BY om.slug
 `
 
 type GetOpenRouterCreditsMonitoringTargetsRow struct {
-	OrganizationID   string
-	OrganizationSlug string
-	GramAccountType  string
-	KeyType          string
-	MonthlyCredits   int64
-	LimitGeneration  int64
-	ApiKeyEncrypted  pgtype.Text
+	OrganizationID     string
+	OrganizationSlug   string
+	GramAccountType    string
+	KeyType            string
+	MonthlyCredits     int64
+	LimitGeneration    int64
+	ApiKeyEncrypted    pgtype.Text
+	ApiKeyOrgEncrypted pgtype.Text
 }
 
 // Targets for periodic OpenRouter credit usage polling. Filters out disabled
@@ -1030,6 +793,7 @@ func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, acc
 			&i.MonthlyCredits,
 			&i.LimitGeneration,
 			&i.ApiKeyEncrypted,
+			&i.ApiKeyOrgEncrypted,
 		); err != nil {
 			return nil, err
 		}
@@ -1045,8 +809,22 @@ const getOpenRouterDailySpendRecoveryStartDay = `-- name: GetOpenRouterDailySpen
 SELECT MIN(generated.source_timestamp)::date AS recovery_start_day
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
-  invoice.service_period_start,
-  invoice.service_period_end - interval '1 day',
+  GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
   interval '1 day'
 ) AS generated(source_timestamp)
 WHERE invoice.organization_id = $1
@@ -1085,6 +863,10 @@ type GetOpenRouterDailySpendRecoveryStartDayParams struct {
 	TargetKeyType        string
 }
 
+// Partner conversion retains an immutable non-midnight anchor. All seven invoice
+// day enumerations use the same UTC-day policy: waive the initial conversion
+// day, and assign later boundary days to the following invoice. Keep exact
+// Stripe periods unchanged for identity validation and native metered usage.
 // Expand collection to the oldest unresolved invoice day. This heals outages
 // beyond the normal overlap instead of permanently detecting the same gap.
 func (q *Queries) GetOpenRouterDailySpendRecoveryStartDay(ctx context.Context, arg GetOpenRouterDailySpendRecoveryStartDayParams) (pgtype.Date, error) {
@@ -1158,12 +940,15 @@ WITH latest_deployments AS (
 toolset_metrics AS (
   SELECT 
     p.organization_id,
-    COUNT(CASE WHEN t.mcp_is_public = true AND t.mcp_slug IS NOT NULL THEN 1 END) as public_mcp_servers,
-    COUNT(CASE WHEN t.mcp_is_public = false AND t.mcp_slug IS NOT NULL THEN 1 END) as private_mcp_servers,
-    COUNT(CASE WHEN t.mcp_enabled = true THEN 1 END) as total_enabled_servers,
+    -- A hosted server counts by its canonical wrapper's visibility; a toolset without one is not hosted.
+    COUNT(CASE WHEN w.visibility = 'public' THEN 1 END) as public_mcp_servers,
+    COUNT(CASE WHEN w.visibility = 'private' THEN 1 END) as private_mcp_servers,
+    -- Matches GetEnabledServerCount.
+    COUNT(CASE WHEN w.visibility IN ('public', 'private') THEN 1 END)::bigint as total_enabled_servers,
     COUNT(t.id) as total_toolsets
   FROM projects p
   LEFT JOIN toolsets t ON p.id = t.project_id AND t.deleted = false
+  LEFT JOIN mcp_servers w ON w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
   GROUP BY p.organization_id
 ),
 tool_metrics AS (
@@ -1574,8 +1359,22 @@ SELECT
   , frozen.source_snapshot_usd AS frozen_snapshot_usd
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
-  invoice.service_period_start,
-  invoice.service_period_end - interval '1 day',
+  GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
   interval '1 day'
 ) AS generated(source_timestamp)
 CROSS JOIN unnest($1::text[]) AS billable(key_type)
@@ -1633,6 +1432,69 @@ func (q *Queries) ListOpenRouterInvoiceSourceDays(ctx context.Context, arg ListO
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsForToolsetIndexing = `-- name: ListProjectsForToolsetIndexing :many
+SELECT t.project_id
+FROM toolsets t
+JOIN projects p ON p.id = t.project_id
+    AND p.organization_id = t.organization_id
+    AND p.deleted IS FALSE
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE t.deleted IS FALSE
+  -- Only a toolset whose canonical wrapper serves it is hosted.
+  AND EXISTS (
+      SELECT 1
+      FROM mcp_servers w
+      WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+        AND w.visibility IN ('public', 'private')
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM openrouter_api_keys k
+      WHERE k.organization_id = t.organization_id
+        AND k.key_type = 'chat'
+        AND k.deleted IS FALSE
+        AND COALESCE(cardinality(k.disable_causes) > 0, k.disabled)
+  )
+  AND COALESCE((
+      SELECT cardinality(tv.tool_urns)
+      FROM toolset_versions tv
+      WHERE tv.toolset_id = t.id
+        AND tv.deleted IS FALSE
+      ORDER BY tv.version DESC
+      LIMIT 1
+  ), 0) > 0
+GROUP BY t.project_id
+ORDER BY hashtextextended(t.project_id::text, $1), t.project_id
+LIMIT $2
+`
+
+type ListProjectsForToolsetIndexingParams struct {
+	RotationSeed int64
+	ProjectLimit int32
+}
+
+// Choose a rotating, bounded project page before evaluating deployment and
+// embedding state for individual toolsets.
+func (q *Queries) ListProjectsForToolsetIndexing(ctx context.Context, arg ListProjectsForToolsetIndexingParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsForToolsetIndexing, arg.RotationSeed, arg.ProjectLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1721,8 +1583,22 @@ WHERE invoice.organization_id IS NOT NULL
     EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest($1::text[]) AS billable(key_type)
@@ -1739,8 +1615,22 @@ WHERE invoice.organization_id IS NOT NULL
     OR EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest($1::text[]) AS billable(key_type)
@@ -1758,16 +1648,13 @@ WHERE invoice.organization_id IS NOT NULL
       SELECT 1
       FROM stripe_invoice_allocations allocation
       WHERE allocation.organization_id = invoice.organization_id
+        AND allocation.source_kind = 'openrouter_daily_spend'
         AND (
           allocation.delivery_state IN ('pending', 'ambiguous')
           OR (
             allocation.amount_usd > 0
             AND allocation.destination_invoice_id IS NULL
             AND allocation.original_invoice_id IS NOT NULL
-          )
-          OR (
-            allocation.source_kind = 'tum_cycle'
-            AND allocation.original_invoice_id IS NULL
           )
         )
     )
@@ -1819,8 +1706,22 @@ WHERE invoice.organization_id = $1
     EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest($2::text[]) AS billable(key_type)
@@ -1837,8 +1738,22 @@ WHERE invoice.organization_id = $1
     OR EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest($2::text[]) AS billable(key_type)
@@ -1856,6 +1771,7 @@ WHERE invoice.organization_id = $1
       SELECT 1
       FROM stripe_invoice_allocations allocation
       WHERE allocation.organization_id = invoice.organization_id
+        AND allocation.source_kind = 'openrouter_daily_spend'
         AND (
           allocation.original_invoice_id = invoice.stripe_invoice_id
           OR allocation.destination_invoice_id = invoice.stripe_invoice_id
@@ -1864,12 +1780,6 @@ WHERE invoice.organization_id = $1
             AND allocation.amount_usd > 0
             AND allocation.destination_invoice_id IS NULL
             AND allocation.original_invoice_id IS NOT NULL
-          )
-          OR (
-            allocation.source_kind = 'tum_cycle'
-            AND allocation.original_invoice_id IS NULL
-            AND allocation.source_period_start = invoice.service_period_start
-            AND allocation.source_period_end = invoice.service_period_end
           )
         )
     )
@@ -1923,11 +1833,325 @@ func (q *Queries) ListStripeInvoicesForOpenRouterBilling(ctx context.Context, ar
 	return items, nil
 }
 
+const listTenantDimensionOrganizations = `-- name: ListTenantDimensionOrganizations :many
+SELECT
+    om.id,
+    om.slug,
+    om.gram_account_type AS account_type,
+    om.workos_id,
+    om.workos_updated_at,
+    om.webhooks_enabled,
+    om.scim_enabled,
+    om.sso_enabled,
+    om.whitelisted,
+    om.free_trial_started_at,
+    om.free_trial_ends_at,
+    t.tier AS trial_tier,
+    t.ends_at AS trial_ends_at,
+    t.converted_at AS trial_converted_at,
+    t.demoted_at AS trial_demoted_at,
+    t.created_at AS trial_created_at,
+    t.updated_at AS trial_updated_at,
+    om.created_at,
+    om.updated_at,
+    om.disabled_at
+FROM organization_metadata om
+LEFT JOIN trials t ON t.organization_id = om.id
+WHERE EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.organization_id = om.id
+)
+ORDER BY om.id
+`
+
+type ListTenantDimensionOrganizationsRow struct {
+	ID                 string
+	Slug               string
+	AccountType        string
+	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WebhooksEnabled    pgtype.Bool
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	TrialTier          pgtype.Text
+	TrialEndsAt        pgtype.Timestamptz
+	TrialConvertedAt   pgtype.Timestamptz
+	TrialDemotedAt     pgtype.Timestamptz
+	TrialCreatedAt     pgtype.Timestamptz
+	TrialUpdatedAt     pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
+// Full reporting projection for ClickHouse organizations that own at least
+// one project. The caller runs this and ListTenantDimensionProjects in one
+// repeatable-read transaction so both generations come from one source
+// snapshot.
+func (q *Queries) ListTenantDimensionOrganizations(ctx context.Context) ([]ListTenantDimensionOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, listTenantDimensionOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantDimensionOrganizationsRow
+	for rows.Next() {
+		var i ListTenantDimensionOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.AccountType,
+			&i.WorkosID,
+			&i.WorkosUpdatedAt,
+			&i.WebhooksEnabled,
+			&i.ScimEnabled,
+			&i.SsoEnabled,
+			&i.Whitelisted,
+			&i.FreeTrialStartedAt,
+			&i.FreeTrialEndsAt,
+			&i.TrialTier,
+			&i.TrialEndsAt,
+			&i.TrialConvertedAt,
+			&i.TrialDemotedAt,
+			&i.TrialCreatedAt,
+			&i.TrialUpdatedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DisabledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTenantDimensionProjects = `-- name: ListTenantDimensionProjects :many
+SELECT
+    id,
+    organization_id,
+    slug,
+    created_at,
+    updated_at,
+    deleted_at
+FROM projects
+ORDER BY organization_id, id
+`
+
+type ListTenantDimensionProjectsRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Slug           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+}
+
+// Includes soft-deleted projects so retained ClickHouse facts keep their
+// human-readable dimension and reports can choose lifecycle semantics.
+func (q *Queries) ListTenantDimensionProjects(ctx context.Context) ([]ListTenantDimensionProjectsRow, error) {
+	rows, err := q.db.Query(ctx, listTenantDimensionProjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantDimensionProjectsRow
+	for rows.Next() {
+		var i ListTenantDimensionProjectsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Slug,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolsetsForIndexing = `-- name: ListToolsetsForIndexing :many
+WITH latest_toolsets AS (
+    SELECT
+        t.id,
+        t.project_id,
+        t.slug,
+        tv.version,
+        tv.tool_urns
+    FROM toolsets t
+    JOIN projects p ON p.id = t.project_id
+        AND p.organization_id = t.organization_id
+        AND p.deleted IS FALSE
+    JOIN organization_metadata om ON om.id = p.organization_id
+    JOIN LATERAL (
+        SELECT version, tool_urns
+        FROM toolset_versions
+        WHERE toolset_id = t.id
+          AND deleted IS FALSE
+        ORDER BY version DESC
+        LIMIT 1
+    ) tv ON TRUE
+    WHERE t.deleted IS FALSE
+      -- Only a toolset whose canonical wrapper serves it is hosted.
+      AND EXISTS (
+          SELECT 1
+          FROM mcp_servers w
+          WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+            AND w.visibility IN ('public', 'private')
+      )
+      AND NOT EXISTS (
+          SELECT 1
+          FROM openrouter_api_keys k
+          WHERE k.organization_id = t.organization_id
+            AND k.key_type = 'chat'
+            AND k.deleted IS FALSE
+            AND COALESCE(cardinality(k.disable_causes) > 0, k.disabled)
+      )
+      AND t.project_id = ANY($3::uuid[])
+      AND cardinality(tv.tool_urns) > 0
+), candidates AS (
+    SELECT
+        t.id,
+        t.project_id,
+        t.slug,
+        t.version,
+        d.id AS deployment_id,
+        e.indexed,
+        t.tool_urns
+    FROM latest_toolsets t
+    JOIN LATERAL (
+        SELECT deployments.id, deployments.created_at
+        FROM deployments
+        WHERE deployments.project_id = t.project_id
+          AND EXISTS (
+              SELECT 1
+              FROM deployment_statuses
+              WHERE deployment_statuses.deployment_id = deployments.id
+                AND deployment_statuses.status = 'completed'
+          )
+        ORDER BY deployments.seq DESC
+        LIMIT 1
+    ) d ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT TRUE AS indexed
+        FROM toolset_embeddings
+        WHERE toolset_id = t.id
+          AND toolset_version = t.version
+          AND entry_key LIKE 'tools:%'
+          AND payload ->> '_gramIndexDeploymentId' = d.id::text
+          AND deleted IS FALSE
+        LIMIT 1
+    ) e ON TRUE
+)
+SELECT
+    candidates.project_id,
+    candidates.id AS toolset_id,
+    candidates.slug,
+    candidates.version AS toolset_version,
+    candidates.deployment_id
+FROM candidates
+WHERE candidates.indexed IS NULL
+  AND (
+      -- Keep the deployment id as the leading index condition on
+      -- http_tool_definitions_deployment_tool_urn_idx. Folding the packaged
+      -- deployments into an OR turns the deployment match into a post-filter
+      -- and walks the whole index for every candidate.
+      EXISTS (
+          SELECT 1
+          FROM http_tool_definitions definitions
+          WHERE definitions.deployment_id = candidates.deployment_id
+            AND definitions.tool_urn = ANY(candidates.tool_urns)
+            AND definitions.deleted IS FALSE
+      )
+      OR EXISTS (
+          SELECT 1
+          FROM deployments_packages
+          JOIN package_versions
+            ON package_versions.id = deployments_packages.version_id
+          JOIN http_tool_definitions definitions
+            ON definitions.deployment_id = package_versions.deployment_id
+          WHERE deployments_packages.deployment_id = candidates.deployment_id
+            AND definitions.tool_urn = ANY(candidates.tool_urns)
+            AND definitions.deleted IS FALSE
+      )
+      OR EXISTS (
+          SELECT 1
+          FROM function_tool_definitions definitions
+          WHERE definitions.tool_urn = ANY(candidates.tool_urns)
+            AND definitions.deployment_id = candidates.deployment_id
+            AND definitions.deleted IS FALSE
+      )
+  )
+ORDER BY hashtextextended(candidates.id::text, $1), candidates.id
+LIMIT $2
+`
+
+type ListToolsetsForIndexingParams struct {
+	RotationSeed int64
+	ScanLimit    int32
+	ProjectIds   []uuid.UUID
+}
+
+type ListToolsetsForIndexingRow struct {
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
+	Slug           string
+	ToolsetVersion int64
+	DeploymentID   uuid.UUID
+}
+
+// MCP requests can opt any enabled toolset into dynamic mode through the
+// Gram-Mode header, regardless of its stored selection mode.
+// Toolsets without a currently resolvable tool need no embeddings. Toolsets
+// containing proxy tools are excluded because those tools cannot be embedded
+// by the current RAG indexer.
+// Rotate the bounded scan each tick so already-running permanent-failure
+// workflows cannot remain at the front and starve the rest of the backlog.
+func (q *Queries) ListToolsetsForIndexing(ctx context.Context, arg ListToolsetsForIndexingParams) ([]ListToolsetsForIndexingRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetsForIndexing, arg.RotationSeed, arg.ScanLimit, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetsForIndexingRow
+	for rows.Next() {
+		var i ListToolsetsForIndexingRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ToolsetID,
+			&i.Slug,
+			&i.ToolsetVersion,
+			&i.DeploymentID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWeeklyUsageSummaryTargets = `-- name: ListWeeklyUsageSummaryTargets :many
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,
     om.slug AS organization_slug,
+    om.default_host,
     om.gram_account_type,
     bm.alert_email,
     bm.billing_cycle_anchor_day
@@ -1945,16 +2169,17 @@ type ListWeeklyUsageSummaryTargetsRow struct {
 	OrganizationID        string
 	OrganizationName      string
 	OrganizationSlug      string
+	DefaultHost           pgtype.Text
 	GramAccountType       string
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
 }
 
-// Organizations that receive the weekly tokens-under-management usage
-// summary email: enabled enterprise organizations with an explicit billing
-// alert email and enabled PAYG organizations (whose fallback audience is
-// resolved by the activity). The anchor day determines the billing cycle
-// window; the slug builds the billing page link.
+// Organizations that receive the weekly metered usage summary email: enabled
+// enterprise organizations with an explicit billing alert email and enabled
+// PAYG organizations (whose fallback audience is resolved by the activity).
+// The anchor day determines the billing-cycle windows; the slug and default
+// host build the billing page link.
 func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeeklyUsageSummaryTargetsRow, error) {
 	rows, err := q.db.Query(ctx, listWeeklyUsageSummaryTargets)
 	if err != nil {
@@ -1968,6 +2193,7 @@ func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeek
 			&i.OrganizationID,
 			&i.OrganizationName,
 			&i.OrganizationSlug,
+			&i.DefaultHost,
 			&i.GramAccountType,
 			&i.AlertEmail,
 			&i.BillingCycleAnchorDay,
@@ -1980,72 +2206,6 @@ func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeek
 		return nil, err
 	}
 	return items, nil
-}
-
-const markOutboxRelayDeadLettered = `-- name: MarkOutboxRelayDeadLettered :exec
-INSERT INTO outbox_relays (outbox_id, attempts, last_error, dead_lettered)
-VALUES ($1, 1, $2, TRUE)
-ON CONFLICT (outbox_id) DO UPDATE SET
-    attempts = outbox_relays.attempts + 1,
-    last_error = EXCLUDED.last_error,
-    dead_lettered = TRUE,
-    updated_at = clock_timestamp()
-`
-
-type MarkOutboxRelayDeadLetteredParams struct {
-	OutboxID  int64
-	LastError pgtype.Text
-}
-
-// Permanently parks a row after exceeding the retry budget. The pending
-// partial index excludes dead_lettered rows so they will not be re-fetched.
-func (q *Queries) MarkOutboxRelayDeadLettered(ctx context.Context, arg MarkOutboxRelayDeadLetteredParams) error {
-	_, err := q.db.Exec(ctx, markOutboxRelayDeadLettered, arg.OutboxID, arg.LastError)
-	return err
-}
-
-const markOutboxRelayFailed = `-- name: MarkOutboxRelayFailed :exec
-INSERT INTO outbox_relays (outbox_id, attempts, last_error, retry_after)
-VALUES ($1, 1, $2, $3)
-ON CONFLICT (outbox_id) DO UPDATE SET
-    attempts = outbox_relays.attempts + 1,
-    last_error = EXCLUDED.last_error,
-    retry_after = EXCLUDED.retry_after,
-    updated_at = clock_timestamp()
-`
-
-type MarkOutboxRelayFailedParams struct {
-	OutboxID   int64
-	LastError  pgtype.Text
-	RetryAfter pgtype.Timestamptz
-}
-
-// Records a failed delivery attempt; the row remains pending for retry.
-func (q *Queries) MarkOutboxRelayFailed(ctx context.Context, arg MarkOutboxRelayFailedParams) error {
-	_, err := q.db.Exec(ctx, markOutboxRelayFailed, arg.OutboxID, arg.LastError, arg.RetryAfter)
-	return err
-}
-
-const markOutboxRelayProcessed = `-- name: MarkOutboxRelayProcessed :exec
-INSERT INTO outbox_relays (outbox_id, processed_at, svix_message_id, attempts, last_error)
-VALUES ($1, clock_timestamp(), $2, 1, NULL)
-ON CONFLICT (outbox_id) DO UPDATE SET
-    processed_at = clock_timestamp(),
-    svix_message_id = EXCLUDED.svix_message_id,
-    attempts = outbox_relays.attempts + 1,
-    last_error = NULL,
-    updated_at = clock_timestamp()
-`
-
-type MarkOutboxRelayProcessedParams struct {
-	OutboxID      int64
-	SvixMessageID pgtype.Text
-}
-
-// Marks a relay as successfully delivered to Svix.
-func (q *Queries) MarkOutboxRelayProcessed(ctx context.Context, arg MarkOutboxRelayProcessedParams) error {
-	_, err := q.db.Exec(ctx, markOutboxRelayProcessed, arg.OutboxID, arg.SvixMessageID)
-	return err
 }
 
 const markPublishOutboxFailed = `-- name: MarkPublishOutboxFailed :exec

@@ -17,6 +17,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/ai_integrations"
 	srv "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/server"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -24,10 +25,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -39,7 +41,10 @@ type Service struct {
 	authz        *authz.Engine
 	audit        *audit.Logger
 	store        *Store
+	credentials  *CredentialVerifier
 	configPoller ConfigPoller
+	// newGeminiClient builds the Vault client Gemini setup uses; tests stub it.
+	newGeminiClient func(geminivault.Config) (geminiSetupClient, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -56,7 +61,8 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	encryptionClient *encryption.Client,
+	keys *aiproviderkeys.Keys,
+	guardianPolicy *guardian.Policy,
 	configPoller ConfigPoller,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("aiintegrations.api"))
@@ -67,8 +73,12 @@ func NewService(
 		auth:         auth.New(logger, db, sessions, authzEngine),
 		authz:        authzEngine,
 		audit:        auditLogger,
-		store:        NewStore(logger, db, encryptionClient),
+		store:        NewStore(logger, db, keys),
+		credentials:  NewCredentialVerifier(logger, guardianPolicy),
 		configPoller: configPoller,
+		newGeminiClient: func(cfg geminivault.Config) (geminiSetupClient, error) {
+			return geminivault.NewClient(cfg, guardianPolicy)
+		},
 	}
 }
 
@@ -91,7 +101,7 @@ func (s *Service) GetConfig(ctx context.Context, payload *gen.GetConfigPayload) 
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -115,7 +125,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -149,6 +159,32 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	externalOrgChanged := beforeRow != nil &&
 		conv.PtrValOr(externalOrganizationID, "") != conv.PtrValOr(before.ExternalOrganizationID, "")
 
+	settings := ProviderSettings{DelegatedUser: "", OrgUnitID: "", OrgUnitPath: ""}
+	orgUnitChanged := false
+	if provider == ProviderGeminiCompliance {
+		var beforeConfig *Config
+		if beforeRow != nil {
+			beforeConfig = &before
+		}
+		setup, err := s.prepareGemini(ctx, geminiSetupRequest{
+			APIKey:         apiKey,
+			APIKeySupplied: apiKeySupplied,
+			DelegatedUser:  payload.DelegatedUser,
+			OrgUnitID:      payload.OrgUnitID,
+			MatterID:       payload.ExternalOrganizationID,
+			Before:         beforeConfig,
+			Reenabled:      payload.Enabled && beforeRow != nil && !before.Enabled,
+		})
+		if err != nil {
+			return nil, err
+		}
+		settings = setup.Settings
+		externalOrganizationID = &setup.MatterID
+		externalOrgChanged = beforeRow != nil && setup.MatterID != conv.PtrValOr(before.ExternalOrganizationID, "")
+		// A new export scope needs its own backfill.
+		orgUnitChanged = beforeRow != nil && setup.Settings.OrgUnitID != before.Settings.OrgUnitID
+	}
+
 	// billing_mode is admin-declared and independent of the API key. Omit it to
 	// preserve the existing value (settings-only updates and key rotations must
 	// not wipe a declared mode).
@@ -161,11 +197,32 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		billingMode = conv.PtrEmpty(before.BillingMode)
 	}
 
+	// Ask the provider before writing: a refused key never reaches the
+	// database, so nothing is enqueued for it and the user reads the
+	// provider's own explanation now rather than in a failed poll later.
+	// Only saves that would start polling on an unanswered credential need
+	// this — a new or changed key or scope, or re-enabling. A billing mode
+	// edit or a disable reuses the answer we have.
+	credentialsChanged := beforeRow == nil || apiKeySupplied || externalOrgChanged
+	reenabled := beforeRow != nil && !before.Enabled
+	rejections, err := s.verifyCredentials(ctx, provider, Credentials{
+		Provider:               provider,
+		APIKey:                 apiKey,
+		ExternalOrganizationID: externalOrganizationID,
+	}, provider != ProviderGeminiCompliance && payload.Enabled && (credentialsChanged || reenabled))
+	if err != nil {
+		return nil, err
+	}
+	// Feeds are entitled separately, so a partial refusal keeps the save. The
+	// refusals travel into the upsert transaction, which pauses just those
+	// schedules instead of letting them rediscover the answer over
+	// AutoPauseAfterRejectedPolls failed polls.
+
 	// Start the watermark one lookback period in the past so the first poll
 	// backfills usage emitted just before the key was configured.
 	watermark := time.Now().UTC().Add(-initialPollLookbackForProvider(provider))
 	resetPollWatermarkAt := conv.Ternary(
-		beforeRow != nil && (apiKeySupplied || externalOrgChanged),
+		beforeRow != nil && (apiKeySupplied || externalOrgChanged || orgUnitChanged),
 		&watermark,
 		nil,
 	)
@@ -176,7 +233,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, externalOrganizationID, billingMode, resetPollWatermarkAt)
+	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, externalOrganizationID, settings, billingMode, resetPollWatermarkAt, rejections)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +281,7 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -276,7 +333,7 @@ func (s *Service) ListSchedules(ctx context.Context, payload *gen.ListSchedulesP
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -327,7 +384,7 @@ func (s *Service) SetScheduleEnabled(ctx context.Context, payload *gen.SetSchedu
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -375,7 +432,7 @@ func (s *Service) RetrySchedule(ctx context.Context, payload *gen.RetryScheduleP
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -515,6 +572,22 @@ func snapshotFromConfig(cfg Config) audit.AIIntegrationSnapshot {
 	}
 }
 
+// verifyCredentials fails the save when every schedule is refused: nothing
+// about the integration would work, so storing the key would only start a
+// poll loop that rediscovers the refusal. A partial refusal is returned
+// instead, for the caller to pause those schedules.
+func (s *Service) verifyCredentials(ctx context.Context, provider string, creds Credentials, verify bool) ([]ScheduleRejection, error) {
+	if s.credentials == nil || !verify {
+		return nil, nil
+	}
+
+	rejections := s.credentials.Verify(ctx, creds)
+	if len(rejections) > 0 && len(rejections) == len(syncSchedulesFor(provider)) {
+		return nil, rejections[0].Err
+	}
+	return rejections, nil
+}
+
 func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
 	if s.configPoller == nil {
 		return nil
@@ -525,17 +598,17 @@ func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, c
 		return err
 	}
 	syncIDsBySchedule := make(map[string]uuid.UUID, len(schedules))
-	disabledBySchedule := make(map[string]bool, len(schedules))
+	pausedBySchedule := make(map[string]bool, len(schedules))
 	for _, syncSchedule := range schedules {
 		syncIDsBySchedule[syncSchedule.Schedule] = syncSchedule.ID
-		disabledBySchedule[syncSchedule.Schedule] = !syncSchedule.DisabledAt.IsZero()
+		pausedBySchedule[syncSchedule.Schedule] = !syncSchedule.DisabledAt.IsZero() || !syncSchedule.AutoPausedAt.IsZero()
 	}
 
 	var startErr error
 	for _, syncSchedule := range syncSchedulesFor(provider) {
-		if disabledBySchedule[syncSchedule.schedule] {
-			// The user explicitly paused this schedule; a config save must not
-			// restart it.
+		if pausedBySchedule[syncSchedule.schedule] {
+			// Paused by the user, or by this save over refused credentials.
+			// Both outrank the save's implicit "start polling now".
 			continue
 		}
 		syncID, ok := syncIDsBySchedule[syncSchedule.schedule]
@@ -560,6 +633,9 @@ func emptyView(orgID, provider string) *gen.AIIntegrationConfig {
 		Provider:               provider,
 		ProjectID:              nil,
 		ExternalOrganizationID: nil,
+		DelegatedUser:          nil,
+		OrgUnitID:              nil,
+		OrgUnitPath:            nil,
 		BillingMode:            nil,
 		Enabled:                false,
 		HasAPIKey:              false,
@@ -604,6 +680,9 @@ func buildView(cfg Config, idValue uuid.UUID) *gen.AIIntegrationConfig {
 		Provider:               cfg.Provider,
 		ProjectID:              &projectID,
 		ExternalOrganizationID: conv.PtrValOrEmpty(&cfg.ExternalOrganizationID, nil),
+		DelegatedUser:          conv.PtrEmpty(cfg.Settings.DelegatedUser),
+		OrgUnitID:              conv.PtrEmpty(cfg.Settings.OrgUnitID),
+		OrgUnitPath:            conv.PtrEmpty(cfg.Settings.OrgUnitPath),
 		BillingMode:            conv.PtrEmpty(cfg.BillingMode),
 		Enabled:                cfg.Enabled,
 		HasAPIKey:              cfg.APIKey != "",

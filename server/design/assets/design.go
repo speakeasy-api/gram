@@ -7,7 +7,7 @@ import (
 )
 
 var _ = Service("assets", func() {
-	Description("Manages assets used by Gram projects.")
+	Description("Manages assets used by Speakeasy projects.")
 	shared.DeclareErrorResponses()
 
 	Security(security.ByKey, security.ProjectSlug, func() {
@@ -16,7 +16,7 @@ var _ = Service("assets", func() {
 	Security(security.Session, security.ProjectSlug)
 
 	Method("serveImage", func() {
-		Description("Serve an image from Gram.")
+		Description("Serve an image from Speakeasy.")
 
 		Payload(ServeImageForm)
 		Result(ServeImageResult)
@@ -34,6 +34,9 @@ var _ = Service("assets", func() {
 				Header("content_length:Content-Length")
 				Header("last_modified:Last-Modified")
 				Header("access_control_allow_origin:Access-Control-Allow-Origin")
+				Header("cross_origin_resource_policy:Cross-Origin-Resource-Policy")
+				Header("content_security_policy:Content-Security-Policy")
+				Header("x_content_type_options:X-Content-Type-Options")
 			})
 
 			SkipResponseBodyEncodeDecode()
@@ -46,7 +49,7 @@ var _ = Service("assets", func() {
 
 	Method("uploadImage", func() {
 
-		Description("Upload an image to Gram.")
+		Description("Upload an image to Speakeasy.")
 
 		Payload(UploadImageForm)
 
@@ -68,7 +71,7 @@ var _ = Service("assets", func() {
 	})
 
 	Method("uploadFunctions", func() {
-		Description("Upload functions to Gram.")
+		Description("Upload functions to Speakeasy.")
 
 		Payload(UploadFunctionsForm)
 
@@ -90,7 +93,7 @@ var _ = Service("assets", func() {
 	})
 
 	Method("uploadOpenAPIv3", func() {
-		Description("Upload an OpenAPI v3 document to Gram.")
+		Description("Upload an OpenAPI v3 document to Speakeasy.")
 
 		Payload(UploadOpenAPIv3Form)
 
@@ -112,7 +115,7 @@ var _ = Service("assets", func() {
 	})
 
 	Method("fetchImageFromURL", func() {
-		Description("Fetch an image from a URL and upload it to Gram as an image asset.")
+		Description("Fetch an image from a URL and upload it to Speakeasy as an image asset.")
 
 		Payload(FetchImageFromURLForm)
 
@@ -131,7 +134,7 @@ var _ = Service("assets", func() {
 	})
 
 	Method("fetchOpenAPIv3FromURL", func() {
-		Description("Fetch an OpenAPI v3 document from a URL and upload it to Gram.")
+		Description("Fetch an OpenAPI v3 document from a URL and upload it to Speakeasy.")
 
 		Payload(FetchOpenAPIv3FromURLForm)
 
@@ -150,7 +153,7 @@ var _ = Service("assets", func() {
 	})
 
 	Method("serveOpenAPIv3", func() {
-		Description("Serve an OpenAPIv3 asset from Gram.")
+		Description("Serve an OpenAPIv3 asset from Speakeasy.")
 
 		Payload(ServeOpenAPIv3Form)
 		Result(ServeOpenAPIv3Result)
@@ -181,7 +184,7 @@ var _ = Service("assets", func() {
 	})
 
 	Method("serveFunction", func() {
-		Description("Serve a Gram Functions asset from Gram.")
+		Description("Serve a Speakeasy Functions asset from Speakeasy.")
 
 		Payload(ServeFunctionForm)
 		Result(ServeFunctionResult)
@@ -234,7 +237,7 @@ var _ = Service("assets", func() {
 	})
 
 	Method("uploadChatAttachment", func() {
-		Description("Upload a chat attachment to Gram.")
+		Description("Upload a chat attachment to Speakeasy.")
 
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
@@ -263,7 +266,7 @@ var _ = Service("assets", func() {
 	})
 
 	Method("serveChatAttachment", func() {
-		Description("Serve a chat attachment from Gram.")
+		Description("Serve a chat attachment from Speakeasy.")
 
 		Payload(ServeChatAttachmentForm)
 		Result(ServeChatAttachmentResult)
@@ -281,6 +284,9 @@ var _ = Service("assets", func() {
 				Header("content_type:Content-Type")
 				Header("content_length:Content-Length")
 				Header("last_modified:Last-Modified")
+				Header("content_disposition:Content-Disposition")
+				Header("content_security_policy:Content-Security-Policy")
+				Header("x_content_type_options:X-Content-Type-Options")
 			})
 
 			security.ByKeyHeader()
@@ -336,6 +342,9 @@ var _ = Service("assets", func() {
 				Header("content_length:Content-Length")
 				Header("last_modified:Last-Modified")
 				Header("access_control_allow_origin:Access-Control-Allow-Origin")
+				Header("content_disposition:Content-Disposition")
+				Header("content_security_policy:Content-Security-Policy")
+				Header("x_content_type_options:X-Content-Type-Options")
 			})
 
 			SkipResponseBodyEncodeDecode()
@@ -360,12 +369,20 @@ var ServeImageForm = Type("ServeImageForm", func() {
 })
 
 var ServeImageResult = Type("ServeImageResult", func() {
-	Required("content_type", "content_length", "last_modified")
+	Required(
+		"content_type",
+		"content_length",
+		"last_modified",
+		"cross_origin_resource_policy",
+	)
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
 	Attribute("last_modified", String)
 	Attribute("access_control_allow_origin", String)
+	Attribute("cross_origin_resource_policy", String)
+	Attribute("content_security_policy", String)
+	Attribute("x_content_type_options", String)
 })
 
 var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {
@@ -390,7 +407,7 @@ var FetchOpenAPIv3FromURLForm = Type("FetchOpenAPIv3FromURLForm", func() {
 var UploadOpenAPIv3Result = Type("UploadOpenAPIv3Result", func() {
 	Required("asset")
 
-	Attribute("asset", Asset, "The asset entry that was created in Gram")
+	Attribute("asset", Asset, "The asset entry that was created in Speakeasy")
 })
 
 var FetchImageFromURLForm = Type("FetchImageFromURLForm", func() {
@@ -415,7 +432,7 @@ var UploadImageForm = Type("UploadImageForm", func() {
 var UploadImageResult = Type("UploadImageResult", func() {
 	Required("asset")
 
-	Attribute("asset", Asset, "The asset entry that was created in Gram")
+	Attribute("asset", Asset, "The asset entry that was created in Speakeasy")
 })
 
 var UploadFunctionsForm = Type("UploadFunctionsForm", func() {
@@ -431,7 +448,7 @@ var UploadFunctionsForm = Type("UploadFunctionsForm", func() {
 var UploadFunctionsResult = Type("UploadFunctionsResult", func() {
 	Required("asset")
 
-	Attribute("asset", Asset, "The asset entry that was created in Gram")
+	Attribute("asset", Asset, "The asset entry that was created in Speakeasy")
 })
 
 var ServeOpenAPIv3Form = Type("ServeOpenAPIv3Form", func() {
@@ -504,7 +521,7 @@ var UploadChatAttachmentForm = Type("UploadChatAttachmentForm", func() {
 var UploadChatAttachmentResult = Type("UploadChatAttachmentResult", func() {
 	Required("asset", "url")
 
-	Attribute("asset", Asset, "The asset entry that was created in Gram")
+	Attribute("asset", Asset, "The asset entry that was created in Speakeasy")
 	Attribute("url", String, "The URL to serve the chat attachment")
 })
 
@@ -519,11 +536,14 @@ var ServeChatAttachmentForm = Type("ServeChatAttachmentForm", func() {
 })
 
 var ServeChatAttachmentResult = Type("ServeChatAttachmentResult", func() {
-	Required("content_type", "content_length", "last_modified")
+	Required("content_type", "content_length", "last_modified", "content_disposition", "content_security_policy", "x_content_type_options")
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
 	Attribute("last_modified", String)
+	Attribute("content_disposition", String)
+	Attribute("content_security_policy", String)
+	Attribute("x_content_type_options", String)
 })
 
 var CreateSignedChatAttachmentURLForm = Type("CreateSignedChatAttachmentURLForm", func() {
@@ -555,10 +575,13 @@ var ServeChatAttachmentSignedForm = Type("ServeChatAttachmentSignedForm", func()
 })
 
 var ServeChatAttachmentSignedResult = Type("ServeChatAttachmentSignedResult", func() {
-	Required("content_type", "content_length", "last_modified")
+	Required("content_type", "content_length", "last_modified", "content_disposition", "content_security_policy", "x_content_type_options")
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
 	Attribute("last_modified", String)
 	Attribute("access_control_allow_origin", String)
+	Attribute("content_disposition", String)
+	Attribute("content_security_policy", String)
+	Attribute("x_content_type_options", String)
 })

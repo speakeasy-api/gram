@@ -17,16 +17,12 @@ type ExternalMCPServer struct {
 	Version string
 	// Description of what the server does
 	Description string
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string
 	// ID of the external MCP registry this server came from
 	RegistryID *string
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string
 	// Display name for the server
 	Title *string
 	// URL to the server's icon

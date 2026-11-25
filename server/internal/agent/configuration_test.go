@@ -55,7 +55,9 @@ func TestUpdateConfigurationPersistsAndDeliversOnPluginPoll(t *testing.T) {
 
 	beforePoll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
 	require.NoError(t, err)
-	require.Nil(t, beforePoll.Configuration)
+	require.NotNil(t, beforePoll.Configuration)
+	require.False(t, beforePoll.Configuration.IsConfigured)
+	require.Contains(t, beforePoll.Configuration.Config, "ai_scan")
 
 	beforeAuditCount, err := audittest.AuditLogCountByAction(
 		ctx,
@@ -99,7 +101,14 @@ func TestUpdateConfigurationPersistsAndDeliversOnPluginPoll(t *testing.T) {
 	afterPoll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
 	require.NoError(t, err)
 	require.NotNil(t, afterPoll.Configuration)
-	require.Equal(t, updated, afterPoll.Configuration)
+	require.True(t, afterPoll.Configuration.IsConfigured)
+	require.Equal(t, updated.SchemaVersion, afterPoll.Configuration.SchemaVersion)
+	require.Equal(t, updated.UpdatedAt, afterPoll.Configuration.UpdatedAt)
+	for key, value := range updated.Config {
+		require.Equal(t, value, afterPoll.Configuration.Config[key], "stored key %q must be delivered as saved", key)
+	}
+	require.Contains(t, afterPoll.Configuration.Config, "ai_scan")
+	require.NotEqual(t, updated.Etag, afterPoll.Configuration.Etag)
 	require.NotEqual(t, beforePoll.Etag, afterPoll.Etag, "remote configuration changes must invalidate the policy etag")
 }
 
@@ -140,6 +149,103 @@ func TestUpdateConfigurationRejectsInvalidPlatformLayer(t *testing.T) {
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)
 	require.Equal(t, oops.CodeInvalid, shareableErr.Code)
+}
+
+func TestUpdateConfigurationAcceptsAIScanInterval(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	updated, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+		Config: map[string]any{"ai_scan_interval_seconds": 21600},
+	})
+	require.NoError(t, err)
+	require.True(t, updated.IsConfigured)
+
+	// The setting flows to agents through the existing configuration blob on
+	// the plugin poll, like every other admin-saved key.
+	poll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
+	require.NoError(t, err)
+	require.NotNil(t, poll.Configuration)
+	require.EqualValues(t, 21600, poll.Configuration.Config["ai_scan_interval_seconds"])
+}
+
+func TestUpdateConfigurationRejectsInvalidAIScanInterval(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	for _, invalid := range []any{"six hours", 0, 59, 24*60*60 + 1, 1.5} {
+		_, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+			Config: map[string]any{"ai_scan_interval_seconds": invalid},
+		})
+		var shareableErr *oops.ShareableError
+		require.ErrorAs(t, err, &shareableErr, "value %v must be rejected", invalid)
+		require.Equal(t, oops.CodeInvalid, shareableErr.Code)
+	}
+}
+
+func TestUpdateConfigurationAcceptsDisableAIScan(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	_, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+		Config: map[string]any{"disable_ai_scan": true},
+	})
+	require.NoError(t, err)
+
+	poll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
+	require.NoError(t, err)
+	require.NotNil(t, poll.Configuration)
+	require.Equal(t, true, poll.Configuration.Config["disable_ai_scan"])
+
+	// It is a known key, so an update that omits it turns the scan back on.
+	updated, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+		Config: map[string]any{"sync_interval_seconds": 300},
+	})
+	require.NoError(t, err)
+	require.NotContains(t, updated.Config, "disable_ai_scan")
+}
+
+func TestUpdateConfigurationRejectsNonBooleanDisableSwitches(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	for _, key := range []string{"disable_ai_scan", "disable_crash_reports"} {
+		for _, invalid := range []any{"true", 1, nil} {
+			_, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+				Config: map[string]any{key: invalid},
+			})
+			var shareableErr *oops.ShareableError
+			require.ErrorAs(t, err, &shareableErr, "%s value %v must be rejected", key, invalid)
+			require.Equal(t, oops.CodeInvalid, shareableErr.Code)
+		}
+	}
+}
+
+func TestUpdateConfigurationAcceptsDisableCrashReports(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	_, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+		Config: map[string]any{"disable_crash_reports": true},
+	})
+	require.NoError(t, err)
+
+	poll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
+	require.NoError(t, err)
+	require.NotNil(t, poll.Configuration)
+	require.Equal(t, true, poll.Configuration.Config["disable_crash_reports"])
+
+	// A known key, so an update that omits it turns reports back on.
+	updated, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+		Config: map[string]any{"sync_interval_seconds": 300},
+	})
+	require.NoError(t, err)
+	require.NotContains(t, updated.Config, "disable_crash_reports")
 }
 
 func TestUpdateConfigurationPreservesStoredUnknownKeys(t *testing.T) {

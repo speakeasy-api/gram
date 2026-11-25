@@ -54,7 +54,11 @@ var registry = []toolFactory{
 		return platformslack.NewScheduleMessageTool(deps.SlackHTTPClient)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
-		return platformslack.NewSendMessageTool(deps.SlackHTTPClient)
+		var router platformslack.ThreadRouter
+		if deps.TriggerApp != nil {
+			router = deps.TriggerApp
+		}
+		return platformslack.NewSendMessageTool(deps.SlackHTTPClient, router)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewAddReactionTool(deps.SlackHTTPClient)
@@ -314,7 +318,7 @@ func ListTypedTools(
 		if urnPrefix != "" && !strings.HasPrefix(descriptor.ToolURN().String(), urnPrefix) {
 			continue
 		}
-		tools = append(tools, descriptor.ToTool(projectID))
+		tools = append(tools, DescriptorForContext(ctx, descriptor).ToTool(projectID))
 	}
 	for _, extra := range extras {
 		if extra.Executor == nil {
@@ -329,7 +333,7 @@ func ListTypedTools(
 		if urnPrefix != "" && !strings.HasPrefix(descriptor.ToolURN().String(), urnPrefix) {
 			continue
 		}
-		tools = append(tools, descriptor.ToTool(projectID))
+		tools = append(tools, DescriptorForContext(ctx, descriptor).ToTool(projectID))
 	}
 	return tools
 }
@@ -397,6 +401,10 @@ func FindToolEntries(toolURNs []string, extras ...ExternalTool) []*types.ToolEnt
 		entries = append(entries, descriptor.ToToolEntry())
 	}
 	return entries
+}
+
+func CountTools(toolURNs []string, extras ...ExternalTool) int {
+	return len(findToolDescriptors(toolURNs, extras...))
 }
 
 func FindTypedTools(projectID uuid.UUID, toolURNs []string, extras ...ExternalTool) []*types.Tool {

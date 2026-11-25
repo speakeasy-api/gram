@@ -1,12 +1,13 @@
+// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 import { Icon } from "../Icon";
-import { IconName } from "../Icon/names";
+import type { IconName } from "../Icon/names";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../Tooltip";
-import {
+import type {
   ButtonSize,
   ButtonVariant,
   ButtonContext,
@@ -163,6 +164,8 @@ const buttonVariants = cva(
           "border border-neutral-default bg-transparent text-btn-secondary hover:border-neutral-hover hover:bg-btn-secondary hover:text-btn-secondary-hover active:border-neutral-active active:bg-btn-secondary-hover active:text-btn-secondary-active disabled:border-neutral-disabled disabled:bg-transparent disabled:text-btn-secondary-disabled",
         tertiary:
           "bg-transparent text-btn-tertiary hover:bg-btn-secondary-hover hover:text-btn-tertiary-hover active:bg-btn-secondary-active active:text-btn-tertiary-active disabled:text-btn-tertiary-disabled",
+        success:
+          "bg-success-default text-white hover:bg-success-highlight hover:shadow-[0px_2px_1px_0px_rgba(255,255,255,0.08)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.25)_inset] active:bg-btn-success-active active:shadow-none disabled:bg-btn-primary-disabled disabled:text-btn-primary-disabled",
         "destructive-primary":
           "bg-btn-destructive text-btn-destructive-primary hover:bg-btn-destructive-hover hover:text-btn-destructive-primary-hover hover:shadow-[0px_2px_1px_0px_rgba(255,255,255,0.08)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.25)_inset] active:bg-btn-destructive-active active:text-btn-destructive-primary-active active:shadow-none disabled:bg-btn-destructive-disabled disabled:text-btn-destructive-primary-disabled",
         "destructive-secondary":
@@ -475,12 +478,29 @@ const BaseButton = React.forwardRef<HTMLButtonElement, BaseButtonProps>(
         return props.children;
       }
 
-      return React.Children.map(props.children, (child) => {
+      // Adjacent text runs ("Choose ({n})") form one label, not one flex
+      // item per run.
+      const result: React.ReactNode[] = [];
+      let text: Array<string | number> = [];
+      const flushText = () => {
+        if (text.length === 0) return;
+        result.push(
+          <ButtonText key={`button-text-${result.length}`}>
+            {text.join("")}
+          </ButtonText>,
+        );
+        text = [];
+      };
+      for (const child of React.Children.toArray(props.children)) {
         if (typeof child === "string" || typeof child === "number") {
-          return <ButtonText>{child}</ButtonText>;
+          text.push(child);
+        } else {
+          flushText();
+          result.push(child);
         }
-        return child;
-      });
+      }
+      flushText();
+      return result;
     }, [props.children, asChild]);
 
     return (
@@ -548,27 +568,30 @@ export interface ButtonProps
  */
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ icon, iconAfter = false, tooltip, href, children, ...props }, ref) => {
+    // Keyed: the icon sits in a list beside the caller's children, and only
+    // this component can name it.
     const iconElement = icon ? (
       iconAfter ? (
-        <ButtonRightIcon>
+        <ButtonRightIcon key="button-icon">
           <Icon name={icon} />
         </ButtonRightIcon>
       ) : (
-        <ButtonLeftIcon>
+        <ButtonLeftIcon key="button-icon">
           <Icon name={icon} />
         </ButtonLeftIcon>
       )
     ) : null;
 
-    const content = props.asChild ? (
-      children
-    ) : (
-      <>
-        {!iconAfter && iconElement}
-        {children}
-        {iconAfter && iconElement}
-      </>
-    );
+    // Keep compound children visible to BaseButton's validation and text
+    // wrapping. An icon-only button passes the icon through on its own: a
+    // one-element list would ask React for a key the caller cannot give.
+    const content = props.asChild
+      ? children
+      : React.Children.toArray([
+          !iconAfter && iconElement,
+          children,
+          iconAfter && iconElement,
+        ]);
 
     const button = (
       <BaseButton ref={ref} {...props} {...(href ? { asChild: true } : {})}>

@@ -1,11 +1,24 @@
 <!doctype html>
-<html lang="en" class="dark:scheme-dark">
+<!-- Browser translation mutates React-managed text nodes and can break DOM updates. -->
+<html lang="en" translate="no" class="dark:scheme-dark">
   <head>
     <meta charset="UTF-8" />
-    <!-- The SVG adapts to the browser color scheme on its own; the .ico is the
-         fallback for browsers that don't render SVG favicons. -->
+    <!-- Slack's link-preview proxy rejects SVG (HTTP 415) and then draws a
+         broken image beside the site name. The PNG listed first is an opaque
+         tile, so the mark stays visible on Slack's light and dark themes.
+         favicon.png is a black glyph on transparency and disappears in dark
+         mode. Browsers that support SVG favicons still select favicon.svg,
+         which adapts to the tab-strip color scheme; the .ico covers browsers
+         that support neither. -->
+    <link
+      rel="icon"
+      href="/external/sticker-logo.png"
+      type="image/png"
+      sizes="300x300"
+    />
+    <link rel="apple-touch-icon" href="/external/sticker-logo.png" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="alternate icon" href="/favicon.ico" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
 
     <!-- Apply the theme class before first paint to avoid a flash of the
          wrong theme on load. Mirrors App.tsx (key: "preferred-theme",
@@ -15,6 +28,11 @@
     <!-- Nothing on this host wants search indexing: the app is behind login
          and /shared/* pages are tokenized capability URLs. -->
     <meta name="robots" content="noindex, nofollow" />
+    <meta name="gram-admin-server-url" content="${GRAM_ADMIN_SERVER_URL}" />
+    <!-- Deployment-specific settings (telemetry, tunnel host, first-party
+         hosts, ...) as JSON, substituted at container start by
+         42-dashboard-config.sh. See src/lib/runtime-config.ts. -->
+    <meta name="gram-dashboard-config" content="${GRAM_DASHBOARD_CONFIG}" />
 
     <meta property="og:title" content="Speakeasy AI Control Plane" />
     <meta
@@ -30,6 +48,16 @@
     <meta property="og:site_name" content="Speakeasy" />
     <meta property="og:locale" content="en_US" />
 
+    <!-- Preview provenance, read by the Gutternote widget below, and
+         substituted by the container entrypoint at container start
+         (41-preview-runtime-values.sh) from the environment the deployment
+         supplies. These default to empty in the image, so any host whose
+         deployment does not set them renders blanks. Under `vite dev` the
+         entrypoint never runs and they stay as literal ${...} text. -->
+    <meta name="gutternote:branch" content="${GRAM_BRANCH}" />
+    <meta name="gutternote:commit" content="${GRAM_COMMIT_SHA}" />
+    <meta name="gutternote:pr" content="${GRAM_PR_NUMBER}" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -37,11 +65,6 @@
     <link
       rel="preconnect"
       href="https://browser-intake-datadoghq.com"
-      crossorigin
-    />
-    <link
-      rel="preconnect"
-      href="https://static.clairedefermat.com"
       crossorigin
     />
     <!-- Fonts live in src/fonts (not public/) so they build to hashed
@@ -76,5 +99,12 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Gutternote feedback widget, on PR previews only. Placed before </body>
+         as its docs require. The container entrypoint composes the whole tag
+         (41-preview-runtime-values.sh), so this expands to nothing at all
+         unless the deployment set both GRAM_IS_PREVIEW=true and a key — prod,
+         shared staging and local dev get no tag. -->
+    ${GRAM_GUTTERNOTE_SCRIPT}
   </body>
 </html>

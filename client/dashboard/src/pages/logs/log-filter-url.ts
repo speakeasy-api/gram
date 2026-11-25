@@ -24,6 +24,17 @@ const VALID_OPS = new Set<string>(Object.values(Op));
  * Parse the `af` URL param back into ActiveLogFilter[].
  * Returns an empty array for null/empty input.
  */
+// A pasted or truncated link can carry an invalid percent escape, which
+// decodeURIComponent throws on. One bad chip should drop out of the URL, not
+// take the page down on render.
+function safeDecode(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
 export function parseFilters(param: string | null): ActiveLogFilter[] {
   if (!param) return [];
 
@@ -34,7 +45,8 @@ export function parseFilters(param: string | null): ActiveLogFilter[] {
       const firstColon = segment.indexOf(":");
       if (firstColon === -1) return null;
 
-      const path = decodeURIComponent(segment.slice(0, firstColon));
+      const path = safeDecode(segment.slice(0, firstColon));
+      if (path === null) return null;
       const rest = segment.slice(firstColon + 1);
 
       const secondColon = rest.indexOf(":");
@@ -45,7 +57,8 @@ export function parseFilters(param: string | null): ActiveLogFilter[] {
         op = rest;
       } else {
         op = rest.slice(0, secondColon);
-        value = decodeURIComponent(rest.slice(secondColon + 1));
+        value = safeDecode(rest.slice(secondColon + 1)) ?? undefined;
+        if (value === undefined) return null;
       }
 
       if (!path || !VALID_OPS.has(op)) return null;

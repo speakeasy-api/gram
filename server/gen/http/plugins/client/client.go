@@ -18,6 +18,14 @@ import (
 
 // Client lists the plugins service endpoint HTTP clients.
 type Client struct {
+	// ListDistributionPlugins Doer is the HTTP client used to make requests to the
+	// listDistributionPlugins endpoint.
+	ListDistributionPluginsDoer goahttp.Doer
+
+	// GetDistributionPlugin Doer is the HTTP client used to make requests to the
+	// getDistributionPlugin endpoint.
+	GetDistributionPluginDoer goahttp.Doer
+
 	// ListPlugins Doer is the HTTP client used to make requests to the listPlugins
 	// endpoint.
 	ListPluginsDoer goahttp.Doer
@@ -61,6 +69,10 @@ type Client struct {
 	// DownloadPluginPackage Doer is the HTTP client used to make requests to the
 	// downloadPluginPackage endpoint.
 	DownloadPluginPackageDoer goahttp.Doer
+
+	// RotateObservabilityCredential Doer is the HTTP client used to make requests
+	// to the rotateObservabilityCredential endpoint.
+	RotateObservabilityCredentialDoer goahttp.Doer
 
 	// DownloadObservabilityPlugin Doer is the HTTP client used to make requests to
 	// the downloadObservabilityPlugin endpoint.
@@ -106,28 +118,79 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListPluginsDoer:                 doer,
-		GetPluginDoer:                   doer,
-		CreatePluginDoer:                doer,
-		UpdatePluginDoer:                doer,
-		DeletePluginDoer:                doer,
-		AddPluginServerDoer:             doer,
-		UpdatePluginServerDoer:          doer,
-		RemovePluginServerDoer:          doer,
-		SetPluginAssignmentsDoer:        doer,
-		ListAudiencesDoer:               doer,
-		DownloadPluginPackageDoer:       doer,
-		DownloadObservabilityPluginDoer: doer,
-		DownloadCodexInstallScriptDoer:  doer,
-		GetPublishStatusDoer:            doer,
-		PublishPluginsDoer:              doer,
-		GetMarketplaceSettingsDoer:      doer,
-		UpdateMarketplaceSettingsDoer:   doer,
-		RestoreResponseBody:             restoreBody,
-		scheme:                          scheme,
-		host:                            host,
-		decoder:                         dec,
-		encoder:                         enc,
+		ListDistributionPluginsDoer:       doer,
+		GetDistributionPluginDoer:         doer,
+		ListPluginsDoer:                   doer,
+		GetPluginDoer:                     doer,
+		CreatePluginDoer:                  doer,
+		UpdatePluginDoer:                  doer,
+		DeletePluginDoer:                  doer,
+		AddPluginServerDoer:               doer,
+		UpdatePluginServerDoer:            doer,
+		RemovePluginServerDoer:            doer,
+		SetPluginAssignmentsDoer:          doer,
+		ListAudiencesDoer:                 doer,
+		DownloadPluginPackageDoer:         doer,
+		RotateObservabilityCredentialDoer: doer,
+		DownloadObservabilityPluginDoer:   doer,
+		DownloadCodexInstallScriptDoer:    doer,
+		GetPublishStatusDoer:              doer,
+		PublishPluginsDoer:                doer,
+		GetMarketplaceSettingsDoer:        doer,
+		UpdateMarketplaceSettingsDoer:     doer,
+		RestoreResponseBody:               restoreBody,
+		scheme:                            scheme,
+		host:                              host,
+		decoder:                           dec,
+		encoder:                           enc,
+	}
+}
+
+// ListDistributionPlugins returns an endpoint that makes HTTP requests to the
+// plugins service listDistributionPlugins server.
+func (c *Client) ListDistributionPlugins() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDistributionPluginsRequest(c.encoder)
+		decodeResponse = DecodeListDistributionPluginsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDistributionPluginsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDistributionPluginsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "listDistributionPlugins", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetDistributionPlugin returns an endpoint that makes HTTP requests to the
+// plugins service getDistributionPlugin server.
+func (c *Client) GetDistributionPlugin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetDistributionPluginRequest(c.encoder)
+		decodeResponse = DecodeGetDistributionPluginResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetDistributionPluginRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDistributionPluginDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "getDistributionPlugin", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
@@ -397,6 +460,30 @@ func (c *Client) DownloadPluginPackage() goa.Endpoint {
 			return nil, err
 		}
 		return &plugins.DownloadPluginPackageResponseData{Result: res.(*plugins.DownloadPluginPackageResult), Body: resp.Body}, nil
+	}
+}
+
+// RotateObservabilityCredential returns an endpoint that makes HTTP requests
+// to the plugins service rotateObservabilityCredential server.
+func (c *Client) RotateObservabilityCredential() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRotateObservabilityCredentialRequest(c.encoder)
+		decodeResponse = DecodeRotateObservabilityCredentialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRotateObservabilityCredentialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RotateObservabilityCredentialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "rotateObservabilityCredential", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

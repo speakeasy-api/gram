@@ -38,6 +38,8 @@ type ruleSettings struct {
 	RpcEndpointFormat          rpcEndpointFormatSettings          `json:"rpc-endpoint-format"`
 	NoRawUserEmailFilter       noRawUserEmailFilterSettings       `json:"no-raw-user-email-filter"`
 	ResearchImportBoundary     researchImportBoundarySettings     `json:"research-import-boundary"`
+	NoRawAuthzChecks           noRawAuthzChecksSettings           `json:"no-raw-authz-checks"`
+	NoPublicSchemaSql          noPublicSchemaSqlSettings          `json:"no-public-schema-sql"`
 }
 
 type plugin struct {
@@ -108,6 +110,12 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 	if !p.settings.Rules.ResearchImportBoundary.Disabled {
 		analyzers = append(analyzers, newResearchImportBoundaryAnalyzer(p.settings.Rules.ResearchImportBoundary))
+	}
+	if !p.settings.Rules.NoRawAuthzChecks.Disabled {
+		analyzers = append(analyzers, newNoRawAuthzChecksAnalyzer(p.settings.Rules.NoRawAuthzChecks))
+	}
+	if !p.settings.Rules.NoPublicSchemaSql.Disabled {
+		analyzers = append(analyzers, newNoPublicSchemaSqlAnalyzer(p.settings.Rules.NoPublicSchemaSql))
 	}
 
 	return analyzers, nil

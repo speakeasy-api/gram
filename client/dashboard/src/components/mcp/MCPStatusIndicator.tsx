@@ -8,15 +8,23 @@ interface MCPStatusIndicatorProps {
   className?: string;
 }
 
+interface StatusConfig {
+  color: string;
+  pulseColor: string;
+  label: string;
+  animate: boolean;
+}
+
 function getStatusConfig(
   mcpEnabled: boolean | undefined,
   mcpIsPublic: boolean | undefined,
-) {
+): StatusConfig {
   if (!mcpEnabled) {
     return {
       color: "bg-destructive",
       pulseColor: "bg-destructive/60",
       label: "Disabled",
+      animate: false,
     };
   }
   if (!mcpIsPublic) {
@@ -24,28 +32,32 @@ function getStatusConfig(
       color: "bg-muted-foreground/60",
       pulseColor: "bg-muted-foreground/40",
       label: "Private",
+      animate: true,
     };
   }
   return {
     color: "bg-success-default",
     pulseColor: "bg-success-default",
     label: "Public",
+    animate: true,
   };
 }
 
-export function MCPStatusIndicator({
-  mcpEnabled,
-  mcpIsPublic,
+function StatusDotLabel({
+  status,
   size = "md",
   className,
-}: MCPStatusIndicatorProps): JSX.Element {
-  const status = getStatusConfig(mcpEnabled, mcpIsPublic);
+}: {
+  status: StatusConfig;
+  size?: "sm" | "md";
+  className?: string;
+}): JSX.Element {
   const dotSize = size === "sm" ? "h-2 w-2" : "h-2.5 w-2.5";
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <div className={cn("relative flex", dotSize)}>
-        {mcpEnabled && (
+        {status.animate && (
           <span
             className={cn(
               "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
@@ -65,5 +77,20 @@ export function MCPStatusIndicator({
         {status.label}
       </Text>
     </div>
+  );
+}
+
+export function MCPStatusIndicator({
+  mcpEnabled,
+  mcpIsPublic,
+  size = "md",
+  className,
+}: MCPStatusIndicatorProps): JSX.Element {
+  return (
+    <StatusDotLabel
+      status={getStatusConfig(mcpEnabled, mcpIsPublic)}
+      size={size}
+      className={className}
+    />
   );
 }

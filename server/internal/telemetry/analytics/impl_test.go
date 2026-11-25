@@ -1,0 +1,459 @@
+package analytics
+
+import (
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/analytics"
+	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
+)
+
+func TestDescribe(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	result, err := ti.service.Describe(ctx, &gen.DescribePayload{SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, result.Datasets, 3, "an org admin reads every dataset")
+	require.Empty(t, result.RestrictedDatasets)
+
+	toolCalls := datasetNamed(t, result.Datasets, "tool_calls")
+	require.Equal(t, "event", toolCalls.Kind)
+	require.NotEmpty(t, toolCalls.Grain)
+
+	byName := fieldsByName(toolCalls)
+	require.Equal(t, "dimension", byName["user"].Role)
+	require.Equal(t, []string{"equals", "in"}, byName["user"].Operators)
+	require.Equal(t, []string{"count_distinct"}, byName["user"].Aggregations, "describe advertises the one aggregation a dimension admits")
+	require.Empty(t, byName["status"].Aggregations)
+	require.Equal(t, "measure", byName["duration_ms"].Role)
+	require.Equal(t, "float64", byName["duration_ms"].Type)
+	require.NotNil(t, byName["duration_ms"].Unit)
+	require.Equal(t, "ms", *byName["duration_ms"].Unit)
+	require.Equal(t, []string{"sum", "avg", "p95"}, byName["duration_ms"].Aggregations)
+	require.NotContains(t, byName, "project")
+	require.Equal(t, []string{"tool_name"}, defaultFields(toolCalls), "the catalog names the opening group-by, not the client")
+	require.False(t, byName["session"].Default)
+	require.False(t, byName["duration_ms"].Default)
+	require.NotContains(t, byName, "skill", "a Skill call is an ordinary call here; skills are their own dataset")
+	require.NotNil(t, byName["mcp_server"].Lookup, "describe says which map mcp_server reads through")
+	require.Equal(t, MCPServerDisplayNamesLookup, byName["mcp_server"].Lookup.Name)
+	require.Contains(t, byName["mcp_server"].Lookup.Description, "Hooks settings")
+	require.NotNil(t, byName["agent"].Lookup, "an agent shows under its name")
+	require.Equal(t, AgentNamesLookup, byName["agent"].Lookup.Name)
+	require.Equal(t, []string{"count_distinct"}, byName["agent"].Aggregations)
+	require.Contains(t, *byName["surface"].Description, "Deprecated", "surface points readers at product and client")
+	require.NotNil(t, byName["product"].Description)
+	require.NotNil(t, byName["client"].Description)
+	require.NotNil(t, byName["family"].Lookup, "family is derived from the product")
+	require.Equal(t, ProductFamiliesLookup, byName["family"].Lookup.Name)
+	require.NotNil(t, byName["vendor"].Lookup, "vendor is derived from the product")
+	require.Equal(t, ProductVendorsLookup, byName["vendor"].Lookup.Name)
+	require.Nil(t, byName["tool_name"].Lookup, "a field read as reported names no lookup")
+	require.Nil(t, byName["tool_name"].Description, "a field with nothing to add has no description")
+	require.Nil(t, byName["user"].Description)
+
+	skills := datasetNamed(t, result.Datasets, "skills")
+	require.Equal(t, "skill invocation", skills.Grain)
+	require.Contains(t, skills.Description, "Claude Code", "describe carries the caveat on which producers report skills")
+	require.Equal(t, []string{"skill"}, defaultFields(skills), "the skills view opens broken down by skill")
+	skillFields := fieldsByName(skills)
+	require.Equal(t, []string{"count_distinct"}, skillFields["skill"].Aggregations, "skills used is a distinct count")
+	require.Equal(t, "dimension", skillFields["tool_call"].Role, "the invocation's call id tells repeated invocations apart in rows mode")
+	require.Equal(t, []string{"count_distinct"}, skillFields["user"].Aggregations)
+
+	riskFindings := datasetNamed(t, result.Datasets, "risk_findings")
+	require.Equal(t, "metric", riskFindings.Kind, "describe says the dataset answers aggregates only")
+	require.Equal(t, []string{"category"}, defaultFields(riskFindings))
+	riskFields := fieldsByName(riskFindings)
+	require.Equal(t, RiskPolicySeveritiesLookup, riskFields["severity"].Lookup.Name)
+	require.Equal(t, RiskPolicyNamesLookup, riskFields["policy"].Lookup.Name)
+
+	t.Run("it requires an authenticated project", func(t *testing.T) {
+		t.Parallel()
+		_, err := ti.service.Describe(t.Context(), &gen.DescribePayload{SessionToken: nil, ProjectSlugInput: nil})
+		requireOopsCode(t, err, oops.CodeUnauthorized)
+	})
+}
+
+// TestDescribeDatasetsCarriesFieldDescriptions: a field's description
+// reaches describe when the catalog gives one, and is absent otherwise.
+func TestDescribeDatasetsCarriesFieldDescriptions(t *testing.T) {
+	t.Parallel()
+
+	catalog := MustCatalog(nil, &Dataset{
+		Name:        "things",
+		Kind:        KindEvent,
+		Grain:       "thing",
+		Description: "things",
+		TimeExpr:    "started_at",
+		Access:      AccessProject,
+		Fields: []Field{
+			{Name: "kind", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "kind", Description: "Which producers fill it.", Lookup: ""},
+			{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: "", Lookup: ""},
+		},
+		Source: toolCallsSource,
+	})
+	described := describeDatasets(catalog, catalog.Datasets())
+	require.Len(t, described, 1)
+	require.NotNil(t, described[0].Fields[0].Description)
+	require.Equal(t, "Which producers fill it.", *described[0].Fields[0].Description)
+	require.Nil(t, described[0].Fields[1].Description, "a field with nothing to add has no description")
+}
+
+func TestQueryReadsAgentThroughItsName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	agent, err := agentsRepo.New(ti.db).CreateAgent(ctx, agentsRepo.CreateAgentParams{
+		OrganizationID: ti.organizationID,
+		OwnerUserID:    ti.userID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "release-bot",
+	})
+	require.NoError(t, err)
+
+	base := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
+	call := func(recordID, agentID string, at time.Time) chrepo.AgentEventRow {
+		r := agentEventFixture(ti.organizationID, recordID, "s1", "t1", recordID, "tool_call_result", at.UnixNano())
+		r.ProjectID = ti.projectID
+		r.ToolName = "Bash"
+		r.AgentID = agentID
+		return r
+	}
+	require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
+		call("c1", agent.ID.String(), base),
+		call("c2", agent.ID.String(), base.Add(time.Minute)),
+		call("c3", "", base.Add(2*time.Minute)),
+	}))
+	from, to := base.Add(-time.Hour).Format(time.RFC3339), base.Add(time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		SessionToken: nil, ProjectSlugInput: nil,
+		Dataset: "tool_calls", From: from, To: to, Grain: nil,
+		Dimensions: []string{"agent"},
+		Measures:   []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
+		Filters:    []*gen.AnalyticsFilter{{Field: "agent", Operator: "equals", Values: []string{"release-bot"}}},
+		OrderBy:    []*gen.AnalyticsOrderBy{{Measure: "count", Direction: "desc"}},
+		Limit:      0, Ungrouped: false,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Rows, 1, "a filter speaks the agent's name")
+	require.Equal(t, "release-bot", result.Rows[0]["agent"])
+	require.EqualValues(t, 2, result.Rows[0]["count"], "the call a person made is not the agent's")
+}
+
+func TestQueryDerivesFamilyAndVendorFromTheProduct(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	base := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
+	call := func(recordID, product string, at time.Time) chrepo.AgentEventRow {
+		r := agentEventFixture(ti.organizationID, recordID, "s1", "t1", recordID, "tool_call_result", at.UnixNano())
+		r.ProjectID = ti.projectID
+		r.ToolName = "Bash"
+		r.Product = product
+		return r
+	}
+	require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
+		call("c1", "claude-code", base),
+		call("c2", "claude", base.Add(time.Minute)),
+		call("c3", "cowork", base.Add(2*time.Minute)),
+		call("c4", "codex", base.Add(3*time.Minute)),
+		call("c5", "chatgpt", base.Add(4*time.Minute)),
+	}))
+	from, to := base.Add(-time.Hour).Format(time.RFC3339), base.Add(time.Hour).Format(time.RFC3339)
+
+	counts := func(t *testing.T, dimension string, filters []*gen.AnalyticsFilter) map[string]int64 {
+		t.Helper()
+		result, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
+			Dimensions: []string{dimension},
+			Measures:   []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
+			Filters:    filters,
+			OrderBy:    []*gen.AnalyticsOrderBy{{Measure: "count", Direction: "desc"}},
+			Limit:      0, Ungrouped: false,
+		})
+		require.NoError(t, err)
+		out := map[string]int64{}
+		for _, row := range result.Rows {
+			name, _ := row[dimension].(string)
+			n, _ := row["count"].(int64)
+			out[name] = n
+		}
+		return out
+	}
+
+	require.Equal(t, map[string]int64{"claude": 3, "codex": 1, "chatgpt": 1}, counts(t, "family", nil))
+	require.Equal(t, map[string]int64{"anthropic": 3, "openai": 2}, counts(t, "vendor", nil))
+	onClaude := []*gen.AnalyticsFilter{{Field: "family", Operator: "equals", Values: []string{"claude"}}}
+	require.Equal(t, map[string]int64{"claude-code": 1, "claude": 1, "cowork": 1}, counts(t, "product", onClaude), "a family filter reaches every product in the family")
+	onOpenAI := []*gen.AnalyticsFilter{{Field: "vendor", Operator: "equals", Values: []string{"openai"}}}
+	require.Equal(t, map[string]int64{"codex": 1, "chatgpt": 1}, counts(t, "product", onOpenAI))
+}
+
+func TestQueryReadsMCPServerThroughTheOverrideLookup(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	base := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
+	call := func(recordID, server string, at time.Time) chrepo.AgentEventRow {
+		r := agentEventFixture(ti.organizationID, recordID, "s1", "t1", recordID, "tool_call_result", at.UnixNano())
+		r.ProjectID = ti.projectID
+		r.ToolName = "mcp_tool"
+		r.MCPServerName = server
+		return r
+	}
+	require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
+		call("c1", "github-mcp", base),
+		call("c2", "gh", base.Add(time.Minute)),
+		call("c3", "linear", base.Add(2*time.Minute)),
+	}))
+	from, to := base.Add(-time.Hour).Format(time.RFC3339), base.Add(time.Hour).Format(time.RFC3339)
+	str := func(s string) *string { return &s }
+
+	byServer := func(t *testing.T, filters []*gen.AnalyticsFilter) []map[string]any {
+		t.Helper()
+		result, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
+			Dimensions: []string{"mcp_server"},
+			Measures: []*gen.AnalyticsMeasure{
+				{Op: "count", Field: nil, Alias: nil},
+				{Op: "count_distinct", Field: str("mcp_server"), Alias: str("servers")},
+			},
+			Filters: filters,
+			OrderBy: []*gen.AnalyticsOrderBy{{Measure: "count", Direction: "desc"}},
+			Limit:   0, Ungrouped: false,
+		})
+		require.NoError(t, err)
+		return result.Rows
+	}
+
+	rows := byServer(t, nil)
+	require.Len(t, rows, 3, "no overrides yet: every raw name is its own server")
+
+	projectID, err := uuid.Parse(ti.projectID)
+	require.NoError(t, err)
+	for raw, display := range map[string]string{"github-mcp": "GitHub", "gh": "GitHub"} {
+		_, err := hooksRepo.New(ti.db).UpsertHooksServerNameOverride(ctx, hooksRepo.UpsertHooksServerNameOverrideParams{ProjectID: projectID, RawServerName: raw, DisplayName: display})
+		require.NoError(t, err)
+	}
+
+	rows = byServer(t, nil)
+	require.Len(t, rows, 2)
+	require.Equal(t, "GitHub", rows[0]["mcp_server"])
+	require.EqualValues(t, 2, rows[0]["count"], "two raw names fold into one server with summed calls")
+	require.EqualValues(t, 1, rows[0]["servers"])
+	require.Equal(t, "linear", rows[1]["mcp_server"])
+
+	rows = byServer(t, []*gen.AnalyticsFilter{{Field: "mcp_server", Operator: "equals", Values: []string{"GitHub"}}})
+	require.Len(t, rows, 1, "a filter speaks display names too")
+	require.EqualValues(t, 2, rows[0]["count"])
+
+	rows = byServer(t, []*gen.AnalyticsFilter{{Field: "mcp_server", Operator: "equals", Values: []string{"gh"}}})
+	require.Len(t, rows, 1, "a filter saved on a raw name still matches after the override")
+	require.EqualValues(t, 2, rows[0]["count"], "and reaches every raw name folded with it")
+}
+
+func TestQuery(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	base := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
+	row := func(recordID, sessionID, turnID, eventID, eventType, user string, at time.Time) chrepo.AgentEventRow {
+		r := agentEventFixture(ti.organizationID, recordID, sessionID, turnID, eventID, eventType, at.UnixNano())
+		r.ProjectID = ti.projectID
+		r.UserEmail = user
+		if eventType == "tool_call" || eventType == "tool_call_result" {
+			r.ToolName = "Bash"
+		}
+		return r
+	}
+	require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
+		row("r1", "s1", "t1", "r1", "api_request", "ann@example.com", base),
+		row("r1", "s1", "t1", "r1", "api_request", "ann@example.com", base), // redelivered
+		row("r2", "s1", "t1", "tc1", "tool_call", "ann@example.com", base.Add(time.Second)),
+		row("r3", "s1", "t1", "tc1", "tool_call_result", "ann@example.com", base.Add(2*time.Second)),
+		row("r4", "s1", "t2", "r4", "api_request", "ann@example.com", base.Add(3*time.Second)),
+		row("r5", "s2", "t1", "r5", "api_request", "bob@example.com", base.Add(24*time.Hour)),
+		row("r6", "s3", "t1", "tc2", "tool_call", "bob@example.com", base.Add(25*time.Hour+250*time.Millisecond)),
+	}))
+
+	from, to := base.Add(-time.Hour).Format(time.RFC3339), base.Add(48*time.Hour).Format(time.RFC3339)
+	str := func(s string) *string { return &s }
+
+	t.Run("it aggregates tool calls by user", func(t *testing.T) {
+		t.Parallel()
+		result, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
+			Dimensions: []string{"user"},
+			Measures: []*gen.AnalyticsMeasure{
+				{Op: "count", Field: nil, Alias: nil},
+				{Op: "count_distinct", Field: str("session"), Alias: str("sessions")},
+			},
+			Filters: nil, OrderBy: []*gen.AnalyticsOrderBy{{Measure: "count", Direction: "desc"}}, Limit: 0, Ungrouped: false,
+		})
+		require.NoError(t, err)
+		require.Equal(t, "tool_calls", result.Dataset)
+		require.Equal(t, "tool_calls.agent_events", result.Plan)
+		require.Len(t, result.Rows, 2)
+
+		ann := result.Rows[0]
+		require.Equal(t, "ann@example.com", ann["user"])
+		require.EqualValues(t, 1, ann["count"], "two observations of tc1 are one call")
+		require.EqualValues(t, 1, ann["sessions"])
+
+		bob := result.Rows[1]
+		require.Equal(t, "bob@example.com", bob["user"])
+		require.EqualValues(t, 1, bob["count"])
+		require.EqualValues(t, 1, bob["sessions"])
+	})
+
+	t.Run("it counts distinct values of a dimension", func(t *testing.T) {
+		t.Parallel()
+		result, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
+			Dimensions: nil,
+			Measures: []*gen.AnalyticsMeasure{
+				{Op: "count", Field: nil, Alias: nil},
+				{Op: "count_distinct", Field: str("tool_name"), Alias: str("tools_used")},
+				{Op: "count_distinct", Field: str("user"), Alias: str("people")},
+			},
+			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+		require.EqualValues(t, 2, result.Rows[0]["count"], "tc1 and tc2")
+		require.EqualValues(t, 1, result.Rows[0]["tools_used"], "both calls are Bash")
+		require.EqualValues(t, 2, result.Rows[0]["people"])
+	})
+
+	t.Run("it buckets by day and formats the bucket as RFC 3339", func(t *testing.T) {
+		t.Parallel()
+		result, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: str("day"),
+			Dimensions: nil,
+			Measures:   []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
+			Filters:    nil, OrderBy: nil, Limit: 0, Ungrouped: false,
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 2)
+		require.Equal(t, "2026-09-02T00:00:00Z", result.Rows[0]["time_bucket"])
+		require.EqualValues(t, 1, result.Rows[0]["count"])
+		require.Equal(t, "2026-09-03T00:00:00Z", result.Rows[1]["time_bucket"])
+		require.EqualValues(t, 1, result.Rows[1]["count"])
+	})
+
+	t.Run("it returns ungrouped rows newest first with a time column", func(t *testing.T) {
+		t.Parallel()
+		result, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
+			Dimensions: []string{"tool_call", "session"},
+			Measures:   nil,
+			Filters:    []*gen.AnalyticsFilter{{Field: "user", Operator: "in", Values: []string{"ann@example.com", "bob@example.com"}}},
+			OrderBy:    nil, Limit: 0, Ungrouped: true,
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 2)
+		require.Equal(t, "tc2", result.Rows[0]["tool_call"])
+		require.Equal(t, "s3", result.Rows[0]["session"])
+		require.Equal(t, base.Add(25*time.Hour+250*time.Millisecond).Format(time.RFC3339Nano), result.Rows[0]["time"], "the event time keeps its sub-second precision")
+		require.Equal(t, "tc1", result.Rows[1]["tool_call"])
+		require.Len(t, result.Rows[1], 3, "row keys are the time plus the projected dimensions")
+	})
+
+	t.Run("it names what is wrong with a request", func(t *testing.T) {
+		t.Parallel()
+		_, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
+			Dimensions: []string{"department"},
+			Measures:   []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
+			Filters:    nil, OrderBy: nil, Limit: 0, Ungrouped: false,
+		})
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "unknown_field")
+		require.ErrorContains(t, err, "dimensions[0]")
+	})
+
+	t.Run("it rejects a malformed time", func(t *testing.T) {
+		t.Parallel()
+		_, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: "yesterday", To: to, Grain: nil,
+			Dimensions: nil, Measures: []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
+			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
+		})
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "invalid_time_range")
+	})
+
+	t.Run("it rejects a bound that nanoseconds cannot represent", func(t *testing.T) {
+		t.Parallel()
+		_, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: "1500-01-01T00:00:00Z", To: to, Grain: nil,
+			Dimensions: nil, Measures: []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
+			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
+		})
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "invalid_time_range: from")
+	})
+
+	t.Run("it requires an authenticated project", func(t *testing.T) {
+		t.Parallel()
+		_, err := ti.service.Query(t.Context(), &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
+			Dimensions: nil, Measures: []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
+			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
+		})
+		requireOopsCode(t, err, oops.CodeUnauthorized)
+	})
+}
+
+// datasetNamed finds a described dataset by name, so the assertions do not
+// depend on the catalog's declaration order.
+func datasetNamed(t *testing.T, datasets []*gen.AnalyticsDataset, name string) *gen.AnalyticsDataset {
+	t.Helper()
+	for _, ds := range datasets {
+		if ds.Name == name {
+			return ds
+		}
+	}
+	require.Failf(t, "dataset not described", "no dataset named %q", name)
+	return nil
+}
+
+// fieldsByName indexes a described dataset's fields by name.
+func fieldsByName(ds *gen.AnalyticsDataset) map[string]*gen.AnalyticsField {
+	byName := make(map[string]*gen.AnalyticsField, len(ds.Fields))
+	for _, f := range ds.Fields {
+		byName[f.Name] = f
+	}
+	return byName
+}
+
+// defaultFields lists the names describe flags as default, in declaration
+// order.
+func defaultFields(ds *gen.AnalyticsDataset) []string {
+	var names []string
+	for _, f := range ds.Fields {
+		if f.Default {
+			names = append(names, f.Name)
+		}
+	}
+	return names
+}

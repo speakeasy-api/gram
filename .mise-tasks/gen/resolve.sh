@@ -14,10 +14,24 @@ if ! git rev-parse --verify "$base" >/dev/null 2>&1; then
   exit 1
 fi
 
-paths=(.speakeasy client/dashboard/src/sdk server/gen)
+paths=(
+  .speakeasy/openapi-hooks.yaml
+  .speakeasy/out.admin.openapi.yaml
+  .speakeasy/out.openapi.yaml
+  .speakeasy/workflow.lock
+  client/admin/src/sdk
+  client/dashboard/src/sdk
+  server/gen
+)
 
 echo "==> Checking out $base for: ${paths[*]}"
-git checkout "$base" -- "${paths[@]}"
+for path in "${paths[@]}"; do
+  if git cat-file -e "$base:$path" 2>/dev/null; then
+    git checkout "$base" -- "$path"
+  else
+    echo "==> $path is absent from $base; keeping it for regeneration"
+  fi
+done
 
 echo "==> Regenerating Goa server"
 mise run gen:goa-server

@@ -32,7 +32,7 @@ func TestClassifyTurnError(t *testing.T) {
 		},
 		{
 			name: "network drop",
-			err:  errors.New("send assistant fly runtime request: dial tcp: connection refused"),
+			err:  errors.New("send assistant gke runtime request: dial tcp: connection refused"),
 			want: ErrRuntimeUnhealthy,
 		},
 		{
@@ -52,18 +52,18 @@ func TestClassifyTurnError(t *testing.T) {
 		},
 		{
 			name: "marker stamped by /chat/completions on upstream 4xx",
-			err:  fmt.Errorf("execute fly turn request: status=422 body=provider error: {\"message\":%q}", corruptionMarker),
+			err:  fmt.Errorf("execute gke turn request: status=422 body=provider error: {\"message\":%q}", corruptionMarker),
 			want: ErrHistoryCorrupted,
 		},
 		{
 			name: "marker wrapped through assistant runtime error chain",
 			err: fmt.Errorf("run assistant turn: %w",
-				errors.New("execute fly turn request: status=422 body=provider error: "+corruptionMarker)),
+				errors.New("execute gke turn request: status=422 body=provider error: "+corruptionMarker)),
 			want: ErrHistoryCorrupted,
 		},
 		{
 			name: "runner rejected truncated tool_call args (decode marker)",
-			err:  fmt.Errorf("execute fly turn request: %w", &runtimeResponseError{StatusCode: 503, Body: "decode tool_call arguments for id call_1: EOF while parsing a value"}),
+			err:  fmt.Errorf("execute gke turn request: %w", &runtimeResponseError{StatusCode: 503, Body: "decode tool_call arguments for id call_1: EOF while parsing a value"}),
 			want: ErrHistoryCorrupted,
 		},
 		{

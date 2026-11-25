@@ -19,6 +19,12 @@ const (
 	openRouterDailySpendScheduleID          = "v1:collect-openrouter-daily-spend-schedule"
 	openRouterDailySpendScheduledWorkflowID = "v1:collect-openrouter-daily-spend/scheduled"
 
+	// Collect daily at 04:00 UTC.
+	openRouterDailySpendHourUTC = 4
+
+	// Allow 1h of lateness for brief outages; skip stale daily reporting ticks.
+	openRouterDailySpendCatchupWindow = time.Hour
+
 	// Four completed days keeps the last invoice day in the +76h final
 	// observation collected immediately before settlement.
 	openRouterDailySpendLookbackDays        = 4
@@ -58,8 +64,8 @@ func CollectOpenRouterDailySpendWorkflow(ctx workflow.Context) error {
 		collected.ReadyOrganizationIDs = nil
 	}
 
-	// A failed collection leaves the ready set empty, so settlement still routes
-	// independent TUM carries without freezing stale OpenRouter spend.
+	// A failed collection leaves the ready set empty. Settlement can still
+	// deliver existing allocations without freezing stale OpenRouter spend.
 	settlementErr := workflow.ExecuteActivity(ctx, a.SettleStripeInvoiceAllocations, activities.SettleStripeInvoiceAllocationsArgs{
 		Now:                                    workflow.Now(ctx).UTC(),
 		RestrictOpenRouterToReadyOrganizations: true,
@@ -75,14 +81,15 @@ func CollectOpenRouterDailySpendWorkflow(ctx workflow.Context) error {
 
 func openRouterDailySpendScheduleOptions(taskQueue string) client.ScheduleOptions {
 	return client.ScheduleOptions{
-		ID:      openRouterDailySpendScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: openRouterDailySpendCatchupWindow,
+		ID:            openRouterDailySpendScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		Spec: client.ScheduleSpec{
 			Calendars: []client.ScheduleCalendarSpec{
 				{
 					Second:     nil,
 					Minute:     nil,
-					Hour:       []client.ScheduleRange{{Start: 4, End: 0, Step: 0}},
+					Hour:       []client.ScheduleRange{{Start: openRouterDailySpendHourUTC, End: 0, Step: 0}},
 					DayOfMonth: nil,
 					Month:      nil,
 					Year:       nil,
@@ -111,6 +118,7 @@ func AddOpenRouterDailySpendSchedule(ctx context.Context, temporalEnv *tenv.Envi
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &options.Spec
 				input.Description.Schedule.Action = options.Action
+				setScheduleCatchup(&input.Description.Schedule, openRouterDailySpendCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

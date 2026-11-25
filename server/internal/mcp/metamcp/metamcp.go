@@ -22,10 +22,20 @@ const MaxMemberResponseBytes = 4 << 20
 
 // The fixed gateway tool contract. ToolDescribeTools and ToolExecuteTool
 // intentionally carry the same wire names as the dynamic toolset surface's
-// tools so agents see one vocabulary across Gram surfaces.
+// tools so agents see one vocabulary across Speakeasy surfaces.
 const (
 	ToolListServers    = "list_servers"
 	ToolDescribeServer = "describe_server"
 	ToolDescribeTools  = "describe_tools"
 	ToolExecuteTool    = "execute_tool"
 )
+
+// ToolExecuteReadOnlyTool runs only member tools whose effective annotations
+// mark them read-only. It carries readOnlyHint itself, so clients that skip
+// approval for read-only tools run these calls without a prompt while
+// execute_tool keeps prompting.
+const ToolExecuteReadOnlyTool = "execute_read_only_tool"
+
+// ToolCodeExecute is the one tool Code Mode serves: it runs a Python program
+// against the connection's member servers.
+const ToolCodeExecute = "execute"

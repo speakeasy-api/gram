@@ -2,6 +2,8 @@ package remotesessionissuers
 
 import (
 	. "goa.design/goa/v3/dsl"
+
+	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
 // Org-admin types — the read/aggregate shapes that power the organization
@@ -37,12 +39,22 @@ var ListOrganizationRemoteSessionIssuersResult = Type("ListOrganizationRemoteSes
 // OrganizationIssuerDeletePreflight describes the impact of deleting an issuer so the
 // confirmation dialog can be authoritative.
 var OrganizationIssuerDeletePreflight = Type("OrganizationIssuerDeletePreflight", func() {
-	Description("Authoritative impact summary for deleting a remote_session_issuer: how many clients reference it and the names of the MCP servers those clients are attached to.")
+	Description("Authoritative impact summary for deleting a remote_session_issuer: its client, trusted user-session-issuer, and active identity-chaining binding references.")
 
 	Attribute("client_count", Int, "Number of non-deleted remote_session_clients registered with this issuer.")
 	Attribute("mcp_server_names", ArrayOf(String), "Display names of MCP servers attached to this issuer's clients.")
+	Attribute("trusted_user_session_issuers", ArrayOf(TrustedUserSessionIssuerReference), "Organization-owned user_session_issuers that trust this issuer and block deletion.")
 
-	Required("client_count", "mcp_server_names")
+	Required("client_count", "mcp_server_names", "trusted_user_session_issuers")
+	Attribute("ema_binding_count", Int64, "Active identity-chaining bindings that must be explicitly unlinked before deletion.")
+	Required("ema_binding_count")
+})
+
+var TrustedUserSessionIssuerReference = Type("TrustedUserSessionIssuerReference", func() {
+	Description("An organization-owned user_session_issuer that uses a remote_session_issuer as its trust anchor.")
+	Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
+	Attribute("slug", String, "The user_session_issuer slug.")
+	Required("id", "slug")
 })
 
 // IssuerFieldMismatch is one issuer field whose value differs between the
@@ -70,9 +82,9 @@ var IssuerFieldMismatch = Type("IssuerFieldMismatch", func() {
 
 // OrganizationIssuerMigratePreflight describes the impact of consolidating a
 // source issuer onto a target issuer so the confirmation dialog can list every
-// blocker before the mutation runs. can_migrate is FALSE exactly when
-// endpoint_mismatches or conflicting_mcp_server_names is non-empty — the same
-// two conditions the migrate mutation rejects with 409.
+// blocker before the mutation runs. can_migrate is FALSE when endpoint
+// metadata differs, an MCP-server binding conflicts, an EMA binding is active,
+// or a user-session issuer still trusts the source — the same conditions the mutation rejects with 409.
 var OrganizationIssuerMigratePreflight = Type("OrganizationIssuerMigratePreflight", func() {
 	Description("Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: how many clients move, which MCP servers are affected, and every blocker that would make the migration fail.")
 
@@ -81,9 +93,11 @@ var OrganizationIssuerMigratePreflight = Type("OrganizationIssuerMigratePrefligh
 	Attribute("endpoint_mismatches", ArrayOf(IssuerFieldMismatch), "The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target, with both sides' values. Non-empty blocks the migration.")
 	Attribute("conflicting_mcp_server_names", ArrayOf(String), "Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.")
 	Attribute("warnings", ArrayOf(IssuerFieldMismatch), "Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.")
-	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.")
+	Attribute("trusted_user_session_issuers", ArrayOf(TrustedUserSessionIssuerReference), "User-session issuers that trust the source and block migration until explicitly unlinked or re-linked.")
+	Attribute("ema_binding_count", Int64, "Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.")
+	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.")
 
-	Required("client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "can_migrate")
+	Required("ema_binding_count", "client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "trusted_user_session_issuers", "can_migrate")
 })
 
 // MigrateOrganizationRemoteSessionIssuerResult reports the outcome of a
@@ -96,4 +110,54 @@ var MigrateOrganizationRemoteSessionIssuerResult = Type("MigrateOrganizationRemo
 	Attribute("source_deleted", Boolean, "TRUE when the source issuer was soft-deleted.")
 
 	Required("issuer", "clients_migrated", "source_deleted")
+})
+
+// EMAService is one service identity chaining reaches in the organization.
+var EMAService = Type("EMAService", func() {
+	Description("One service identity chaining reaches in the organization: a vendor authorization server, the identity providers that can vouch for people to it with whether the vendor has accepted each, and the MCP servers that chain through it.")
+
+	Attribute("vendor_issuer", String, "The vendor authorization server issuer, canonicalized.")
+	Attribute("name", String, "The vendor's display name, from an issuer record that names it. Empty when none has one.")
+	Attribute("remote_session_issuer_id", String, "An issuer record the organization can name for this vendor, organization-level first, to pass to setEMAProviders. Omitted only when no issuer record names the vendor any more.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("ema_providers", shared.EMAProviderOrder, "The organization-wide provider order. Each provider's last_accepted_at is the newest acceptance across every binding in the organization.")
+	Attribute("server_count", Int, "Distinct live MCP servers whose identity chaining binding for this vendor has been turned on, in any state after setup, including servers the caller cannot read.")
+	Attribute("ready_server_count", Int, "Of those, how many have a ready binding, including servers the caller cannot read.")
+	Attribute("servers", ArrayOf(EMAServiceServer), "The counted servers the caller can read (mcp:read), ordered by project and name.")
+	Attribute("hidden_server_count", Int, "Counted servers the caller cannot read; they are not named.")
+
+	Required("vendor_issuer", "name", "ema_providers", "server_count", "ready_server_count", "servers", "hidden_server_count")
+})
+
+// EMAServiceServer is one MCP server that reaches a service through identity chaining.
+var EMAServiceServer = Type("EMAServiceServer", func() {
+	Description("One live MCP server whose identity chaining binding for the service has been turned on.")
+
+	Attribute("id", String, "The MCP server id.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The MCP server name. Empty when it has none.")
+	Attribute("slug", String, "The MCP server slug. Empty when it has none.")
+	Attribute("project_id", String, "The owning project.", func() { Format(FormatUUID) })
+	Attribute("project_slug", String, "The owning project's slug.")
+	Attribute("project_name", String, "The owning project's name.")
+	Attribute("status", String, "working: on, and the vendor accepted an assertion for this server from a provider that can vouch now. not_proven: on, with no such acceptance yet. needs_attention: on but blocked, or no provider can vouch for it right now.", func() {
+		Enum("working", "not_proven", "needs_attention")
+	})
+	Attribute("last_accepted_at", String, "When the vendor last accepted an assertion for this server from a provider that can vouch now. Omitted when never.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("sign_in_issuer_id", String, "The remote session issuer the server's sign-in trusts, such as an Okta authorization server: only that issuer can vouch for people on the server. Omitted when the server uses Speakeasy's own sign-in, where only Speakeasy can vouch.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("sign_in_issuer_name", String, "The display name of sign_in_issuer_id. Omitted with it, or when the issuer has no name.")
+
+	Required("id", "name", "slug", "project_id", "project_slug", "project_name", "status")
+})
+
+var ListEMAServicesResult = Type("ListEMAServicesResult", func() {
+	Description("Every service identity chaining reaches in the organization.")
+
+	Attribute("items", ArrayOf(EMAService))
+
+	Required("items")
 })

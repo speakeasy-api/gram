@@ -30,9 +30,9 @@ Add to `mise.local.toml`:
 
 ```toml
 [env]
-GRAM_PLUGINS_GITHUB_APP_ID       = "<int64 app ID>"
-GRAM_PLUGINS_GITHUB_PRIVATE_KEY  = "<PEM-encoded private key>"
-GRAM_PLUGINS_GITHUB_ORG          = "<GitHub org where plugin repos are created>"
+GRAM_PLUGINS_GITHUB_APP_ID = "<int64 app ID>"
+GRAM_PLUGINS_GITHUB_PRIVATE_KEY = "<PEM-encoded private key>"
+GRAM_PLUGINS_GITHUB_ORG = "<GitHub org where plugin repos are created>"
 GRAM_PLUGINS_GITHUB_INSTALLATION_ID = "<int64 installation ID>"
 ```
 
@@ -95,12 +95,12 @@ With GitHub env vars set:
 
 1. Create one or more plugins with at least one MCP server each
 2. Click **Publish to GitHub** in the dashboard
-3. Optionally enter a GitHub username to add as a collaborator
+3. Optionally enter a GitHub username to add as a collaborator (granted `admin` on the repo)
 4. The server will:
    - Mint a `consumer`-scoped API key (prefix `gsk_`) and a `hooks`-scoped key
    - Generate all plugin ZIPs + marketplace.json files
    - Create or update the repo `<org>/<project-slug>-plugins` in the configured GitHub org
-   - Store a marketplace token in `plugin_github_connections.marketplace_token`
+   - Store a marketplace token's hash and sealed copy in `plugin_github_connections`
 
 After publishing, the dashboard shows a GitHub repo link and marketplace installation instructions.
 

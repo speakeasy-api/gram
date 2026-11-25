@@ -14,6 +14,8 @@ export function subjectLabel(session: UserSession): string {
       return "API key";
     case "anonymous":
       return "Anonymous client";
+    case "workload":
+      return session.workload?.externalSubject ?? "Workload";
     default:
       return session.subjectUrn;
   }

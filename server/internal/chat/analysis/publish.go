@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 const (
@@ -93,6 +94,9 @@ type PublishResult struct {
 	// Retryable is how many hit an infrastructure failure that still needs
 	// another pass.
 	Retryable int
+	// Throttled is how many the provider rate limited before any inference
+	// happened; they stay reserved for another pass with no attempt charged.
+	Throttled int
 }
 
 // Publisher judges reserved evaluations and publishes their verdicts.
@@ -150,7 +154,7 @@ func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, ids []uuid
 	))
 	defer span.End()
 
-	result := PublishResult{Loaded: 0, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0}
+	result := PublishResult{Loaded: 0, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0, Throttled: 0}
 	if len(ids) == 0 {
 		return result, nil
 	}
@@ -362,6 +366,11 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 	switch {
 	case err != nil && errors.Is(err, ErrModelFailure):
 		return p.recordAttempt(ctx, projectID, input, result)
+	case err != nil && errors.Is(err, openrouter.ErrRateLimited):
+		// The provider throttled the call. The row stays reserved for the next
+		// pass with no attempt charged: nothing about it was tried.
+		result.Throttled++
+		return nil
 	case err != nil:
 		result.Retryable++
 		return fmt.Errorf("judge chat analysis evaluation: %w", err)

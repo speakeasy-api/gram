@@ -49,10 +49,6 @@ type Client struct {
 	// the listToolSchemaStaticValues endpoint.
 	ListToolSchemaStaticValuesDoer goahttp.Doer
 
-	// CheckMCPSlugAvailability Doer is the HTTP client used to make requests to
-	// the checkMCPSlugAvailability endpoint.
-	CheckMCPSlugAvailabilityDoer goahttp.Doer
-
 	// CloneToolset Doer is the HTTP client used to make requests to the
 	// cloneToolset endpoint.
 	CloneToolsetDoer goahttp.Doer
@@ -61,13 +57,13 @@ type Client struct {
 	// addExternalOAuthServer endpoint.
 	AddExternalOAuthServerDoer goahttp.Doer
 
+	// UpdateExternalOAuthServer Doer is the HTTP client used to make requests to
+	// the updateExternalOAuthServer endpoint.
+	UpdateExternalOAuthServerDoer goahttp.Doer
+
 	// RemoveOAuthServer Doer is the HTTP client used to make requests to the
 	// removeOAuthServer endpoint.
 	RemoveOAuthServerDoer goahttp.Doer
-
-	// SetUserSessionIssuer Doer is the HTTP client used to make requests to the
-	// setUserSessionIssuer endpoint.
-	SetUserSessionIssuerDoer goahttp.Doer
 
 	// SetToolVariationsGroup Doer is the HTTP client used to make requests to the
 	// setToolVariationsGroup endpoint.
@@ -101,11 +97,10 @@ func NewClient(
 		GetToolsetDoer:                 doer,
 		ListToolFiltersDoer:            doer,
 		ListToolSchemaStaticValuesDoer: doer,
-		CheckMCPSlugAvailabilityDoer:   doer,
 		CloneToolsetDoer:               doer,
 		AddExternalOAuthServerDoer:     doer,
+		UpdateExternalOAuthServerDoer:  doer,
 		RemoveOAuthServerDoer:          doer,
-		SetUserSessionIssuerDoer:       doer,
 		SetToolVariationsGroupDoer:     doer,
 		RestoreResponseBody:            restoreBody,
 		scheme:                         scheme,
@@ -307,30 +302,6 @@ func (c *Client) ListToolSchemaStaticValues() goa.Endpoint {
 	}
 }
 
-// CheckMCPSlugAvailability returns an endpoint that makes HTTP requests to the
-// toolsets service checkMCPSlugAvailability server.
-func (c *Client) CheckMCPSlugAvailability() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeCheckMCPSlugAvailabilityRequest(c.encoder)
-		decodeResponse = DecodeCheckMCPSlugAvailabilityResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildCheckMCPSlugAvailabilityRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.CheckMCPSlugAvailabilityDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("toolsets", "checkMCPSlugAvailability", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
 // CloneToolset returns an endpoint that makes HTTP requests to the toolsets
 // service cloneToolset server.
 func (c *Client) CloneToolset() goa.Endpoint {
@@ -379,6 +350,30 @@ func (c *Client) AddExternalOAuthServer() goa.Endpoint {
 	}
 }
 
+// UpdateExternalOAuthServer returns an endpoint that makes HTTP requests to
+// the toolsets service updateExternalOAuthServer server.
+func (c *Client) UpdateExternalOAuthServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateExternalOAuthServerRequest(c.encoder)
+		decodeResponse = DecodeUpdateExternalOAuthServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateExternalOAuthServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateExternalOAuthServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "updateExternalOAuthServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // RemoveOAuthServer returns an endpoint that makes HTTP requests to the
 // toolsets service removeOAuthServer server.
 func (c *Client) RemoveOAuthServer() goa.Endpoint {
@@ -398,30 +393,6 @@ func (c *Client) RemoveOAuthServer() goa.Endpoint {
 		resp, err := c.RemoveOAuthServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "removeOAuthServer", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// SetUserSessionIssuer returns an endpoint that makes HTTP requests to the
-// toolsets service setUserSessionIssuer server.
-func (c *Client) SetUserSessionIssuer() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeSetUserSessionIssuerRequest(c.encoder)
-		decodeResponse = DecodeSetUserSessionIssuerResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildSetUserSessionIssuerRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.SetUserSessionIssuerDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("toolsets", "setUserSessionIssuer", err)
 		}
 		return decodeResponse(resp)
 	}

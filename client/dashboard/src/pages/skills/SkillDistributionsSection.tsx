@@ -1,9 +1,9 @@
-import { RequireScope } from "@/components/require-scope";
+import { RequirePluginWrite } from "@/components/require-plugin-write";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import type { PluginSkillDistribution } from "@gram/client/models/components/pluginskilldistribution.js";
@@ -12,12 +12,12 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge } from "@/components/ui/Badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
+import { SkillDistributionVersionBadge } from "./skill-badges";
 
 /**
  * Lists the plugins an individual skill is distributed to and lets writers
@@ -29,8 +29,8 @@ export function SkillDistributionsSection({
 }: {
   skillId: string;
 }): JSX.Element {
-  const project = useProject();
   const queryClient = useQueryClient();
+  const canWritePlugin = usePluginWriteAccess();
   const routes = useRoutes();
   const distributionsQuery = useSkillDistributionsInfinite(
     { skillId, limit: 50 },
@@ -50,6 +50,7 @@ export function SkillDistributionsSection({
   const handleUndistribute = async (
     distribution: PluginSkillDistribution,
   ): Promise<void> => {
+    if (!canWritePlugin || distribution.channel !== "plugin") return;
     try {
       await undistribute.mutateAsync({
         request: {
@@ -96,7 +97,7 @@ export function SkillDistributionsSection({
             >
               <div className="min-w-0">
                 <Link
-                  to={routes.plugins.detail.href(distribution.pluginId)}
+                  to={`${routes.plugins.detail.href(distribution.pluginId)}?skillId=${encodeURIComponent(skillId)}`}
                   className="text-sm font-medium hover:underline"
                 >
                   {distribution.pluginName}
@@ -109,14 +110,18 @@ export function SkillDistributionsSection({
                 >
                   Distributed <HumanizeDateTime date={distribution.createdAt} />
                 </Text>
+                {distribution.channel !== "plugin" && (
+                  <Text small muted className="block text-xs">
+                    Refresh the page before changing this unsupported
+                    distribution channel.
+                  </Text>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <VersionTrackingBadge distribution={distribution} />
-                <RequireScope
-                  scope="skill:write"
-                  resourceId={project.id}
-                  level="component"
-                >
+                <SkillDistributionVersionBadge
+                  pinnedVersionId={distribution.pinnedVersionId}
+                />
+                <RequirePluginWrite>
                   <Button
                     type="button"
                     variant="tertiary"
@@ -124,12 +129,15 @@ export function SkillDistributionsSection({
                     tooltip="Remove from plugin"
                     aria-label={`Remove from ${distribution.pluginName}`}
                     className="hover:text-destructive"
-                    disabled={undistribute.isPending}
+                    disabled={
+                      undistribute.isPending ||
+                      distribution.channel !== "plugin"
+                    }
                     onClick={() => void handleUndistribute(distribution)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
-                </RequireScope>
+                </RequirePluginWrite>
               </div>
             </li>
           ))}
@@ -150,19 +158,4 @@ export function SkillDistributionsSection({
       )}
     </div>
   );
-}
-
-function VersionTrackingBadge({
-  distribution,
-}: {
-  distribution: PluginSkillDistribution;
-}): JSX.Element {
-  if (distribution.pinnedVersionId) {
-    return (
-      <Badge variant="neutral" title={distribution.pinnedVersionId}>
-        Pinned
-      </Badge>
-    );
-  }
-  return <Badge variant="information">Latest</Badge>;
 }

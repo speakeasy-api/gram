@@ -1,0 +1,27 @@
+import type { JSX } from "react";
+// oxlint-disable-next-line no-restricted-imports -- object URLs are external resources requiring cleanup
+import { useLayoutEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { adminIssuerImageQuery } from "@/lib/gramAdminClient";
+export function IssuerLogo({ id }: { id: string }): JSX.Element | null {
+  const query = useQuery({ ...adminIssuerImageQuery(id), throwOnError: false });
+  const [url, setUrl] = useState("");
+  useLayoutEffect(() => {
+    if (!query.data) {
+      setUrl("");
+      return;
+    }
+    const next = URL.createObjectURL(query.data);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [query.data]);
+  if (query.error && !url)
+    return (
+      <span role="alert" className="text-muted-foreground text-xs">
+        Logo unavailable
+      </span>
+    );
+  return url ? (
+    <img src={url} alt="Issuer logo" className="size-10 object-contain" />
+  ) : null;
+}

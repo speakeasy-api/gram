@@ -9,14 +9,16 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * The kind of source (http or function)
  */
-export const SourceKind = {
+export const SetSourceEnvironmentLinkRequestBodySourceKind = {
   Http: "http",
   Function: "function",
 } as const;
 /**
  * The kind of source (http or function)
  */
-export type SourceKind = ClosedEnum<typeof SourceKind>;
+export type SetSourceEnvironmentLinkRequestBodySourceKind = ClosedEnum<
+  typeof SetSourceEnvironmentLinkRequestBodySourceKind
+>;
 
 export type SetSourceEnvironmentLinkRequestBody = {
   /**
@@ -26,7 +28,7 @@ export type SetSourceEnvironmentLinkRequestBody = {
   /**
    * The kind of source (http or function)
    */
-  sourceKind: SourceKind;
+  sourceKind: SetSourceEnvironmentLinkRequestBodySourceKind;
   /**
    * The slug of the source
    */
@@ -34,8 +36,10 @@ export type SetSourceEnvironmentLinkRequestBody = {
 };
 
 /** @internal */
-export const SourceKind$outboundSchema: z.ZodMiniEnum<typeof SourceKind> = z
-  .enum(SourceKind);
+export const SetSourceEnvironmentLinkRequestBodySourceKind$outboundSchema:
+  z.ZodMiniEnum<typeof SetSourceEnvironmentLinkRequestBodySourceKind> = z.enum(
+    SetSourceEnvironmentLinkRequestBodySourceKind,
+  );
 
 /** @internal */
 export type SetSourceEnvironmentLinkRequestBody$Outbound = {
@@ -51,7 +55,7 @@ export const SetSourceEnvironmentLinkRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     environmentId: z.string(),
-    sourceKind: SourceKind$outboundSchema,
+    sourceKind: SetSourceEnvironmentLinkRequestBodySourceKind$outboundSchema,
     sourceSlug: z.string(),
   }),
   z.transform((v) => {

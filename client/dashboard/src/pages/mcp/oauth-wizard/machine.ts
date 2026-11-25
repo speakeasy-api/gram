@@ -1,20 +1,14 @@
 import { createActorContext } from "@xstate/react";
 import { assign, fromPromise, setup, type SnapshotFrom } from "xstate";
 
+import { validateProviderIssuerUrl } from "./externalOAuthMetadata";
 import { checkCreds, checkExternal, checkProxyMeta } from "./guards";
-import {
-  authServerOrigin,
-  pickAuthMethodFromList,
-  type Context,
-  type DiscoveredOAuth,
-  type Input,
-  type WizardEvent,
-} from "./machine-types";
+import { type Context, type Input, type WizardEvent } from "./machine-types";
 import {
   type AddExternalOAuthInput,
+  type DiscoverExternalOAuthInput,
+  type DiscoverExternalOAuthOutput,
   type ProvisionUserSessionInput,
-  type RegisterClientInput,
-  type RegisterClientOutput,
 } from "./services";
 
 function initialProxy(): Context["proxy"] {
@@ -28,97 +22,31 @@ function initialProxy(): Context["proxy"] {
     environmentSlug: "",
     clientId: "",
     clientSecret: "",
-    prefilled: false,
   };
 }
 
 function initialContext(input: Input): Context {
   return {
-    discovered: input.discovered,
     initialPath: input.initialPath,
     external: {
       issuerUrl: "",
-      slug: "",
       metadataJson: "",
+      verifiedMetadata: null,
       jsonError: null,
-      prefilled: false,
     },
     proxy: initialProxy(),
     envSlug: null,
     error: null,
-    autoRegistering: false,
     result: null,
+    toolsetId: input.toolsetId,
     toolsetSlug: input.toolsetSlug,
     toolsetName: input.toolsetName,
     activeOrganizationId: input.activeOrganizationId,
   };
 }
 
-function externalFromDiscovered(
-  d: DiscoveredOAuth,
-): Pick<
-  Context["external"],
-  "issuerUrl" | "slug" | "metadataJson" | "jsonError" | "prefilled"
-> {
-  return {
-    issuerUrl: typeof d.metadata.issuer === "string" ? d.metadata.issuer : "",
-    slug: d.slug,
-    metadataJson: JSON.stringify(d.metadata, null, 2),
-    jsonError: null,
-    prefilled: true,
-  };
-}
-
-// Picks the preferred token auth method from the discovered metadata's
-// advertised list, falling back to client_secret_basic. Note the synthesized
-// metadata in the remote-MCP wizard rarely carries the list, so this usually
-// returns the fallback; the auto-register service additionally runs a live RFC
-// 8414 discovery to recover the upstream's real methods before DCR.
-function pickTokenAuthMethod(m: Record<string, unknown>): string {
-  const raw = m.token_endpoint_auth_methods_supported;
-  const supported = Array.isArray(raw)
-    ? raw.filter((v): v is string => typeof v === "string")
-    : [];
-  return pickAuthMethodFromList(supported);
-}
-
-function proxyFieldsFromDiscovered(
-  d: DiscoveredOAuth,
-): Partial<Context["proxy"]> {
-  const m = d.metadata;
-  const out: Partial<Context["proxy"]> = { slug: d.slug };
-  if (typeof m.authorization_endpoint === "string")
-    out.authorizationEndpoint = m.authorization_endpoint;
-  if (typeof m.token_endpoint === "string")
-    out.tokenEndpoint = m.token_endpoint;
-  if (Array.isArray(m.scopes_supported))
-    out.scopes = m.scopes_supported.join(", ");
-  out.tokenAuthMethod = pickTokenAuthMethod(m);
-  return out;
-}
-
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
-}
-
-function discoveredRegistrationEndpoint(
-  d: DiscoveredOAuth | null,
-): string | null {
-  const v = d?.metadata.registration_endpoint;
-  return typeof v === "string" && v.length > 0 ? v : null;
-}
-
-export function canAutoConfigureFromDiscovered(
-  d: DiscoveredOAuth | null,
-): boolean {
-  if (!d) return false;
-  if (discoveredRegistrationEndpoint(d) === null) return false;
-  const fields = proxyFieldsFromDiscovered(d);
-  // scopes_supported is optional — many MCP servers don't advertise scopes in
-  // their well-known doc. DCR accepts empty scopes.
-  return Boolean(
-    fields.slug && fields.authorizationEndpoint && fields.tokenEndpoint,
-  );
 }
 
 function placeholder<TInput, TOutput = void>(name: string) {
@@ -138,19 +66,18 @@ export const oauthWizardMachine = setup({
   },
   actors: {
     addExternalOAuth: placeholder<AddExternalOAuthInput>("addExternalOAuth"),
+    discoverExternalOAuth: placeholder<
+      DiscoverExternalOAuthInput,
+      DiscoverExternalOAuthOutput
+    >("discoverExternalOAuth"),
     provisionUserSession: placeholder<ProvisionUserSessionInput>(
       "provisionUserSession",
-    ),
-    registerClient: placeholder<RegisterClientInput, RegisterClientOutput>(
-      "registerClient",
     ),
   },
   guards: {
     validExternal: ({ context }) => checkExternal(context).ok,
     validProxyMeta: ({ context }) => checkProxyMeta(context).ok,
     validCreds: ({ context }) => checkCreds(context).ok,
-    canAutoConfigure: ({ context }) =>
-      canAutoConfigureFromDiscovered(context.discovered),
   },
   actions: {
     invalidateOnExternalSuccess: () => {},
@@ -167,13 +94,7 @@ export const oauthWizardMachine = setup({
       always: [
         {
           guard: ({ context }) => context.initialPath === "external",
-          target: "external.editing",
-          actions: assign({
-            external: ({ context }) =>
-              context.discovered && context.discovered.version === "2.1"
-                ? externalFromDiscovered(context.discovered)
-                : context.external,
-          }),
+          target: "external.source",
         },
         { target: "pathSelection" },
       ],
@@ -182,74 +103,140 @@ export const oauthWizardMachine = setup({
     pathSelection: {
       meta: { title: "Connect OAuth" },
       on: {
-        SELECT_EXTERNAL: {
-          target: "external.editing",
-          actions: assign({
-            external: ({ context }) =>
-              context.discovered && context.discovered.version === "2.1"
-                ? externalFromDiscovered(context.discovered)
-                : context.external,
-          }),
-        },
-        SELECT_PROXY: {
-          target: "proxy.metadata",
-          actions: assign({
-            proxy: ({ context }) =>
-              context.discovered
-                ? {
-                    ...context.proxy,
-                    ...proxyFieldsFromDiscovered(context.discovered),
-                    prefilled: true,
-                  }
-                : context.proxy,
-          }),
-        },
-        SELECT_PROXY_AUTO: [
-          {
-            guard: "canAutoConfigure",
-            target: "proxy.registering",
-            actions: assign({
-              proxy: ({ context }) =>
-                context.discovered
-                  ? {
-                      ...context.proxy,
-                      ...proxyFieldsFromDiscovered(context.discovered),
-                      prefilled: true,
-                    }
-                  : context.proxy,
-              autoRegistering: () => true,
-              error: () => null,
-            }),
-          },
-        ],
+        SELECT_EXTERNAL: "external.source",
+        SELECT_PROXY: "proxy.metadata",
       },
     },
 
     external: {
-      initial: "editing",
+      initial: "source",
       states: {
-        editing: {
+        source: {
           meta: { title: "Configure External OAuth" },
+          on: {
+            SELECT_PROVIDER_ISSUER: "providerIssuer",
+            SELECT_GRAM_HOSTED: {
+              target: "gramHosted",
+              actions: assign({
+                external: ({ context }) => ({
+                  ...context.external,
+                  verifiedMetadata: null,
+                }),
+                error: () => null,
+              }),
+            },
+            BACK: "#oauthWizard.pathSelection",
+          },
+        },
+        providerIssuer: {
+          meta: { title: "Provider-hosted metadata" },
           on: {
             FIELD_EXTERNAL: {
               actions: assign({
                 external: ({ context, event }) => ({
                   ...context.external,
                   [event.key]: event.value,
-                  jsonError:
-                    event.key === "metadataJson"
-                      ? null
-                      : context.external.jsonError,
+                  verifiedMetadata: null,
+                }),
+                error: () => null,
+              }),
+            },
+            NEXT: [
+              {
+                guard: ({ context }) =>
+                  validateProviderIssuerUrl(context.external.issuerUrl) ===
+                  null,
+                target: "verifying",
+                actions: assign({
+                  external: ({ context }) => ({
+                    ...context.external,
+                    verifiedMetadata: null,
+                  }),
+                  error: () => null,
+                }),
+              },
+              {
+                actions: assign({
+                  error: ({ context }) =>
+                    validateProviderIssuerUrl(context.external.issuerUrl),
+                }),
+              },
+            ],
+            BACK: {
+              target: "source",
+              actions: assign({ error: () => null }),
+            },
+          },
+        },
+        verifying: {
+          meta: { title: "Verifying provider metadata" },
+          invoke: {
+            src: "discoverExternalOAuth",
+            input: ({ context }): DiscoverExternalOAuthInput => ({
+              issuer: context.external.issuerUrl.trim(),
+            }),
+            onDone: {
+              target: "review",
+              actions: assign({
+                external: ({ context, event }) => ({
+                  ...context.external,
+                  verifiedMetadata: event.output,
+                }),
+                error: () => null,
+              }),
+            },
+            onError: {
+              target: "providerIssuer",
+              actions: assign({
+                error: ({ event }) =>
+                  errorMessage(
+                    event.error,
+                    "Could not verify provider metadata",
+                  ),
+              }),
+            },
+          },
+          on: {
+            FIELD_EXTERNAL: {
+              target: "providerIssuer",
+              actions: assign({
+                external: ({ context, event }) => ({
+                  ...context.external,
+                  [event.key]: event.value,
+                  verifiedMetadata: null,
                 }),
               }),
             },
-            APPLY_DISCOVERED: {
-              guard: ({ context }) => context.discovered != null,
+            BACK: "providerIssuer",
+          },
+        },
+        review: {
+          meta: { title: "Review provider metadata" },
+          on: {
+            FIELD_EXTERNAL: {
+              target: "providerIssuer",
               actions: assign({
-                external: ({ context }) =>
-                  context.discovered
-                    ? externalFromDiscovered(context.discovered)
-                    : context.external,
+                external: ({ context, event }) => ({
+                  ...context.external,
+                  [event.key]: event.value,
+                  verifiedMetadata: null,
+                }),
+              }),
+            },
+            SUBMIT: { target: "submitting" },
+            BACK: "providerIssuer",
+          },
+        },
+        gramHosted: {
+          meta: { title: "Speakeasy-hosted metadata" },
+          on: {
+            FIELD_EXTERNAL: {
+              actions: assign({
+                external: ({ context, event }) => ({
+                  ...context.external,
+                  [event.key]: event.value,
+                  jsonError: null,
+                }),
               }),
             },
             SUBMIT: [
@@ -266,30 +253,35 @@ export const oauthWizardMachine = setup({
               {
                 actions: assign({
                   external: ({ context }) => {
-                    const r = checkExternal(context);
+                    const result = checkExternal(context);
                     return {
                       ...context.external,
-                      jsonError: r.ok ? null : r.reason,
+                      jsonError: result.ok ? null : result.reason,
                     };
                   },
                 }),
               },
             ],
-            BACK: "#oauthWizard.pathSelection",
+            BACK: "source",
           },
         },
         submitting: {
           meta: { title: "Configure External OAuth" },
           invoke: {
             src: "addExternalOAuth",
-            input: ({ context }): AddExternalOAuthInput => ({
-              toolsetSlug: context.toolsetSlug,
-              slug: context.external.slug,
-              metadata: JSON.parse(context.external.metadataJson) as Record<
-                string,
-                unknown
-              >,
-            }),
+            input: ({ context }): AddExternalOAuthInput =>
+              context.external.verifiedMetadata
+                ? {
+                    toolsetSlug: context.toolsetSlug,
+                    authorizationServerIssuer:
+                      context.external.verifiedMetadata.issuer,
+                  }
+                : {
+                    toolsetSlug: context.toolsetSlug,
+                    metadata: JSON.parse(
+                      context.external.metadataJson,
+                    ) as Record<string, unknown>,
+                  },
             onDone: {
               target: "#oauthWizard.result.success",
               actions: [
@@ -304,23 +296,36 @@ export const oauthWizardMachine = setup({
                 "invalidateOnExternalSuccess",
               ],
             },
-            onError: {
-              target: "editing",
-              actions: assign({
-                external: ({ context, event }) => ({
-                  ...context.external,
-                  jsonError: errorMessage(
-                    event.error,
-                    "Failed to configure OAuth",
-                  ),
+            onError: [
+              {
+                guard: ({ context }) =>
+                  context.external.verifiedMetadata !== null,
+                target: "review",
+                actions: assign({
+                  error: ({ event }) =>
+                    errorMessage(
+                      event.error,
+                      "Failed to configure external OAuth",
+                    ),
                 }),
-              }),
-            },
+              },
+              {
+                target: "gramHosted",
+                actions: assign({
+                  external: ({ context, event }) => ({
+                    ...context.external,
+                    jsonError: errorMessage(
+                      event.error,
+                      "Failed to configure external OAuth",
+                    ),
+                  }),
+                }),
+              },
+            ],
           },
         },
       },
     },
-
     proxy: {
       initial: "metadata",
       states: {
@@ -334,19 +339,6 @@ export const oauthWizardMachine = setup({
                   [event.key]: event.value,
                 }),
                 error: () => null,
-              }),
-            },
-            APPLY_DISCOVERED: {
-              guard: ({ context }) => context.discovered != null,
-              actions: assign({
-                proxy: ({ context }) =>
-                  context.discovered
-                    ? {
-                        ...context.proxy,
-                        ...proxyFieldsFromDiscovered(context.discovered),
-                        prefilled: true,
-                      }
-                    : context.proxy,
               }),
             },
             NEXT: [
@@ -367,54 +359,8 @@ export const oauthWizardMachine = setup({
             BACK: "#oauthWizard.pathSelection",
           },
         },
-        registering: {
-          meta: { title: "Configure OAuth Proxy" },
-          invoke: {
-            src: "registerClient",
-            input: ({ context }): RegisterClientInput => ({
-              registrationEndpoint:
-                discoveredRegistrationEndpoint(context.discovered) ?? "",
-              tokenAuthMethod: context.proxy.tokenAuthMethod,
-              // Origin to run live auth-method discovery against. Derived from
-              // the discovered endpoints since the synthesized metadata omits
-              // the supported-methods list. Empty when no endpoint parses, in
-              // which case the service skips discovery and uses tokenAuthMethod.
-              issuer: authServerOrigin(
-                context.proxy.authorizationEndpoint,
-                context.proxy.tokenEndpoint,
-                discoveredRegistrationEndpoint(context.discovered) ?? "",
-              ),
-            }),
-            onDone: {
-              target: "submitting",
-              actions: assign({
-                proxy: ({ context, event }) => ({
-                  ...context.proxy,
-                  clientId: event.output.clientId,
-                  clientSecret: event.output.clientSecret,
-                  tokenAuthMethod:
-                    event.output.tokenAuthMethod ??
-                    context.proxy.tokenAuthMethod,
-                }),
-                error: () => null,
-              }),
-            },
-            onError: {
-              target: "autoRegisterFailed",
-              actions: assign({
-                error: ({ event }) =>
-                  errorMessage(event.error, "Failed to fetch credentials"),
-              }),
-            },
-          },
-        },
-        autoRegisterFailed: {
-          meta: { title: "OAuth Setup Failed" },
-          type: "final",
-        },
         credentials: {
           meta: { title: "OAuth Client Credentials" },
-          entry: assign({ autoRegistering: () => false }),
           on: {
             FIELD_PROXY: {
               actions: assign({
@@ -448,6 +394,7 @@ export const oauthWizardMachine = setup({
           invoke: {
             src: "provisionUserSession",
             input: ({ context }): ProvisionUserSessionInput => ({
+              toolsetId: context.toolsetId,
               toolsetSlug: context.toolsetSlug,
               authorizationEndpoint: context.proxy.authorizationEndpoint,
               tokenEndpoint: context.proxy.tokenEndpoint,
@@ -471,32 +418,16 @@ export const oauthWizardMachine = setup({
                 "invalidateOnProxyCreate",
               ],
             },
-            onError: [
-              {
-                // Auto-configure path: never drop the user back into the manual
-                // credentials form — they didn't ask to type anything. Surface
-                // the failure on the same screen used by DCR errors.
-                guard: ({ context }) => context.autoRegistering,
-                target: "#oauthWizard.proxy.autoRegisterFailed",
-                actions: assign({
-                  error: ({ event }) =>
-                    errorMessage(
-                      event.error,
-                      "Failed to configure user sessions",
-                    ),
-                }),
-              },
-              {
-                target: "#oauthWizard.proxy.credentials",
-                actions: assign({
-                  error: ({ event }) =>
-                    errorMessage(
-                      event.error,
-                      "Failed to configure user sessions",
-                    ),
-                }),
-              },
-            ],
+            onError: {
+              target: "#oauthWizard.proxy.credentials",
+              actions: assign({
+                error: ({ event }) =>
+                  errorMessage(
+                    event.error,
+                    "Failed to configure user sessions",
+                  ),
+              }),
+            },
           },
         },
         fatalError: {

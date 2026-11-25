@@ -15,6 +15,8 @@ import {
   ListAuditLogsRequest,
   ListAuditLogsResponse,
   ListAuditLogsSecurity,
+  Origin,
+  QueryParamCategory,
 } from "../models/operations/listauditlogs.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -87,6 +89,10 @@ export function buildAuditLogsQuery(
       subjectId: request?.subjectId,
       subjectIds: request?.subjectIds,
       actingSurface: request?.actingSurface,
+      from: request?.from,
+      to: request?.to,
+      category: request?.category,
+      origin: request?.origin,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -133,6 +139,10 @@ export function buildAuditLogsInfiniteQuery(
       subjectId: request?.subjectId,
       subjectIds: request?.subjectIds,
       actingSurface: request?.actingSurface,
+      from: request?.from,
+      to: request?.to,
+      category: request?.category,
+      origin: request?.origin,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -178,6 +188,10 @@ export function queryKeyAuditLogs(
     subjectId?: string | undefined;
     subjectIds?: Array<string> | undefined;
     actingSurface?: string | undefined;
+    from?: Date | undefined;
+    to?: Date | undefined;
+    category?: QueryParamCategory | undefined;
+    origin?: Origin | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },
@@ -195,6 +209,10 @@ export function queryKeyAuditLogsInfinite(
     subjectId?: string | undefined;
     subjectIds?: Array<string> | undefined;
     actingSurface?: string | undefined;
+    from?: Date | undefined;
+    to?: Date | undefined;
+    category?: QueryParamCategory | undefined;
+    origin?: Origin | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },

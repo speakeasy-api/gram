@@ -68,11 +68,10 @@ var File_gram_otel_v1_log_relay_proto protoreflect.FileDescriptor
 
 const file_gram_otel_v1_log_relay_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgram/otel/v1/log_relay.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"B\n" +
-	"\bLogRelay:6\x92\xb5\x182\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\b\n" +
+	"\x1cgram/otel/v1/log_relay.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\">\n" +
+	"\bLogRelay:2\x92\xb5\x18.\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\b\n" +
 	"\x02\b\n" +
-	"\x12\x02\b<J\x02\x10\n" +
-	"R\x16gram.otel.v1.LogRecordB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"
+	"\x12\x02\b<R\x16gram.otel.v1.LogRecordB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"
 
 var file_gram_otel_v1_log_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_otel_v1_log_relay_proto_goTypes = []any{

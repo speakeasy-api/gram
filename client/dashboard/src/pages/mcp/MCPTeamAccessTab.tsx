@@ -1,25 +1,26 @@
-import { Page } from "@/components/page-layout";
+import { useRBAC } from "@/hooks/useRBAC";
+import { IdentityLink } from "@/components/identity-link";
+import { useHideInsightsDock } from "@/components/insights-context";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/Sheet";
+import { Heading } from "@/components/ui/Heading";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
-import type { AccessMember } from "@gram/client/models/components/accessmember.js";
-import type { Role } from "@gram/client/models/components/role.js";
 import type { Tool } from "@/lib/toolTypes";
-import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
-import { useOrgRoutes } from "@/routes";
-import { useMembers } from "@gram/client/react-query/members.js";
-import { useRoles } from "@gram/client/react-query/roles.js";
-import { Badge } from "@/components/ui/Badge";
+import { toolDisposition } from "@/pages/access/mcpAccessModel";
+import type { ToolSource } from "@/pages/access/useServerTools";
 import { Button } from "@/components/ui/Button";
-import { Column, Table } from "@/components/ui/Table";
-import { SkeletonTable } from "@/components/ui/Skeleton";
-import { useMemo, useState, ReactElement } from "react";
+import { TriangleAlert } from "lucide-react";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useResourceAudience } from "@gram/client/react-query/resourceAudience.js";
+import { useMemo, type ReactElement } from "react";
+import { CheckAccess } from "./access/CheckAccess";
+import { ManageAccess } from "./access/ManageAccess";
+import { RoleLink } from "@/components/role-link";
+import { blockingRules } from "./access/serverAudience";
+import { toolSourceUnavailableMessage } from "./access/toolSourceMessage";
 
 function getInitials(name: string) {
   return name
@@ -30,476 +31,293 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
-type AccessLevel = "full" | "server" | "tools" | "none";
+/** A rule named on a row, linked when it is a role someone can go and edit. */
+interface NamedRule {
+  principalUrn: string;
+  displayName: string;
+}
 
-interface MemberAccess {
+/**
+ * Someone two rules disagree about: a role gives them the server and another
+ * role they are also in takes it away. A role's block outranks every grant
+ * except one made to the person by name for this server, so the role's grant
+ * does nothing — which is invisible from either role's own page.
+ */
+interface MemberConflict {
   member: AccessMember;
-  roles: Role[];
-  scopes: {
-    read: AccessLevel;
-    write: AccessLevel;
-    connect: AccessLevel;
-  };
+  grantedBy: NamedRule[];
+  blockedBy: NamedRule[];
 }
 
-function getAccessLevel(
-  role: Role,
-  scope: string,
-  resourceId: string,
-): AccessLevel {
-  const grant = role.grants.find((g) => g.scope === scope);
-  if (!grant) return "none";
-  // selectors undefined/null = unrestricted
-  if (grant.selectors === undefined || grant.selectors === null) return "full";
-  if (grant.selectors.length === 0) return "none";
-
-  const check: Record<string, string> = {
-    resourceKind: resourceKindForScope(scope),
-    resourceId,
-  };
-
-  // Check if any selector matches this server (without tool constraint)
-  const hasServer = grant.selectors.some(
-    (s) => selectorMatches(s, check) && !s.tool,
-  );
-  // Check if any selector matches with a specific tool on this server
-  const hasTools = grant.selectors.some(
-    (s) => selectorMatches(s, check) && !!s.tool,
-  );
-  if (hasServer) return "server";
-  if (hasTools) return "tools";
-  return "none";
-}
-
-/** Extract tool names from selectors for this server */
-function getToolIdsForScope(
-  role: Role,
-  scope: string,
-  resourceId: string,
-): string[] {
-  const grant = role.grants.find((g) => g.scope === scope);
-  if (!grant?.selectors) return [];
-  const check: Record<string, string> = {
-    resourceKind: resourceKindForScope(scope),
-    resourceId,
-  };
-  return grant.selectors
-    .filter((s) => selectorMatches(s, check) && s.tool)
-    .map((s) => s.tool!);
-}
-
-/** Match tool identifiers against toolset tools (by id or name) */
-function resolveTools(toolIds: string[], tools: Tool[]): Tool[] {
-  const idSet = new Set(toolIds);
-  return tools.filter(
-    (t) => ("id" in t && idSet.has(t.id)) || ("name" in t && idSet.has(t.name)),
-  );
-}
-
-const ACCESS_LEVEL_PRIORITY: Record<AccessLevel, number> = {
-  full: 3,
-  server: 2,
-  tools: 1,
-  none: 0,
-};
-
-function bestAccessLevel(levels: AccessLevel[]): AccessLevel {
-  let best: AccessLevel = "none";
-  for (const level of levels) {
-    if (ACCESS_LEVEL_PRIORITY[level] > ACCESS_LEVEL_PRIORITY[best]) {
-      best = level;
-    }
-  }
-  return best;
-}
-
-const METHOD_COLORS: Record<string, string> = {
-  GET: "text-blue-600 bg-blue-50",
-  POST: "text-green-600 bg-green-50",
-  PUT: "text-amber-600 bg-amber-50",
-  PATCH: "text-orange-600 bg-orange-50",
-  DELETE: "text-red-600 bg-red-50",
-};
-
-function ToolRow({ tool }: { tool: Tool }) {
-  const isHttp = tool.type === "http";
-  const httpTool = isHttp ? (tool as Tool & { type: "http" }) : null;
-  const method = httpTool?.httpMethod?.toUpperCase();
-  const methodColors = method
-    ? (METHOD_COLORS[method] ?? "text-muted-foreground bg-muted")
-    : null;
-
-  const annotations = isHttp ? httpTool?.annotations : undefined;
-  const annotationTags: string[] = [];
-  if (annotations?.readOnlyHint) annotationTags.push("Read-only");
-  if (annotations?.destructiveHint) annotationTags.push("Destructive");
-  if (annotations?.idempotentHint) annotationTags.push("Idempotent");
-  if (annotations?.openWorldHint) annotationTags.push("Open-world");
-
-  return (
-    <div className="border-border border p-3">
-      <div className="flex items-start gap-2">
-        {method && methodColors && (
-          <span
-            className={`mt-0.5 inline-flex shrink-0 items-center px-1.5 py-0.5 font-mono text-[10px] font-bold ${methodColors}`}
-          >
-            {method}
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
-          <Text variant="body" className="font-mono text-sm font-medium">
-            {"name" in tool ? tool.name : "Unknown tool"}
-          </Text>
-          {httpTool?.path && (
-            <Text
-              variant="body"
-              className="text-muted-foreground mt-0.5 font-mono text-xs"
-            >
-              {httpTool.path}
-            </Text>
-          )}
-        </div>
-      </div>
-      {"description" in tool && tool.description && (
-        <Text
-          variant="body"
-          className="text-muted-foreground mt-1.5 line-clamp-2 text-xs"
-        >
-          {tool.description}
-        </Text>
-      )}
-      {annotationTags.length > 0 && (
-        <div className="mt-2 flex gap-1">
-          {annotationTags.map((tag) => (
-            <span
-              key={tag}
-              className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px]"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AccessBadge({
-  level,
-  onClick,
-}: {
-  level: AccessLevel;
-  onClick?: () => void;
-}) {
-  switch (level) {
-    case "full":
-      return (
-        <Badge variant="neutral">
-          <Badge.Text>All servers</Badge.Text>
-        </Badge>
-      );
-    case "server":
-      return (
-        <Badge variant="neutral">
-          <Badge.Text>This server</Badge.Text>
-        </Badge>
-      );
-    case "tools":
-      return (
-        <button type="button" onClick={onClick} className="cursor-pointer">
-          <Badge
-            variant="neutral"
-            className="hover:bg-accent transition-colors"
-          >
-            <Badge.Text>Specific tools &ensp;&rsaquo;</Badge.Text>
-          </Badge>
-        </button>
-      );
-    case "none":
-      return (
-        <span className="text-muted-foreground/50 text-sm">No access</span>
-      );
-  }
-}
-
-interface ToolDetailSheet {
-  member: AccessMember;
-  roles: Role[];
-  scope: string;
-  scopeLabel: string;
-  // Rich Tool objects resolved against a toolset catalog. Empty for
-  // mcp_servers-backed servers (no Gram-side tool catalog), in which case
-  // toolNames carries the per-grant tool identifiers verbatim.
-  tools: Tool[];
-  toolNames: string[];
-}
-
-// MCPTeamAccessTab renders the per-server team access matrix for any MCP
-// server identified by its resource id. Both toolset-backed and
-// mcp_servers-backed (Remote MCP) servers grant under the same `mcp:*` scope
-// family and the same `"mcp"` resource kind today, so the same component
-// serves both — the caller just supplies the resource id and, when
-// available, the toolset's tool catalog for rich per-tool drilldowns.
-//
-// TODO(AGE-1902): once toolset-backed MCP data moves to mcp_servers, the
-// resourceId on every callsite should already be an mcp_servers id and the
-// `tools` prop will be sourced from whatever tool-catalog primitive replaces
-// `toolset.tools` for both backing kinds.
+// MCPTeamAccessTab renders who can use one MCP server, for any server
+// identified by its resource id. Toolset-backed and mcp_servers-backed (Remote
+// MCP) servers grant under the same `mcp:*` scope family and the same `"mcp"`
+// resource kind today, so the same component serves both.
 export function MCPTeamAccessTab({
   resourceId,
+  serverName,
   tools,
+  toolSource,
+  checkAccess = true,
 }: {
   resourceId: string;
+  toolSource?: ToolSource;
+  serverName?: string;
+  /** The server's tools, when the backend exposes a catalogue for it. */
   tools?: Tool[];
+  /**
+   * Whether to offer Check access. A gateway turns it off: nothing checks
+   * access on a gateway's own id, each server it fronts is checked instead.
+   */
+  checkAccess?: boolean;
 }): ReactElement | null {
-  const orgRoutes = useOrgRoutes();
-  const { data: membersData, isLoading: membersLoading } = useMembers();
-  const { data: rolesData, isLoading: rolesLoading } = useRoles();
+  const { hasAnyScope } = useRBAC();
+  const canManage = hasAnyScope(["org:admin"]);
+  // The dock floats over the bottom of the page, which here is rows with
+  // edit and remove controls and the access check.
+  useHideInsightsDock();
+  const {
+    data: audienceData,
+    isLoading: audienceLoading,
+    isError: audienceFailed,
+  } = useResourceAudience(
+    { resourceKind: "mcp", resourceId },
+    undefined,
+    // Recover inline: the page's other sections still work, and a save must
+    // not treat an unread audience as an empty one.
+    { throwOnError: false },
+  );
+  const { data: membersData } = useMembers();
 
-  const [sheetData, setSheetData] = useState<ToolDetailSheet | null>(null);
+  const entries = useMemo(
+    () => audienceData?.entries ?? [],
+    [audienceData?.entries],
+  );
 
-  const memberAccess = useMemo((): MemberAccess[] => {
+  // Remote servers share the role editor's tool source. Gateways can still
+  // omit the catalogue and narrow by annotations.
+  const catalogTools =
+    toolSource?.status === "ready" ? toolSource.tools : tools;
+  const toolCatalog = useMemo(
+    () =>
+      catalogTools?.map((tool) => ({
+        name: "name" in tool ? tool.name : "",
+        disposition: toolDisposition("annotations" in tool ? tool : {}),
+      })),
+    [catalogTools],
+  );
+
+  // The people two rules disagree about. Nothing they were given survives,
+  // and nothing on the rules list says why, so they get a section that names
+  // both rules and says how to resolve it.
+  const conflicts = useMemo((): MemberConflict[] => {
     const members = membersData?.members ?? [];
-    const roles = rolesData?.roles ?? [];
-    const roleMap = new Map(roles.map((r) => [r.id, r]));
+    const reaching = new Map<string, ResourceAudienceEntry[]>();
+    for (const entry of entries) {
+      for (const memberId of entry.memberIds ?? []) {
+        reaching.set(memberId, [...(reaching.get(memberId) ?? []), entry]);
+      }
+    }
+
+    const named = (rules: ResourceAudienceEntry[]): NamedRule[] => {
+      const byUrn = new Map<string, NamedRule>();
+      for (const rule of rules) {
+        byUrn.set(rule.principalUrn, {
+          principalUrn: rule.principalUrn,
+          displayName: rule.displayName,
+        });
+      }
+      return [...byUrn.values()];
+    };
+
     return members
       .map((member) => {
-        const roles = member.roleIds
-          .map((id) => roleMap.get(id))
-          .filter((r): r is Role => r !== undefined);
-        if (roles.length === 0) return null;
-        const scopes = {
-          read: bestAccessLevel(
-            roles.map((r) => getAccessLevel(r, "mcp:read", resourceId)),
+        const rules = reaching.get(member.id) ?? [];
+        const blocks = blockingRules(rules, `user:${member.id}`);
+        // A grant they never had is not a conflict, it is just no access.
+        if (blocks.length === 0) return null;
+        const blockedBy = named(blocks);
+        const blocking = new Set(blockedBy.map((rule) => rule.principalUrn));
+        // Only the roles the conflict is with. A role that both grants the
+        // server organization-wide and blocks it here is arguing with itself,
+        // not with another role, and naming it on both sides of the row would
+        // read as a contradiction rather than a thing to go and fix.
+        const grantedBy = named(
+          rules.filter(
+            (rule) =>
+              !rule.level.startsWith("blocked") &&
+              !blocking.has(rule.principalUrn),
           ),
-          write: bestAccessLevel(
-            roles.map((r) => getAccessLevel(r, "mcp:write", resourceId)),
-          ),
-          connect: bestAccessLevel(
-            roles.map((r) => getAccessLevel(r, "mcp:connect", resourceId)),
-          ),
-        };
-        return { member, roles, scopes };
+        );
+        if (grantedBy.length === 0) return null;
+        return { member, grantedBy, blockedBy };
       })
-      .filter((m): m is MemberAccess => m !== null)
-      .filter(
-        (m) =>
-          m.scopes.read !== "none" ||
-          m.scopes.write !== "none" ||
-          m.scopes.connect !== "none",
-      )
+      .filter((row): row is MemberConflict => row !== null)
       .sort((a, b) => a.member.name.localeCompare(b.member.name));
-  }, [membersData?.members, rolesData?.roles, resourceId]);
+  }, [membersData?.members, entries]);
 
-  const openToolSheet = (
-    row: MemberAccess,
-    scope: string,
-    scopeLabel: string,
-  ) => {
-    const toolNames = [
-      ...new Set(
-        row.roles.flatMap((r) => getToolIdsForScope(r, scope, resourceId)),
-      ),
-    ];
-    const matched = tools ? resolveTools(toolNames, tools) : [];
-    setSheetData({
-      member: row.member,
-      roles: row.roles,
-      scope,
-      scopeLabel,
-      tools: matched,
-      toolNames,
-    });
-  };
-
-  if (membersLoading || rolesLoading) {
-    return <SkeletonTable />;
-  }
-
-  const columns: Column<MemberAccess>[] = [
+  const conflictColumns: Column<MemberConflict>[] = [
     {
       key: "member",
-      header: "Member",
-      width: "280px",
-      render: (row) => (
-        <div className="flex items-center gap-3">
-          <Avatar className="h-8 w-8">
-            {row.member.photoUrl && (
-              <AvatarImage src={row.member.photoUrl} alt={row.member.name} />
-            )}
-            <AvatarFallback className="text-xs">
-              {getInitials(row.member.name)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <Text variant="body" className="truncate font-medium">
-              {row.member.name}
-            </Text>
-            <Text
-              variant="body"
-              className="text-muted-foreground truncate text-xs"
-            >
-              {row.member.email}
-            </Text>
-          </div>
-        </div>
-      ),
+      header: "Person",
+      width: "300px",
+      render: (row) => <PersonCell member={row.member} />,
     },
     {
-      key: "role",
-      header: "Role",
+      key: "granted",
+      header: "Granted by",
       width: "1fr",
-      render: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {row.roles.map((role) => (
-            <Text key={role.id} variant="body" className="text-sm">
-              {role.name}
-            </Text>
-          ))}
-        </div>
-      ),
+      render: (row) => <RuleNames rules={row.grantedBy} />,
     },
     {
-      key: "read",
-      header: "Read",
-      width: "120px",
-      render: (row) => (
-        <AccessBadge
-          level={row.scopes.read}
-          onClick={
-            row.scopes.read === "tools"
-              ? () => openToolSheet(row, "mcp:read", "Read")
-              : undefined
-          }
-        />
-      ),
-    },
-    {
-      key: "write",
-      header: "Write",
-      width: "120px",
-      render: (row) => (
-        <AccessBadge
-          level={row.scopes.write}
-          onClick={
-            row.scopes.write === "tools"
-              ? () => openToolSheet(row, "mcp:write", "Write")
-              : undefined
-          }
-        />
-      ),
-    },
-    {
-      key: "connect",
-      header: "Connect",
-      width: "160px",
-      render: (row) => (
-        <AccessBadge
-          level={row.scopes.connect}
-          onClick={
-            row.scopes.connect === "tools"
-              ? () => openToolSheet(row, "mcp:connect", "Connect")
-              : undefined
-          }
-        />
-      ),
+      key: "blocked",
+      header: "Blocked by",
+      width: "1fr",
+      render: (row) => <RuleNames rules={row.blockedBy} />,
     },
   ];
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Team access</Page.Section.Title>
-      <Page.Section.Body>
-        <div className="mb-4">
-          <Text variant="body" className="text-muted-foreground text-sm">
-            {memberAccess.length} team member
-            {memberAccess.length !== 1 ? "s" : ""} with access to this server
+    <section className="flex flex-col gap-4">
+      {toolSource?.status === "loading" && (
+        <Text muted small>
+          Loading server tools…
+        </Text>
+      )}
+      {toolSource?.status === "error" && (
+        <div role="status">
+          <Text muted small>
+            Server tools could not be loaded.
           </Text>
+          <Button variant="secondary" size="sm" onClick={toolSource.retry}>
+            <Button.Text>Retry loading tools</Button.Text>
+          </Button>
         </div>
-        <Table columns={columns}>
-          <Table.Header columns={columns} />
-          {memberAccess.length === 0 ? (
-            <Table.NoResultsMessage>
-              <div className="px-4 py-6 text-center">
-                No team members have access to this server.
-              </div>
-            </Table.NoResultsMessage>
-          ) : (
+      )}
+      {toolSource?.status === "needs-write" && (
+        <Text muted small>
+          {toolSourceUnavailableMessage(toolSource)}
+        </Text>
+      )}
+      {audienceFailed ? (
+        <Text muted small>
+          Access rules could not be loaded, so they cannot be changed here yet.
+          Reload the page to try again.
+        </Text>
+      ) : (
+        <ManageAccess
+          description={`Who can use ${serverName ?? "this server"}. Access given here applies to this server only.`}
+          resourceId={resourceId}
+          resourceName={serverName}
+          entries={entries}
+          rolePlugins={canManage ? audienceData?.rolePlugins : undefined}
+          version={audienceData?.version ?? ""}
+          toolCatalog={toolCatalog}
+          toolSource={toolSource}
+          isLoading={audienceLoading}
+        />
+      )}
+
+      {/* Below the rules it explains: the list above is what gets changed,
+            this is where one person's outcome is read back. */}
+      {checkAccess && (
+        <>
+          <div className="mt-10 mb-4">
+            <Heading variant="h4">Check a person&rsquo;s access</Heading>
+            <Text muted small className="mt-1">
+              Pick one person to see what they can do on{" "}
+              {serverName ?? "this server"}, and which rules decide it.
+            </Text>
+          </div>
+          <CheckAccess
+            resourceId={resourceId}
+            serverName={serverName ?? "this server"}
+          />
+        </>
+      )}
+
+      {/* Two rules disagreeing about the same person. Nothing on the rules
+            list says why they lost access, so the pair is named here along
+            with the only place either can be changed. */}
+      {!audienceFailed && conflicts.length > 0 && (
+        <>
+          <div className="mt-10 mb-4">
+            {/* The one section on this page reporting something wrong
+                  rather than something configured, so it is marked as such
+                  before the heading is read. */}
+            <div className="flex items-center gap-2">
+              <TriangleAlert
+                className="h-4 w-4 shrink-0 text-amber-500"
+                aria-hidden
+              />
+              <Heading variant="h4">Conflicting roles</Heading>
+            </div>
+            <Text muted small className="mt-1">
+              These people are granted access through one rule and blocked by
+              another, so they cannot reach this server. To fix it, remove the
+              block: on the blocking role&rsquo;s page, or from the list above
+              when it names the person directly. When the block comes from a
+              role or everyone, giving them access to this server by name also
+              works, since that outranks it; a block on the person themselves
+              still applies.
+            </Text>
+          </div>
+          <Table columns={conflictColumns}>
+            <Table.Header columns={conflictColumns} />
             <Table.Body
-              columns={columns}
-              data={memberAccess}
+              columns={conflictColumns}
+              data={conflicts}
               rowKey={(row) => row.member.id}
             />
-          )}
-          <Table.Row>
-            <div className="border-border bg-muted/20 col-span-full border-t py-5 text-center">
-              <Text variant="body" className="text-muted-foreground text-sm">
-                Want to grant new members access?
-              </Text>
-              <div className="mt-2">
-                <orgRoutes.access.roles.Link>
-                  <Button variant="primary" size="sm">
-                    <Button.Text>Configure Roles</Button.Text>
-                  </Button>
-                </orgRoutes.access.roles.Link>
-              </div>
-            </div>
-          </Table.Row>
-        </Table>
+          </Table>
+        </>
+      )}
+    </section>
+  );
+}
 
-        <Sheet open={!!sheetData} onOpenChange={() => setSheetData(null)}>
-          <SheetContent className="sm:max-w-md">
-            {sheetData && (
-              <>
-                <SheetHeader>
-                  <SheetTitle>{sheetData.scopeLabel} access</SheetTitle>
-                  <SheetDescription>
-                    <span className="text-foreground font-medium">
-                      {sheetData.member.name}
-                    </span>{" "}
-                    can {sheetData.scopeLabel.toLowerCase()}{" "}
-                    {sheetData.toolNames.length} tool
-                    {sheetData.toolNames.length !== 1 ? "s" : ""} on this server
-                    via the{" "}
-                    <span className="text-foreground font-medium">
-                      {sheetData.roles.map((r) => r.name).join(", ")}
-                    </span>{" "}
-                    {sheetData.roles.length === 1 ? "role" : "roles"}.
-                  </SheetDescription>
-                </SheetHeader>
-                <div className="flex-1 overflow-y-auto px-4 pb-4">
-                  <div className="space-y-2">
-                    {sheetData.tools.length > 0 ? (
-                      sheetData.tools.map((tool, i) => (
-                        <ToolRow key={i} tool={tool} />
-                      ))
-                    ) : sheetData.toolNames.length > 0 ? (
-                      // No catalog available (mcp_servers-backed servers don't
-                      // expose tools through Gram). Surface the raw tool
-                      // identifiers from the grant selectors so the user can
-                      // at least see what they have access to.
-                      sheetData.toolNames.map((name) => (
-                        <div key={name} className="border-border border p-3">
-                          <Text
-                            variant="body"
-                            className="font-mono text-sm font-medium"
-                          >
-                            {name}
-                          </Text>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-muted-foreground py-8 text-center text-sm">
-                        Could not resolve tool names from grants.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-          </SheetContent>
-        </Sheet>
-      </Page.Section.Body>
-    </Page.Section>
+/** The person a row is about: avatar, name, and the address that identifies them. */
+function PersonCell({ member }: { member: AccessMember }): ReactElement {
+  return (
+    <div className="flex items-center gap-3">
+      <Avatar className="h-8 w-8">
+        {member.photoUrl && (
+          <AvatarImage src={member.photoUrl} alt={member.name} />
+        )}
+        <AvatarFallback className="text-xs">
+          {getInitials(member.name)}
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0">
+        <IdentityLink identifier={{ userId: member.id }}>
+          <Text variant="body" className="truncate font-medium">
+            {member.name}
+          </Text>
+        </IdentityLink>
+        <Text variant="body" className="text-muted-foreground truncate text-xs">
+          {member.email}
+        </Text>
+      </div>
+    </div>
+  );
+}
+
+/** Rules named on a conflict row, linked when the rule lives on a role. */
+function RuleNames({ rules }: { rules: NamedRule[] }): ReactElement {
+  return (
+    <Text variant="body" className="text-sm break-words">
+      {rules.map((rule, index) => (
+        <span key={rule.principalUrn}>
+          {index > 0 && ", "}
+          {rule.principalUrn.startsWith("role:") ? (
+            <RoleLink principalUrn={rule.principalUrn}>
+              {rule.displayName}
+            </RoleLink>
+          ) : (
+            rule.displayName
+          )}
+        </span>
+      ))}
+    </Text>
   );
 }

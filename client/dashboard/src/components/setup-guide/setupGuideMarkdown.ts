@@ -41,7 +41,7 @@ interface MarkdownNode {
  * Namespaces a heading id by the guide that authored it.
  *
  * Matched guides are stacked into one document, and their headings collide by
- * construction: the Gram half of every guide is templated from one canonical
+ * construction: the Speakeasy half of every guide is templated from one canonical
  * section, so ids like `#connect-speakeasy-credentials` appear in all of them.
  * Left as authored, an anchor in the second guide scrolls to the first guide's
  * copy of that heading.

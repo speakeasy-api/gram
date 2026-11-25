@@ -37,6 +37,9 @@ type Skill struct {
 	LastSeenAt *string
 	// The number of reconciled activations observed for this skill.
 	SeenCount int64
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Returned by list and get only.
+	LastLoadedOverMcpAt *string
 	// The active public share token, absent when the skill is not shared.
 	ShareToken *string
 	// When the skill was created.

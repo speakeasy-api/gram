@@ -27,17 +27,17 @@ func ResolveParams(
 ) (Params, error) {
 	apiKey := ResolveKey(c, prof)
 	if apiKey == "" {
-		return Params{}, fmt.Errorf("api-key required: not found in --api-key flag, $GRAM_API_KEY environment variable, or profile")
+		return Params{}, fmt.Errorf("api-key required: not found in --api-key flag, $SPEAKEASY_AI_API_KEY environment variable, or profile")
 	}
 
 	orgSlug := ResolveOrgSlug(c, prof)
 	if orgSlug == "" {
-		return Params{}, fmt.Errorf("organization required: not found in --org flag, $GRAM_ORG environment variable, or profile")
+		return Params{}, fmt.Errorf("organization required: not found in --org flag, $SPEAKEASY_AI_ORG environment variable, or profile")
 	}
 
 	projectSlug := ResolveProject(c, prof)
 	if projectSlug == "" {
-		return Params{}, fmt.Errorf("project required: not found in --project flag, $GRAM_PROJECT environment variable, or profile")
+		return Params{}, fmt.Errorf("project required: not found in --project flag, $SPEAKEASY_AI_PROJECT environment variable, or profile")
 	}
 
 	apiURL, err := ResolveURL(c, prof)

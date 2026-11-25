@@ -1,4 +1,4 @@
-package platformtools
+package platformtools_test
 
 import (
 	"bytes"
@@ -63,7 +63,6 @@ func TestExecuteSearchLogs_IgnoresInjectedAuthFields(t *testing.T) {
 	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{

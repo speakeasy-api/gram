@@ -21,7 +21,7 @@ The migration engine is controlled by the `CLICKHOUSE_MIGRATION_ENGINE` environm
 
 ```toml
 [env]
-CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"  # or "atlas"
+CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate" # or "atlas"
 ```
 
 If you don't have this variable set, the `mise zero:migrations` task will automatically detect whether you have Atlas installed and logged in, and configure the appropriate engine for you.
@@ -38,9 +38,9 @@ The script will automatically use the configured migration engine.
 
 ## URL Format Differences
 
-Note that golang-migrate requires a different URL format than Atlas:
+Unlike Atlas, golang-migrate requires the database, username, and password as query parameters. A database in the URL path is ignored.
 
 - **Atlas**: `clickhouse://user:password@host:port/database?params`
-- **golang-migrate**: `clickhouse://host:port/database?username=user&password=pass&params`
+- **golang-migrate**: `clickhouse://host:port?database=gram&username=user&password=pass&secure=true&skip_verify=true&x-multi-statement=true`
 
 This is handled automatically by using the `GRAM_CLICKHOUSE_GOMIGRATE_URL` environment variable for golang-migrate.

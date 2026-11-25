@@ -1,4 +1,5 @@
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 
 // Snapshot of the issuer + RFC 8414 metadata for a given Issuer URL. Created
 // fresh on every successful discovery and seeded from saved records in the
@@ -11,6 +12,8 @@ export type DiscoveredEndpoints = {
   jwksUri: string;
   scopesSupported: string[];
   grantTypesSupported: string[];
+  // RFC 7523bis profiles; the ID-JAG profile gates identity chaining.
+  authorizationGrantProfilesSupported: string[];
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
   // PKCE methods (RFC 8414 code_challenge_methods_supported). Unlike the
@@ -38,6 +41,15 @@ export type DiscoveredEndpoints = {
   serviceDocumentation: string;
   opPolicyUri: string;
   opTosUri: string;
+  // OIDC userinfo / RFC 7662 introspection endpoints; "" = not advertised.
+  userinfoEndpoint: string;
+  introspectionEndpoint: string;
+  // Tri-state like codeChallengeMethodsSupported: null = never captured.
+  introspectionEndpointAuthMethodsSupported: string[] | null;
+  idTokenSigningAlgValuesSupported: string[] | null;
+  claimsSupported: string[] | null;
+  backchannelLogoutSupported: boolean | null;
+  authorizationResponseIssParameterSupported: boolean | null;
 };
 
 // Matches the OAuth Proxy wizard's parseScopes helper: split on commas, trim,
@@ -50,36 +62,46 @@ export function parseScopes(raw: string): string[] {
     .filter((scope) => scope.length > 0);
 }
 
+// DCR callers leave private_key_jwt disabled because a newly registered client
+// cannot already have Speakeasy's JWKS attached. Existing-client settings opt in
+// after the key set has been attached through its dedicated endpoint.
 export function narrowTokenEndpointAuthMethod(
   value: string | null | undefined,
+  allowPrivateKeyJwt = false,
 ): CreateRemoteSessionClientFormTokenEndpointAuthMethod | undefined {
   if (
     value ===
       CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic ||
     value ===
       CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost ||
-    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None
+    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None ||
+    (allowPrivateKeyJwt &&
+      value ===
+        CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt)
   ) {
     return value;
   }
   return undefined;
 }
 
-// Picks the preferred auth method from the issuer's advertised list.
-// Preference order: client_secret_basic > client_secret_post > none.
-// Falls back to client_secret_basic when the issuer advertises no recognized
-// method, so DCR always sends one — upstreams that require an explicit method
-// reject a registration that omits it ("No supported Token Endpoint Auth
-// Method provided."). This fallback was the pre-#2910 server-side default.
-export function pickPreferredAuthMethod(
-  supported: string[],
-): CreateRemoteSessionClientFormTokenEndpointAuthMethod {
-  const { ClientSecretBasic, ClientSecretPost, None } =
-    CreateRemoteSessionClientFormTokenEndpointAuthMethod;
-  for (const preferred of [ClientSecretBasic, ClientSecretPost, None]) {
-    if (supported.includes(preferred)) return preferred;
-  }
-  return ClientSecretBasic;
+export function isPrivateKeyJwtAuthMethod(
+  method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+): boolean {
+  return (
+    method ===
+    CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt
+  );
+}
+
+// The server retains an existing secret when this update omits clientSecret.
+// Never rotate a dormant secret while private_key_jwt is selected, even if a
+// value was typed before switching authentication methods in the form.
+export function clientSecretUpdateValue(
+  method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+  secret: string,
+): string | undefined {
+  if (isPrivateKeyJwtAuthMethod(method)) return undefined;
+  return secret.trim() || undefined;
 }
 
 // Derive a unique slug from the Issuer URL's hostname. Mirrors the hyphen-style
@@ -121,8 +143,29 @@ export function deriveNameFromUrl(url: string): string | null {
 // UI-only choice that routes to the matching create endpoint: DCR proxies a
 // registration to obtain credentials, Manual takes caller-supplied
 // credentials, and CIMD (Client ID Metadata Document) creates a
-// credential-less client whose client_id is a Gram-hosted document URL.
+// credential-less client whose client_id is a Speakeasy-hosted document URL.
 export type ClientType = "dcr" | "manual" | "cimd";
+
+export const TUNNELED_DCR_PERMISSION_MESSAGE =
+  "Dynamic client registration through this authorization server's tunnel requires platform admin access. Use Manual, or CIMD when supported.";
+
+export function dynamicClientRegistrationAvailability({
+  registrationEndpoint,
+  tunneled,
+  isPlatformAdmin,
+}: {
+  registrationEndpoint: string | null | undefined;
+  tunneled: boolean;
+  isPlatformAdmin: boolean;
+}): { available: boolean; permissionRestricted: boolean } {
+  const hasRegistrationEndpoint = !!registrationEndpoint?.trim();
+  const permissionRestricted =
+    hasRegistrationEndpoint && tunneled && !isPlatformAdmin;
+  return {
+    available: hasRegistrationEndpoint && !permissionRestricted,
+    permissionRestricted,
+  };
+}
 
 export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   dcr: "Dynamic Client Registration (DCR)",
@@ -132,7 +175,7 @@ export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
 
 // The selectable client types for an issuer. DCR and CIMD appear only when the
 // issuer supports them; Manual is always available. The first entry is the
-// default — an automatic type (DCR, then CIMD) when one is available, so the
+// default — an automatic type (CIMD, then DCR) when one is available, so the
 // recommended path stays pre-selected while remaining switchable.
 export function availableClientTypes({
   dcrAvailable,
@@ -142,8 +185,8 @@ export function availableClientTypes({
   cimdAvailable: boolean;
 }): ClientType[] {
   const types: ClientType[] = [];
-  if (dcrAvailable) types.push("dcr");
   if (cimdAvailable) types.push("cimd");
+  if (dcrAvailable) types.push("dcr");
   types.push("manual");
   return types;
 }
@@ -156,7 +199,7 @@ export function clientTypeHelp(
 ): string {
   switch (clientType) {
     case "dcr":
-      return "The issuer advertises a registration endpoint (RFC 7591), so the platform can automatically register a client on save. You can also choose to manually define an existing client.";
+      return "A registration endpoint (RFC 7591) is configured, so the platform can automatically register a client on save. You can also choose to manually define an existing client.";
     case "cimd":
       return "The issuer supports Client ID Metadata Documents, so the platform hosts a public document and uses its URL as the client_id. No credentials are stored; the issuer authenticates the client by dereferencing that URL.";
     case "manual": {
@@ -169,4 +212,57 @@ export function clientTypeHelp(
       return help;
     }
   }
+}
+
+// legacyCallbackURL is the callback clients registered before
+// /mcp/remote_login_callback existed, on the same origin as the client's
+// current callbackURL (the server reports it per client, since a client keeps
+// the origin it was registered with). The server still mounts it and forwards
+// into the current callback, for clients in legacy callback compatibility mode.
+export function legacyCallbackURL(callbackURL: string): string {
+  // Swap only the path: URL.origin would drop an explicit default port the
+  // server keeps.
+  return callbackURL.replace(
+    /\/mcp\/remote_login_callback$/,
+    "/oauth/callback",
+  );
+}
+
+/** The snapshot a fresh discovery of `url` captured from its metadata. */
+export function discoveredFromDraft(
+  url: string,
+  draft: RemoteSessionIssuerDraft,
+): DiscoveredEndpoints {
+  return {
+    url,
+    authorizationEndpoint: draft.authorizationEndpoint ?? "",
+    tokenEndpoint: draft.tokenEndpoint ?? "",
+    registrationEndpoint: draft.registrationEndpoint ?? "",
+    jwksUri: draft.jwksUri ?? "",
+    scopesSupported: draft.scopesSupported ?? [],
+    grantTypesSupported: draft.grantTypesSupported ?? [],
+    authorizationGrantProfilesSupported:
+      draft.authorizationGrantProfilesSupported ?? [],
+    responseTypesSupported: draft.responseTypesSupported ?? [],
+    tokenEndpointAuthMethodsSupported:
+      draft.tokenEndpointAuthMethodsSupported ?? [],
+    // Discovery ran, so a document that omits the field captures as [] —
+    // never null, which is reserved for "never captured" seeded records.
+    codeChallengeMethodsSupported: draft.codeChallengeMethodsSupported ?? [],
+    clientIdMetadataDocumentSupported: draft.clientIdMetadataDocumentSupported,
+    revocationEndpoint: draft.revocationEndpoint ?? "",
+    serviceDocumentation: draft.serviceDocumentation ?? "",
+    opPolicyUri: draft.opPolicyUri ?? "",
+    opTosUri: draft.opTosUri ?? "",
+    userinfoEndpoint: draft.userinfoEndpoint ?? "",
+    introspectionEndpoint: draft.introspectionEndpoint ?? "",
+    introspectionEndpointAuthMethodsSupported:
+      draft.introspectionEndpointAuthMethodsSupported ?? [],
+    idTokenSigningAlgValuesSupported:
+      draft.idTokenSigningAlgValuesSupported ?? [],
+    claimsSupported: draft.claimsSupported ?? [],
+    backchannelLogoutSupported: draft.backchannelLogoutSupported,
+    authorizationResponseIssParameterSupported:
+      draft.authorizationResponseIssParameterSupported,
+  };
 }

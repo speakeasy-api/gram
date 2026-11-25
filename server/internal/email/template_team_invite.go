@@ -1,6 +1,6 @@
 package email
 
-// TeamInvite is sent to a recipient who has been invited to join a Gram
+// TeamInvite is sent to a recipient who has been invited to join a Speakeasy
 // organization. The fields below mirror the merge variables the Loops
 // template expects.
 type TeamInvite struct {

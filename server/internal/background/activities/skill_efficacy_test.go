@@ -72,11 +72,12 @@ func TestSkillEfficacyScorerPublishesABatchAndReportsWhatItDid(t *testing.T) {
 	require.Equal(t, publisher.result, *result)
 }
 
-func TestSkillEfficacyScorerRetriesNonTerminalModelFailures(t *testing.T) {
+func TestSkillEfficacyScorerReportsNonTerminalModelFailures(t *testing.T) {
 	t.Parallel()
 	// A model failure is charged to its own evaluation's attempt counter inside
 	// the publication, so it reaches the workflow as a count rather than as an
-	// error that would retry the whole batch and pay for inference again.
+	// error: the workflow decides whether to judge the batch again, and the
+	// activity attempt itself is not a failure.
 	publisher := &stubEfficacyPublisher{
 		result: efficacy.PublishResult{
 			Loaded: 3, AlreadyPublished: 0, Scored: 1, ModelFailures: 1, Failed: 1, Retryable: 0,
@@ -92,8 +93,8 @@ func TestSkillEfficacyScorerRetriesNonTerminalModelFailures(t *testing.T) {
 		IDs:        []uuid.UUID{uuid.New(), uuid.New(), uuid.New()},
 	})
 
-	require.ErrorIs(t, err, efficacy.ErrRetryable)
-	require.Nil(t, result)
+	require.NoError(t, err)
+	require.Equal(t, publisher.result, *result)
 }
 
 func TestSkillEfficacyScorerCompletesAfterTerminalModelFailure(t *testing.T) {

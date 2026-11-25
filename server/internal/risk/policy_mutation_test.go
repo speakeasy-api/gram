@@ -6,15 +6,23 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestPolicyMutationErrorMapsCoreFailures(t *testing.T) {
 	t.Parallel()
 
-	service := &Service{logger: testenv.NewLogger(t)}
+	service := &Service{
+		logger:       testenv.NewLogger(t),
+		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		stokenCodec:  stokens.NewCodec(),
+	}
 	cause := errors.New("database unavailable")
 
 	tests := []struct {

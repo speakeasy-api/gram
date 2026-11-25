@@ -3,13 +3,14 @@ import { ResolveChallengeFormResolutionType } from "@gram/client/models/componen
 import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
 import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
+import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { type Column } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { GrantDrawer } from "./GrantDrawer";
-import { toRoleSlug } from "./types";
+import { principalDisplayName } from "./challengeHelpers";
 
 const RESOLVE_LINGER_MS = 3_000;
 const FADE_OUT_MS = 1_000;
@@ -88,16 +89,27 @@ export function useGrantFlow(): {
       width: "100px",
       render: (row: ChallengeBucket) =>
         row.outcome === "deny" && !row.resolvedAt ? (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setGrantChallenge(row);
-              setIsDrawerOpen(true);
-            }}
+          // Anyone with org:read can list challenges, but resolving one
+          // assigns a role, which the server allows only for org:admin.
+          <RequireScope
+            scope="org:admin"
+            level="component"
+            reason="Only organization admins can grant access."
           >
-            <Button.Text>Grant</Button.Text>
-          </Button>
+            {({ disabled }) => (
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={disabled}
+                onClick={() => {
+                  setGrantChallenge(row);
+                  setIsDrawerOpen(true);
+                }}
+              >
+                <Button.Text>Grant</Button.Text>
+              </Button>
+            )}
+          </RequireScope>
         ) : null,
     }),
     [],
@@ -133,7 +145,15 @@ export function useGrantFlow(): {
           }
         }}
         editingRole={null}
-        onRoleCreated={(roleName) => {
+        confirmAssignmentFor={
+          createChallenge
+            ? principalDisplayName(
+                createChallenge.userEmail,
+                createChallenge.principalUrn,
+              )
+            : undefined
+        }
+        onRoleCreated={(role) => {
           if (!createChallenge) return;
           const ids = createChallenge.challengeIds;
           resolveChallenge.mutate(
@@ -145,7 +165,10 @@ export function useGrantFlow(): {
                   scope: createChallenge.scope,
                   resolutionType:
                     ResolveChallengeFormResolutionType.RoleAssigned,
-                  roleSlug: toRoleSlug(roleName),
+                  roleSlug: role.slug,
+                  // The role editor requires explicit acknowledgement before
+                  // creating and assigning the complete role.
+                  roleAssignmentConfirmed: true,
                   resourceKind: createChallenge.resourceKind,
                   resourceId: createChallenge.resourceId,
                 },

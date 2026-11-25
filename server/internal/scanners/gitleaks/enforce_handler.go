@@ -1,0 +1,212 @@
+package gitleaks
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
+
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/requestreply"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
+	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	enforce "github.com/speakeasy-api/gram/server/internal/scanners/enforcement"
+)
+
+const (
+	// DefaultMaxRequestAge is the maximum useful age of an inline scan request.
+	DefaultMaxRequestAge = 30 * time.Second
+	// DefaultEnforcementMaxContentBytes matches the published content budget.
+	DefaultEnforcementMaxContentBytes = 1 * 1024 * 1024
+)
+
+// FingerprintFinding returns a canonically encoded, tenant-scoped fingerprint.
+// Production callers must adapt risk.Fingerprinter.TenantedHS256 and
+// risk.EncodeFingerprint here; the callback avoids a package import cycle.
+type FingerprintFinding func(tenantID string, message []byte) (string, error)
+
+// EnforceHandlerConfig controls inline request freshness.
+type EnforceHandlerConfig struct {
+	// MaxRequestAge drops requests that can no longer satisfy an inline caller.
+	MaxRequestAge time.Duration
+
+	// MaxContentBytes bounds the prefix scanned by gitleaks.
+	MaxContentBytes int
+}
+
+// EnforceHandler scans one inline request and writes a safe correlated reply.
+type EnforceHandler struct {
+	logger          *slog.Logger
+	writer          requestreply.ReplyBroker[*riskv1.EnforcementReply]
+	scanner         *Scanner
+	fingerprint     FingerprintFinding
+	metrics         enforceHandlerMetrics
+	truncations     metric.Int64Counter
+	riskRecorder    *metering.RiskRecorder
+	consumerID      string
+	maxRequestAge   time.Duration
+	maxContentBytes int
+}
+
+// NewEnforceHandler builds the gitleaks enforcement subscription handler.
+func NewEnforceHandler(
+	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
+	writer requestreply.ReplyBroker[*riskv1.EnforcementReply],
+	fingerprint FingerprintFinding,
+	cfg EnforceHandlerConfig,
+	riskRecorder *metering.RiskRecorder,
+) (*EnforceHandler, error) {
+	if writer == nil {
+		return nil, errors.New("gitleaks enforcement reply writer is required")
+	}
+	if fingerprint == nil {
+		return nil, errors.New("gitleaks enforcement fingerprint function is required")
+	}
+	if riskRecorder == nil {
+		return nil, errors.New("gitleaks enforcement risk recorder is required")
+	}
+	if cfg.MaxRequestAge <= 0 {
+		cfg.MaxRequestAge = DefaultMaxRequestAge
+	}
+	if cfg.MaxContentBytes <= 0 {
+		cfg.MaxContentBytes = DefaultEnforcementMaxContentBytes
+	}
+	metrics, err := newEnforceHandlerMetrics(meterProvider)
+	if err != nil {
+		return nil, err
+	}
+	truncations, err := enforce.NewTruncationCounter(meterProvider)
+	if err != nil {
+		return nil, fmt.Errorf("create gitleaks enforcement truncation counter: %w", err)
+	}
+	return &EnforceHandler{
+		logger:          logger.With(attr.SlogComponent("gitleaks-enforcer")),
+		writer:          writer,
+		scanner:         NewScanner(),
+		fingerprint:     fingerprint,
+		metrics:         metrics,
+		truncations:     truncations,
+		riskRecorder:    riskRecorder,
+		consumerID:      uuid.NewString(),
+		maxRequestAge:   cfg.MaxRequestAge,
+		maxContentBytes: cfg.MaxContentBytes,
+	}, nil
+}
+
+// Handle ACKs completed and stale scans. Malformed requests return an error so
+// the restricted forensic DLQ retains evidence that could not be interpreted.
+func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforcement, meta gcp.MessageMetadata) error {
+	replyURN := enforce.ReplyURN(meta.Attributes)
+	correlationID, stale, err := enforce.ValidateRequest(enforce.Request{
+		CreatedAt: m.GetCreatedAt(), OrganizationID: m.GetOrganizationId(), ProjectID: m.GetProjectId(), ReplyURN: replyURN, MaxRequestAge: h.maxRequestAge,
+	})
+	if err != nil {
+		return fmt.Errorf("validate gitleaks enforcement request: %w", err)
+	}
+	if stale {
+		h.metrics.staleDropped.Add(ctx, 1)
+		return nil
+	}
+
+	started := time.Now().UTC()
+	content := m.GetContent()
+	contentCut := enforce.TruncateFields(h.maxContentBytes, &content)
+	truncated := m.GetContentTruncated() || contentCut
+	if contentCut {
+		enforce.RecordTruncation(ctx, h.truncations, "gitleaks")
+	}
+	result, err := h.scanner.Scan(ctx, content)
+	findings := result.Findings
+	status := riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK
+	reason := ""
+	if err != nil {
+		status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
+		reason = err.Error()
+	}
+
+	replyFindings := make([]*riskv1.EnforcementFinding, 0, len(findings))
+	for _, finding := range findings {
+		fingerprint, fingerprintErr := h.fingerprint(m.GetOrganizationId(), []byte(finding.Match))
+		if fingerprintErr != nil {
+			h.logger.ErrorContext(ctx, "fingerprint gitleaks enforcement finding", attr.SlogError(fingerprintErr))
+			status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
+			reason = "fingerprint enforcement finding"
+			replyFindings = nil
+			result.Completed = false
+			break
+		}
+		replyFindings = append(replyFindings, riskv1.EnforcementFinding_builder{
+			RuleId:        new(finding.RuleID),
+			Category:      new(string(categories.Classify(finding.Source, finding.RuleID))),
+			Score:         new(finding.Confidence),
+			StartPos:      new(conv.SafeInt32(finding.StartPos)),
+			EndPos:        new(conv.SafeInt32(finding.EndPos)),
+			Surface:       new(scanners.FindingSurface(finding.Source, finding.Field, finding.Path)),
+			Field:         new(finding.Field),
+			Path:          new(finding.Path),
+			ToolCallId:    new(finding.McpLookupToolCallID),
+			MaskedPreview: new(maskdisplay.Display(finding.Source, finding.RuleID, finding.Match)),
+			Fingerprint:   new(fingerprint),
+		}.Build())
+	}
+
+	deliveryAttempt := int32(0)
+	if meta.DeliveryAttempt != nil {
+		deliveryAttempt = conv.SafeInt32(*meta.DeliveryAttempt)
+	}
+	reply := riskv1.EnforcementReply_builder{
+		CorrelationId: new(correlationID),
+		Scanner:       new(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS),
+		Status:        new(status),
+		Reason:        new(conv.TruncateString(reason, enforce.MaxReplyReasonRunes)),
+		Findings:      replyFindings,
+		Diagnostics: riskv1.EnforcementDiagnostics_builder{
+			ScanDurationMs:  new(time.Since(started).Milliseconds()),
+			ConsumerId:      new(h.consumerID),
+			DeliveryAttempt: new(deliveryAttempt),
+		}.Build(),
+		ContentTruncated: new(truncated),
+		Incomplete:       new(!result.Completed),
+	}.Build()
+	replyErr := h.writer.Reply(ctx, replyURN, reply)
+	if replyErr != nil {
+		h.metrics.replyWriteErrors.Add(ctx, 1)
+		h.logger.ErrorContext(ctx, "write gitleaks enforcement reply; acknowledging request", attr.SlogError(replyErr))
+	}
+
+	if result.Completed {
+		provenance, err := scanners.ParseRiskProvenance(m, m.GetMessageType(), "realtime_streams")
+		if err != nil {
+			return fmt.Errorf("parse gitleaks enforcement provenance: %w", err)
+		}
+		// Separate realtime requests stay distinct even when linked to one message.
+		policyID := ""
+		if provenance.RiskPolicyVersion > 0 {
+			policyID = provenance.RiskPolicyID.String()
+		}
+		provenance.OperationID = scanners.AsyncRiskOperationID(provenance.ExecutionPath, policyID, provenance.RiskPolicyVersion, "", "", m.GetRequestId())
+		if err := h.riskRecorder.Record(ctx, metering.RiskGitleaks(), provenance, result.STokens, started); err != nil {
+			h.logger.ErrorContext(ctx, "record gitleaks enforcement usage", attr.SlogError(err))
+		}
+	}
+	if replyErr != nil {
+		return nil
+	}
+
+	h.logger.DebugContext(ctx, "gitleaks enforcement scan complete", attr.SlogValueAny(map[string]any{
+		"request_id": m.GetRequestId(),
+		"detections": len(findings),
+		"status":     status.String(),
+	}))
+	return nil
+}

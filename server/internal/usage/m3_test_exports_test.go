@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 )
@@ -42,6 +43,7 @@ func NewM3StripeWebhookService(t *testing.T, db *pgxpool.Pool, stripeClient stri
 	service := &Service{
 		logger:          testenv.NewLogger(t),
 		db:              db,
+		orgRepo:         orgrepo.New(db),
 		auditLogger:     audit.NewLogger(),
 		stripeClient:    stripeClient,
 		stripeHandler:   nil,

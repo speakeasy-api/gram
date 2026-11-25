@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -81,7 +82,11 @@ func (c *localSessionCache) fallbackSessionMetadata(ctx context.Context, session
 	}
 	orgID := project.OrganizationID
 	projectID := project.ID.String()
-	userID, userEmail := c.localFallbackUser(ctx, orgID)
+	userID, userEmail := "", ""
+	// Agent actors never borrow the local fallback human identity.
+	if !isAgentActor(ctx) {
+		userID, userEmail = c.localFallbackUser(ctx, orgID)
+	}
 
 	metadata := SessionMetadata{
 		SessionID:           sessionID,
@@ -107,7 +112,7 @@ func (c *localSessionCache) fallbackSessionMetadata(ctx context.Context, session
 }
 
 func (c *localSessionCache) enrichLocalSessionMetadata(ctx context.Context, metadata *SessionMetadata) error {
-	if metadata.UserID != "" {
+	if metadata.UserID != "" || isAgentActor(ctx) {
 		return nil
 	}
 
@@ -123,7 +128,7 @@ func (c *localSessionCache) enrichLocalSessionMetadata(ctx context.Context, meta
 		metadata.GramOrgID = project.OrganizationID
 	}
 	// ExternalOrgID is the provider's organization id (the personal-vs-team
-	// discriminator) and must never be synthesized from the Gram org id — doing
+	// discriminator) and must never be synthesized from the Speakeasy org id — doing
 	// so would mislabel every local session as having a known provider org.
 
 	userID, userEmail := c.localFallbackUser(ctx, metadata.GramOrgID)
@@ -168,6 +173,20 @@ func (c *localSessionCache) localFallbackUser(ctx context.Context, orgID string)
 	}
 
 	return conv.FromPGTextOrEmpty[string](users[0].UserID), users[0].UserEmail
+}
+
+// SetIfAbsent delegates to the underlying cache so session metadata claims
+// stay atomic.
+func (c *localSessionCache) SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
+	conditional, ok := c.Cache.(cache.ConditionalCache)
+	if !ok {
+		return false, errors.New("underlying cache does not support conditional writes")
+	}
+	stored, err := conditional.SetIfAbsent(ctx, key, value, ttl)
+	if err != nil {
+		return false, fmt.Errorf("set if absent in cache: %w", err)
+	}
+	return stored, nil
 }
 
 // Set always delegates to the underlying cache so explicitly seeded sessions

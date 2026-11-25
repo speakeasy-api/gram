@@ -3,753 +3,979 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
     <title>
-      {{if .FirstParty}}Connect {{.MCPSlug}}{{else}}Authorize
+      {{if and .Gateway .Gateway.Focus}}Connect {{.Gateway.Focus.Name}}{{else if .FirstParty}}Connect {{.MCPSlug}}{{else}}Authorize
       {{.ClientName}}{{end}}
     </title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&display=swap"
-      rel="stylesheet"
-    />
+    {{/* The stylesheet is compiled from the dashboard design system by
+    `aube run -F dashboard build:consent-page` and inlined rather than linked:
+    the page renders with Cache-Control: no-store, so a separate request would
+    buy no caching, and inlining keeps the first paint free of a style
+    round-trip. Scripts stay external — the ingress CSP forbids inline ones. */}}
     <style>
-      html,
-      body {
-        --font-diatype:
-          "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif;
-        --font-diatype-mono:
-          "Geist Mono", SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-
-        --color-base-white: hsl(0 0% 100%);
-        --color-base-black: hsl(0 0% 0%);
-
-        --color-neutral-50: hsl(0, 0%, 99%);
-        --color-neutral-100: hsl(0, 0%, 98%);
-        --color-neutral-200: hsl(0, 0%, 92%);
-        --color-neutral-700: hsl(0, 0%, 33%);
-        --color-neutral-800: hsl(0, 0%, 20%);
-
-        --color-feedback-green-100: hsl(102, 35%, 93%);
-        --color-feedback-green-300: hsl(99, 30%, 73%);
-        --color-feedback-green-700: hsl(105, 24%, 27%);
-        --color-feedback-amber-700: hsl(32, 80%, 36%);
-        --color-feedback-red-100: hsl(0, 71%, 97%);
-        --color-feedback-red-300: hsl(0, 51%, 80%);
-        --color-feedback-red-700: hsl(0, 61%, 43%);
-        --color-brand-blue-600: hsl(215, 71%, 40%);
-
-        --text-default: var(--color-neutral-700);
-        --text-default-inverse: var(--color-neutral-100);
-        --text-default-success: var(--color-feedback-green-700);
-        --text-default-warning: var(--color-feedback-amber-700);
-        --text-default-destructive: var(--color-feedback-red-700);
-
-        --fill-neutral-highlight: var(--color-base-black);
-        --fill-neutral-default: var(--color-neutral-800);
-        --fill-neutral-default-inverse: var(--color-neutral-50);
-
-        --bg-surface-primary-default: var(--color-base-white);
-        --bg-surface-secondary-default: var(--color-neutral-100);
-
-        --border-neutral-softest: var(--color-neutral-200);
-
-        --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
-        --z-tooltip: 10;
-
-        font-family: var(--font-diatype);
-        color: var(--text-default);
-        background: var(--bg-surface-secondary-default);
-
-        margin: 0;
-        padding: 0;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        font-weight: 300;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      .main {
-        flex: 1;
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-        padding: 6rem 1rem;
-      }
-
-      @media (min-width: 768px) {
-        .main {
-          padding: 6rem 2rem;
-        }
-      }
-
-      .auth-consent-container {
-        background: var(--bg-surface-primary-default);
-        border: solid 1px var(--border-neutral-softest);
-        border-radius: 0.5rem;
-        padding: 2rem;
-        max-width: 52rem;
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-      }
-
-      .header {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-
-      .header h1 {
-        color: var(--fill-neutral-default);
-        margin: 0;
-        font-size: 1.625rem;
-        font-weight: 300;
-        line-height: 150%;
-        text-wrap-style: balance;
-      }
-
-      .header p {
-        margin: 0;
-        font-size: 1rem;
-        line-height: 175%;
-        color: var(--text-default);
-        text-wrap-style: balance;
-      }
-
-      .header strong {
-        font-weight: 500;
-        color: var(--fill-neutral-default);
-      }
-
-      .info {
-        background: var(--bg-surface-secondary-default);
-        border: solid 1px var(--border-neutral-softest);
-        border-radius: 0.5rem;
-        padding: 1rem 1.25rem;
-        margin: 0;
-        font-size: 0.8125rem;
-      }
-
-      .info dt {
-        font-weight: 500;
-        color: var(--fill-neutral-default);
-        margin-top: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-        font-size: 0.6875rem;
-      }
-
-      .info dt:first-child {
-        margin-top: 0;
-      }
-
-      /* Wrap any consent-screen trigger and tooltip content with this pattern. */
-      .tooltip {
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-      }
-
-      .tooltip[tabindex] {
-        cursor: help;
-      }
-
-      .tooltip[tabindex]:focus-visible {
-        outline: 2px solid var(--color-brand-blue-600);
-        outline-offset: 2px;
-        border-radius: 2px;
-      }
-
-      .tooltip-content {
-        position: absolute;
-        z-index: var(--z-tooltip);
-        top: calc(100% + 0.5rem);
-        left: 0;
-        display: none;
-        width: max-content;
-        max-width: min(18rem, calc(100vw - 2rem));
-        padding: 0.625rem 0.75rem;
-        border-radius: 6px;
-        background: var(--fill-neutral-default);
-        color: var(--text-default-inverse);
-        box-shadow: 0 0.375rem 1rem hsl(0 0% 0% / 18%);
-        font: 400 0.75rem/1.5 var(--font-diatype);
-        letter-spacing: normal;
-        text-align: left;
-        text-transform: none;
-      }
-
-      .tooltip--align-end .tooltip-content {
-        right: 0;
-        left: auto;
-      }
-
-      .tooltip:hover > .tooltip-content,
-      .tooltip:focus-within > .tooltip-content {
-        display: block;
-      }
-
-      .info dd {
-        margin: 0.25rem 0 0 0;
-        word-break: break-all;
-        font-family: var(--font-diatype-mono);
-        color: var(--text-default);
-      }
-
-      .loopback-warning {
-        margin: 0;
-        padding: 0.75rem 1rem;
-        border: solid 1px var(--border-neutral-softest);
-        border-radius: 0.5rem;
-        font-size: 0.8125rem;
-        color: var(--text-default-warning);
-      }
-
-      .remotes {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-      }
-
-      .remotes h3 {
-        margin: 0;
-        color: var(--fill-neutral-default);
-        font-size: 0.875rem;
-        font-weight: 400;
-      }
-
-      .remote-card {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.75rem;
-        padding: 0.875rem 1rem;
-        border: solid 1px var(--border-neutral-softest);
-        border-radius: 0.5rem;
-        background: var(--fill-neutral-default-inverse);
-        transition: background-color 300ms var(--ease-in-out-quad);
-      }
-
-      .remote-card:hover {
-        background: var(--bg-surface-primary-default);
-      }
-
-      .remote-card .meta {
-        font-size: 0.8125rem;
-        color: var(--text-default);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: flex;
-        flex-direction: column;
-        gap: 0.125rem;
-      }
-
-      .remote-card .meta .issuer {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-weight: 500;
-        color: var(--fill-neutral-default);
-        font-family: var(--font-diatype-mono);
-      }
-
-      .remote-card .meta .issuer-logo {
-        width: 1.5rem;
-        height: 1.5rem;
-        border-radius: 4px;
-        object-fit: contain;
-        flex-shrink: 0;
-        display: block;
-      }
-
-      .remote-card .meta .state {
-        font-size: 0.6875rem;
-        color: var(--text-default);
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-      }
-
-      .remote-card .meta .detail {
-        font-size: 0.75rem;
-        color: var(--text-default);
-      }
-
-      .remote-card .state.connected {
-        color: var(--text-default-success);
-      }
-
-      .remote-card .detail.auto-refresh-on {
-        color: var(--text-default-success);
-      }
-
-      .remote-card .state.disconnected,
-      .remote-card .state.expired {
-        color: var(--text-default-warning);
-      }
-
-      .remote-card button.btn-link {
-        padding: 0.5rem 1rem;
-        font-size: calc(1rem - 2px);
-        font-weight: 400;
-        border: none;
-        border-radius: 6px;
-        text-decoration: none;
-        text-transform: uppercase;
-        font-family: inherit;
-        cursor: pointer;
-        background: var(--fill-neutral-default);
-        color: var(--text-default-inverse);
-        transition: background-color 300ms var(--ease-in-out-quad);
-        white-space: nowrap;
-      }
-
-      .remote-card button.btn-link:hover {
-        background: var(--fill-neutral-highlight);
-      }
-
-      .remote-card button.btn-link:disabled,
-      .remote-card button.btn-link:disabled:hover {
-        background: var(--color-neutral-200);
-        color: var(--text-default);
-        cursor: default;
-      }
-
-      .remote-card .remote-actions {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .remote-card button.icon-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 2.125rem;
-        height: 2.125rem;
-        padding: 0;
-        border: solid 1px var(--border-neutral-softest);
-        border-radius: 6px;
-        background: transparent;
-        color: var(--text-default-destructive);
-        cursor: pointer;
-        transition:
-          background-color 300ms var(--ease-in-out-quad),
-          border-color 300ms var(--ease-in-out-quad);
-      }
-
-      .remote-card button.icon-btn:hover {
-        background: var(--color-feedback-red-100);
-        border-color: var(--color-feedback-red-300);
-      }
-
-      .remote-card button.icon-btn svg {
-        width: 0.875rem;
-        height: 0.875rem;
-        display: block;
-      }
-
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-        white-space: nowrap;
-      }
-
-      .info select {
-        font-family: var(--font-diatype-mono);
-        font-size: 0.8125rem;
-        padding: 0.25rem 0.5rem;
-        border: solid 1px var(--border-neutral-softest);
-        border-radius: 6px;
-        background: var(--bg-surface-primary-default);
-        color: var(--text-default);
-        max-width: 100%;
-      }
-
-      .info .auto-refresh-managed {
-        font-family: var(--font-diatype-mono);
-        font-size: 0.8125rem;
-      }
-
-      .info .auto-refresh-managed.on {
-        color: var(--text-default-success);
-      }
-
-      /* Refresh being off is the organization's choice, not a failure, so the
-         off state stays neutral rather than borrowing a feedback color. */
-      .info .auto-refresh-managed.off {
-        color: var(--text-default);
-      }
-
-      .remote-card button.btn-link[aria-disabled="true"] {
-        pointer-events: none;
-        opacity: 0.65;
-      }
-
-      .tools {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-      }
-
-      .tools h3 {
-        margin: 0;
-        color: var(--fill-neutral-default);
-        font-size: 0.875rem;
-        font-weight: 400;
-      }
-
-      .tools-note {
-        margin: 0;
-        font-size: 0.75rem;
-        color: var(--text-default);
-      }
-
-      .actions {
-        display: flex;
-        gap: 0.75rem;
-      }
-
-      .actions form {
-        flex: 1;
-      }
-
-      .btn {
-        width: 100%;
-        padding: 0.75rem 1.25rem;
-        border: solid 1px transparent;
-        border-radius: 6px;
-        font-family: var(--font-diatype);
-        font-size: calc(1rem - 2px);
-        font-weight: 400;
-        cursor: pointer;
-        text-decoration: none;
-        text-align: center;
-        text-transform: uppercase;
-        transition:
-          background-color 300ms var(--ease-in-out-quad),
-          color 300ms var(--ease-in-out-quad),
-          border-color 300ms var(--ease-in-out-quad);
-      }
-
-      .btn-primary {
-        background: var(--fill-neutral-default);
-        color: var(--text-default-inverse);
-      }
-
-      .btn-primary:hover {
-        background: var(--fill-neutral-highlight);
-      }
-
-      .btn-primary:disabled,
-      .btn-primary:disabled:hover {
-        background: var(--color-neutral-200);
-        color: var(--text-default);
-        cursor: not-allowed;
-      }
-
-      .btn-secondary {
-        background: var(--bg-surface-primary-default);
-        color: var(--fill-neutral-default);
-        border-color: var(--border-neutral-softest);
-      }
-
-      .btn-secondary:hover {
-        background: var(--bg-surface-secondary-default);
-        color: var(--fill-neutral-highlight);
-      }
-
-      .spinner {
-        display: inline-block;
-        width: 0.85em;
-        height: 0.85em;
-        margin-right: 0.5em;
-        vertical-align: -0.15em;
-        border: 2px solid currentColor;
-        border-right-color: transparent;
-        border-radius: 50%;
-        animation: spin 0.6s linear infinite;
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .spinner {
-          animation-duration: 1.5s;
-        }
-      }
+      {{.Styles}}
     </style>
   </head>
-  <body{{if .AutoClose}} data-auto-close{{end}}>
-    <main class="main">
-      <div class="auth-consent-container">
-        <div class="header">
-          {{if .FirstParty}}
-          <h1>Connect {{.MCPSlug}}</h1>
-          <p>
-            {{if .RemoteSessionCards}}Link the services this MCP server needs to access on your behalf.{{else}}This MCP server needs no per-user service connections — you're all set.{{end}}
+  <body
+    class="bg-background text-foreground min-h-screen"
+    {{if .AutoClose}}data-auto-close{{end}}
+  >
+    <main
+      class="mx-auto flex min-h-screen w-full max-w-[52rem] flex-col gap-6 px-4 py-12 sm:py-16"
+    >
+      <div class="text-foreground">{{template "speakeasyWordmark"}}</div>
+
+      <section class="bg-card border">
+        <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          {{if and .Gateway .Gateway.Focus}}
+          <p class="text-eyebrow">Connect a server</p>
+          <h1 class="text-display-xs break-all">{{.Gateway.Focus.Name}}</h1>
+          <p class="text-sm text-muted-foreground">
+            <span class="text-foreground font-mono">{{.Gateway.Focus.Slug}}</span>, a server on <span class="text-foreground">{{.MCPSlug}}</span>.
           </p>
           {{else}}
-          <h1>Authorize {{.ClientName}}</h1>
-          <p>
-            <strong>{{.ClientName}}</strong> is requesting access to the MCP
-            server
-            <strong>{{.MCPSlug}}</strong>
+          <p class="text-eyebrow">
+            {{if .FirstParty}}Connect{{else}}Authorize{{end}}
+          </p>
+          {{if .FirstParty}}
+          <h1 class="text-display-xs">{{.MCPSlug}}</h1>
+          {{else}}
+          {{/* Client and server are both named in the title: the server slug
+          carries the organization prefix ({org}-{server}), so inside a running
+          sentence the one identity being handed access gets buried. */}}
+          <h1 class="text-display-xs flex flex-wrap items-baseline gap-x-3 gap-y-1"
+          >
+            <span>{{.ClientName}}</span>
+            <span class="text-muted-foreground" aria-hidden="true"
+              >&rsaquo;</span
+            >
+            <span class="break-all">{{.MCPSlug}}</span>
+          </h1>
+          {{end}}
+          <p class="text-sm text-muted-foreground">
+            {{if .FirstParty}}
+            {{if .Gateway}}Connect the servers you want to use through this gateway.{{else if .RemoteSessionCards}}Link the services this MCP server needs to access on your behalf.{{else}}This MCP server needs no per-user service connections — you're all set.{{end}}
+            {{else}}
+            <span class="text-foreground">{{.ClientName}}</span> is requesting
+            access to {{if .Gateway}}this gateway and the servers on it{{else}}this MCP server{{end}}. {{end}}
           </p>
           {{end}}
-        </div>
-
-        <dl class="info">
-          <dt>Signing in as</dt>
-          <dd>{{.SubjectDisplay}}</dd>
-          {{if .ClientIDOrigin}}
-          <dt>Client verified from</dt>
-          <dd>{{.ClientIDOrigin}}</dd>
-          {{end}}
-          {{if .RedirectURI}}
-          <dt>Will redirect to</dt>
-          <dd>{{.RedirectURI}}</dd>
-          {{end}}
-          {{if .SessionDurationOptions}}
-          <dt>Session length</dt>
-          <dd>
-            <select
-              name="session_duration_hours"
-              form="consent-approve-form"
-              aria-label="Session length"
-            >
-              {{range .SessionDurationOptions}}
-              <option value="{{.Hours}}" {{if .Selected}}selected{{end}}>
-                {{.Label}}
-              </option>
-              {{end}}
-            </select>
-          </dd>
-          {{end}}
-          {{if .RemoteSessionCards}}
-          <dt>
-            <span
-              class="tooltip"
-              tabindex="0"
-              aria-describedby="auto-refresh-tooltip"
-            >
-              Auto refresh
-              <span
-                id="auto-refresh-tooltip"
-                class="tooltip-content"
-                role="tooltip"
-              >
-                Renews connections in the background so they don't expire
-                from inactivity. When off, idle connections lapse and need
-                reconnecting.
-              </span>
-            </span>
-          </dt>
-          <dd>
-            {{if .AutoRefreshPolicy.IsUserControlled}}
-            <select
-              name="auto_refresh"
-              form="auto-refresh-form"
-              aria-label="Auto refresh"
-              data-auto-refresh-select
-            >
-              <option value="on" {{if .AutoRefreshOn}}selected{{end}}>On</option>
-              <option value="off" {{if not .AutoRefreshOn}}selected{{end}}>
-                Off
-              </option>
-            </select>
-            {{else if .AutoRefreshPolicy.IsEnforced}}
-            <span class="auto-refresh-managed on" data-auto-refresh-managed>
-              On · Managed by your organization
-            </span>
-            {{else}}
-            <span class="auto-refresh-managed off" data-auto-refresh-managed>
-              Off · Managed by your organization
-            </span>
-            {{end}}
-          </dd>
-          {{end}}
-        </dl>
-
-        {{if .AutoRefreshPolicy.IsUserControlled}}
-        <form
-          method="POST"
-          action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect/remote-session"
-          id="auto-refresh-form"
-          class="visually-hidden"
-          {{if .AutoRefreshHasSessions}}data-auto-refresh-persist{{end}}
-        >
-          <input type="hidden" name="state" value="{{.State}}" />
-          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
-          <input type="hidden" name="action" value="set_auto_refresh" />
-          <button type="submit" tabindex="-1" aria-hidden="true"></button>
-        </form>
-        {{end}}
+        </header>
 
         {{if .LoopbackRedirectWarning}}
-        <p class="loopback-warning">
+        {{/* A loopback redirect means any local process could be the real
+        recipient, so this stays expanded and outside the collapsed details —
+        it is the one thing on the page a user must read before approving. */}}
+        <p
+          class="text-xs text-default-warning border-warning-softest bg-card border-b px-6 py-3 sm:px-8"
+        >
           This client receives its authorization at a local address on your
           device. Only approve if you just started this request from an app
           running on this computer.
         </p>
         {{end}}
 
-        {{if .RemoteSessionCards}}
-        <div class="remotes">
-          <h3>Connect required services</h3>
-          {{range .RemoteSessionCards}}
-          <form
-            method="POST"
-            action="/{{$.MCPRouteBase}}/{{$.MCPSlug}}/connect/remote-session"
-            class="remote-card"
-            data-remote-card
+        {{if .AgentSelectionEnabled}}
+        {{if .AgentOptions}}
+        {{/* The actor choice leads the page: it decides whether every
+        self-only section below (service connections, tool access) applies at
+        all, so it must sit above them — collapsing content that is above the
+        control you just clicked makes the page jump under the cursor. */}}
+        <div class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8">
+          <h2 class="text-eyebrow" id="consent-agent-choice-label">
+            Authorize as
+          </h2>
+          <div
+            role="radiogroup"
+            aria-labelledby="consent-agent-choice-label"
+            class="grid grid-cols-2 border"
           >
-            <input type="hidden" name="state" value="{{$.State}}" />
-            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
-            <input type="hidden" name="client_id" value="{{.ClientID}}" />
-            <input
-              type="hidden"
-              name="auto_refresh"
-              value="{{if $.AutoRefreshOn}}on{{else}}off{{end}}"
-              data-auto-refresh-input
-            />
-            <div class="meta">
-              <div class="issuer">
-                {{if .IssuerLogoURL}}<img
-                  class="issuer-logo"
-                  src="{{.IssuerLogoURL}}"
-                  alt=""
-                />{{end}}<span>{{.IssuerDisplay}}</span>
-              </div>
-              {{if .Connected}}
-              <div class="state connected">✓ Connected</div>
-              {{if .AutoRefreshChecked}}
-              <div class="detail auto-refresh-on">✓ Auto refresh on</div>
-              {{else}}
-              <div class="detail">Auto refresh off</div>
-              {{end}}
-              {{else if .Expired}}
-              <div class="state expired">⚠ Expired — reconnect</div>
-              {{else}}
-              <div class="state disconnected">Not connected</div>
-              {{end}}
-            </div>
-            <div class="remote-actions">
-              {{if .Connected}} {{if .CanRefresh}}
-              <span
-                {{if .RefreshExpiresIn}}class="tooltip
-                tooltip--align-end"{{end}}
-              >
-                <button
-                  type="submit"
-                  name="action"
-                  value="refresh"
-                  class="btn-link"
-                  {{if .RefreshExpiresIn}}
-                  aria-describedby="refresh-expiry-{{.ClientID}}"
-                  {{end}}
-                  data-refresh-link
+            <label
+              class="has-[:checked]:bg-accent hover:bg-accent flex min-w-0 cursor-pointer items-center gap-2.5 px-4 py-3"
+            >
+              <input
+                type="radio"
+                name="consent_actor"
+                value="self"
+                checked
+                data-agent-mode
+                data-subject-display="{{.SubjectDisplay}}"
+                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+              />
+              <span class="flex min-w-0 items-center gap-2">
+                <span class="shrink-0 text-sm font-medium">Myself</span>
+                <span class="text-muted-foreground truncate font-mono text-xs"
+                  >{{.SubjectDisplay}}</span
                 >
-                  Refresh now
-                </button>
-                {{if .RefreshExpiresIn}}
-                <span
-                  id="refresh-expiry-{{.ClientID}}"
-                  class="tooltip-content"
-                  role="tooltip"
-                >
-                  Renews on use. If unused, this connection expires in
-                  <time datetime="{{.RefreshExpiresAt}}"
-                    >{{.RefreshExpiresIn}}</time
-                  >.
-                </span>
-                {{end}}
               </span>
-              {{end}} {{else}}
-              <button
-                type="submit"
-                name="action"
-                value="connect"
-                class="btn-link"
-                data-connect-link
+            </label>
+            <label
+              class="has-[:checked]:bg-accent hover:bg-accent flex min-w-0 cursor-pointer items-center gap-2.5 border-l px-4 py-3"
+            >
+              <input
+                type="radio"
+                name="consent_actor"
+                value="agent"
+                disabled
+                data-agent-mode
+                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+              />
+              <span class="text-sm font-medium">Agent</span>
+            </label>
+          </div>
+          <input type="hidden" name="agent_id" value="" form="consent-approve-form" data-agent-self />
+          <div data-agent-picker hidden>
+            <label for="consent-agent-search" class="text-sm font-medium">Search agents</label>
+            <input
+              id="consent-agent-search"
+              type="search"
+              placeholder="Search by name"
+              autocomplete="off"
+              data-agent-search
+              class="bg-background mt-2 w-full border px-4 py-3 text-sm"
+            />
+            <div
+              role="radiogroup"
+              aria-label="Choose an agent"
+              class="mt-2 max-h-64 overflow-y-auto border"
+            >
+              {{range .AgentOptions}}
+              <label
+                data-agent-option
+                class="has-[:checked]:bg-accent hover:bg-accent flex cursor-pointer items-start gap-2.5 border-b px-4 py-3"
               >
-                Connect
-              </button>
+                <input
+                  type="radio"
+                  name="agent_id"
+                  value="{{.ID}}"
+                  form="consent-approve-form"
+                  disabled
+                  data-agent-select
+                  data-subject-display="{{.Name}}"
+                  class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 mt-0.5 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+                />
+                <span class="truncate text-sm font-medium">{{.Name}}</span>
+              </label>
               {{end}}
-              {{if or .Connected .Expired}}
-              <button
-                type="submit"
-                name="action"
-                value="disconnect"
-                class="icon-btn"
-                aria-label="Disconnect {{.IssuerDisplay}}"
-                title="Disconnect"
-              >
-                <svg
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  aria-hidden="true"
-                >
-                  <path d="M3 3l10 10M13 3L3 13" />
-                </svg>
-              </button>
-              {{end}}
+              <p data-agent-empty hidden role="status" class="text-muted-foreground px-4 py-3 text-sm">No agents match your search.</p>
             </div>
-          </form>
+          </div>
+          <div
+            data-agent-policy
+            hidden
+            aria-live="polite"
+            class="bg-accent flex flex-col gap-1 border px-4 py-3"
+          >
+            <p class="text-sm">
+              <span class="font-medium" data-agent-policy-name></span> connects
+              to <span class="font-mono">{{.MCPSlug}}</span> with its own
+              identity — you approve as the authorizer.
+            </p>
+            <p class="text-muted-foreground text-xs">
+              Access stays fixed to connecting to this server
+              (<span
+                class="font-mono"
+                >mcp:connect</span
+              >). The agent's and its
+              owner's permissions are checked again when you authorize.{{if .RemoteSessionCards}} Attach your service connections below before
+              continuing.{{end}} The agent's tool policy is never changed here.
+            </p>
+          </div>
+          <p data-agent-setup hidden class="text-muted-foreground text-xs">
+            Missing an agent?
+            <a
+              href="{{.AgentSetupURL}}"
+              target="_blank"
+              rel="noopener"
+              class="underline"
+              >Create or configure it in Agent management</a
+            >, then restart this authorization.
+          </p>
+        </div>
+        {{else}}
+        {{/* Rollout is on but no agent is eligible: a one-option picker is
+        noise, so render only the pointer to where agents come from. */}}
+        <p class="text-muted-foreground border-b px-6 py-4 text-xs sm:px-8">
+          To authorize an agent instead of yourself,
+          <a
+            href="{{.AgentSetupURL}}"
+            target="_blank"
+            rel="noopener"
+            class="underline"
+            >create one in Agent management</a
+          >
+          and restart this authorization.
+        </p>
+        {{end}}
+        {{end}}
+
+        {{if and .Gateway (not .Gateway.Focus)}}
+        {{/* A gateway lists servers, not services: approving the gateway
+        needs no connection, and each server connects on its own page, now or
+        the first time one of its tools needs it. Collapsed so the decision
+        stays the approval itself. */}}
+        <div class="border-b" data-gateway-servers>
+          {{if .Gateway.FocusUnavailable}}
+          <p class="text-xs text-default-warning px-6 pt-4 sm:px-8" data-gateway-focus-unavailable>
+            That server isn't available to you on this gateway.
+          </p>
+          {{end}}
+          {{if .Gateway.Servers}}
+          {{$visible := .VisibleGatewayRows}}
+          {{$hidden := .HiddenGatewayRows}}
+          <details
+            class="group"
+            data-gateway-list
+            data-state="{{.State}}"
+            {{if .Gateway.ListOpen}}open{{end}}
+          >
+            <summary
+              class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 sm:px-8"
+            >
+              <span class="text-sm" data-gateway-summary
+                >{{.Gateway.ReadyCount}} of {{len $visible}} {{if eq (len $visible) 1}}server{{else}}servers{{end}} connected{{if $hidden}} · {{len $hidden}} hidden{{end}}</span
+              >
+              <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true"
+                >Show servers</span
+              >
+              <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true"
+                >Collapse</span
+              >
+            </summary>
+            <div class="flex flex-col gap-3 px-6 pt-4 pb-6 sm:px-8">
+              <p class="text-xs text-muted-foreground">
+                {{if .ShowToolsIsland}}Only servers verified at consent are included. If access or a connection changes, reload this page to review it.{{else}}Connect a server that needs you to sign in before using it.{{end}}
+              </p>
+              {{/* Changing a server's credential reloads the page so the
+              tools offered for approval are the ones it reaches. */}}
+              <form method="GET" action="{{$.ConsentPath}}" id="gateway-auth-form" class="hidden">
+                <input type="hidden" name="state" value="{{$.State}}" />
+              </form>
+              <ul
+                class="m-0 flex max-h-96 list-none flex-col overflow-y-auto border p-0"
+                data-gateway-visible-list
+                {{if not $visible}}hidden{{end}}
+              >
+                {{range $visible}}{{template "gatewayServerRow" .}}{{end}}
+              </ul>
+              <p class="text-sm text-muted-foreground" data-gateway-all-hidden {{if $visible}}hidden{{end}}>
+                You've hidden every server on this gateway.
+              </p>
+              <p class="text-xs text-default-warning" data-gateway-visibility-error role="alert" hidden></p>
+              <details class="group/hidden" data-gateway-hidden-section {{if not $hidden}}hidden{{end}}>
+                <summary class="text-muted-foreground interact:text-foreground flex cursor-pointer list-none items-center justify-between gap-3 text-xs">
+                  <span>Hidden (<span data-gateway-hidden-count>{{len $hidden}}</span>)</span>
+                  <span class="text-eyebrow group-open/hidden:hidden" aria-hidden="true">Expand</span>
+                  <span class="text-eyebrow hidden group-open/hidden:inline" aria-hidden="true">Collapse</span>
+                </summary>
+                <p class="text-xs text-muted-foreground mt-2">
+                  Hidden servers aren't available to your AI tools. Show one to use it again.
+                </p>
+                <ul class="m-0 mt-2 flex list-none flex-col border p-0 opacity-60" data-gateway-hidden-list>
+                  {{range $hidden}}{{template "gatewayServerRow" .}}{{end}}
+                </ul>
+              </details>
+            </div>
+          </details>
+          {{else}}
+          <p class="text-sm text-muted-foreground px-6 py-4 sm:px-8">
+            You don't have access to any servers on this gateway yet.
+          </p>
           {{end}}
         </div>
         {{end}}
 
+        {{with .UpstreamAuth}}{{if .ShowPicker}}
+        {{/* Each option is a different upstream identity, so the choice is
+        part of the approval: the radios belong to the approve form. */}}
+        <fieldset class="m-0 flex flex-col gap-3 border-0 border-b px-6 py-6 sm:px-8" data-upstream-auth>
+          <legend class="text-eyebrow float-left mb-3 w-full p-0">Sign in to the service as</legend>
+          <ul class="m-0 flex list-none flex-col border p-0">
+            {{range .Options}}
+            <li class="flex items-start gap-3 px-4 py-3 not-first:border-t" data-upstream-auth-option="{{.ID}}">
+              <input
+                type="radio"
+                name="auth_client"
+                form="consent-approve-form"
+                value="{{.ID}}"
+                id="auth-client-{{.ID}}"
+                class="mt-1"
+                {{if .Selected}}checked{{end}}
+                {{if not .Usable}}disabled{{end}}
+              />
+              <label for="auth-client-{{.ID}}" class="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span class="truncate text-sm">{{.Name}}</span>
+                <span class="text-xs text-muted-foreground">{{.TypeLabel}}{{if .Shared}} · the service records your actions as this shared identity{{end}}</span>
+                {{if eq .State "connect"}}<span class="text-xs text-muted-foreground">Connect your account below to choose this.</span>
+                {{else if eq .State "reconnect"}}<span class="text-xs text-default-warning">Reconnect your account below to choose this.</span>
+                {{else if eq .State "setup"}}<span class="text-xs text-muted-foreground">Not set up yet. Ask an administrator.</span>{{end}}
+              </label>
+            </li>
+            {{end}}
+          </ul>
+        </fieldset>
+        {{else}}{{with .Selected}}
+        <input type="hidden" name="auth_client" form="consent-approve-form" value="{{.ID}}" />
+        {{end}}{{end}}{{end}}
+
+        {{if .RemoteSessionCards}}
+        <div
+          data-service-connections
+          data-action-url="{{.ConsentPath}}/remote-session"
+          class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
+        >
+          <div class="flex items-baseline justify-between gap-3">
+            <h2 class="text-eyebrow">Service connections</h2>
+            <p
+              class="text-xs text-muted-foreground"
+              data-connected-summary
+              data-connected-count="{{.ConnectedCardCount}}"
+              data-connected-total="{{len .RemoteSessionCards}}"
+            >
+              {{.ConnectedCardCount}} of {{len .RemoteSessionCards}} connected
+            </p>
+          </div>
+          {{if and (not .FirstParty) (not .Gateway)}}
+          <p class="text-sm text-muted-foreground">
+            These connections sign you in to services. Choose Give access below
+            to approve {{.ClientName}}’s access.
+          </p>
+          {{end}}
+          <ul
+            class="m-0 flex list-none flex-col border p-0"
+            {{if .ValidationDeadlineMS}}data-verify-deadline-ms="{{.ValidationDeadlineMS}}"{{end}}
+          >
+            {{range .RemoteSessionCards}}
+
+            <li data-remote-client="{{.ClientID}}" data-remote-display="{{.IssuerDisplay}}" data-connected-as="{{.ConnectedAs}}" class="flex flex-col px-4 py-3 not-first:border-t">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:has-[details[open]]:items-start" data-card-row>
+              <div class="flex min-w-0 items-start gap-3">
+
+                {{if .IssuerLogoURL}}<img
+                  class="size-6 shrink-0 object-contain"
+                  src="{{.IssuerLogoURL}}"
+                  alt=""
+                  data-issuer-logo
+                />{{end}}
+                <div class="flex min-w-0 flex-col gap-0.5">
+                  <span class="truncate font-mono text-sm"
+                    >{{.IssuerDisplay}}</span
+                  >
+                  {{if .Connected}}
+                  {{/* One status line: the connection and the last verdict. A
+                  rejection or revocation needs action, so it replaces the line
+                  rather than hiding under it; a pending automatic verification
+                  shows on it until the page refreshes with the verdict;
+                  everything descriptive sits in the disclosure below. */}}
+                  {{if .SignInAddress}}
+                  <span class="text-xs text-default-warning" data-validation="sign-in-address"
+                    >{{.SignInAddressStatus}}</span
+                  >
+                  {{else if .Unavailable}}
+                  <span class="text-xs text-default-warning" data-validation="unavailable"
+                    >Unavailable · try again shortly</span
+                  >
+                  {{else if .Rejected}}
+                  <span class="text-xs text-default-warning" data-validation="rejected"
+                    >{{.ValidationReason}} — reconnect to continue</span
+                  >
+                  {{else if .Inactive}}
+                  <span class="text-xs text-default-warning" data-validation="inactive"
+                    >{{.ValidationReason}} — reconnect to continue</span
+                  >
+                  {{else}}
+                  <span class="text-xs text-default-success" data-card-status
+                    >Service connected{{if .Pending}}<span class="text-muted-foreground" data-validation="pending"
+                      > · Verifying…</span
+                    >{{else if .Verified}}<span class="text-muted-foreground" data-validation="valid"
+                      > · Verified
+                      <time datetime="{{.ValidatedAt}}">{{.ValidatedAgo}}</time></span
+                    >{{else if .Unverified}}<span class="text-muted-foreground" data-validation="unknown"
+                      > · Checked
+                      <time datetime="{{.ValidatedAt}}">{{.ValidatedAgo}}</time>, unconfirmed</span
+                    >{{else if .CanValidate}}<span class="text-muted-foreground" data-validation="none"
+                      > · Not yet verified</span
+                    >{{end}}</span
+                  >
+                  {{end}} {{if .AttachmentReconnect}}
+                  <span class="text-xs text-muted-foreground">Sign in again to choose the account for this agent</span>
+                  {{end}} {{if .IdentityReconnect}}
+                  <span class="text-xs text-muted-foreground"
+                    >Reconnect to add account details</span
+                  >
+                  {{end}}
+                  {{else if .Chained}}
+                  {{/* Pending renders neutral so the card reads right without
+                  script; the script shows checking and settles it. */}}
+                  {{if eq .ChainCheck "connected"}}
+                  <span class="text-xs text-default-success" data-card-status data-identity-chained data-chain-check="connected"
+                    >Service connected through your identity provider</span
+                  >
+                  {{else if eq .ChainCheck "rejected"}}
+                  <span class="text-xs text-default-warning" data-card-status data-identity-chained data-chain-check="rejected"
+                    >{{.ChainMessage}}</span
+                  >
+                  {{else}}
+                  <span class="text-xs text-muted-foreground" data-card-status data-identity-chained data-chain-check="{{.ChainCheck}}"
+                    >Managed by your identity provider</span
+                  >
+                  {{end}}
+                  {{else if .Expired}}
+                  <span class="text-xs text-default-warning"
+                    >Expired — reconnect to continue</span
+                  >
+                  {{else if .Unroutable}}
+                  <span class="text-xs text-default-warning"
+                    >Connected elsewhere — reconnect to continue</span
+                  >
+                  {{else}}
+                  <span class="text-xs text-muted-foreground"
+                    >Not connected</span
+                  >
+                  {{end}} {{if .ValidationNotice}}
+                  <span class="text-xs text-default-warning" data-validation-notice
+                    >{{.ValidationNotice}}</span
+                  >
+                  {{end}} {{if .SharedServerNote}}
+                  <span class="text-xs text-muted-foreground" data-shared-server-note
+                    >{{.SharedServerNote}}</span
+                  >
+                  {{end}}
+                {{$panel := .Panel}} {{if $panel.ShowDetails}}
+                  {{/* The descriptive detail, collapsed by default; Panel decides
+                  which lines a state shows. Native details keeps it
+                  keyboard-reachable and working without the page script. */}}
+                  <details class="group mt-1" data-card-details>
+                    <summary
+                      class="flex cursor-pointer list-none items-center gap-1 text-eyebrow"
+                    >
+                      Details
+                      <svg
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        class="size-3 shrink-0 transition-transform group-open:rotate-180"
+                        data-card-details-chevron
+                      >
+                        <path d="M4 6l4 4 4-4" />
+                      </svg>
+                    </summary>
+                    <div class="bg-accent mt-2 flex w-fit max-w-[70%] flex-col gap-1 border px-3 py-3 max-sm:w-full max-sm:max-w-full" data-card-details-panel>
+                      {{if $panel.ShowIdentity}}
+                      <span
+                        class="text-xs text-muted-foreground break-words has-[[data-caveat-trigger]:hover]:[&_[data-identity-text]]:bg-destructive/20 has-[[data-caveat-trigger]:focus-visible]:[&_[data-identity-text]]:bg-destructive/20"
+                        >Authenticated as <span class="-mx-0.5 px-0.5 py-px box-decoration-clone" data-identity-text>{{.ConnectedAs}}</span>{{if .IdentityCaveat}}
+                        <span class="group/caveat relative inline-block" data-identity-caveat
+                          ><span
+                            class="text-destructive cursor-help inline-block"
+                            tabindex="0"
+                            role="img"
+                            aria-label="Identity caveat"
+                            aria-describedby="identity-caveat-{{.ClientID}}"
+                            data-caveat-trigger
+                            ><svg
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.5"
+                              stroke-linecap="round"
+                              aria-hidden="true"
+                              class="size-3 inline-block"
+                            >
+                              <circle cx="8" cy="8" r="6.5" />
+                              <path d="M8 4.75v3.75M8 11.25h.01" />
+                            </svg></span
+                          ><span
+                            id="identity-caveat-{{.ClientID}}"
+                            role="tooltip"
+                            class="bg-popover text-popover-foreground pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden w-64 -translate-x-1/2 border px-3 py-1.5 text-xs whitespace-normal shadow-md group-hover/caveat:block group-focus-within/caveat:block"
+                            >{{.IdentityCaveat}}</span
+                          ></span
+                        >{{end}}</span
+                      >
+                      {{end}} {{if $panel.ShowAccountContext}}
+                      {{/* Each chip carries its own separator glued on with non-breaking spaces, so a
+                      wrapped row never starts with a dot while a long value can still break. */}}
+                      <span class="text-xs text-muted-foreground" data-account-context
+                        >{{range $i, $chip := .AccountChips}}<span class="break-words">{{if $i}}&nbsp;·&nbsp;{{end}}{{$chip}}</span>{{end}}</span
+                      >
+                      {{end}} {{if $panel.ShowToken}}
+                      <span class="text-xs text-muted-foreground" data-token-line
+                        >Token active{{if .TokenExpiresIn}} · expires in
+                        <time datetime="{{.TokenExpiresAt}}">{{.TokenExpiresIn}}</time>{{end}}</span
+                      >
+                      {{end}} {{if $panel.ShowValidationReason}}
+                      <span class="text-xs text-muted-foreground" data-validation-reason
+                        >{{.ValidationReason}}</span
+                      >
+                      {{end}} {{if $panel.ShowLapse}}
+                      <span class="text-xs text-muted-foreground" data-lapse-line
+                        >Lapses in
+                        <time datetime="{{.RefreshExpiresAt}}"
+                          >{{.RefreshExpiresIn}}</time
+                        >
+                        if unused.</span
+                      >
+                      {{end}} {{if $panel.ShowAutoRefresh}}
+                      <span class="text-xs text-muted-foreground" data-auto-refresh-line
+                        >Auto refresh on.</span
+                      >
+                      {{end}} {{if $panel.ShowAccessEnd}}
+                      <span class="text-xs text-muted-foreground" data-access-end-line
+                        >Access ends in
+                        <time datetime="{{.AuthorizationExpiresAt}}"
+                          >{{.AuthorizationExpiresIn}}</time
+                        >.</span
+                      >
+                      {{end}} {{if $panel.ShowLinks}}
+                      {{/* The resource's own links (RFC 9728) for an attachment issuer, the authorization server's otherwise. */}}
+                      <span
+                        class="flex flex-wrap gap-x-3 text-xs text-muted-foreground"
+                        data-issuer-links
+                      >
+                        {{if .IssuerDocumentationURL}}<a
+                          href="{{.IssuerDocumentationURL}}"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="underline"
+                          >Documentation</a
+                        >{{end}} {{if .IssuerPolicyURL}}<a
+                          href="{{.IssuerPolicyURL}}"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="underline"
+                          >Policy</a
+                        >{{end}} {{if .IssuerTosURL}}<a
+                          href="{{.IssuerTosURL}}"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="underline"
+                          >Terms</a
+                        >{{end}}
+                      </span>
+                      {{end}}
+                    </div>
+                  </details>
+                {{end}}
+                </div>
+              </div>
+
+              <form
+                method="POST"
+                action="{{$.ConsentPath}}/remote-session"
+                class="flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end"
+                data-card-actions
+              >
+                <input type="hidden" name="state" value="{{$.State}}" />
+                <input
+                  type="hidden"
+                  name="csrf_token"
+                  value="{{$.CSRFToken}}"
+                />
+                <input type="hidden" name="client_id" value="{{.ClientID}}" />
+                {{if and $.Gateway $.Gateway.Focus}}<input type="hidden" name="server" value="{{$.Gateway.Focus.Slug}}" />{{end}}
+                <input
+                  type="hidden"
+                  name="auto_refresh"
+                  value="{{if $.AutoRefreshOn}}on{{else}}off{{end}}"
+                  data-auto-refresh-input
+                />
+                {{if or .Connected .Unroutable}} {{if .CanRefresh}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="refresh"
+                  class="interact:bg-accent flex h-8 items-center border px-3 text-sm"
+                  data-refresh-link
+                >
+                  Refresh
+                </button>
+                {{end}} {{end}} {{if and .Connected .CanValidate (not (or .Rejected .Inactive .Unavailable .SignInAddress))}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="validate"
+                  class="interact:bg-accent flex h-8 items-center border px-3 text-sm"
+                  data-validate-link
+                >
+                  Verify
+                </button>
+                {{end}} {{if or (not .Connected) (and .Unavailable (not .UnavailableTunnel)) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
+                {{if .Chained}}
+                {{if $.AccountSwitch}}
+                {{/* Shown by the page script only when the check offers it. */}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="switch_account"
+                  class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center justify-center whitespace-nowrap px-3 text-sm"
+                  data-switch-account
+                  hidden
+                >
+                  Sign in with your company account
+                </button>
+                {{end}}
+                {{/* Every company sign-in card offers the same outlined action in every
+                state. The short label never overflows a narrow card; the page script
+                names the service when it fits. */}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="connect"
+                  class="interact:bg-accent flex h-8 shrink-0 items-center whitespace-nowrap border px-3 text-sm"
+                  data-connect-link
+                  data-connect-fallback
+                >
+                  Use your own account
+                </button>
+                {{else}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="connect"
+                  class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
+                  data-connect-link
+                >
+                  {{if or .Expired .Unavailable .Unroutable .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
+                </button>
+                {{end}}
+                {{end}} {{if or .Connected .Expired .Unroutable}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="disconnect"
+                  class="text-muted-foreground interact:text-default-destructive interact:border-destructive-softest flex size-8 shrink-0 items-center justify-center border"
+                  aria-label="Disconnect {{.IssuerDisplay}}"
+                  title="Disconnect"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                    class="size-3"
+                  >
+                    <path d="M3 3l10 10M13 3L3 13" />
+                  </svg>
+                </button>
+                {{end}}
+              </form>
+
+              </div>
+              {{if $.AgentSelectionEnabled}}
+              <div
+                data-agent-access
+                hidden
+                class="flex w-full flex-col gap-2 border-t pt-3"
+                aria-live="polite"
+              ></div>
+              {{end}}
+            </li>
+            {{end}}
+          </ul>
+        </div>
+        {{end}}
+
+        {{with .CatalogChanges}}
+        {{if or .Added .Removed .Changed}}
+        <section class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8" data-catalog-changes aria-labelledby="catalog-changes-heading">
+          <h2 class="text-eyebrow" id="catalog-changes-heading">Review updated tools</h2>
+          <p class="text-sm text-muted-foreground">Changes apply only after you approve. Your current tool selection is preselected.</p>
+          <div class="divide-y border">
+            {{if .Added}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Added <span class="text-muted-foreground font-mono">{{len .Added}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="divide-y">
+                {{range .Added}}
+                {{template "catalogToolDiff" .}}
+                {{end}}
+              </ul>
+            </details>
+            {{end}}
+            {{if .Removed}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Removed <span class="text-muted-foreground font-mono">{{len .Removed}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="divide-y">
+                {{range .Removed}}
+                {{template "catalogToolDiff" .}}
+                {{end}}
+              </ul>
+            </details>
+            {{end}}
+            {{if .Changed}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Changed <span class="text-muted-foreground font-mono">{{len .Changed}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="divide-y">
+                {{range .Changed}}
+                {{template "catalogToolDiff" .}}
+                {{end}}
+              </ul>
+            </details>
+            {{end}}
+          </div>
+        </section>
+        {{end}}
+        {{end}}
+        {{with .ApprovalError}}
+        <div role="alert" class="border-b px-6 py-6 text-sm sm:px-8">
+          <p>{{.Message}}</p>
+          {{if .ActionURL}}<a class="underline" href="{{.ActionURL}}">{{.ActionLabel}}</a>{{end}}
+        </div>
+        {{end}}
+        {{with .SelfApprovalError}}
+        <div role="alert" data-agent-self-only data-self-approval-error class="border-b px-6 py-6 text-sm sm:px-8">
+          <p>{{.Message}}</p>
+          {{if .ActionURL}}<a class="underline" href="{{.ActionURL}}">{{.ActionLabel}}</a>{{end}}
+        </div>
+        {{end}}
         {{if .ShowToolsIsland}}
-        <div class="tools">
-          <h3>Tool access</h3>
+        <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
+        >
+          <h2 class="text-eyebrow">Tool access</h2>
           <div
             id="consent-tools-root"
+            data-gateway-inventory="{{.GatewayInventory}}"
             data-tools-url="{{.ConsentToolsURL}}"
             data-state="{{.State}}"
             data-csrf-token="{{.CSRFToken}}"
             data-form-id="consent-approve-form"
             data-approve-button-id="consent-approve-button"
+            data-gateway="{{if or .ShowDiscoveryMode .DashboardInspectGateway .CatalogChanges}}true{{else}}false{{end}}"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
+            data-inventory-deferred="{{if .ConsentToolsDeferred}}true{{else}}false{{end}}"
             data-server-name="{{.MCPSlug}}"
-            {{if .ConsentToolsPrefill}}data-prefill="{{.ConsentToolsPrefill}}"{{end}}
+            {{if
+            .ConsentToolsPrefill}}data-prefill="{{.ConsentToolsPrefill}}"
+            {{end}}
             aria-live="polite"
           >
-            <p class="tools-note">Loading available tools…</p>
+            <p class="text-sm text-muted-foreground">
+              Loading tool choices. Approval is unavailable until they appear.
+            </p>
+            <noscript>To choose tools, enable JavaScript and reload this page.</noscript>
           </div>
         </div>
         {{end}}
 
-        {{if .AutoClose}}
-        <p class="info">
+        {{/* Identity, provenance and session settings are correct-by-default and
+        rarely changed, so they sit behind a disclosure rather than competing
+        with the decision itself. The summary keeps the identity visible. */}}
+        <details class="group border-b">
+          <summary
+            class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 sm:px-8"
+          >
+            <span class="text-xs text-muted-foreground truncate">
+              <span data-consent-subject-mode>Signing in as</span>
+              <span class="text-foreground font-mono"
+                data-consent-subject-display
+                >{{.SubjectDisplay}}</span
+              >{{if .SelectedSessionDuration}} for
+              <span class="text-foreground" data-session-duration-label
+                >{{.SelectedSessionDuration}}</span
+              >{{end}}
+            </span>
+            <span
+              class="text-eyebrow shrink-0 group-open:hidden"
+              aria-hidden="true"
+              >Configuration</span
+            >
+            <span
+              class="text-eyebrow hidden shrink-0 group-open:inline"
+              aria-hidden="true"
+              >Collapse</span
+            >
+          </summary>
+
+          <dl class="m-0 flex flex-col gap-4 px-6 pt-5 pb-6 sm:px-8">
+            {{if .ClientIDOrigin}}
+            <div>
+              <dt class="text-eyebrow">Client verified from</dt>
+              <dd class="mt-1 ml-0 font-mono text-sm break-all">
+                {{.ClientIDOrigin}}
+              </dd>
+            </div>
+            {{end}} {{if .RedirectURI}}
+            <div>
+              <dt class="text-eyebrow">Will redirect to</dt>
+              <dd class="mt-1 ml-0 font-mono text-sm break-all">
+                {{.RedirectURI}}
+              </dd>
+            </div>
+            {{end}} {{if .SessionDurationOptions}}
+            <div>
+              <dt class="text-eyebrow">Session length</dt>
+              <dd class="mt-1 ml-0">
+                <select
+                  name="session_duration_hours"
+                  form="consent-approve-form"
+                  aria-label="Session length"
+                  class="bg-card border px-2 py-1.5 font-mono text-sm"
+                >
+                  {{range .SessionDurationOptions}}
+                  <option
+                    value="{{.Hours}}"
+                    data-short-label="{{.ShortLabel}}"
+                    {{if .Selected}}selected{{end}}
+                  >
+                    {{.Label}}
+                  </option>
+                  {{end}}
+                </select>
+              </dd>
+            </div>
+            {{end}}
+            {{if .ShowDiscoveryMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0">
+                <select
+                  name="discovery_mode"
+                  form="consent-approve-form"
+                  aria-label="Tool discovery"
+                  aria-describedby="discovery-mode-help"
+                  class="bg-card border px-2 py-1.5 font-mono text-sm"
+                >
+                  <option value="">{{if .GatewayDefaultMode}}Gateway default ({{.GatewayDefaultMode}}){{else}}Use gateway default{{end}}</option>
+                  <option value="progressive" {{if eq .PrefillDiscoveryMode "progressive"}}selected{{end}}>Progressive</option>
+                  <option value="direct" {{if eq .PrefillDiscoveryMode "direct"}}selected{{end}}>Direct</option>
+                  {{if .ShowCodeMode}}<option value="code_mode"{{if eq .PrefillDiscoveryMode "code_mode"}} selected{{end}}>Code Mode</option>{{end}}
+                </select>
+                <p
+                  id="discovery-mode-help"
+                  class="text-muted-foreground mt-2 text-sm"
+                >
+                  Progressive discovers tools as needed, starting from
+                  <code>list_servers</code>. Direct lists every available tool
+                  as a qualified <code>server--tool</code> name. Use Direct if
+                  your client cannot discover tools progressively. {{if .ShowCodeMode}}Code Mode exposes one execute tool to discover and call tools using Python, with <code>tools.search</code>, <code>tools.describe</code> and <code>tools.call</code>.{{end}}
+                </p>
+              </dd>
+            </div>
+            {{else if .DashboardInspectGateway}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0 text-sm text-muted-foreground">Progressive (dashboard Inspect)</dd>
+            </div>
+            {{else if .GatewayDefaultMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0 text-sm text-muted-foreground">{{.GatewayDefaultMode}} (gateway default). Connections without an override follow this setting.</dd>
+            </div>
+            {{end}}
+            {{if .CodeModeUnavailable}}
+            <div data-agent-self-only>
+              <dt class="sr-only">Code Mode unavailable</dt>
+              <dd class="ml-0 text-muted-foreground text-sm">The code runtime is unavailable. Progressive discovery is available for this connection.</dd>
+            </div>
+            {{end}}
+            {{if .RemoteSessionCards}}
+            <div>
+              <dt class="text-eyebrow">Auto refresh</dt>
+              <dd class="mt-1 ml-0">
+                {{if .AutoRefreshPolicy.IsUserControlled}}
+                <select
+                  name="auto_refresh"
+                  form="auto-refresh-form"
+                  aria-label="Auto refresh"
+                  data-auto-refresh-select
+                  class="bg-card border px-2 py-1.5 font-mono text-sm"
+                >
+                  <option value="on" {{if .AutoRefreshOn}}selected{{end}}>
+                    On
+                  </option>
+                  <option value="off" {{if not .AutoRefreshOn}}selected{{end}}>
+                    Off
+                  </option>
+                </select>
+                {{else if .AutoRefreshPolicy.IsEnforced}}
+                <span class="text-sm" data-auto-refresh-managed
+                  >On · managed by your organization</span
+                >
+                {{else}}
+                <span
+                  class="text-sm text-muted-foreground"
+                  data-auto-refresh-managed
+                  >Off · managed by your organization</span
+                >
+                {{end}}
+                <p class="text-xs text-muted-foreground mt-1">
+                  Renews connections in the background so they don't expire from
+                  inactivity. When off, idle connections lapse and need
+                  reconnecting.
+                </p>
+              </dd>
+            </div>
+            {{end}}
+          </dl>
+        </details>
+
+        {{if .AutoRefreshPolicy.IsUserControlled}}
+        <form
+          method="POST"
+          action="{{.ConsentPath}}/remote-session"
+          id="auto-refresh-form"
+          class="sr-only"
+          {{if .AutoRefreshHasSessions}}data-auto-refresh-persist{{end}}
+        >
+          <input type="hidden" name="state" value="{{.State}}" />
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+          <input type="hidden" name="action" value="set_auto_refresh" />
+          {{if and .Gateway .Gateway.Focus}}<input type="hidden" name="server" value="{{.Gateway.Focus.Slug}}" />{{end}}
+          <button type="submit" tabindex="-1" aria-hidden="true"></button>
+        </form>
+        {{end}} {{if .AutoClose}}
+        <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
           Connection complete. This tab will close automatically.
         </p>
+        {{else if and .ApprovalError .Gateway .Gateway.Focus}}
+        <div class="px-6 py-6 sm:px-8">
+          <a href="{{.ConsentPath}}?state={{.State}}&server=" class="underline" data-gateway-back>Back to all servers</a>
+        </div>
+        {{else if and .Gateway .Gateway.Focus}}
+        <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
+          <p class="text-sm text-muted-foreground">
+            {{if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.
+            {{else if .Gateway.Focus.AddressNotice}}{{.Gateway.Focus.AddressNotice}}
+            {{else if .Gateway.Focus.ConnectionUnavailable}}{{.Gateway.Focus.Name}}'s sign-in has expired and hasn't been renewed. Try again shortly.
+            {{else if .Gateway.Focus.NeedsSignIn}}Connecting is all {{.Gateway.Focus.Name}} needs. As soon as a service above is connected, it works through this gateway, with nothing else to approve.
+            {{if .FirstParty}}Go back to your AI client and try again. You can close this tab.{{else}}Go back to all servers to finish giving {{.ClientName}} access.{{end}}{{else}}{{.Gateway.Focus.Name}} needs no sign-in, so it works through this gateway with nothing to connect.{{end}}
+          </p>
+          <a
+            href="{{.ConsentPath}}?state={{.State}}&server="
+            class="bg-card interact:bg-accent flex h-10 w-full items-center justify-center border px-6 text-sm sm:w-fit"
+            data-gateway-back
+            >Back to all servers</a
+          >
+        </div>
         {{else if .FirstParty}}
-        <p class="info">
+        <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
           {{if .RemoteSessionCards}}When you've connected the services above, you can close this tab.{{else}}You can close this tab.{{end}}
         </p>
         {{else}}
-        <div class="actions">
+        <div class="flex flex-col gap-3 px-6 py-6 sm:px-8">
+        <div class="flex flex-col gap-3 sm:flex-row">
           <form
             method="POST"
-            action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect"
+            action="{{.ConsentPath}}"
             id="consent-approve-form"
             data-approve-form
           >
@@ -760,27 +986,41 @@
               name="action"
               value="approve"
               id="consent-approve-button"
-              class="btn btn-primary"
+              data-self-label="Give access"
+              data-agent-label="Authorize agent"
+              data-consent-self-ready="{{if and (not .ShowToolsIsland) .ConsentEnabled}}true{{else}}false{{end}}"
+              class="bg-primary text-primary-foreground enabled:interact:bg-foreground disabled:bg-muted disabled:text-muted-foreground h-10 w-full px-6 text-sm sm:w-auto disabled:cursor-not-allowed"
               {{if or .ShowToolsIsland (not .ConsentEnabled)}}disabled{{end}}
             >
-              Give Access
+              Give access
             </button>
           </form>
-          <form method="POST" action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect">
+          <form method="POST" action="{{.ConsentPath}}">
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
             <button
               type="submit"
               name="action"
               value="deny"
-              class="btn btn-secondary"
+              class="bg-card interact:bg-accent h-10 w-full border px-6 text-sm sm:w-auto"
             >
               Cancel
             </button>
           </form>
         </div>
+        {{if and (not .ConsentEnabled) (not .ApprovalError) (not .SelfApprovalError)}}
+        <p data-agent-self-only class="text-muted-foreground text-xs">
+          Connect or reconnect a service above to give access.
+        </p>
         {{end}}
-      </div>
+        </div>
+        {{end}}
+      </section>
+
+      <p class="text-xs text-muted-foreground">
+        Secured by Speakeasy. Speakeasy never sees your credentials for the services
+        {{if and .Gateway (not .Gateway.Focus)}}you connect{{else}}above{{end}} — they stay with the provider.
+      </p>
     </main>
     <script src="{{.ScriptURL}}"></script>
     {{if .ShowToolsIsland}}
@@ -788,3 +1028,137 @@
     {{end}}
   </body>
 </html>
+{{define "gatewayServerRow"}}
+{{$server := .}}
+<li
+  class="group/server flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
+  data-gateway-server="{{.Slug}}"
+  data-gateway-server-ready="{{.Ready}}"
+  {{if .Hidden}}data-gateway-server-hidden{{end}}
+>
+  <span class="flex min-w-0 flex-col gap-0.5">
+    <span class="flex min-w-0 items-baseline gap-2">
+      <span class="truncate text-sm">{{.Name}}</span>
+      {{if ne .Name .Slug}}<span class="text-muted-foreground truncate font-mono text-xs">{{.Slug}}</span>{{end}}
+    </span>
+    <span
+      class="text-xs {{if .StatusWarns}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
+      data-gateway-server-status="{{.Status}}"
+      {{if .Hidden}}hidden{{end}}
+      >{{.StatusLabel}}</span
+    >
+                    {{with .Auth}}{{if .ShowPicker}}
+                    <select
+                      name="auth_client.{{$server.Slug}}"
+                      form="gateway-auth-form"
+                      aria-label="Sign in to {{$server.Name}} as"
+                      data-auto-submit
+                      class="bg-card mt-1 max-w-full border px-2 py-1 text-xs"
+                    >
+                      {{if not .Selected}}<option value="" selected disabled>Choose a credential</option>{{end}}
+                      {{range .Options}}
+                      <option value="{{.ID}}" {{if .Selected}}selected{{end}} {{if not .Usable}}disabled{{end}}>
+                        {{.Name}} · {{.TypeLabel}}{{if eq .State "connect"}} (connect first){{else if eq .State "reconnect"}} (reconnect first){{else if eq .State "setup"}} (not set up){{end}}
+                      </option>
+                      {{end}}
+                    </select>
+                    {{end}}{{end}}
+  </span>
+  <span class="flex shrink-0 items-center gap-3">
+    {{if .CanHide}}
+    {{/* Hide is an icon that shows on row hover or focus, and always on touch
+      screens, which can't hover. A hidden row swaps it for a plain Show
+      button. consent_script.js toggles data-gateway-server-hidden on the row. */}}
+    <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0" data-gateway-visibility-form>
+      <input type="hidden" name="state" value="{{.State}}" />
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+      <input type="hidden" name="server_id" value="{{.ServerID}}" />
+      <button
+        type="submit"
+        name="action"
+        value="{{if .Hidden}}show_server{{else}}hide_server{{end}}"
+        class="text-muted-foreground interact:text-foreground interact:bg-accent interact:border-border flex h-8 min-w-8 cursor-pointer items-center justify-center border border-transparent text-xs opacity-0 transition-[color,background-color,border-color,opacity] group-hover/server:opacity-100 group-focus-within/server:opacity-100 pointer-coarse:opacity-100 group-data-[gateway-server-hidden]/server:px-3 group-data-[gateway-server-hidden]/server:opacity-100 disabled:cursor-wait disabled:opacity-60"
+        title="{{if .Hidden}}Make this server available to your tools again{{else}}Hide this server, preventing your agent from attempting to access it.{{end}}"
+        data-gateway-visibility-toggle
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          class="size-4 group-data-[gateway-server-hidden]/server:hidden"
+        >
+          <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+          <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+          <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+          <path d="m2 2 20 20" />
+        </svg>
+        <span class="sr-only group-data-[gateway-server-hidden]/server:hidden">Hide</span>
+        <span class="hidden group-data-[gateway-server-hidden]/server:inline">Show</span>
+      </button>
+    </form>
+    {{end}}
+    <span class="flex shrink-0 items-center gap-3" data-gateway-server-actions {{if .Hidden}}hidden{{end}}>
+      {{if .ConnectClientID}}
+      <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0">
+        <input type="hidden" name="state" value="{{.State}}" />
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+        <input type="hidden" name="client_id" value="{{.ConnectClientID}}" />
+        <button
+          type="submit"
+          name="action"
+          value="connect"
+          class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
+          data-connect-link
+        >
+          {{if .NeedsAttention}}Reconnect{{else}}Connect{{end}}
+        </button>
+      </form>
+      {{else if or .NeedsSignIn .ConnectionUnavailable}}
+      <a
+        href="{{.ConsentPath}}?state={{.State}}&server={{.Slug}}"
+        class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+        data-gateway-server-page
+        >{{if or .Ready .ConnectionUnavailable}}Manage{{else}}Connect{{end}} &rsaquo;</a
+      >
+      {{else if .NotSetUp}}
+      <a
+        href="{{.ConsentPath}}?state={{.State}}&server={{.Slug}}"
+        class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+        data-gateway-server-page
+        >View &rsaquo;</a
+      >
+      {{end}}
+    </span>
+  </span>
+</li>
+{{end}}
+
+{{define "catalogToolDiff"}}
+<li>
+  <details>
+    <summary class="interact:bg-accent list-item list-inside cursor-pointer px-4 py-3 font-mono text-xs break-all">{{.Name}}</summary>
+    <dl class="divide-y border-t">
+      {{range .Fields}}
+      <div class="px-4 py-3">
+        <dt class="text-muted-foreground mb-2 font-mono text-xs">{{.Name}}</dt>
+        <dd class="grid min-w-0 gap-2 {{if and .HasBefore .HasAfter}}sm:grid-cols-2{{end}}">
+          {{if .HasBefore}}<div class="min-w-0 bg-red-50 px-3 py-2 text-red-700 dark:bg-red-950 dark:text-red-400">
+            <span class="mb-1 block text-xs font-medium">− Before</span>
+            <pre class="max-h-64 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-xs">{{.Before}}</pre>
+          </div>
+          {{end}}
+          {{if .HasAfter}}<div class="min-w-0 bg-emerald-50 px-3 py-2 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+            <span class="mb-1 block text-xs font-medium">+ After</span>
+            <pre class="max-h-64 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-xs">{{.After}}</pre>
+          </div>{{end}}
+        </dd>
+      </div>
+      {{end}}
+    </dl>
+  </details>
+</li>
+{{end}}

@@ -55,8 +55,11 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		}
 	case urn.SessionSubjectKindAPIKey:
 		subjectName = conv.FromPGText[string](row.ApiKeyName)
-	case urn.SessionSubjectKindAnonymous:
-		// anonymous subjects have no resolved display name
+	case urn.SessionSubjectKindAnonymous, urn.SessionSubjectKindAgent:
+		// anonymous and agent subjects have no resolved display name
+	case urn.SessionSubjectKindWorkload:
+		// The session row does not join the workload issuer, so there is no
+		// display name; subjectType names the caller.
 	}
 
 	var revokedAt *string
@@ -114,15 +117,18 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		// rather than nil: the field is required, and absent upstreams is a
 		// meaningful answer this caller simply is not computing.
 		Upstreams: []*types.UserSessionUpstream{},
+		// Not resolved here: labelling a workload needs the workload issuer and
+		// agent assignment lookups the management API performs.
+		Workload: nil,
 	}
 }
 
-func projectID(ctx context.Context) (uuid.UUID, error) {
+func projectTenancy(ctx context.Context) (uuid.UUID, string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return uuid.Nil, oops.C(oops.CodeUnauthorized)
+		return uuid.Nil, "", oops.C(oops.CodeUnauthorized)
 	}
-	return *authCtx.ProjectID, nil
+	return *authCtx.ProjectID, authCtx.ActiveOrganizationID, nil
 }
 
 func parseNullUUID(s string, field string) (uuid.NullUUID, error) {
@@ -160,7 +166,7 @@ func (t *ListTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	pid, err := projectID(ctx)
+	pid, org, err := projectTenancy(ctx)
 	if err != nil {
 		return err
 	}
@@ -199,6 +205,7 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 
 	rows, err := repo.New(t.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
 		ProjectID:           pid,
+		OrganizationID:      org,
 		Status:              conv.ToPGTextEmpty(in.Status),
 		SubjectUrn:          conv.ToPGTextEmpty(in.SubjectURN),
 		UserSessionIssuerID: issuer,
@@ -246,7 +253,7 @@ func (t *GetTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *GetTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	pid, err := projectID(ctx)
+	pid, org, err := projectTenancy(ctx)
 	if err != nil {
 		return err
 	}
@@ -267,6 +274,7 @@ func (t *GetTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io
 	// status "all" ensures revoked sessions are visible by ID too.
 	rows, err := repo.New(t.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
 		ProjectID:           pid,
+		OrganizationID:      org,
 		Status:              conv.ToPGTextEmpty("all"),
 		SubjectUrn:          conv.ToPGTextEmpty(""),
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},

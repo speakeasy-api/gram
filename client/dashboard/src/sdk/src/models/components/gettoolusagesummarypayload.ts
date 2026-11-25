@@ -6,10 +6,29 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 import {
+  LogFilter,
+  LogFilter$Outbound,
+  LogFilter$outboundSchema,
+} from "./logfilter.js";
+import {
   ToolUsageUserFilter,
   ToolUsageUserFilter$Outbound,
   ToolUsageUserFilter$outboundSchema,
 } from "./toolusageuserfilter.js";
+
+/**
+ * Tool usage trace outcome
+ */
+export const Statuses = {
+  Error: "error",
+  Success: "success",
+  Blocked: "blocked",
+  Pending: "pending",
+} as const;
+/**
+ * Tool usage trace outcome
+ */
+export type Statuses = ClosedEnum<typeof Statuses>;
 
 /**
  * Tool usage target type
@@ -17,6 +36,7 @@ import {
 export const TargetTypes = {
   HostedMcpServer: "hosted_mcp_server",
   TunneledMcpServer: "tunneled_mcp_server",
+  MetaMcpServer: "meta_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
   LocalTool: "local_tool",
   Skill: "skill",
@@ -35,6 +55,18 @@ export type GetToolUsageSummaryPayload = {
    */
   accountType?: string | undefined;
   /**
+   * Agent identities to include. Combined with user_filters by AND, so an agent and a person select the calls that agent made on that person's behalf.
+   */
+  agentIds?: Array<string> | undefined;
+  /**
+   * MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Speakeasy never saw an initialize handshake for) to include
+   */
+  clientKeys?: Array<string> | undefined;
+  /**
+   * Arbitrary attribute filter conditions from the af URL param
+   */
+  filters?: Array<LogFilter> | undefined;
+  /**
    * Start time in ISO 8601 format
    */
   from: Date;
@@ -43,13 +75,29 @@ export type GetToolUsageSummaryPayload = {
    */
   hookSources?: Array<string> | undefined;
   /**
-   * Hosted MCP toolset slugs to include
+   * Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
    */
   hostedToolsetSlugs?: Array<string> | undefined;
+  /**
+   * MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.
+   */
+  mcpServerIds?: Array<string> | undefined;
+  /**
+   * Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself
+   */
+  metaMcpServerIds?: Array<string> | undefined;
+  /**
+   * Free-text attribute search string from the q URL param, applied as the trace listing applies it.
+   */
+  query?: string | undefined;
   /**
    * Shadow MCP server names to include
    */
   shadowServerNames?: Array<string> | undefined;
+  /**
+   * Trace outcomes to include (error, success, blocked, pending). Empty means all.
+   */
+  statuses?: Array<Statuses> | undefined;
   /**
    * Target types to include. Empty means all target types.
    */
@@ -59,10 +107,15 @@ export type GetToolUsageSummaryPayload = {
    */
   to: Date;
   /**
-   * Typed user identities to include
+   * Typed user identities to include. An email also matches the calls an agent made on that person's behalf.
    */
   userFilters?: Array<ToolUsageUserFilter> | undefined;
 };
+
+/** @internal */
+export const Statuses$outboundSchema: z.ZodMiniEnum<typeof Statuses> = z.enum(
+  Statuses,
+);
 
 /** @internal */
 export const TargetTypes$outboundSchema: z.ZodMiniEnum<typeof TargetTypes> = z
@@ -71,10 +124,17 @@ export const TargetTypes$outboundSchema: z.ZodMiniEnum<typeof TargetTypes> = z
 /** @internal */
 export type GetToolUsageSummaryPayload$Outbound = {
   account_type?: string | undefined;
+  agent_ids?: Array<string> | undefined;
+  client_keys?: Array<string> | undefined;
+  filters?: Array<LogFilter$Outbound> | undefined;
   from: string;
   hook_sources?: Array<string> | undefined;
   hosted_toolset_slugs?: Array<string> | undefined;
+  mcp_server_ids?: Array<string> | undefined;
+  meta_mcp_server_ids?: Array<string> | undefined;
+  query?: string | undefined;
   shadow_server_names?: Array<string> | undefined;
+  statuses?: Array<string> | undefined;
   target_types?: Array<string> | undefined;
   to: string;
   user_filters?: Array<ToolUsageUserFilter$Outbound> | undefined;
@@ -87,10 +147,17 @@ export const GetToolUsageSummaryPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     accountType: z.optional(z.string()),
+    agentIds: z.optional(z.array(z.string())),
+    clientKeys: z.optional(z.array(z.string())),
+    filters: z.optional(z.array(LogFilter$outboundSchema)),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     hookSources: z.optional(z.array(z.string())),
     hostedToolsetSlugs: z.optional(z.array(z.string())),
+    mcpServerIds: z.optional(z.array(z.string())),
+    metaMcpServerIds: z.optional(z.array(z.string())),
+    query: z.optional(z.string()),
     shadowServerNames: z.optional(z.array(z.string())),
+    statuses: z.optional(z.array(Statuses$outboundSchema)),
     targetTypes: z.optional(z.array(TargetTypes$outboundSchema)),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     userFilters: z.optional(z.array(ToolUsageUserFilter$outboundSchema)),
@@ -98,8 +165,12 @@ export const GetToolUsageSummaryPayload$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       accountType: "account_type",
+      agentIds: "agent_ids",
+      clientKeys: "client_keys",
       hookSources: "hook_sources",
       hostedToolsetSlugs: "hosted_toolset_slugs",
+      mcpServerIds: "mcp_server_ids",
+      metaMcpServerIds: "meta_mcp_server_ids",
       shadowServerNames: "shadow_server_names",
       targetTypes: "target_types",
       userFilters: "user_filters",

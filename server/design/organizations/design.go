@@ -31,6 +31,50 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Organization"}`)
 	})
 
+	Method("getGateway", func() {
+		Description("Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(OrganizationGateway)
+
+		HTTP(func() {
+			GET("/rpc/organizations.getGateway")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationGateway")
+		Meta("openapi:extension:x-speakeasy-name-override", "getGateway")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationGateway"}`)
+	})
+
+	Method("getProjectGateway", func() {
+		Description("Get the selected project's Project Gateway: the organization's gateway limited to that project's MCP servers. It is served under the same conditions as the organization's gateway. Requires project:read.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ProjectGateway)
+
+		HTTP(func() {
+			GET("/rpc/organizations.getProjectGateway")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getProjectGateway")
+		Meta("openapi:extension:x-speakeasy-name-override", "getProjectGateway")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ProjectGateway"}`)
+	})
+
 	Method("sendInvite", func() {
 		Description("Send a WorkOS invitation for the active organization.")
 
@@ -119,7 +163,7 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("listUsers", func() {
-		Description("List users in the active organization from Gram organization_user_relationships.")
+		Description("List users in the active organization from Speakeasy organization_user_relationships.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -139,10 +183,10 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("removeUser", func() {
-		Description("Remove a user from the active organization in Gram and delete their WorkOS organization membership.")
+		Description("Remove a user from the active organization in Speakeasy and delete their WorkOS organization membership.")
 
 		Payload(func() {
-			Attribute("user_id", String, "Gram user ID to remove.")
+			Attribute("user_id", String, "Speakeasy user ID to remove.")
 			Required("user_id")
 			security.SessionPayload()
 		})
@@ -157,6 +201,28 @@ var _ = Service("organizations", func() {
 		Meta("openapi:operationId", "removeOrganizationUser")
 		Meta("openapi:extension:x-speakeasy-name-override", "removeUser")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveOrganizationUser"}`)
+	})
+
+	Method("revokeMemberSignIns", func() {
+		Description("Revoke a member's sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.")
+
+		Payload(func() {
+			Attribute("user_id", String, "Speakeasy user ID of the member.")
+			Required("user_id")
+			security.SessionPayload()
+		})
+
+		Result(shared.RevokeSignInsResult)
+
+		HTTP(func() {
+			POST("/rpc/organizations.revokeMemberSignIns")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeOrganizationMemberSignIns")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeMemberSignIns")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeOrganizationMemberSignIns"}`)
 	})
 
 	Method("enableWebhooks", func() {
@@ -216,7 +282,7 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("getOnboardingStatus", func() {
-		Description("Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.")
+		Description("Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -236,7 +302,7 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("verifyOnboardingHooksSetup", func() {
-		Description("Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.")
+		Description("Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Speakeasy. Polled from the confirm-traffic step.")
 
 		Payload(func() {
 			Attribute("since_unix_nano", String, "Only return events with time_unix_nano greater than this value. Pass the previous response's latest_unix_nano to poll for new events. Stringified to preserve int64 precision.")
@@ -314,6 +380,78 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "generateWorkOSAdminPortalLink")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GenerateWorkOSAdminPortalLink"}`)
 	})
+
+	Method("listSetupTasks", func() {
+		Description("List the fixed setup task catalog projected with organization state and completion evidence.")
+
+		Payload(func() {
+			Attribute("include_hidden", Boolean, "Include hidden tasks for platform administrators.")
+			security.SessionPayload()
+		})
+
+		Result(ListSetupTasksResult)
+
+		HTTP(func() {
+			GET("/rpc/organizations.listSetupTasks")
+			Param("include_hidden")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSetupTasks")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSetupTasks")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListSetupTasks"}`)
+	})
+
+	Method("updateSetupTask", func() {
+		Description("Update one fixed setup task. The request must include at least one effective update: status, assignee, hidden, or clear_assignee=true. Assignee is mutually exclusive with clear_assignee=true.")
+
+		Payload(func() {
+			Attribute("task_key", String, "Stable setup task key.")
+			Attribute("status", String, "Setup task status.", func() {
+				Enum("todo", "in_progress", "awaiting_support", "done")
+			})
+			Attribute("assignee", SetupTaskAssigneeInput, "Replacement task assignee. Must not be set when clear_assignee=true.")
+			Attribute("clear_assignee", Boolean, "Clear the current task assignee. Must not be true when assignee is set.")
+			Attribute("hidden", Boolean, "Hide or restore the task.")
+			Required("task_key")
+			security.SessionPayload()
+		})
+
+		Result(SetupTask)
+
+		HTTP(func() {
+			POST("/rpc/organizations.updateSetupTask")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateSetupTask")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateSetupTask")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateSetupTask"}`)
+	})
+
+	Method("submitOnboardingSurvey", func() {
+		Description("Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.")
+
+		Payload(func() {
+			Attribute("use_case", String, "Use case the survey answers resolved to.")
+			Required("use_case")
+			security.SessionPayload()
+		})
+
+		Result(ListSetupTasksResult)
+
+		HTTP(func() {
+			POST("/rpc/organizations.submitOnboardingSurvey")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "submitOnboardingSurvey")
+		Meta("openapi:extension:x-speakeasy-name-override", "submitOnboardingSurvey")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SubmitOnboardingSurvey"}`)
+	})
 })
 
 // OrganizationInvitation is a non-sensitive admin view (no invitation token or accept URL).
@@ -329,7 +467,7 @@ var OrganizationInvitation = Type("OrganizationInvitation", func() {
 	Attribute("revoked_at", String, "When the invitation was revoked.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("inviter_user_id", String, "Gram user ID of the inviter, when known.")
+	Attribute("inviter_user_id", String, "Speakeasy user ID of the inviter, when known.")
 	Attribute("role_slug", String, "WorkOS role slug assigned when the invite is accepted.")
 	Attribute("expires_at", String, "When the invitation expires.", func() {
 		Format(FormatDateTime)
@@ -351,16 +489,16 @@ var OrganizationInvitationAccept = Type("OrganizationInvitationAccept", func() {
 	Attribute("state", String, "Invitation lifecycle state.", func() {
 		Enum("pending", "accepted", "expired", "revoked")
 	})
-	Attribute("organization_name", String, "Gram organization display name when the org is linked in Gram; empty if unknown.")
+	Attribute("organization_name", String, "Speakeasy organization display name when the org is linked in Speakeasy; empty if unknown.")
 	Attribute("accept_invitation_url", String, "URL to complete acceptance in WorkOS (may be empty when not actionable).")
 	Required("email", "state", "organization_name", "accept_invitation_url")
 })
 
 // OrganizationUser is a row from organization_user_relationships joined with the users table.
 var OrganizationUser = Type("OrganizationUser", func() {
-	Attribute("id", String, "Gram relationship row ID.")
-	Attribute("organization_id", String, "Gram organization ID.")
-	Attribute("user_id", String, "Gram user ID.")
+	Attribute("id", String, "Speakeasy relationship row ID.")
+	Attribute("organization_id", String, "Speakeasy organization ID.")
+	Attribute("user_id", String, "Speakeasy user ID.")
 	Attribute("name", String, "User display name.")
 	Attribute("email", String, "User email address.")
 	Attribute("photo_url", String, "User photo URL.")
@@ -385,7 +523,7 @@ var ListInvitesResult = Type("ListInvitesResult", func() {
 
 var ListUsersResult = Type("ListUsersResult", func() {
 	Required("users")
-	Attribute("users", ArrayOf(OrganizationUser), "Users linked to the organization in Gram.")
+	Attribute("users", ArrayOf(OrganizationUser), "Users linked to the organization in Speakeasy.")
 })
 
 var CreatePortalSessionResult = Type("CreatePortalSessionResult", func() {
@@ -418,8 +556,10 @@ var GenerateWorkOSAdminPortalLinkResult = Type("GenerateWorkOSAdminPortalLinkRes
 var OnboardingStatusResult = Type("OnboardingStatusResult", func() {
 	Attribute("sso_configured", Boolean, "Whether the organization has at least one active SSO connection in WorkOS.")
 	Attribute("dsync_configured", Boolean, "Whether the organization has at least one linked directory sync in WorkOS.")
+	Attribute("domain_verified", Boolean, "Whether the organization has at least one verified domain in WorkOS. Single sign-on cannot be set up until one is verified.")
+	Attribute("verified_domains", ArrayOf(String), "Domains WorkOS has verified for the organization. Single sign-on only works for users on these domains.")
 
-	Required("sso_configured", "dsync_configured")
+	Required("sso_configured", "dsync_configured", "domain_verified", "verified_domains")
 })
 
 var OnboardingHookEvent = Type("OnboardingHookEvent", func() {
@@ -427,10 +567,10 @@ var OnboardingHookEvent = Type("OnboardingHookEvent", func() {
 	Attribute("source", String, "Hook source: claude_code, cursor, or codex.")
 	Attribute("tool_name", String, "Tool invoked by the hook, if any.")
 	Attribute("event_name", String, "Hook event name (e.g. PreToolUse, SessionStart).")
-	Attribute("project_slug", String, "Slug of the Gram project that received the event.")
+	Attribute("project_slug", String, "Slug of the Speakeasy project that received the event.")
 	Attribute("status", String, "Outcome status: allowed, blocked, failure, or pending.")
 	Attribute("user_email", String, "Email of the user whose session produced the event, when present in hook attributes.")
-	Attribute("chat_id", String, "Gram chat/session ID that owns this event, when present.")
+	Attribute("chat_id", String, "Speakeasy chat/session ID that owns this event, when present.")
 
 	Required("time_unix_nano", "source", "project_slug")
 })
@@ -448,4 +588,61 @@ var VerifyOnboardingHooksSetupResult = Type("VerifyOnboardingHooksSetupResult", 
 	Attribute("total_count", Int, "Total events received with time_unix_nano greater than since_unix_nano. May exceed len(events) when truncated.")
 
 	Required("events", "latest_unix_nano", "total_count")
+})
+
+var SetupTaskAssigneeInput = Type("SetupTaskAssigneeInput", func() {
+	Description("Assignee selector. Exactly one of user_id or email must be present and non-empty.")
+	Attribute("user_id", String, "Active organization member to assign. Mutually exclusive with email.")
+	Attribute("email", String, "Email address to assign before membership exists. Mutually exclusive with user_id.", func() {
+		Format(FormatEmail)
+	})
+})
+
+var SetupTaskAssignee = Type("SetupTaskAssignee", func() {
+	Attribute("user_id", String, "Resolved active organization member ID.")
+	Attribute("email", String, "Assignee email address.")
+	Attribute("name", String, "Resolved member display name.")
+	Attribute("photo_url", String, "Resolved member photo URL.")
+	Required("email")
+})
+
+var SetupTask = Type("SetupTask", func() {
+	Attribute("key", String, "Stable code-owned task key.")
+	Attribute("title", String, "Task title.")
+	Attribute("description", String, "Task description.")
+	Attribute("status", String, "Effective task status.", func() {
+		Enum("todo", "in_progress", "awaiting_support", "done")
+	})
+	Attribute("completed_by_fact", Boolean, "Whether current organization facts force the effective status to done. This field is read-only.")
+	Attribute("assignee", SetupTaskAssignee, "Current resolved user or email assignee.")
+	Attribute("blocked_by", ArrayOf(String), "Incomplete prerequisite task keys.")
+	Attribute("hidden", Boolean, "Whether a platform administrator hid the task.")
+	Attribute("parent_key", String, "Key of the group this card sits under. Absent for a top-level card or a group.")
+	Attribute("group", Boolean, "True for a group that nests cards. A group has no card of its own: it is hidden when every card under it is, done when every visible card is, and cannot be assigned or marked by hand.")
+	Required("key", "title", "description", "status", "completed_by_fact", "blocked_by", "hidden", "group")
+})
+
+var ListSetupTasksResult = Type("ListSetupTasksResult", func() {
+	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order. A group precedes the cards under it.")
+	Required("tasks")
+})
+
+var ProjectGateway = Type("ProjectGateway", func() {
+	Description("The selected project's gateway, or why it is not served.")
+	Attribute("available", Boolean, "Whether the project is served a gateway.")
+	Attribute("url", String, "The gateway's MCP URL. Set only when available.")
+	Attribute("unavailable_reason", String, "Why the gateway is not served. Set only when not available.", func() {
+		Enum("no_organization_issuer", "multiple_organization_issuers", "custom_domain_only", "organization_disabled", "turned_off")
+	})
+	Required("available")
+})
+
+var OrganizationGateway = Type("OrganizationGateway", func() {
+	Description("The active organization's gateway, or why it is not served.")
+	Attribute("available", Boolean, "Whether the organization is served a gateway.")
+	Attribute("url", String, "The gateway's MCP URL. Set only when available.")
+	Attribute("unavailable_reason", String, "Why the gateway is not served. Set only when not available.", func() {
+		Enum("no_organization_issuer", "multiple_organization_issuers", "custom_domain_only", "organization_disabled", "turned_off")
+	})
+	Required("available")
 })

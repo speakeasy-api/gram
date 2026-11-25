@@ -1,0 +1,150 @@
+import type { IdentityRailItem } from "@/components/identity-rail";
+import type { useRoutes } from "@/routes";
+
+/**
+ * The identity page's sub-pages, in reading order: what needs attention first,
+ * then the subsystems that explain it.
+ *
+ * Active comes from the route table's own matcher rather than from a path
+ * comparison: the URN segment is url-encoded in the href and decoded in the
+ * location, so a literal match on the colon in `user:...` never lands.
+ */
+export function identityRailItems(
+  routes: ReturnType<typeof useRoutes>,
+  encodedUrn: string,
+  /**
+   * The current query string, carried onto every rail link: the window and the
+   * project live in the URL, so without it moving between sub-pages silently
+   * resets the filters the reader just set.
+   */
+  search = "",
+  /**
+   * An agent is not a person, and three of the people tabs have nothing to
+   * read for one: usage, cost and risk findings are all keyed by a human
+   * subject, so each rendered a panel whose only content was a sentence
+   * explaining that it had no content. A tab that can never fill is worse
+   * than a missing one — it costs a click to learn nothing.
+   */
+  kind?: string,
+): IdentityRailItem[] {
+  const detail = routes.identities.detail;
+  if (kind === "agent") {
+    return [
+      {
+        key: "overview",
+        title: "Overview",
+        href: `${detail.overview.href(encodedUrn)}${search}`,
+        active: detail.overview.active,
+      },
+      {
+        // Where the agent's servers and their sign-in are changed. Second,
+        // because it is what is most often changed on an agent: a server
+        // added, or an expired connection signed in again.
+        key: "mcp-sign-in",
+        title: "MCP sign-in",
+        href: `${detail.mcpSignIn.href(encodedUrn)}${search}`,
+        active: detail.mcpSignIn.active,
+      },
+      {
+        key: "permissions",
+        title: "Permissions",
+        href: `${detail.permissions.href(encodedUrn)}${search}`,
+        active: detail.permissions.active,
+      },
+      {
+        key: "sessions",
+        title: "Sessions",
+        href: `${detail.sessions.href(encodedUrn)}${search}`,
+        active: detail.sessions.active,
+      },
+      {
+        key: "audit-trail",
+        title: "Audit trail",
+        href: `${detail.auditTrail.href(encodedUrn)}${search}`,
+        active: detail.auditTrail.active,
+      },
+      {
+        // The agent's way in: the keys it holds and the platforms that sign
+        // in as it. Named like the wizard step that first sets it up, so
+        // issuing another key reads as the same thing as issuing the first.
+        key: "sign-in",
+        title: "Agent sign-in",
+        href: `${detail.credentials.href(encodedUrn)}${search}`,
+        active: detail.credentials.active,
+      },
+      {
+        // Ending an agent is not something you do while reading it, so it
+        // does not sit under the facts about it.
+        key: "controls",
+        title: "Controls & Safety",
+        href: `${detail.controls.href(encodedUrn)}${search}`,
+        active: detail.controls.active,
+      },
+    ];
+  }
+  return [
+    {
+      key: "overview",
+      title: "Overview",
+      href: `${detail.overview.href(encodedUrn)}${search}`,
+      active: detail.overview.active,
+    },
+    {
+      key: "access",
+      title: "Access",
+      href: `${detail.access.href(encodedUrn)}${search}`,
+      active: detail.access.active,
+    },
+    {
+      key: "usage",
+      title: "Usage",
+      href: `${detail.usage.href(encodedUrn)}${search}`,
+      active: detail.usage.active,
+    },
+    {
+      key: "security",
+      title: "Security",
+      href: `${detail.security.href(encodedUrn)}${search}`,
+      active: detail.security.active,
+    },
+    {
+      key: "cost",
+      title: "Cost",
+      href: `${detail.cost.href(encodedUrn)}${search}`,
+      active: detail.cost.active,
+    },
+    {
+      key: "connections",
+      title: "Connections",
+      href: `${detail.connections.href(encodedUrn)}${search}`,
+      active: detail.connections.active,
+    },
+    {
+      // "Devices" undersold the tab once the linked provider accounts moved
+      // in beside them: both answer the same question — the machines and the
+      // logins this person works through.
+      key: "devices",
+      title: "Accounts & devices",
+      href: `${detail.devices.href(encodedUrn)}${search}`,
+      active: detail.devices.active,
+    },
+    {
+      key: "activity",
+      title: "Activity",
+      href: `${detail.activity.href(encodedUrn)}${search}`,
+      active: detail.activity.active,
+    },
+  ];
+}
+
+/**
+ * The breadcrumb label for each sub-page segment, taken from the rail so a
+ * section has one name in both places. Without it the crumb title-cased the
+ * URL segment, so the agent tab "Controls & Safety" read "Controls" above it.
+ * A rail item's key is its URL segment.
+ */
+export function identitySectionCrumbs(
+  items: Pick<IdentityRailItem, "key" | "title">[],
+): Record<string, string> {
+  return Object.fromEntries(items.map((item) => [item.key, item.title]));
+}

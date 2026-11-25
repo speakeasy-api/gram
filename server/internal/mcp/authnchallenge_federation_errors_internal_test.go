@@ -1,0 +1,162 @@
+package mcp
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+)
+
+func TestFederatedCallbackHTTPS(t *testing.T) {
+	t.Parallel()
+	for _, callback := range []string{"http://localhost/callback", "http://gram.example/callback", "https:///callback", "https://user:password@gram.example/callback", "https://gram.example/callback#fragment"} {
+		_, err := federatedCallbackURL(callback)
+		require.ErrorIs(t, err, remotesessions.ErrFederatedConfiguration)
+	}
+	callback, err := federatedCallbackURL("https://gram.example/mcp/idp_callback")
+	require.NoError(t, err)
+	require.Equal(t, "https", callback.Scheme)
+}
+
+func TestFederatedFailureSafeCauses(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		cause error
+		code  oops.Code
+	}{
+		{fmt.Errorf("secret: %w", remotesessions.ErrFederatedConfiguration), oops.CodeFailedPrecondition},
+		{fmt.Errorf("secret: %w", remotesessions.ErrFederatedIdentity), oops.CodeUnauthorized},
+		{errors.New("secret token response"), oops.CodeUnavailable},
+		{fmt.Errorf("secret: %w", remotesessions.ErrFederatedSigning), oops.CodeUnexpected},
+		{fmt.Errorf("secret: %w", remotesessions.ErrFederatedUnavailable), oops.CodeUnavailable},
+		{errors.Join(remotesessions.ErrFederatedUnavailable, remotesessions.ErrFederatedSigning), oops.CodeUnavailable},
+	} {
+		code, cause := federatedFailure(test.cause)
+		require.Equal(t, test.code, code)
+		require.NotContains(t, cause.Error(), "secret")
+		if errors.Is(test.cause, remotesessions.ErrFederatedSigning) {
+			require.ErrorIs(t, cause, remotesessions.ErrFederatedSigning)
+		}
+	}
+}
+
+func TestFederatedFailureResponse(t *testing.T) {
+	t.Parallel()
+	for _, firstParty := range []bool{false, true} {
+		for _, declined := range []bool{false, true} {
+			t.Run(fmt.Sprintf("firstparty=%t/declined=%t", firstParty, declined), func(t *testing.T) {
+				t.Parallel()
+				reader := sdkmetric.NewManualReader()
+				meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+				t.Cleanup(func() { require.NoError(t, meter.Shutdown(t.Context())) })
+				logger := testenv.NewLogger(t)
+				serverURL, err := url.Parse("https://gram.example")
+				require.NoError(t, err)
+				s := &Service{aiCatalog: aivendorstest.NewStore(), siteURL: serverURL, serverURL: serverURL, logger: logger, metrics: mcpmetrics.NewMetrics(meter.Meter("test"), logger)}
+				endpoint := &ResolvedMcpEndpoint{RouteBase: "/mcp", Slug: "test-server"}
+				state := AuthnChallengeState{FirstParty: firstParty, RedirectURI: "http://127.0.0.1:8080/callback", State: "original-client-state"}
+				w := httptest.NewRecorder()
+				r := httptest.NewRequest(http.MethodGet, "https://gram.example/mcp/idp_callback", nil)
+				code := oops.CodeGatewayError
+				if declined {
+					code = oops.CodeForbidden
+				}
+				err = s.finishFederatedFailure(w, r, endpoint, state, mcpmetrics.OAuthFlowStageIDPCallback, code, nil, "Safe login failure", declined)
+				if firstParty {
+					var failure *oops.ShareableError
+					require.ErrorAs(t, err, &failure)
+					require.Equal(t, code, failure.Code)
+					oops.BrowserErrHandle(logger, func(http.ResponseWriter, *http.Request) error { return err }).ServeHTTP(w, r)
+					require.NotEmpty(t, oauthtest.RequireAuthorizationErrorRecovery(t, w, failure.HTTPStatus(t.Context()), "https://gram.example/@self").Code)
+					if declined {
+						require.Contains(t, w.Body.String(), "Speakeasy dashboard")
+						require.NotContains(t, w.Body.String(), "your MCP client")
+						require.Contains(t, w.Body.String(), "Sign-in was canceled")
+					}
+					require.Empty(t, w.Header().Get("Location"))
+				} else {
+					require.NoError(t, err)
+					require.Equal(t, http.StatusFound, w.Code)
+					target, err := url.Parse(w.Header().Get("Location"))
+					require.NoError(t, err)
+					require.Equal(t, "http", target.Scheme, "native loopback redirect remains supported")
+					require.Equal(t, "original-client-state", target.Query().Get("state"))
+					require.Equal(t, "https://gram.example/mcp/test-server", target.Query().Get("iss"))
+					require.Equal(t, "Safe login failure", target.Query().Get("error_description"))
+					expected := "server_error"
+					if declined {
+						expected = "access_denied"
+					}
+					require.Equal(t, expected, target.Query().Get("error"))
+				}
+				var data metricdata.ResourceMetrics
+				require.NoError(t, reader.Collect(t.Context(), &data))
+				var terminals int64
+				for _, scope := range data.ScopeMetrics {
+					for _, metric := range scope.Metrics {
+						if metric.Name == "oauth.flow.failed" || metric.Name == "oauth.flow.declined" {
+							expectedMetric := "oauth.flow.failed"
+							if declined {
+								expectedMetric = "oauth.flow.declined"
+							}
+							require.Equal(t, expectedMetric, metric.Name)
+							sum, ok := metric.Data.(metricdata.Sum[int64])
+							require.True(t, ok)
+							for _, point := range sum.DataPoints {
+								terminals += point.Value
+							}
+						}
+					}
+				}
+				require.EqualValues(t, 1, terminals)
+			})
+		}
+	}
+}
+
+func TestFederatedIdentityFailureInlineAndRedirect(t *testing.T) {
+	t.Parallel()
+
+	for _, firstParty := range []bool{false, true} {
+		t.Run(fmt.Sprintf("firstparty=%t", firstParty), func(t *testing.T) {
+			t.Parallel()
+			logger := testenv.NewLogger(t)
+			serverURL, err := url.Parse("https://mcp.example.test")
+			require.NoError(t, err)
+			s := &Service{aiCatalog: aivendorstest.NewStore(), siteURL: serverURL, serverURL: serverURL, logger: logger, metrics: mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), logger)}
+			endpoint := &ResolvedMcpEndpoint{RouteBase: "/mcp", Slug: "test-server"}
+			state := AuthnChallengeState{FirstParty: firstParty, RedirectURI: "http://127.0.0.1:8080/callback", State: "original-state"}
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "https://mcp.example.test/mcp/idp_callback", nil)
+			handler := oops.ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+				return s.finishFederatedFailure(w, r, endpoint, state, mcpmetrics.OAuthFlowStageIDPCallback, oops.CodeUnauthorized, nil, "Invalid login response", false)
+			})
+			handler.ServeHTTP(response, request)
+			require.Empty(t, response.Header().Get("WWW-Authenticate"))
+			if firstParty {
+				require.Equal(t, http.StatusBadRequest, response.Code)
+				require.Contains(t, response.Body.String(), "Invalid login response")
+				require.Empty(t, response.Header().Get("Location"))
+			} else {
+				require.Equal(t, http.StatusFound, response.Code)
+				location, err := url.Parse(response.Header().Get("Location"))
+				require.NoError(t, err)
+				require.Equal(t, "access_denied", location.Query().Get("error"))
+				require.Equal(t, "Invalid login response", location.Query().Get("error_description"))
+				require.Equal(t, "original-state", location.Query().Get("state"))
+			}
+		})
+	}
+}

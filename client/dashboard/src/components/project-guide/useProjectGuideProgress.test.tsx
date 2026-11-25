@@ -173,7 +173,12 @@ describe("useProjectGuideProgress", () => {
             audienceType: "everyone",
             policyType: "standard",
             sources: ["gitleaks"],
-            messageTypes: ["tool_request", "tool_response"],
+            detectionScopes: [
+              {
+                category: "secrets",
+                scopeInclude: 'kind in ["tool_request","tool_response"]',
+              },
+            ],
           },
         ],
       },
@@ -199,7 +204,12 @@ describe("useProjectGuideProgress", () => {
             audienceType: "everyone",
             policyType: "standard",
             sources: ["gitleaks", "prompt_injection"],
-            messageTypes: ["tool_request", "tool_response"],
+            detectionScopes: [
+              {
+                category: "secrets",
+                scopeInclude: 'kind in ["tool_request","tool_response"]',
+              },
+            ],
           },
         ],
       },
@@ -265,7 +275,12 @@ describe("useProjectGuideProgress", () => {
             audienceType: "everyone",
             policyType: "standard",
             sources: ["gitleaks"],
-            messageTypes: ["tool_request", "tool_response"],
+            detectionScopes: [
+              {
+                category: "secrets",
+                scopeInclude: 'kind in ["tool_request","tool_response"]',
+              },
+            ],
           },
         ],
       },
@@ -305,7 +320,12 @@ describe("useProjectGuideProgress", () => {
             audienceType: "everyone",
             policyType: "standard",
             sources: ["gitleaks"],
-            messageTypes: ["tool_request", "tool_response"],
+            detectionScopes: [
+              {
+                category: "secrets",
+                scopeInclude: 'kind in ["tool_request","tool_response"]',
+              },
+            ],
           },
         ],
       },

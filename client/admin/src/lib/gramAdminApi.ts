@@ -1,6 +1,13 @@
-// Gram admin API client.
+import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
+import { GramError } from "@gram/admin-client/models/errors/gramerror";
+
+import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/adminAuth";
+
+export { isRedirectingToLogin } from "@/lib/adminAuth";
+
+// Speakeasy admin API client.
 //
-// This app is served from the same origin as the Gram admin API (the admin
+// This app is served from the same origin as the Speakeasy admin API (the admin
 // Ingress puts both behind one host), so every path below is relative
 // and the `gram_admin` session cookie rides along as a first-party cookie.
 //
@@ -26,6 +33,10 @@ export class GramAdminError extends Error {
 // verb phrase the handler passed to oops.E, such as "list organizations"
 // (server/internal/admin/impl.go:343, surfaced by pp.go:83), which reads worse
 // than the status line. So trust the body below 500 and nowhere else.
+//
+// Generated ServiceError puts that verb on Error.message for every status, so
+// a 5xx from the SDK has to be rewritten to the status line the handwritten
+// client already used.
 export function errorMessage(e: unknown): string {
   if (
     e instanceof GramAdminError &&
@@ -36,6 +47,9 @@ export function errorMessage(e: unknown): string {
     const message = (e.body as { message?: unknown }).message;
     if (typeof message === "string" && message) return message;
   }
+  if (e instanceof GramError && e.statusCode >= 500) {
+    return `gram admin ${e.statusCode} ${e.rawResponse.statusText || "Internal Server Error"}`;
+  }
   return e instanceof Error ? e.message : String(e);
 }
 
@@ -44,8 +58,7 @@ export type QueryParams = Record<
   string | number | boolean | string[] | undefined
 >;
 
-// Values the admin API reads as unset. Every boolean it takes is an opt-in
-// flag, so `false` is the same request as no flag at all.
+// Values the admin API reads as unset. Boolean flags are opt-in.
 //
 // A cache key runs through this too, so the key and the request agree on what
 // "unset" means. Without that, `{type: []}` and `{}` send one request and cache
@@ -97,14 +110,9 @@ async function gramAdminRequest(
     // absolute return_to silently loses the page the operator was on. The hash
     // is left out because the router keeps the whole route in the path and
     // query.
-    const returnTo = encodeURIComponent(
-      window.location.pathname + window.location.search,
+    startLoginRedirect(
+      new GramAdminError(401, null, "redirecting to admin login"),
     );
-    redirectingToLogin = true;
-    window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=consent`;
-    // Setting window.location starts the navigation but does not stop the code
-    // that follows it. Throw to unwind the in-flight call.
-    throw new GramAdminError(401, null, "redirecting to admin login");
   }
 
   if (!res.ok) {
@@ -132,9 +140,19 @@ export async function gramAdminFetch<T>(
   return (await res.json()) as T;
 }
 
+// Downloads use the same first-party admin session and error handling as reads.
+export async function gramAdminDownload(path: string): Promise<Blob> {
+  const res = await gramAdminRequest(
+    path,
+    { headers: { Accept: "application/octet-stream" } },
+    true,
+  );
+  return res.blob();
+}
+
 // A mutation reports its own failure rather than taking the 401 redirect,
 // which would sign the operator back in behind the action they just took.
-async function gramAdminMutation<T>(
+export async function gramAdminMutation<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
@@ -149,22 +167,9 @@ async function gramAdminSend(path: string, init?: RequestInit): Promise<void> {
   await gramAdminRequest(path, init, false);
 }
 
-// True once gramAdminFetch has sent the browser to the login page. The document
-// is on its way out, so no caller should report the failure that caused it.
-//
-// The module records the navigation instead of reading it back off the failed
-// query, because React Query clears the error of a query that holds no data on
-// the next refetch, and a refetch on window focus would then reopen the gate
-// while the browser is still leaving.
-let redirectingToLogin = false;
-
-export function isRedirectingToLogin(): boolean {
-  return redirectingToLogin;
-}
-
 // Identity of the admin operator that owns the current session. The backend
 // reads it from the OIDC session record, so it names the identity-provider
-// account that signed in to this app, not any Gram customer account.
+// account that signed in to this app, not any Speakeasy customer account.
 export type AdminSessionInfo = {
   email: string;
   name?: string;
@@ -177,6 +182,57 @@ export function getSession(): Promise<AdminSessionInfo> {
 export function organizationDashboardUrl(organizationId: string): string {
   const query = new URLSearchParams({ organization_id: organizationId });
   return `/admin/organization.open-dashboard?${query.toString()}`;
+}
+
+// The same handoff `RecordHeader` renders, for a caller that has no form to
+// render it in.
+//
+// A real <form> around a submit button is the better shape wherever there is a
+// button, and RecordHeader keeps it. The command palette has no button: the row
+// that triggers this unmounts with the dialog in the commit that follows a
+// selection, so a form inside that row can be gone before it submits. This one
+// lives on `document.body`, where closing the dialog cannot reach it.
+//
+// Every attribute is load-bearing, and each is the one RecordHeader gives its
+// reason for:
+//   - POST, so the admin origin check protects handoff issuance.
+//   - `_blank`, so the admin record stays open in the tab the operator is in.
+//   - `noopener` and deliberately not `noreferrer`: noreferrer makes Chromium
+//     send `Origin: null` for this POST, which the admin CSRF middleware
+//     correctly rejects.
+//
+// One element, reused, and never detached. Creating one per handoff and
+// removing it after `submit()` is the obvious shape and it is a bug: submission
+// is processed in a later task, and Firefox abandons the navigation when the
+// form has left the document before that task runs. Keeping one settles the
+// timing question without a timer to reason about, and leaves nothing
+// accumulating behind it.
+let handoffForm: HTMLFormElement | undefined;
+
+function dashboardHandoffForm(): HTMLFormElement {
+  handoffForm ??= (() => {
+    const form = document.createElement("form");
+    form.method = "post";
+    form.target = "_blank";
+    form.setAttribute("rel", "noopener");
+    // It carries no controls and so draws nothing, but a form is still a block
+    // box. Said outright rather than left to the user agent's margins.
+    form.hidden = true;
+    return form;
+  })();
+
+  // Re-attached rather than assumed attached: a submit from a form outside the
+  // document does nothing at all, and a test harness that resets the document
+  // between cases takes it back out.
+  if (!handoffForm.isConnected) document.body.append(handoffForm);
+
+  return handoffForm;
+}
+
+export function openOrganizationDashboard(organizationId: string): void {
+  const form = dashboardHandoffForm();
+  form.action = organizationDashboardUrl(organizationId);
+  form.submit();
 }
 
 // Ends the admin session, then sends the browser into the OIDC flow.
@@ -217,6 +273,15 @@ export type AdminOrganization = {
   slug: string;
   account_type: string;
   workos_id?: string;
+  // Absent unless the organization is linked to WorkOS and the deployment knows
+  // its WorkOS environment.
+  workos_dashboard_url?: string;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
+  // Absent unless the matching Stripe ID is set and the deployment has a
+  // Stripe API key that says which dashboard mode the IDs belong to.
+  stripe_customer_dashboard_url?: string;
+  stripe_subscription_dashboard_url?: string;
   whitelisted: boolean;
   disabled_at?: string;
   trial_state?: TrialState;
@@ -224,65 +289,101 @@ export type AdminOrganization = {
   trial_tier?: string;
   trial_converted_at?: string;
   trial_demoted_at?: string;
+  // The flow that created the organization. Absent when nothing recorded one,
+  // and absent on every row the list endpoint returns: only the record read
+  // selects it.
+  creation_source?: string;
+  // Staff-entered link to the organization's adoption dashboard. Absent when
+  // none is set, and absent on list rows: only the record read selects it.
+  adoption_dashboard_url?: string;
   member_count: number;
   created_at: string;
   updated_at: string;
 };
 
+export type AdminStripeCustomer = {
+  id: string;
+  name?: string;
+  email?: string;
+  description?: string;
+  livemode: boolean;
+};
+
+export function getStripeCustomer(
+  organizationID: string,
+  stripeCustomerID: string,
+): Promise<AdminStripeCustomer> {
+  const query = toSearchParams({
+    organization_id: organizationID,
+    stripe_customer_id: stripeCustomerID,
+  });
+  return gramAdminFetch<AdminStripeCustomer>(
+    `/admin/organization.stripeCustomer?${query}`,
+    { cache: "no-store" },
+  );
+}
+
+export type SetAdoptionDashboardUrlRequest = {
+  organization_id: string;
+  // An https URL, or empty to clear the link.
+  adoption_dashboard_url: string;
+};
+
+export function setAdoptionDashboardUrl(
+  body: SetAdoptionDashboardUrlRequest,
+): Promise<AdminOrganization> {
+  return gramAdminMutation<AdminOrganization>(
+    "/admin/organization.setAdoptionDashboardUrl",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export type SetStripeCustomerRequest = {
+  organization_id: string;
+  stripe_customer_id: string;
+};
+
+export function setStripeCustomer(
+  body: SetStripeCustomerRequest,
+): Promise<AdminOrganization> {
+  return gramAdminMutation<AdminOrganization>(
+    "/admin/organization.setStripeCustomer",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
 export type ListOrganizationsResult = {
+  total: number;
   organizations: AdminOrganization[];
   next_cursor?: string;
 };
 
-export type AdminAuditLog = {
-  id: string;
-  project_id?: string;
-  project_slug?: string;
-  actor_id: string;
-  actor_type: string;
-  actor_display_name?: string;
-  actor_slug?: string;
-  action: string;
-  acting_surface: string;
-  acting_client_id?: string;
-  subject_id: string;
-  subject_type: string;
-  subject_display_name?: string;
-  subject_slug?: string;
-  before_snapshot?: unknown;
-  after_snapshot?: unknown;
-  metadata?: Record<string, unknown>;
-  created_at: string;
-};
-
-export type ListOrganizationActivityResult = {
-  logs: AdminAuditLog[];
-  next_cursor?: string;
-};
-
-export function listOrganizationActivity(
-  organizationID: string,
-  cursor?: string,
-): Promise<ListOrganizationActivityResult> {
-  const qs = toSearchParams({ organization_id: organizationID, cursor });
-  return gramAdminFetch<ListOrganizationActivityResult>(
-    `/admin/organization.activity?${qs.toString()}`,
-  );
-}
-
-// Each filter is a repeated parameter the server reads as a set, and an absent
-// one means no filter of that kind: no account_types is every type, no
-// trial_states is every state, no disabled_states is active organizations only.
-//
-// The scalar `account_type` and the `include_disabled` flag these replaced are
-// still accepted by the server, so its half of this change can merge first.
-// Nothing here sends them, and nothing should: two ways to say the same filter
-// is how the browser and the server end up disagreeing about what is on.
+// Set filters match any supplied value; omitted filters are unrestricted.
+// Status is strict even for exact ID searches.
 export type ListOrganizationsParams = {
+  sort?: string;
+  direction?: "asc" | "desc";
+  page?: number;
   q?: string;
   account_types?: string[];
   trial_states?: string[];
-  disabled_states?: string[];
+  disabled_status?: "all" | "active" | "disabled";
+  /** Nonnegative int64. Use decimal strings above Number.MAX_SAFE_INTEGER. */
+  min_members?: number | string;
+  /** Nonnegative int64. Unsafe numeric values are rejected before sending. */
+  max_members?: number | string;
+  /** Inclusive UTC calendar date, strictly YYYY-MM-DD (not a timestamp). */
+  created_from?: string;
+  /** Inclusive UTC calendar date, strictly YYYY-MM-DD (not a timestamp). */
+  created_to?: string;
   cursor?: string;
   limit?: number;
 };
@@ -290,6 +391,32 @@ export type ListOrganizationsParams = {
 export function listOrganizations(
   params: ListOrganizationsParams = {},
 ): Promise<ListOrganizationsResult> {
+  for (const key of ["min_members", "max_members"] as const) {
+    const value = params[key];
+    if (value === undefined) continue;
+    // Never convert a decimal string through Number: int64 exceeds JS precision.
+    if (
+      (typeof value === "number" && !Number.isSafeInteger(value)) ||
+      !/^[0-9]+$/.test(String(value)) ||
+      BigInt(value) > 9223372036854775807n
+    ) {
+      throw new RangeError(
+        `${key} must be a nonnegative int64; use a decimal string for large values`,
+      );
+    }
+  }
+  for (const key of ["created_from", "created_to"] as const) {
+    const value = params[key];
+    if (value === undefined) continue;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (
+      !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) ||
+      !Number.isFinite(date.getTime()) ||
+      date.toISOString().slice(0, 10) !== value
+    ) {
+      throw new RangeError(`${key} must be a valid YYYY-MM-DD UTC date`);
+    }
+  }
   const qs = toSearchParams(params).toString();
   return gramAdminFetch<ListOrganizationsResult>(
     `/admin/organizations.list${qs ? `?${qs}` : ""}`,
@@ -392,26 +519,22 @@ export type OrganizationRequest = {
   id: string;
 };
 
-// Both answer the organization in its new state, so a caller updates its cache
-// from the response rather than reading the record back.
-export function disableOrganization(
-  body: OrganizationRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/organization.disable", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
+export type MarkEnterpriseTrialConvertedResult = {
+  organization_id: string;
+  converted_at: string;
+};
 
-export function enableOrganization(
+export function markEnterpriseTrialConverted(
   body: OrganizationRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/organization.enable", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+): Promise<MarkEnterpriseTrialConvertedResult> {
+  return gramAdminMutation<MarkEnterpriseTrialConvertedResult>(
+    "/admin/trial.convert",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 // The server's own bounds, mirrored so a value it would reject never leaves the
@@ -422,23 +545,6 @@ export function enableOrganization(
 export const MIN_TRIAL_EXTENSION_DAYS = 1;
 export const MAX_TRIAL_EXTENSION_DAYS = 365;
 
-export type ExtendTrialRequest = {
-  id: string;
-  days: number;
-};
-
-// The days are added to the trial's current end date, not to today, so an
-// extension applied early does not shorten the trial.
-export function extendTrial(
-  body: ExtendTrialRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/trial.extend", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 // The server's own bounds for a re-arm, mirrored the way the extension bounds
 // above are. See MinTrialRearmDays and MaxTrialRearmDays in
 // server/internal/constants/trials.go: separate names from the extension pair
@@ -447,27 +553,17 @@ export function extendTrial(
 export const MIN_TRIAL_REARM_DAYS = 1;
 export const MAX_TRIAL_REARM_DAYS = 365;
 
-export type RearmTrialRequest = {
-  id: string;
-  days: number;
-};
-
-// Not an extension with a different verb. The days are the whole length of a
-// fresh run counted from now, and the write also restores the organization's
-// account type and whitelist flag and revives its model provider keys. Only a
-// demoted trial can be re-armed; anything else is refused with a conflict.
-export function rearmTrial(
-  body: RearmTrialRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/trial.rearm", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
+// The server's own bounds for a start, mirrored the way the re-arm bounds
+// above are. See MinTrialStartDays and MaxTrialStartDays in
+// server/internal/constants/trials.go.
+export const MIN_TRIAL_START_DAYS = 1;
+export const MAX_TRIAL_START_DAYS = 365;
 
 export type CreateOrganizationRequest = {
+  url: string;
   name: string;
+  slug: string;
+  ownership_confirmed: boolean;
 };
 
 export function createOrganization(
@@ -505,6 +601,248 @@ export function listOrganizationProjects(
   );
 }
 
+export type AdminProjectRedeployPreview = {
+  organization_id: string;
+  project_id: string;
+  project_name: string;
+  // Sent back as `expected_active_deployment_id`, so a redeploy clones the
+  // deployment the operator reviewed or refuses.
+  active_deployment_id: string;
+  openapi_assets: number;
+  function_assets: number;
+  packages: number;
+};
+
+export function getProjectRedeployPreview(
+  organizationID: string,
+  projectID: string,
+): Promise<AdminProjectRedeployPreview> {
+  const qs = toSearchParams({
+    organization_id: organizationID,
+    project_id: projectID,
+  });
+  return gramAdminFetch<AdminProjectRedeployPreview>(
+    `/admin/project.redeployPreview?${qs}`,
+  );
+}
+
+export type RedeployProjectRequest = {
+  organization_id: string;
+  project_id: string;
+  expected_active_deployment_id: string;
+};
+
+export type AdminProjectRedeployResult = {
+  project_id: string;
+  source_deployment_id: string;
+  // Processing continues after this returns, and this deployment becomes active
+  // only if it succeeds.
+  deployment_id: string;
+};
+
+export function redeployProject(
+  body: RedeployProjectRequest,
+): Promise<AdminProjectRedeployResult> {
+  return gramAdminMutation<AdminProjectRedeployResult>(
+    "/admin/project.redeploy",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export type AdminAssistantIdentityState =
+  | "NEVER_CONFIGURED"
+  | "ACTIVE"
+  | "UNAVAILABLE";
+
+export type AdminOrganizationAssistant = {
+  id: string;
+  name: string;
+  project_id: string;
+  project_slug: string;
+  project_name: string;
+  status: string;
+  identity_state: AdminAssistantIdentityState;
+  agent_id?: string;
+  agent_name?: string;
+  agent_name_repair_state?: "not_needed" | "pending" | "conflict";
+  // 2 is the default runtime, 3 is Kit.
+  runtime_version: number;
+  created_by_user_id?: string;
+  created_by_user_email?: string;
+  // The migration makes the creator the new agent's owner, so an assistant
+  // whose creator left the organization is skipped.
+  creator_active: boolean;
+  created_at: string;
+};
+
+export type AdminOrganizationAssistants = {
+  organization_id: string;
+  assistants: AdminOrganizationAssistant[];
+};
+
+export function listOrganizationAssistants(
+  organizationID: string,
+): Promise<AdminOrganizationAssistants> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationAssistants>(
+    `/admin/organization.assistants?${qs}`,
+  );
+}
+
+export type AdminAssistantMigrationOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  assistants: number;
+};
+
+export function listAssistantMigrationOrganizations(): Promise<{
+  organizations: AdminAssistantMigrationOrganization[];
+}> {
+  return gramAdminFetch("/admin/assistants.organizations");
+}
+
+export type AdminAssistantNameRepairRun = {
+  organization_id: string;
+  repaired: number;
+  conflicts: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: "repaired" | "conflict" | "failed";
+  }[];
+};
+
+export function repairAssistantAgentNames(
+  organizationID: string,
+): Promise<AdminAssistantNameRepairRun> {
+  return gramAdminMutation("/admin/organization.repairAssistantAgentNames", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ organization_id: organizationID }),
+  });
+}
+
+export type AdminAssistantIdentityMigrationOutcome =
+  | "migrated"
+  | "already_migrated"
+  | "needs_owner"
+  | "failed";
+
+export type AdminAssistantIdentityMigrationRun = {
+  organization_id: string;
+  migrated: number;
+  already_migrated: number;
+  needs_owner: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: AdminAssistantIdentityMigrationOutcome;
+  }[];
+};
+
+export function migrateOrganizationAssistantIdentities(
+  organizationID: string,
+): Promise<AdminAssistantIdentityMigrationRun> {
+  return gramAdminMutation<AdminAssistantIdentityMigrationRun>(
+    "/admin/organization.migrateAssistantIdentities",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: organizationID }),
+    },
+  );
+}
+
+export type AdminAssistantKitMigrationOutcome =
+  | "switched"
+  | "already_kit"
+  | "needs_identity"
+  | "ineligible"
+  | "busy"
+  | "failed";
+
+export type AdminAssistantKitMigrationRun = {
+  organization_id: string;
+  switched: number;
+  already_kit: number;
+  needs_identity: number;
+  ineligible: number;
+  busy: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: AdminAssistantKitMigrationOutcome;
+  }[];
+};
+
+// Moves the given assistants, or every live assistant of the organization when
+// none are given, to the Kit runtime.
+export function migrateOrganizationAssistantsToKit(
+  organizationID: string,
+  assistantIDs?: string[],
+): Promise<AdminAssistantKitMigrationRun> {
+  return gramAdminMutation<AdminAssistantKitMigrationRun>(
+    "/admin/organization.migrateAssistantsToKit",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: organizationID,
+        assistant_ids: assistantIDs,
+      }),
+    },
+  );
+}
+
+export type AdminMcpServerSource =
+  | "toolset"
+  | "remote"
+  | "tunneled"
+  | "unproxied"
+  | "toolset_only";
+
+export type AdminMcpServer = {
+  // The mcp_servers row id, or the toolset id for a toolset-only server.
+  id: string;
+  name: string;
+  // Omitted when the server has no routable address, such as an mcp_servers
+  // row with no endpoint.
+  url?: string;
+  visibility: "disabled" | "private" | "public";
+  // Remote MCP server upstream address; omitted for other server types.
+  upstream_url?: string;
+  source: AdminMcpServerSource;
+  created_at: string;
+};
+
+export type ListProjectMcpServersResult = {
+  mcp_servers: AdminMcpServer[];
+};
+
+export function listProjectMcpServers(
+  organizationID: string,
+  projectID: string,
+): Promise<ListProjectMcpServersResult> {
+  const qs = toSearchParams({
+    organization_id: organizationID,
+    project_id: projectID,
+  });
+  return gramAdminFetch<ListProjectMcpServersResult>(
+    `/admin/project.mcpServers?${qs}`,
+  );
+}
+
 export type AdminOrganizationMember = {
   id: string;
   email: string;
@@ -524,62 +862,6 @@ export function listOrganizationMembers(
   const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<ListOrganizationMembersResult>(
     `/admin/organization.members?${qs}`,
-  );
-}
-
-export type AdminInferenceKey = {
-  key_type: string;
-  credits_used: number;
-  monthly_credits: number;
-  disabled: boolean;
-};
-
-export type AdminOrganizationFeatures = {
-  authz_challenge_logging_enabled: boolean;
-  customer_managed_encryption_keys_enabled: boolean;
-  custom_model_keys_enabled: boolean;
-  platform_mcp_enabled: boolean;
-  remote_session_auto_refresh_enabled: boolean;
-  session_portability_enabled: boolean;
-  sso_enabled: boolean;
-  scim_enabled: boolean;
-};
-
-export type AdminOrganizationFeatureName =
-  | "authz_challenge_logging"
-  | "customer_managed_encryption_keys"
-  | "custom_model_keys"
-  | "platform_mcp"
-  | "remote_session_auto_refresh"
-  | "session_portability"
-  | "sso"
-  | "scim";
-
-export function getOrganizationFeatures(
-  organizationID: string,
-): Promise<AdminOrganizationFeatures> {
-  const qs = toSearchParams({ organization_id: organizationID });
-  return gramAdminFetch<AdminOrganizationFeatures>(
-    `/admin/organization.features?${qs}`,
-  );
-}
-
-export function setOrganizationFeature(input: {
-  organizationID: string;
-  featureName: AdminOrganizationFeatureName;
-  enabled: boolean;
-}): Promise<AdminOrganizationFeatures> {
-  return gramAdminMutation<AdminOrganizationFeatures>(
-    "/admin/organization.features",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        organization_id: input.organizationID,
-        feature_name: input.featureName,
-        enabled: input.enabled,
-      }),
-    },
   );
 }
 
@@ -641,21 +923,113 @@ export function setOrganizationChatAnalysisSetting(input: {
   );
 }
 
-export function getInferenceKeys(
-  organizationID: string,
-): Promise<AdminInferenceKey[]> {
-  const qs = toSearchParams({ organization_id: organizationID });
-  return gramAdminFetch<AdminInferenceKey[]>(
-    `/admin/organization.inferenceKeys?${qs}`,
+export type AdminInferenceKeyType = RepairInferenceKeyRequestBody["keyType"];
+
+export type AdminHooksRolloutPin = {
+  version: number;
+  set_by: string;
+  set_at: string;
+};
+
+export type AdminHooksRolloutOverride = {
+  organization_id: string;
+  organization_name: string;
+  organization_slug: string;
+  pin: AdminHooksRolloutPin;
+};
+
+export type AdminHooksRolloutChange = {
+  organization_id?: string;
+  organization_slug?: string;
+  version?: number;
+  set_by: string;
+  set_at: string;
+};
+
+export type AdminHooksRollout = {
+  current_version: number;
+  default_pin?: AdminHooksRolloutPin;
+  canary_organization_slugs: string[];
+  overrides: AdminHooksRolloutOverride[];
+  recent_changes: AdminHooksRolloutChange[];
+};
+
+export type AdminHooksRolloutSource =
+  | "canary"
+  | "organization"
+  | "default"
+  | "legacy_flag";
+
+export type AdminOrganizationHooksRollout = {
+  organization_id: string;
+  current_version: number;
+  override?: AdminHooksRolloutPin;
+  default_pin?: AdminHooksRolloutPin;
+  source: AdminHooksRolloutSource;
+  effective_version?: number;
+  eligible?: boolean;
+};
+
+export function getHooksRollout(): Promise<AdminHooksRollout> {
+  return gramAdminFetch<AdminHooksRollout>("/admin/hooksRollout.get");
+}
+
+export function setHooksRolloutDefault(
+  version: number,
+): Promise<AdminHooksRollout> {
+  return gramAdminMutation<AdminHooksRollout>(
+    "/admin/hooksRollout.setDefault",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version }),
+    },
   );
 }
 
-export type AdminInferenceKeyType = "chat" | "internal";
+export function getOrganizationHooksRollout(
+  organizationID: string,
+): Promise<AdminOrganizationHooksRollout> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationHooksRollout>(
+    `/admin/organization.hooksRollout?${qs}`,
+  );
+}
 
-export type AdminInferenceKeyLimit = Pick<
-  AdminInferenceKey,
-  "key_type" | "monthly_credits"
->;
+export function setOrganizationHooksRollout(input: {
+  organizationID: string;
+  version: number;
+}): Promise<AdminOrganizationHooksRollout> {
+  return gramAdminMutation<AdminOrganizationHooksRollout>(
+    "/admin/organization.setHooksRollout",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        version: input.version,
+      }),
+    },
+  );
+}
+
+export function clearOrganizationHooksRollout(
+  organizationID: string,
+): Promise<AdminOrganizationHooksRollout> {
+  return gramAdminMutation<AdminOrganizationHooksRollout>(
+    "/admin/organization.clearHooksRollout",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: organizationID }),
+    },
+  );
+}
+
+export type AdminInferenceKeyLimit = {
+  key_type: string;
+  monthly_credits: number;
+};
 
 export function setInferenceKeyMonthlyLimit(input: {
   organizationID: string;
@@ -768,5 +1142,49 @@ export function resumeStripeSubscription(
   return updateStripeSubscription(
     "/admin/organization.resumeStripeSubscription",
     organizationID,
+  );
+}
+
+export type AdminUserOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  disabled_at?: string;
+};
+export type AdminUser = {
+  id: string;
+  display_name: string;
+  email: string;
+  last_login?: string;
+  organizations: AdminUserOrganization[];
+  organization_count: number;
+};
+export type AdminListUsersResult = {
+  users: AdminUser[];
+  total: number;
+  page: number;
+  limit: number;
+};
+export type AdminListUserOrganizationsResult = {
+  organizations: AdminUserOrganization[];
+  total: number;
+  page: number;
+  limit: number;
+};
+export function listUsers(
+  params: { q?: string; page?: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<AdminListUsersResult> {
+  return gramAdminFetch(`/admin/users.list?${toSearchParams(params)}`, {
+    signal,
+  });
+}
+export function listUserOrganizations(
+  params: { user_id: string; page?: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<AdminListUserOrganizationsResult> {
+  return gramAdminFetch(
+    `/admin/users.organizations.list?${toSearchParams(params)}`,
+    { signal },
   );
 }

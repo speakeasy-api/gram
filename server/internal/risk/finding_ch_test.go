@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -94,6 +95,15 @@ func (f *fakeCHInserter) InsertRiskFindings(_ context.Context, rows []chrepo.Ris
 	return f.err
 }
 
+type recordingFindingCreatedEmitter struct {
+	batches [][]risk.RiskFindingCreatedEvent
+}
+
+func (e *recordingFindingCreatedEmitter) Emit(_ context.Context, events []risk.RiskFindingCreatedEvent) error {
+	e.batches = append(e.batches, append([]risk.RiskFindingCreatedEvent(nil), events...))
+	return nil
+}
+
 func newCHWriter(t *testing.T) (*risk.FindingCHWriter, *fakeCHInserter) {
 	t.Helper()
 	return newCHWriterWithMeter(t, testenv.NewMeterProvider(t))
@@ -107,7 +117,7 @@ func newCHWriterWithMeter(t *testing.T, mp metric.MeterProvider) (*risk.FindingC
 	// nil exclusions DB: these unit-test findings carry non-UUID project/policy
 	// ids, so exclusion resolution fails-open before any DB access. Exclusion
 	// filtering against a real DB is covered by the integration test below.
-	w := risk.NewFindingCHWriter(testenv.NewLogger(t), nil, mp, ins, fp)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), nil, mp, ins, fp, testPresetLibrary(t), nil)
 	return w, ins
 }
 
@@ -143,6 +153,105 @@ func requireNoRejects(t *testing.T, failed []error) {
 	for i, err := range failed {
 		require.NoError(t, err, "message %d must not be rejected", i)
 	}
+}
+
+func newPolicyFilteringWriter(t *testing.T, disabledRules []string, analyzerConfig []byte, mp metric.MeterProvider) (context.Context, *risk.FindingCHWriter, *fakeCHInserter, uuid.UUID, uuid.UUID) {
+	t.Helper()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	policyID := uuid.Must(uuid.NewV7())
+	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:                   policyID,
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 "finding writer filters",
+		PolicyType:           "standard",
+		Sources:              []string{},
+		PresidioEntities:     []string{},
+		AnalyzerConfig:       analyzerConfig,
+		PromptInjectionRules: []string{},
+		DisabledRules:        disabledRules,
+		CustomRuleIds:        []string{},
+		McpScope:             nil,
+		Enabled:              true,
+		Action:               "flag",
+		AudienceType:         "everyone",
+		ShadowMcpDisposition: pgtype.Text{},
+		AutoName:             false,
+		UserMessage:          pgtype.Text{},
+		Prompt:               pgtype.Text{},
+		ModelConfig:          nil,
+		Score:                pgtype.Float8{Float64: 5, Valid: true},
+	})
+	require.NoError(t, err)
+
+	ins := &fakeCHInserter{}
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
+	require.NoError(t, err)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, mp, ins, fp, testPresetLibrary(t), nil)
+	return ctx, w, ins, *authCtx.ProjectID, policyID
+}
+
+func findingForPolicy(projectID, policyID uuid.UUID) *riskv1.Finding {
+	f := chFinding()
+	f.SetProjectId(projectID.String())
+	f.SetRiskPolicyId(policyID.String())
+	return f
+}
+
+func TestFindingCHWriter_ProcessBatch_DropsDisabledRule(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	ctx, w, ins, projectID, policyID := newPolicyFilteringWriter(t, []string{"rule-1"}, nil, mp)
+
+	f := findingForPolicy(projectID, policyID)
+	requireNoRejects(t, processBatch(t, w, ctx, []*riskv1.Finding{f}))
+
+	require.Zero(t, ins.calls)
+	point := chFilteredPoint(t, reader)
+	require.Equal(t, int64(1), point.Value)
+	reason, ok := point.Attributes.Value(attr.ReasonKey)
+	require.True(t, ok)
+	require.Equal(t, "disabled_rule", reason.AsString())
+}
+
+func TestFindingCHWriter_ProcessBatch_DropsBuiltinPreset(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	ctx, w, ins, projectID, policyID := newPolicyFilteringWriter(t, nil, nil, mp)
+	f := findingForPolicy(projectID, policyID)
+	f.SetSource("gitleaks")
+	f.SetRuleId("secret.stripe_secret_key")
+	f.SetMatch("sk_test_4eC39HqLyjWDarjtT1zdp7dc")
+
+	requireNoRejects(t, processBatch(t, w, ctx, []*riskv1.Finding{f}))
+	require.Zero(t, ins.calls)
+	point := chFilteredPoint(t, reader)
+	require.Equal(t, int64(1), point.Value)
+	reason, ok := point.Attributes.Value(attr.ReasonKey)
+	require.True(t, ok)
+	require.Equal(t, "builtin_preset", reason.AsString())
+}
+
+func TestFindingCHWriter_ProcessBatch_KeepsBuiltinPresetWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, w, ins, projectID, policyID := newPolicyFilteringWriter(t, nil, []byte(`{"builtin_presets":{"enabled":false}}`), testenv.NewMeterProvider(t))
+	f := findingForPolicy(projectID, policyID)
+	f.SetSource("gitleaks")
+	f.SetRuleId("secret.stripe_secret_key")
+	f.SetMatch("sk_test_4eC39HqLyjWDarjtT1zdp7dc")
+
+	requireNoRejects(t, processBatch(t, w, ctx, []*riskv1.Finding{f}))
+	require.Len(t, chRows(t, ins), 1)
 }
 
 func TestFindingCHWriter_ProcessBatch_MapsAllFields(t *testing.T) {
@@ -205,6 +314,115 @@ func TestFindingCHWriter_ProcessBatch_MapsAllFields(t *testing.T) {
 	require.Equal(t, "tool.args", row.Field)
 	require.Equal(t, "command.0", row.Path)
 	require.Equal(t, "call_abc123", row.ToolCallID)
+
+	// An enforcing finding never carries the engine-comparison marker.
+	require.False(t, row.Shadow)
+}
+
+func TestFindingCHWriter_ProcessBatch_EmitsStableWebhookIDsOnlyForFindings(t *testing.T) {
+	t.Parallel()
+
+	ins := &fakeCHInserter{}
+	emitter := &recordingFindingCreatedEmitter{}
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
+	require.NoError(t, err)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), nil, testenv.NewMeterProvider(t), ins, fp, testPresetLibrary(t), emitter)
+
+	f := chFinding()
+	f.SetProjectId(uuid.NewString())
+	f.SetRiskPolicyId(uuid.NewString())
+	f.SetChatMessageId(uuid.NewString())
+	f.SetAttribution(riskv1.Finding_Attribution_builder{}.Build())
+
+	requireNoRejects(t, processBatch(t, w, t.Context(), []*riskv1.Finding{f, f}))
+	requireNoRejects(t, processBatch(t, w, t.Context(), []*riskv1.Finding{f}))
+
+	f.SetEventKind(chrepo.EventKindSuppression)
+	f.SetFalsePositiveAt("2026-06-27T13:00:00Z")
+	requireNoRejects(t, processBatch(t, w, t.Context(), []*riskv1.Finding{f}))
+
+	require.Len(t, emitter.batches, 3)
+	require.Len(t, emitter.batches[0], 1, "duplicate ids in one batch emit once")
+	require.Len(t, emitter.batches[1], 1)
+	require.Empty(t, emitter.batches[2], "suppression copies emit no finding-created webhook")
+	require.Equal(t, emitter.batches[0][0].Event.ID, emitter.batches[1][0].Event.ID, "redelivery keeps one Svix idempotency key")
+	require.Equal(t, f.GetId(), emitter.batches[0][0].Event.Payload.ID.String())
+}
+
+// TestFindingCHWriter_ProcessBatch_MapsShadow pins the engine-comparison
+// marker: a shadow finding (the LLM analyzer's verdict recorded under the
+// shadow risk engine mode) is persisted with the flag set, so the read paths
+// can hide it, while an enforcing finding in the same batch stays unmarked.
+func TestFindingCHWriter_ProcessBatch_MapsShadow(t *testing.T) {
+	t.Parallel()
+
+	w, ins := newCHWriter(t)
+
+	enforcing := chFinding()
+	shadow := chFinding()
+	shadow.SetShadow(true)
+
+	requireNoRejects(t, processBatch(t, w, context.Background(), []*riskv1.Finding{enforcing, shadow}))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 2)
+	require.False(t, rows[0].Shadow)
+	require.True(t, rows[1].Shadow)
+}
+
+func TestFindingCHWriter_ProcessBatch_CarriedAttributionNeedsNoAnchor(t *testing.T) {
+	t.Parallel()
+	w, ins := newCHWriter(t)
+	f := chFinding()
+	f.SetChatMessageId("")
+	f.SetAttribution(riskv1.Finding_Attribution_builder{
+		ChatId:           new(""),
+		UserId:           new("validated-user"),
+		ExternalUserId:   new("external-user"),
+		AssistantId:      new("assistant"),
+		MessageCreatedAt: new("2026-06-27T14:00:00+02:00"),
+		ChatSource:       new("carried-source"),
+		Team:             new("security"),
+		UserEmail:        new("user@example.com"),
+	}.Build())
+	f.SetExecution(riskv1.Finding_Execution_builder{
+		ExecutionId:      new("execution"),
+		McpServerId:      new("server"),
+		MetaMcpServerId:  new("meta-server"),
+		ToolsetId:        new("toolset"),
+		ToolName:         new("run"),
+		Phase:            new("request"),
+		MediationSurface: new("hosted_mcp"),
+		Method:           new("tools/call"),
+		PrincipalKind:    new("user_session"),
+		IdentityStamped:  new(true),
+	}.Build())
+	f.SetEnforcementOutcome(riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED)
+
+	requireNoRejects(t, processBatch(t, w, t.Context(), []*riskv1.Finding{f}))
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1)
+	row := rows[0]
+	require.Empty(t, row.ChatMessageID)
+	require.Empty(t, row.ChatID)
+	require.Equal(t, "validated-user", row.UserID)
+	require.Equal(t, "external-user", row.ExternalUserID)
+	require.Equal(t, "assistant", row.AssistantID)
+	require.Equal(t, "carried-source", row.ChatSource)
+	require.Equal(t, "security", row.Team)
+	require.Equal(t, "user@example.com", row.UserEmail)
+	require.Equal(t, time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC), row.MessageCreatedAt)
+	require.Equal(t, "execution", row.ExecutionID)
+	require.Equal(t, "server", row.MCPServerID)
+	require.Equal(t, "meta-server", row.MetaMCPServerID)
+	require.Equal(t, "toolset", row.ToolsetID)
+	require.Equal(t, "run", row.ToolName)
+	require.Equal(t, "request", row.Phase)
+	require.Equal(t, "hosted_mcp", row.MediationSurface)
+	require.Equal(t, "tools/call", row.MCPMethod)
+	require.Equal(t, "user_session", row.PrincipalKind)
+	require.True(t, row.IdentityStamped)
+	require.Equal(t, "denied", row.EnforcementOutcome)
 }
 
 // match_redacted is the shared maskdisplay partial mask, per source: an
@@ -453,7 +671,7 @@ func TestFindingCHWriter_ProcessBatch_AnnotatesExcludedFindings(t *testing.T) {
 	ins := &fakeCHInserter{}
 	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
 	require.NoError(t, err)
-	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp, testPresetLibrary(t), nil)
 
 	policyID := uuid.Must(uuid.NewV7()).String()
 
@@ -634,7 +852,7 @@ func TestFindingCHWriter_ProcessBatch_ResolvesAttribution(t *testing.T) {
 	ins := &fakeCHInserter{}
 	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
 	require.NoError(t, err)
-	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp, testPresetLibrary(t), nil)
 
 	own := chFinding()
 	own.SetChatMessageId(msgOwn.String())
@@ -697,7 +915,7 @@ func TestFindingCHWriter_ProcessBatch_ResolvesAttribution(t *testing.T) {
 	otherProject.SetProjectId(uuid.NewString())
 
 	ins2 := &fakeCHInserter{}
-	w2 := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins2, fp)
+	w2 := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins2, fp, testPresetLibrary(t), nil)
 	requireNoRejects(t, processBatch(t, w2, ctx, []*riskv1.Finding{legit, otherProject}))
 
 	crossRows := chRows(t, ins2)
@@ -773,7 +991,7 @@ func TestFindingCHWriter_ProcessBatch_ResolvesContentPartAttribution(t *testing.
 	ins := &fakeCHInserter{}
 	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
 	require.NoError(t, err)
-	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp, testPresetLibrary(t), nil)
 
 	f := chFinding()
 	f.ClearChatMessageId()
@@ -803,7 +1021,7 @@ func TestFindingCHWriter_ProcessBatch_ResolvesContentPartAttribution(t *testing.
 	otherProject.SetRiskPolicyId(uuid.NewString())
 
 	ins2 := &fakeCHInserter{}
-	w2 := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins2, fp)
+	w2 := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins2, fp, testPresetLibrary(t), nil)
 	requireNoRejects(t, processBatch(t, w2, ctx, []*riskv1.Finding{otherProject}))
 
 	crossRows := chRows(t, ins2)
@@ -963,7 +1181,7 @@ func TestFindingCHWriter_ProcessBatch_RejectsMessageWhoseChatIsInAnotherProject(
 	ins := &fakeCHInserter{}
 	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
 	require.NoError(t, err)
-	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp, testPresetLibrary(t), nil)
 
 	f := chFinding()
 	f.SetChatMessageId(msgID.String())
@@ -980,15 +1198,21 @@ func TestFindingCHWriter_ProcessBatch_RejectsMessageWhoseChatIsInAnotherProject(
 	require.Empty(t, rows[0].AssistantID)
 }
 
-// chMessagesInsertedPoint returns the single data point for the CH
-// messages-inserted counter, failing the test if it is missing.
 func chMessagesInsertedPoint(t *testing.T, reader *sdkmetric.ManualReader) metricdata.DataPoint[int64] {
 	t.Helper()
+	return chCounterPoint(t, reader, "gram.risk_findings.ch_messages_inserted")
+}
 
-	const metricName = "gram.risk_findings.ch_messages_inserted"
+func chFilteredPoint(t *testing.T, reader *sdkmetric.ManualReader) metricdata.DataPoint[int64] {
+	t.Helper()
+	return chCounterPoint(t, reader, "gram.risk_findings.ch_filtered")
+}
+
+func chCounterPoint(t *testing.T, reader *sdkmetric.ManualReader, metricName string) metricdata.DataPoint[int64] {
+	t.Helper()
 
 	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(context.Background(), &rm))
+	require.NoError(t, reader.Collect(t.Context(), &rm))
 
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {
@@ -1004,4 +1228,97 @@ func chMessagesInsertedPoint(t *testing.T, reader *sdkmetric.ManualReader) metri
 
 	require.Failf(t, "metric not found", "missing metric %q", metricName)
 	return metricdata.DataPoint[int64]{}
+}
+
+// Carried attribution is producer-asserted, so the writer applies the same
+// tenancy rule as the anchor lookups: a chat outside the finding's project
+// drops every chat-derived field while the finding and its execution metadata
+// still land.
+func TestFindingCHWriter_ProcessBatch_CarriedChatMustBelongToProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "carried-attr-" + uuid.New().String()[:8]
+	otherProject, err := projectsRepo.New(ti.conn).CreateProject(ctx, projectsRepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	queries := riskrepo.New(ti.conn)
+	ownChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("own-user"),
+		ExternalUserID: conv.ToPGText("own-user@example.com"),
+	})
+	require.NoError(t, err)
+	foreignChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      otherProject.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("foreign-user"),
+		ExternalUserID: conv.ToPGText("foreign-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	ins := &fakeCHInserter{}
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
+	require.NoError(t, err)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp, testPresetLibrary(t), nil)
+
+	carried := func(chatID string) *riskv1.Finding {
+		f := chFinding()
+		f.SetChatMessageId("")
+		f.SetProjectId(authCtx.ProjectID.String())
+		f.SetAttribution(riskv1.Finding_Attribution_builder{
+			ChatId:         new(chatID),
+			UserId:         new("carried-user"),
+			ExternalUserId: new("carried-user@example.com"),
+			AssistantId:    new(uuid.NewString()),
+			ChatSource:     new("claude-code"),
+			Team:           new("security"),
+			UserEmail:      new("carried-user@example.com"),
+		}.Build())
+		f.SetExecution(riskv1.Finding_Execution_builder{
+			ExecutionId: new("execution"),
+			McpServerId: new("server"),
+			ToolName:    new("run"),
+			Phase:       new("request"),
+		}.Build())
+		return f
+	}
+	own := carried(ownChatID.String())
+	foreign := carried(foreignChatID.String())
+	malformed := carried("not-a-chat-id")
+
+	requireNoRejects(t, processBatch(t, w, ctx, []*riskv1.Finding{own, foreign, malformed}))
+	rows := chRows(t, ins)
+	require.Len(t, rows, 3)
+	byID := make(map[string]chrepo.RiskFindingRow, len(rows))
+	for _, row := range rows {
+		byID[row.ID.String()] = row
+	}
+
+	ownRow := byID[own.GetId()]
+	require.Equal(t, ownChatID.String(), ownRow.ChatID)
+	require.Equal(t, "carried-user", ownRow.UserID)
+	require.Equal(t, "security", ownRow.Team)
+
+	for _, f := range []*riskv1.Finding{foreign, malformed} {
+		row := byID[f.GetId()]
+		require.Empty(t, row.ChatID)
+		require.Empty(t, row.UserID)
+		require.Empty(t, row.ExternalUserID)
+		require.Empty(t, row.AssistantID)
+		require.Empty(t, row.ChatSource)
+		require.Empty(t, row.Team)
+		require.Empty(t, row.UserEmail)
+		require.Equal(t, "server", row.MCPServerID, "execution metadata survives an unverifiable chat")
+		require.Equal(t, "run", row.ToolName)
+	}
 }

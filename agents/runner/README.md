@@ -1,4 +1,4 @@
-# Gram Assistant Runner
+# Speakeasy Assistant Runner
 
 Rust HTTP runner for assistant threads. The crate is intentionally standalone so
 it can be built and tested without the Go/TypeScript workspaces.

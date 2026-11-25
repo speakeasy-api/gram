@@ -1,9 +1,8 @@
-import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import type { Toolset } from "@/lib/toolTypes";
-import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { useState } from "react";
-import { PageSection } from "./MCPDetails";
+import { PageSection } from "./PageSection";
 import { ConnectOAuthModal } from "./oauth-wizard";
 import { AttachRemoteIdentityProviderSheet } from "./x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet";
 import { AuthenticationSectionBody } from "./x/tabs/settings/sections/authentication/AuthenticationSection";
@@ -25,17 +24,13 @@ export function ToolsetAuthenticationSection({
 }): JSX.Element {
   const target = useToolsetAuthTarget(toolset);
   const [externalOAuthOpen, setExternalOAuthOpen] = useState(false);
-  const externalMcpOAuthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
-  const externalOAuthAvailable = canConfigureExternalOAuth(
-    toolset,
-    externalMcpOAuthStatus === "required-unconfigured",
-  );
+  const externalOAuthAvailable = canConfigureExternalOAuth(toolset);
 
   return (
     <>
       <PageSection
-        heading="Authentication"
-        description="Configure the upstream identity provider and user session settings for clients connecting to this server."
+        heading="Sign-in method"
+        description="Who may connect to this server and how they sign in. Changes take effect on new connections."
       >
         <AuthenticationSectionBody
           target={target}
@@ -62,6 +57,29 @@ export function ToolsetAuthenticationSection({
   );
 }
 
+export function ExternalOAuthMetadataRecommendation({
+  onReview,
+}: {
+  onReview: () => void;
+}): JSX.Element {
+  return (
+    <Alert variant="info" className="mb-4">
+      <AlertTitle>Provider-hosted metadata is recommended</AlertTitle>
+      <AlertDescription className="flex items-center justify-between gap-4">
+        <span>
+          Speakeasy continues to host protected-resource metadata. Review
+          switching authorization-server discovery to your provider without
+          replacing registrations or tokens. Some clients may request
+          authentication again.
+        </span>
+        <Button variant="secondary" onClick={onReview}>
+          Review update
+        </Button>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 /**
  * Convert path for external-OAuth toolsets: opens the attach sheet seeded
  * with the external server's issuer URL. On success the sheet links the new
@@ -75,21 +93,17 @@ export function ConvertToUserSessionsButton({
 }): JSX.Element {
   const [sheetOpen, setSheetOpen] = useState(false);
   const target = useToolsetAuthTarget(toolset);
-  // No issuer wired yet, so every issuer this project can see is selectable.
-  const { data: issuersResult } = useRemoteSessionIssuers();
-  const selectableIssuers = issuersResult?.result.items ?? [];
 
   return (
     <>
       <Button variant="tertiary" onClick={() => setSheetOpen(true)}>
-        <Button.Text>Convert to User Sessions</Button.Text>
+        <Button.Text>Convert to MCP sign-in</Button.Text>
       </Button>
       <AttachRemoteIdentityProviderSheet
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         target={target}
         userSessionIssuer={null}
-        selectableIssuers={selectableIssuers}
         initialIssuerUrl={externalOauthIssuerUrl(toolset)}
       />
     </>

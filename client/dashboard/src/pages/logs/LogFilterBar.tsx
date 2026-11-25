@@ -570,12 +570,12 @@ function EditableFilterChip({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <span className="border-border bg-accent text-accent-foreground inline-flex shrink-0 items-center border font-mono text-xs">
+      <span className="border-border bg-background text-foreground inline-flex shrink-0 items-center border font-mono text-xs">
         <PopoverTrigger asChild>
           <button
             type="button"
             aria-label={`Edit filter ${filter.path}`}
-            className="hover:bg-accent/60 cursor-pointer py-0.5 pr-1 pl-2 transition-colors"
+            className="hover:bg-muted cursor-pointer py-0.5 pr-1 pl-2 transition-colors"
           >
             {filter.path} {OP_LABELS[filter.op]}
             {filter.value !== undefined ? ` ${filter.value}` : ""}
@@ -588,7 +588,7 @@ function EditableFilterChip({
             e.stopPropagation();
             onRemove(filter.id);
           }}
-          className="text-muted-foreground hover:text-foreground hover:bg-accent/60 px-1.5 py-0.5 transition-colors"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted px-1.5 py-0.5 transition-colors"
         >
           <X className="size-3" />
         </button>

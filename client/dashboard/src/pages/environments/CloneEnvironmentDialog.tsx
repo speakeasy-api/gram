@@ -2,7 +2,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
-import { Environment } from "@gram/client/models/components/environment.js";
+import type { Environment } from "@gram/client/models/components/environment.js";
 import { Button } from "@/components/ui/Button";
 import { useState } from "react";
 import { useCloneEnvironment } from "./useEnvironmentActions";

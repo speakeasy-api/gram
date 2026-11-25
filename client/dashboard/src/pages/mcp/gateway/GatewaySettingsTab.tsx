@@ -1,60 +1,75 @@
-import { RequireScope } from "@/components/require-scope";
+import { Spinner } from "@/components/ui/Spinner";
+import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
+import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
+import { Check, Copy } from "lucide-react";
 import {
   DangerSettingsSection,
   FooterSaveButton,
   SettingsSection,
 } from "@/components/detail/settings-section";
-import { Button } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
-import { Input } from "@/components/ui/Input";
-import { Text } from "@/components/ui/Text";
-import { useRoutes } from "@/routes";
-import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
-import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import { invalidateAllGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
-import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
-import { invalidateAllMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
-import { useDeleteMetaMcpServerMutation } from "@gram/client/react-query/deleteMetaMcpServer.js";
-import { useUpdateMetaMcpServerMutation } from "@gram/client/react-query/updateMetaMcpServer.js";
-import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
-import { toast } from "sonner";
-import { AuthenticationSectionBody } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
-import { useMetaMcpAuthTarget } from "@/pages/mcp/x/tabs/settings/sections/authentication/authTarget";
 import {
   MCP_SERVER_URL_SECTION_ID,
   ServerUrlSection,
 } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
+import {
+  SettingsLayout,
+  useReportUnsavedChanges,
+} from "@/components/detail/settings-layout";
+import {
+  SETTINGS_GROUP_IDS,
+  SETTINGS_GROUPS,
+} from "@/components/detail/settings-groups";
+import { useScrollToSettingsHash } from "@/hooks/useScrollToSettingsHash";
+import { DisplayNameField } from "@/pages/mcp/x/tabs/settings/sections/DisplayNameField";
+
+import { AuthenticationSectionBody } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/NetworkAccessSection";
+import { RequireScope } from "@/components/require-scope";
+import { Input } from "@/components/ui/Input";
+import { Text } from "@/components/ui/Text";
+import { Textarea } from "@/components/moon/textarea";
+import codeInstructions from "./builtin-gateway-code-instructions.txt?raw";
+import directInstructions from "./builtin-gateway-direct-instructions.txt?raw";
+import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
+import { cn } from "@/lib/utils";
+import { invalidateAllGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
+import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { invalidateAllMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
+import { toast } from "sonner";
+import { useDeleteMetaMcpServerMutation } from "@gram/client/react-query/deleteMetaMcpServer.js";
+import { useMetaMcpAuthTarget } from "@/pages/mcp/x/tabs/settings/sections/authentication/authTarget";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { useRoutes } from "@/routes";
+import { useUpdateMetaMcpServerMutation } from "@gram/client/react-query/updateMetaMcpServer.js";
 
 // Shares mcp_servers' 40-char display-name convention.
 const NAME_MAX_LENGTH = 40;
 
+// Mirrors the normalized rune limit in the metaMcp update handler.
+const INSTRUCTIONS_MAX_LENGTH = 10000;
+
 export const GATEWAY_AUTHENTICATION_SECTION_ID = "authentication";
+export const GATEWAY_INSTRUCTIONS_SECTION_ID = "instructions";
+/** Anchors Tool discovery, which Inspect and the Code Mode check link to. */
+export const GATEWAY_DISCOVERY_SECTION_ID = "discovery";
 
-function useScrollToSettingsHash() {
-  const location = useLocation();
-
-  useEffect(() => {
-    const targetId = location.hash.replace("#", "");
-    if (
-      targetId !== MCP_SERVER_URL_SECTION_ID &&
-      targetId !== GATEWAY_AUTHENTICATION_SECTION_ID
-    ) {
-      return;
-    }
-
-    const animationFrame = window.requestAnimationFrame(() => {
-      document
-        .getElementById(targetId)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [location.hash]);
-}
+const SCROLLABLE_SECTION_IDS: readonly string[] = [
+  MCP_SERVER_URL_SECTION_ID,
+  GATEWAY_AUTHENTICATION_SECTION_ID,
+  AUTHORIZATION_SERVERS_FIELD_ID,
+  GATEWAY_INSTRUCTIONS_SECTION_ID,
+  GATEWAY_DISCOVERY_SECTION_ID,
+  ...SETTINGS_GROUP_IDS,
+];
 
 export function GatewaySettingsTab({
   metaMcpServer,
@@ -65,26 +80,69 @@ export function GatewaySettingsTab({
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
 }): JSX.Element {
-  useScrollToSettingsHash();
+  useScrollToSettingsHash(SCROLLABLE_SECTION_IDS);
+  const G = SETTINGS_GROUPS;
 
   return (
-    <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
-      <GatewayNameSection metaMcpServer={metaMcpServer} />
-      <ServerUrlSection
-        backend={{ metaMcpServerId: metaMcpServer.id }}
-        endpoints={endpoints}
-        isLoadingEndpoints={isLoadingEndpoints}
-        subject="gateway"
-      />
-      <GatewayAuthenticationSection
-        metaMcpServer={metaMcpServer}
-        endpoints={endpoints}
-      />
-      <GatewayDangerZoneSection
-        metaMcpServer={metaMcpServer}
-        endpoints={endpoints}
-      />
-    </div>
+    <SettingsLayout
+      groups={[
+        {
+          ...G.general,
+          content: <GatewayNameSection metaMcpServer={metaMcpServer} />,
+        },
+        {
+          ...G.identity,
+          content: (
+            <GatewayAuthenticationSection
+              metaMcpServer={metaMcpServer}
+              endpoints={endpoints}
+            />
+          ),
+        },
+        {
+          ...G.connection,
+          content: (
+            <>
+              <ServerUrlSection
+                backend={{ metaMcpServerId: metaMcpServer.id }}
+                endpoints={endpoints}
+                isLoadingEndpoints={isLoadingEndpoints}
+                subject="gateway"
+                mcpServer={metaMcpServer}
+              />
+              {!isLoadingEndpoints && (
+                <NetworkAccessSection
+                  metaMcpServer={metaMcpServer}
+                  endpoints={endpoints}
+                />
+              )}
+            </>
+          ),
+        },
+        {
+          ...G.tools,
+          content: (
+            <GatewayDiscoverySection
+              key={`${metaMcpServer.id}:${metaMcpServer.discoveryMode}`}
+              metaMcpServer={metaMcpServer}
+            />
+          ),
+        },
+        {
+          ...G.instructions,
+          content: <GatewayInstructionsSection metaMcpServer={metaMcpServer} />,
+        },
+        {
+          ...G.danger,
+          content: (
+            <GatewayDangerZoneSection
+              metaMcpServer={metaMcpServer}
+              endpoints={endpoints}
+            />
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -112,6 +170,10 @@ function GatewayNameSection({
 
   const trimmedDraft = nameDraft.trim();
   const dirty = trimmedDraft !== metaMcpServer.name.trim();
+  // Same check as the Save gate below: an edit nobody can save is no change
+  // worth guarding.
+  const { hasScope } = useRBAC();
+  useReportUnsavedChanges(hasScope("mcp:write") && dirty);
   const saveDisabled =
     !dirty ||
     trimmedDraft === "" ||
@@ -128,26 +190,16 @@ function GatewayNameSection({
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          <Field
-            data-invalid={update.isError ? true : undefined}
-            className="max-w-md"
-          >
-            <FieldLabel htmlFor="gateway-name">Display Name</FieldLabel>
-            <Input
-              id="gateway-name"
-              value={nameDraft}
-              onChange={(value) => setNameDraft(value)}
-              placeholder="My Gateway"
-              maxLength={NAME_MAX_LENGTH}
-              aria-invalid={update.isError}
-            />
-            {update.isError && <FieldError>{update.error.message}</FieldError>}
-          </Field>
+          <DisplayNameField
+            id="gateway-name"
+            value={nameDraft}
+            onChange={setNameDraft}
+            placeholder="My Gateway"
+            maxLength={NAME_MAX_LENGTH}
+            error={update.isError ? update.error.message : undefined}
+          />
         </SettingsSection.Body>
         <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            {`Please use no more than ${NAME_MAX_LENGTH} characters.`}
-          </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope scope="mcp:write" level="component">
               <FooterSaveButton
@@ -175,6 +227,195 @@ function GatewayNameSection({
   );
 }
 
+export function GatewayInstructionsSection({
+  metaMcpServer,
+}: {
+  metaMcpServer: MetaMcpServer;
+}): JSX.Element {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
+  const servedMode =
+    metaMcpServer.discoveryMode === "code_mode" &&
+    !metaMcpServer.codeModeEnabled
+      ? "progressive"
+      : metaMcpServer.discoveryMode;
+  const defaultInstructions =
+    servedMode === "direct"
+      ? directInstructions.trimEnd()
+      : servedMode === "progressive"
+        ? builtInInstructions
+        : servedMode === "code_mode"
+          ? codeInstructions.trimEnd()
+          : undefined;
+  const supportsEditing =
+    defaultInstructions !== undefined || !!metaMcpServer.instructions;
+  const stored = metaMcpServer.instructions || defaultInstructions || "";
+  const [draft, setDraft] = useState(stored);
+
+  useEffect(() => {
+    setDraft(stored);
+  }, [metaMcpServer.id, stored]);
+
+  const queryClient = useQueryClient();
+  const update = useUpdateMetaMcpServerMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAllGetMetaMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllMetaMcpServers(queryClient, { refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["gatewayInspection"] }),
+      ]);
+      // Refetching an already-empty saved value does not change `stored`.
+      setDraft((current) =>
+        current.replaceAll("\0", "").trim() === ""
+          ? (defaultInstructions ?? "")
+          : current,
+      );
+      toast.success("Gateway instructions updated");
+    },
+  });
+
+  const trimmedDraft = draft.trim();
+  const dirty = trimmedDraft !== stored.trim();
+  useReportUnsavedChanges(canWrite && supportsEditing && dirty);
+  // Mirror the server's normalization (NUL strip + trim) so the counter and
+  // the limit agree with what will be stored.
+  const characterCount = Array.from(trimmedDraft.replaceAll("\0", "")).length;
+  const overLimit = characterCount > INSTRUCTIONS_MAX_LENGTH;
+  const saveDisabled =
+    !canWrite ||
+    !supportsEditing ||
+    !dirty ||
+    overLimit ||
+    update.isPending ||
+    (defaultInstructions === undefined &&
+      trimmedDraft.replaceAll("\0", "").trim() === "");
+
+  return (
+    <SettingsSection id={GATEWAY_INSTRUCTIONS_SECTION_ID}>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Server instructions</SettingsSection.Title>
+        <SettingsSection.Description>
+          Sent to every client on connect. Speakeasy&apos;s built-in
+          instructions reflect the active discovery mode and, when a user can
+          use any of its servers, start with a line naming them; your text
+          replaces both. Save it blank to restore the built-in text. Anyone who
+          can connect to this gateway can read the text, and clients already
+          connected keep the old text until they reconnect.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          <Field data-invalid={update.isError || overLimit ? true : undefined}>
+            <div className="flex items-center justify-between gap-2">
+              <FieldLabel htmlFor="gateway-instructions">
+                Custom instructions
+              </FieldLabel>
+              {defaultInstructions !== undefined && (
+                <CopyBuiltInInstructionsButton
+                  instructions={defaultInstructions}
+                />
+              )}
+            </div>
+            <Textarea
+              id="gateway-instructions"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              className="min-h-[160px]"
+              aria-invalid={update.isError || overLimit}
+              disabled={!canWrite || !supportsEditing || update.isPending}
+              placeholder={
+                defaultInstructions === undefined
+                  ? "Default instructions unavailable"
+                  : undefined
+              }
+            />
+            {overLimit && (
+              <FieldError>
+                {`Instructions must be ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters or fewer.`}
+              </FieldError>
+            )}
+            {update.isError && <FieldError>{update.error.message}</FieldError>}
+          </Field>
+        </SettingsSection.Body>
+        <SettingsSection.Footer>
+          <SettingsSection.FooterHint
+            className={cn(overLimit && "text-destructive")}
+          >
+            {supportsEditing && (
+              <span className="block">
+                {`${characterCount.toLocaleString()} / ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters.`}
+              </span>
+            )}
+            {defaultInstructions === undefined && (
+              <span className="block">
+                Refresh the page to view or restore default instructions for
+                this gateway’s unsupported discovery mode.
+              </span>
+            )}
+          </SettingsSection.FooterHint>
+          <SettingsSection.FooterActions>
+            <RequireScope
+              scope="mcp:write"
+              resourceId={metaMcpServer.projectId}
+              level="component"
+            >
+              <FooterSaveButton
+                pending={update.isPending}
+                disabled={saveDisabled}
+                onClick={() => {
+                  if (saveDisabled) return;
+                  update.mutate({
+                    request: {
+                      updateMetaMcpServerForm: {
+                        id: metaMcpServer.id,
+                        name: metaMcpServer.name,
+                        userSessionIssuerId:
+                          metaMcpServer.userSessionIssuerId ?? undefined,
+                        // An empty string clears back to the built-in text.
+                        instructions: trimmedDraft,
+                      },
+                    },
+                  });
+                }}
+              />
+            </RequireScope>
+          </SettingsSection.FooterActions>
+        </SettingsSection.Footer>
+      </SettingsSection.Panel>
+    </SettingsSection>
+  );
+}
+
+// Keeps the default text available when editing saved custom instructions.
+function CopyBuiltInInstructionsButton({
+  instructions,
+}: {
+  instructions: string;
+}): JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <Button
+      variant="tertiary"
+      size="xs"
+      onClick={() => {
+        void navigator.clipboard.writeText(instructions).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          },
+          () => toast.error("Could not copy to the clipboard."),
+        );
+      }}
+    >
+      <Button.LeftIcon>{copied ? <Check /> : <Copy />}</Button.LeftIcon>
+      <Button.Text>
+        {copied ? "Copied" : "Copy default instructions"}
+      </Button.Text>
+    </Button>
+  );
+}
+
 function GatewayAuthenticationSection({
   metaMcpServer,
   endpoints,
@@ -188,27 +429,20 @@ function GatewayAuthenticationSection({
     endpoints.find((e) => !e.customDomainId)?.slug ??
     endpoints[0]?.slug ??
     "gateway";
-  const target = useMetaMcpAuthTarget(metaMcpServer, slugSeed);
+  const { mcpUrl } = useResolvedMcpServerUrl(endpoints, false);
+  const target = useMetaMcpAuthTarget(metaMcpServer, slugSeed, mcpUrl);
 
   return (
     <SettingsSection id={GATEWAY_AUTHENTICATION_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Authentication</SettingsSection.Title>
+        <SettingsSection.Title>Sign-in method</SettingsSection.Title>
         <SettingsSection.Description>
-          Configure user sessions for clients connecting to this gateway.
-          Without an issuer the gateway serves anonymously.
+          Who may connect to this gateway and how they sign in. Changes take
+          effect on new connections. Without an identity provider it serves
+          anonymously.
         </SettingsSection.Description>
       </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          <AuthenticationSectionBody target={target} />
-        </SettingsSection.Body>
-        <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            Authentication changes apply to new client connections.
-          </SettingsSection.FooterHint>
-        </SettingsSection.Footer>
-      </SettingsSection.Panel>
+      <AuthenticationSectionBody target={target} />
     </SettingsSection>
   );
 }
@@ -221,6 +455,9 @@ function GatewayDangerZoneSection({
   endpoints: McpEndpoint[];
 }): JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Typed to confirm, like every other MCP server delete.
+  const [typedName, setTypedName] = useState("");
+  const nameMatches = typedName.trim() === metaMcpServer.name.trim();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const routes = useRoutes();
@@ -244,22 +481,25 @@ function GatewayDangerZoneSection({
   return (
     <DangerSettingsSection>
       <SettingsSection.Header>
-        <SettingsSection.Title>Danger Zone</SettingsSection.Title>
-        <SettingsSection.Description>
-          Deleting a gateway removes its endpoints and memberships. Member MCP
-          servers are untouched.
-        </SettingsSection.Description>
+        <SettingsSection.Title>Danger zone</SettingsSection.Title>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          <div className="flex items-center justify-between gap-4">
-            <Text muted small>
-              {endpoints.length > 0
-                ? `Removes ${endpoints.length} ${endpoints.length === 1 ? "address" : "addresses"}: ${endpoints
-                    .map((e) => e.slug)
-                    .join(", ")}`
-                : "This gateway has no addresses."}
-            </Text>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 space-y-1">
+              <Text small className="font-medium">
+                Delete gateway
+              </Text>
+              <Text muted small className="max-w-2xl">
+                {`Removes ${
+                  endpoints.length > 0
+                    ? `its ${endpoints.length === 1 ? "address" : "addresses"} (${endpoints
+                        .map((e) => e.slug)
+                        .join(", ")})`
+                    : "the gateway"
+                } and its member list. Member MCP servers are untouched.`}
+              </Text>
+            </div>
             <RequireScope scope="mcp:write" level="component">
               <Button
                 variant="destructive-primary"
@@ -273,7 +513,13 @@ function GatewayDangerZoneSection({
         </SettingsSection.Body>
       </SettingsSection.Panel>
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          setConfirmOpen(open);
+          if (!open) setTypedName("");
+        }}
+      >
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>Delete this gateway?</Dialog.Title>
@@ -287,24 +533,42 @@ function GatewayDangerZoneSection({
               } and member list are removed. Member MCP servers keep serving their own endpoints.`}
             </Dialog.Description>
           </Dialog.Header>
+          <div className="grid gap-2">
+            <Text small>
+              To confirm, type the gateway name:{" "}
+              <strong className="break-all">{metaMcpServer.name}</strong>
+            </Text>
+            <Input
+              value={typedName}
+              onChange={setTypedName}
+              placeholder={metaMcpServer.name}
+              mutedPlaceholder
+              disabled={remove.isPending}
+              aria-label="Type the gateway name to confirm"
+              autoComplete="off"
+            />
+          </div>
           <Dialog.Footer>
             <Button
               variant="secondary"
               disabled={remove.isPending}
-              onClick={() => setConfirmOpen(false)}
+              onClick={() => {
+                setConfirmOpen(false);
+                setTypedName("");
+              }}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>
             <Button
               variant="destructive-primary"
-              disabled={remove.isPending}
+              disabled={remove.isPending || !nameMatches}
               onClick={() =>
                 remove.mutate({ request: { id: metaMcpServer.id } })
               }
             >
               {remove.isPending && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               )}
               <Button.Text>Delete gateway</Button.Text>

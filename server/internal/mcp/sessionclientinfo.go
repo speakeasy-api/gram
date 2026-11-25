@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,6 +25,45 @@ type sessionClientInfoStore interface {
 	Load(ctx context.Context, projectID uuid.UUID, toolsetSlug, sessionID string, nowMillis int64) (sessionclientinfo.Info, error)
 }
 
+// internalClientInfoScope is the scope for callers that never handshake —
+// agent workflows dispatching through the hosted path. Nothing is ever stored
+// under it, so resolution always misses and those calls stay unattributed.
+const internalClientInfoScope = "internal:"
+
+// metaClientInfoScopePrefix starts every gateway client-info scope. The ":"
+// cannot collide with a toolset slug, which never contains one.
+const metaClientInfoScopePrefix = "meta:"
+
+// metaClientInfoScope keys a gateway session's client-info record.
+func metaClientInfoScope(metaServerID uuid.UUID) string {
+	return metaClientInfoScopePrefix + metaServerID.String()
+}
+
+// sessionClientInfoProjectID is the project a session's client-info record is
+// keyed under. A gateway's scope already names one gateway uniquely, and its
+// handshake and its member dispatches see different projects: the handshake
+// the gateway's own, which an agent or organization gateway does not have,
+// and each dispatch its member's. Keying a gateway's record by scope alone is
+// what lets every dispatch find the record its handshake wrote.
+func sessionClientInfoProjectID(payload *mcpInputs) uuid.UUID {
+	if strings.HasPrefix(payload.clientInfoScope, metaClientInfoScopePrefix) {
+		return uuid.Nil
+	}
+	return payload.projectID
+}
+
+// sessionClientInfoScope is the key a session's client-info record lives under.
+// Records are per (project, scope, session), and the hosted path scopes by
+// toolset slug. A caller that handshakes once for several toolsets — the
+// gateway — sets its own scope instead, so every dispatch in that session
+// resolves the identity the handshake recorded.
+func sessionClientInfoScope(payload *mcpInputs) string {
+	if payload.clientInfoScope != "" {
+		return payload.clientInfoScope
+	}
+	return payload.toolset
+}
+
 // storeSessionClientInfo records what a client reported about itself at
 // initialize. A client that reports neither a name nor a protocol version
 // leaves no record, and a write failure is logged rather than surfaced: losing
@@ -41,7 +81,7 @@ func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sess
 		return
 	}
 
-	err := store.Store(ctx, payload.projectID, payload.toolset, payload.sessionID, sessionclientinfo.Info{
+	err := store.Store(ctx, sessionClientInfoProjectID(payload), sessionClientInfoScope(payload), payload.sessionID, sessionclientinfo.Info{
 		Name:            name,
 		Version:         mcprequests.SanitizeClientInfoField(version),
 		ProtocolVersion: protocolVersion,
@@ -88,7 +128,7 @@ func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessi
 		return identity, ""
 	}
 
-	info, err := store.Load(ctx, payload.projectID, payload.toolset, payload.sessionID, time.Now().UnixMilli())
+	info, err := store.Load(ctx, sessionClientInfoProjectID(payload), sessionClientInfoScope(payload), payload.sessionID, time.Now().UnixMilli())
 	switch {
 	case errors.Is(err, sessionclientinfo.ErrNotFound):
 		// An unknown caller is ordinary: no Redis, an evicted record, or a
@@ -119,7 +159,10 @@ func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessi
 	// middleware has no header to read for them. A session that handshaked
 	// before a change to the supported set would be attributed the answer the
 	// current set produces, which is the one inaccuracy the derivation costs.
-	recordMCPProtocolVersionSpan(ctx, info.ProtocolVersion, mcpversions.Negotiate(info.ProtocolVersion, mcpversions.SupportedHostedToolset()))
+	// A surface without a revision that defines initialize negotiates
+	// nothing, and the empty value leaves the negotiated attribute unset.
+	negotiated, _ := mcpversions.Negotiate(info.ProtocolVersion, mcpversions.SupportedHostedToolset())
+	recordMCPProtocolVersionSpan(ctx, info.ProtocolVersion, negotiated)
 
 	return identity, info.ProtocolVersion
 }

@@ -223,7 +223,7 @@ type SpendRuleActorUsage struct {
 	Email string
 	// Actor display name, when known.
 	DisplayName *string
-	// Gram user ID of the actor, when linked.
+	// Speakeasy user ID of the actor, when linked.
 	UserID *string
 	// Actor spend in USD within the current window.
 	SpendUsd float64
@@ -246,7 +246,7 @@ type SpendRuleEvent struct {
 	RuleName string
 	// Event type.
 	EventType string
-	// Gram user ID of the actor, when linked.
+	// Speakeasy user ID of the actor, when linked.
 	UserID *string
 	// Actor email.
 	Email string

@@ -2,6 +2,7 @@ package otel
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -18,14 +19,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 )
 
+// maxOTLPExportBytes bounds an OTLP export both as sent and after gzip
+// decompression. On the wire the listener's constants.MaxRequestBodyBytes is
+// the lower ceiling; this value is what a gzip export may expand to.
 const maxOTLPExportBytes = 20 * constants.MiB
 
 // ProvenanceSource is the provenance source stamped on every record entering
-// the OTel pipeline through a Gram-operated ingest edge (/otel/v1/* and the
+// the OTel pipeline through a Speakeasy-operated ingest edge (/otel/v1/* and the
 // hooks OTLP tee).
 const ProvenanceSource = "speakeasy"
 
@@ -43,6 +49,7 @@ type Service struct {
 	logPublisher    gcp.Publisher[*otelv1.InboundLogRecord]
 	metricPublisher gcp.Publisher[*otelv1.InboundMetric]
 	spanPublisher   gcp.Publisher[*otelv1.InboundSpan]
+	hooksSink       HooksSink
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -70,6 +77,7 @@ func NewService(
 		logPublisher:    logPublisher,
 		metricPublisher: metricPublisher,
 		spanPublisher:   spanPublisher,
+		hooksSink:       nil,
 	}
 }
 
@@ -84,5 +92,13 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	ctx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return ctx, fmt.Errorf("authorize otel request: %w", err)
+	}
+	// Agent-principal keys ingest through the hooks service, which enforces their grant.
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	return ctx, nil
 }

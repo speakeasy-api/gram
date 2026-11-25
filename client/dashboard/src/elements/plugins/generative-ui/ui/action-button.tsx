@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Button, buttonVariants } from "./button";
+import type { buttonVariants } from "./button";
+import { Button } from "./button";
 import type { VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import { useToolExecution } from "@/elements/contexts/ToolExecutionContext";

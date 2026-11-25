@@ -1,5 +1,5 @@
 import { Heading } from "@/components/ui/Heading";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import { useDeviceIntegrationProviders } from "@gram/client/react-query/deviceIntegrationProviders.js";
@@ -14,8 +14,7 @@ import { isProviderVisible, isSink } from "./provider-role";
 // fleet, coverage is computed against agent heartbeats, and evidence
 // destinations push that coverage out. The layout mirrors that flow — a
 // pipeline banner over two role-labeled groups — so the two opposite roles
-// never read as interchangeable. The tab is gated behind the
-// gram-device-integrations flag by the Device Agent tab shell.
+// never read as interchangeable.
 export function MdmIntegrationsTab(): React.JSX.Element {
   const { data, isLoading } = useDeviceIntegrationProviders(
     undefined,
@@ -53,7 +52,7 @@ export function MdmIntegrationsTab(): React.JSX.Element {
           <CoveragePipeline sources={sources} sinks={sinks} />
           <ProviderGroup
             title="Device inventory sources"
-            description="Connect your MDM so Gram knows which devices exist and which are running the agent. Each source pulls its device list on a schedule; together they form the fleet above."
+            description="Connect your MDM so Speakeasy knows which devices exist and which are running the agent. Each source pulls its device list on a schedule; together they form the fleet above."
             providers={sources}
           />
           <ProviderGroup

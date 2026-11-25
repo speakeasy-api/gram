@@ -480,6 +480,13 @@ export function datasetDefaultGroupBy(
 // and the assistant can't ground on a name it can't resolve. The friendly
 // title-cased form belongs to the hero, which pairs it with the address anyway
 // (see prettyName in EntityProfile).
+// "" is the "(unset)" bucket — a real slice (everyone missing this attribute),
+// so it stays drillable. Only "Other" — the synthetic top-N overflow rollup of
+// many distinct values — can't map back to a single filter, so it's inert.
+export function isDrillableValue(groupValue: string): boolean {
+  return groupValue !== "Other";
+}
+
 export function displayName(dim: Dimension, value: string): string {
   if (value === "") return unsetLabel(dim);
   if (dim === Dimension.Provider) return providerLabel(value);

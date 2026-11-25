@@ -23,10 +23,10 @@ func BuildGetCurrentUserPayload(devIdpGetCurrentUserBody string) (*devidp.GetCur
 	{
 		err = json.Unmarshal([]byte(devIdpGetCurrentUserBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mode\": \"oauth2-1\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mode\": \"workos\"\n   }'")
 		}
-		if !(body.Mode == "mock-workos" || body.Mode == "oauth2-1" || body.Mode == "oauth2" || body.Mode == "workos") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", body.Mode, []any{"mock-workos", "oauth2-1", "oauth2", "workos"}))
+		if !(body.Mode == "oauth2-1" || body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", body.Mode, []any{"oauth2-1", "workos"}))
 		}
 		if err != nil {
 			return nil, err
@@ -47,10 +47,10 @@ func BuildSetCurrentUserPayload(devIdpSetCurrentUserBody string) (*devidp.SetCur
 	{
 		err = json.Unmarshal([]byte(devIdpSetCurrentUserBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mode\": \"oauth2-1\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workos_sub\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mode\": \"workos\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workos_sub\": \"abc123\"\n   }'")
 		}
-		if !(body.Mode == "mock-workos" || body.Mode == "oauth2-1" || body.Mode == "oauth2" || body.Mode == "workos") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", body.Mode, []any{"mock-workos", "oauth2-1", "oauth2", "workos"}))
+		if !(body.Mode == "oauth2-1" || body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", body.Mode, []any{"oauth2-1", "workos"}))
 		}
 		if body.UserID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_id", *body.UserID, goa.FormatUUID))
@@ -76,10 +76,10 @@ func BuildClearCurrentUserPayload(devIdpClearCurrentUserBody string) (*devidp.Cl
 	{
 		err = json.Unmarshal([]byte(devIdpClearCurrentUserBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mode\": \"oauth2-1\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mode\": \"workos\"\n   }'")
 		}
-		if !(body.Mode == "mock-workos" || body.Mode == "oauth2-1" || body.Mode == "oauth2" || body.Mode == "workos") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", body.Mode, []any{"mock-workos", "oauth2-1", "oauth2", "workos"}))
+		if !(body.Mode == "oauth2-1" || body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", body.Mode, []any{"oauth2-1", "workos"}))
 		}
 		if err != nil {
 			return nil, err

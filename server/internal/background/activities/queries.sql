@@ -10,12 +10,15 @@ WITH latest_deployments AS (
 toolset_metrics AS (
   SELECT 
     p.organization_id,
-    COUNT(CASE WHEN t.mcp_is_public = true AND t.mcp_slug IS NOT NULL THEN 1 END) as public_mcp_servers,
-    COUNT(CASE WHEN t.mcp_is_public = false AND t.mcp_slug IS NOT NULL THEN 1 END) as private_mcp_servers,
-    COUNT(CASE WHEN t.mcp_enabled = true THEN 1 END) as total_enabled_servers,
+    -- A hosted server counts by its canonical wrapper's visibility; a toolset without one is not hosted.
+    COUNT(CASE WHEN w.visibility = 'public' THEN 1 END) as public_mcp_servers,
+    COUNT(CASE WHEN w.visibility = 'private' THEN 1 END) as private_mcp_servers,
+    -- Matches GetEnabledServerCount.
+    COUNT(CASE WHEN w.visibility IN ('public', 'private') THEN 1 END)::bigint as total_enabled_servers,
     COUNT(t.id) as total_toolsets
   FROM projects p
   LEFT JOIN toolsets t ON p.id = t.project_id AND t.deleted = false
+  LEFT JOIN mcp_servers w ON w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
   GROUP BY p.organization_id
 ),
 tool_metrics AS (
@@ -36,18 +39,6 @@ SELECT
   COALESCE(tlm.total_tools, 0) as total_tools
 FROM toolset_metrics tm
 FULL OUTER JOIN tool_metrics tlm ON tm.organization_id = tlm.organization_id;
-
--- name: GetAllOrganizationsWithToolsets :many
-SELECT
-    organization_metadata.id,
-    organization_metadata.name,
-    organization_metadata.slug,
-    gram_account_type
-FROM organization_metadata
-JOIN toolsets ON organization_metadata.id = toolsets.organization_id
-WHERE toolsets.deleted = false
-GROUP BY organization_metadata.id
-HAVING COUNT(toolsets.id) > 0;
 
 -- name: AcquireOpenRouterKeyBillingLock :exec
 -- A session lock lets the reconciler serialize a billing projection read and
@@ -118,11 +109,12 @@ SELECT
     k.key_type,
     k.monthly_credits,
     (extract(epoch FROM k.updated_at) * 1000000)::bigint AS limit_generation,
-    k.key_encrypted AS api_key_encrypted
+    k.key_encrypted AS api_key_encrypted,
+    k.key_org_encrypted AS api_key_org_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
 WHERE om.disabled_at IS NULL
-  AND k.disabled = FALSE
+  AND CASE WHEN k.disable_causes IS NULL THEN k.disabled ELSE cardinality(k.disable_causes) > 0 END = FALSE
   AND k.deleted = FALSE
   AND om.gram_account_type = ANY(@account_types::text[])
 ORDER BY om.slug;
@@ -162,14 +154,32 @@ SET
     updated_at = clock_timestamp()
 WHERE openrouter_spend_daily.spend_usd IS DISTINCT FROM @target_spend_usd;
 
+-- Partner conversion retains an immutable non-midnight anchor. All seven invoice
+-- day enumerations use the same UTC-day policy: waive the initial conversion
+-- day, and assign later boundary days to the following invoice. Keep exact
+-- Stripe periods unchanged for identity validation and native metered usage.
 -- name: GetOpenRouterDailySpendRecoveryStartDay :one
 -- Expand collection to the oldest unresolved invoice day. This heals outages
 -- beyond the normal overlap instead of permanently detecting the same gap.
 SELECT MIN(generated.source_timestamp)::date AS recovery_start_day
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
-  invoice.service_period_start,
-  invoice.service_period_end - interval '1 day',
+  GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
   interval '1 day'
 ) AS generated(source_timestamp)
 WHERE invoice.organization_id = @target_organization_id
@@ -204,8 +214,22 @@ WHERE invoice.organization_id = @target_organization_id
 SELECT COUNT(*)::bigint AS missing_count
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
-  invoice.service_period_start,
-  invoice.service_period_end - interval '1 day',
+  GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
   interval '1 day'
 ) AS generated(source_timestamp)
 LEFT JOIN openrouter_spend_daily spend
@@ -265,8 +289,22 @@ WHERE invoice.organization_id IS NOT NULL
     EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
@@ -283,8 +321,22 @@ WHERE invoice.organization_id IS NOT NULL
     OR EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
@@ -302,16 +354,13 @@ WHERE invoice.organization_id IS NOT NULL
       SELECT 1
       FROM stripe_invoice_allocations allocation
       WHERE allocation.organization_id = invoice.organization_id
+        AND allocation.source_kind = 'openrouter_daily_spend'
         AND (
           allocation.delivery_state IN ('pending', 'ambiguous')
           OR (
             allocation.amount_usd > 0
             AND allocation.destination_invoice_id IS NULL
             AND allocation.original_invoice_id IS NOT NULL
-          )
-          OR (
-            allocation.source_kind = 'tum_cycle'
-            AND allocation.original_invoice_id IS NULL
           )
         )
     )
@@ -334,8 +383,22 @@ WHERE invoice.organization_id = @organization_id
     EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
@@ -352,8 +415,22 @@ WHERE invoice.organization_id = @organization_id
     OR EXISTS (
       SELECT 1
       FROM generate_series(
-        invoice.service_period_start,
-        invoice.service_period_end - interval '1 day',
+        GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
         interval '1 day'
       ) AS generated(source_timestamp)
       CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
@@ -371,6 +448,7 @@ WHERE invoice.organization_id = @organization_id
       SELECT 1
       FROM stripe_invoice_allocations allocation
       WHERE allocation.organization_id = invoice.organization_id
+        AND allocation.source_kind = 'openrouter_daily_spend'
         AND (
           allocation.original_invoice_id = invoice.stripe_invoice_id
           OR allocation.destination_invoice_id = invoice.stripe_invoice_id
@@ -379,12 +457,6 @@ WHERE invoice.organization_id = @organization_id
             AND allocation.amount_usd > 0
             AND allocation.destination_invoice_id IS NULL
             AND allocation.original_invoice_id IS NOT NULL
-          )
-          OR (
-            allocation.source_kind = 'tum_cycle'
-            AND allocation.original_invoice_id IS NULL
-            AND allocation.source_period_start = invoice.service_period_start
-            AND allocation.source_period_end = invoice.service_period_end
           )
         )
     )
@@ -411,8 +483,22 @@ SELECT
   , frozen.source_snapshot_usd AS frozen_snapshot_usd
 FROM stripe_invoices invoice
 CROSS JOIN LATERAL generate_series(
-  invoice.service_period_start,
-  invoice.service_period_end - interval '1 day',
+  GREATEST(
+          (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp,
+          COALESCE((
+            SELECT ((metadata.stripe_billing_cycle_anchor AT TIME ZONE 'UTC')::date + 1)::timestamp
+            FROM billing_metadata metadata
+            JOIN organization_promotion_applications application
+              ON application.organization_id = metadata.organization_id
+            WHERE metadata.organization_id = invoice.organization_id
+              AND metadata.stripe_customer_id = invoice.stripe_customer_id
+              AND application.stripe_subscription_id = invoice.stripe_subscription_id
+              AND application.redeemed_at IS NOT NULL
+              AND metadata.stripe_billing_cycle_anchor <= invoice.service_period_start
+              AND metadata.stripe_billing_cycle_anchor <> date_trunc('day', metadata.stripe_billing_cycle_anchor, 'UTC')
+          ), (invoice.service_period_start AT TIME ZONE 'UTC')::date::timestamp)
+        ),
+        (invoice.service_period_end AT TIME ZONE 'UTC')::date::timestamp - interval '1 day',
   interval '1 day'
 ) AS generated(source_timestamp)
 CROSS JOIN unnest(@billable_key_types::text[]) AS billable(key_type)
@@ -507,19 +593,6 @@ INSERT INTO stripe_invoice_allocations (
 )
 ON CONFLICT (organization_id, source_kind, source_key, seq) DO NOTHING;
 
--- name: AttachTUMCarryToOriginalInvoice :execrows
-UPDATE stripe_invoice_allocations allocation
-SET original_invoice_id = invoice.stripe_invoice_id,
-    destination_invoice_id = CASE WHEN allocation.amount_usd < 0 THEN invoice.stripe_invoice_id END,
-    updated_at = clock_timestamp()
-FROM stripe_invoices invoice
-WHERE allocation.organization_id = @organization_id
-  AND allocation.source_kind = 'tum_cycle'
-  AND allocation.original_invoice_id IS NULL
-  AND invoice.organization_id = allocation.organization_id
-  AND invoice.service_period_start = allocation.source_period_start
-  AND invoice.service_period_end = allocation.source_period_end;
-
 -- name: AssignPositiveCarryToStripeInvoice :execrows
 -- Assign every positive carry to the earliest eligible draft. The NULL guard
 -- is the compare-and-swap fence for concurrent settlement runs.
@@ -540,6 +613,7 @@ WITH assignments AS (
       ) AS destination_invoice_id
   FROM stripe_invoice_allocations allocation
   WHERE allocation.organization_id = @organization_id
+    AND allocation.source_kind = 'openrouter_daily_spend'
     AND allocation.amount_usd > 0
     AND allocation.destination_invoice_id IS NULL
     AND allocation.original_invoice_id IS NOT NULL
@@ -566,6 +640,7 @@ WITH candidate AS (
     ON destination.stripe_invoice_id = allocation.destination_invoice_id
    AND destination.organization_id = allocation.organization_id
   WHERE allocation.organization_id = @organization_id
+    AND allocation.source_kind = 'openrouter_daily_spend'
     AND allocation.delivery_state IN ('pending', 'ambiguous')
     AND allocation.amount_usd <> 0
     AND (
@@ -591,8 +666,6 @@ WITH candidate AS (
   , allocation.source_key
   , allocation.seq
   , allocation.source_day
-  , allocation.source_period_start
-  , allocation.source_period_end
   , allocation.amount_usd
   , allocation.original_invoice_id
   , allocation.destination_invoice_id
@@ -706,35 +779,6 @@ INSERT INTO stripe_invoices (
   , @finalized_at
 );
 
--- name: CreateTUMInvoiceAllocationFixture :exec
-INSERT INTO stripe_invoice_allocations (
-    organization_id
-  , source_kind
-  , source_key
-  , seq
-  , source_period_start
-  , source_period_end
-  , source_snapshot_usd
-  , delta_tokens
-  , original_tum_unit_price_usd
-  , amount_usd
-  , idempotency_key
-  , delivery_state
-) VALUES (
-    @organization_id
-  , 'tum_cycle'
-  , @source_key
-  , 1
-  , @source_period_start
-  , @source_period_end
-  , @source_snapshot_usd
-  , 1
-  , 0.000000350000
-  , @amount_usd
-  , @idempotency_key
-  , 'pending'
-);
-
 -- name: DeleteStripeInvoiceAllocationFixture :execrows
 DELETE FROM stripe_invoice_allocations
 WHERE organization_id = @organization_id
@@ -798,15 +842,16 @@ WHERE om.id = ANY(@organization_ids::text[])
   );
 
 -- name: ListWeeklyUsageSummaryTargets :many
--- Organizations that receive the weekly tokens-under-management usage
--- summary email: enabled enterprise organizations with an explicit billing
--- alert email and enabled PAYG organizations (whose fallback audience is
--- resolved by the activity). The anchor day determines the billing cycle
--- window; the slug builds the billing page link.
+-- Organizations that receive the weekly metered usage summary email: enabled
+-- enterprise organizations with an explicit billing alert email and enabled
+-- PAYG organizations (whose fallback audience is resolved by the activity).
+-- The anchor day determines the billing-cycle windows; the slug and default
+-- host build the billing page link.
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,
     om.slug AS organization_slug,
+    om.default_host,
     om.gram_account_type,
     bm.alert_email,
     bm.billing_cycle_anchor_day
@@ -833,83 +878,6 @@ WHERE d.organization_id = ANY($1::text[])
     WHERE organization_id = ANY($1::text[])
     ORDER BY organization_id, created_at DESC
   );
-
--- name: FetchPendingOutboxIDs :many
--- Fetch the next batch of outbox row IDs (across all organizations) that the
--- Svix relay has not finished processing. A row is "pending" when no relay
--- tracking row exists OR a tracking row exists with processed_at IS NULL and
--- not dead-lettered. Returns only IDs to keep the activity payload small —
--- workflows pass IDs to RelayBatch which re-queries the full rows.
-SELECT o.id, o.organization_id, om.svix_app_id, om.webhooks_enabled
-FROM outbox o
-LEFT JOIN organization_metadata om ON o.organization_id = om.id
-LEFT JOIN outbox_relays r ON r.outbox_id = o.id
-WHERE r.outbox_id IS NULL OR (r.processed_at IS NULL AND r.dead_lettered IS FALSE AND (r.retry_after IS NULL OR r.retry_after <= clock_timestamp()))
-ORDER BY o.id ASC
-LIMIT @batch_size;
-
--- name: FetchOutboxRowsByIDs :many
--- Hydrate a set of outbox IDs back into full rows along with their current
--- relay attempt count. Intended to be called inside the relay activity after
--- the workflow has handed it a batch of IDs.
-SELECT
-    o.id,
-    o.public_id,
-    o.organization_id,
-    o.event_type,
-    o.payload,
-    COALESCE(r.attempts, 0)::int AS attempts
-FROM outbox o
-LEFT JOIN outbox_relays r ON r.outbox_id = o.id
-WHERE o.id = ANY(@ids::bigint[])
-ORDER BY o.id ASC;
-
--- name: MarkOutboxRelayProcessed :exec
--- Marks a relay as successfully delivered to Svix.
-INSERT INTO outbox_relays (outbox_id, processed_at, svix_message_id, attempts, last_error)
-VALUES (@outbox_id, clock_timestamp(), @svix_message_id, 1, NULL)
-ON CONFLICT (outbox_id) DO UPDATE SET
-    processed_at = clock_timestamp(),
-    svix_message_id = EXCLUDED.svix_message_id,
-    attempts = outbox_relays.attempts + 1,
-    last_error = NULL,
-    updated_at = clock_timestamp();
-
--- name: MarkOutboxRelayFailed :exec
--- Records a failed delivery attempt; the row remains pending for retry.
-INSERT INTO outbox_relays (outbox_id, attempts, last_error, retry_after)
-VALUES (@outbox_id, 1, @last_error, @retry_after)
-ON CONFLICT (outbox_id) DO UPDATE SET
-    attempts = outbox_relays.attempts + 1,
-    last_error = EXCLUDED.last_error,
-    retry_after = EXCLUDED.retry_after,
-    updated_at = clock_timestamp();
-
--- name: GCProcessedOutboxRows :execrows
--- Hard-deletes terminal outbox rows older than @cutoff. Terminal means the
--- relay row is processed, noop, or dead-lettered. The cascade FK removes the
--- outbox_relays row automatically. Batched via LIMIT to bound lock time.
-DELETE FROM outbox
-WHERE id IN (
-  SELECT o.id
-  FROM outbox o
-  JOIN outbox_relays r ON r.outbox_id = o.id
-  WHERE o.created_at < @cutoff
-    AND (r.processed_at IS NOT NULL OR r.noop = TRUE OR r.dead_lettered = TRUE)
-  ORDER BY o.id ASC
-  LIMIT @batch_size
-);
-
--- name: MarkOutboxRelayDeadLettered :exec
--- Permanently parks a row after exceeding the retry budget. The pending
--- partial index excludes dead_lettered rows so they will not be re-fetched.
-INSERT INTO outbox_relays (outbox_id, attempts, last_error, dead_lettered)
-VALUES (@outbox_id, 1, @last_error, TRUE)
-ON CONFLICT (outbox_id) DO UPDATE SET
-    attempts = outbox_relays.attempts + 1,
-    last_error = EXCLUDED.last_error,
-    dead_lettered = TRUE,
-    updated_at = clock_timestamp();
 
 -- name: ClaimPublishOutboxBatch :many
 -- Leases a batch of publishable rows to this drainer. The lease plus SKIP
@@ -1109,3 +1077,210 @@ WHERE NOT EXISTS (
       AND dd.email_lower = uao.email_lower
 )
 ORDER BY organization_id, email_lower;
+
+-- name: ListTenantDimensionOrganizations :many
+-- Full reporting projection for ClickHouse organizations that own at least
+-- one project. The caller runs this and ListTenantDimensionProjects in one
+-- repeatable-read transaction so both generations come from one source
+-- snapshot.
+SELECT
+    om.id,
+    om.slug,
+    om.gram_account_type AS account_type,
+    om.workos_id,
+    om.workos_updated_at,
+    om.webhooks_enabled,
+    om.scim_enabled,
+    om.sso_enabled,
+    om.whitelisted,
+    om.free_trial_started_at,
+    om.free_trial_ends_at,
+    t.tier AS trial_tier,
+    t.ends_at AS trial_ends_at,
+    t.converted_at AS trial_converted_at,
+    t.demoted_at AS trial_demoted_at,
+    t.created_at AS trial_created_at,
+    t.updated_at AS trial_updated_at,
+    om.created_at,
+    om.updated_at,
+    om.disabled_at
+FROM organization_metadata om
+LEFT JOIN trials t ON t.organization_id = om.id
+WHERE EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.organization_id = om.id
+)
+ORDER BY om.id;
+
+-- name: ListTenantDimensionProjects :many
+-- Includes soft-deleted projects so retained ClickHouse facts keep their
+-- human-readable dimension and reports can choose lifecycle semantics.
+SELECT
+    id,
+    organization_id,
+    slug,
+    created_at,
+    updated_at,
+    deleted_at
+FROM projects
+ORDER BY organization_id, id;
+
+-- name: ListProjectsForToolsetIndexing :many
+-- Choose a rotating, bounded project page before evaluating deployment and
+-- embedding state for individual toolsets.
+SELECT t.project_id
+FROM toolsets t
+JOIN projects p ON p.id = t.project_id
+    AND p.organization_id = t.organization_id
+    AND p.deleted IS FALSE
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE t.deleted IS FALSE
+  -- Only a toolset whose canonical wrapper serves it is hosted.
+  AND EXISTS (
+      SELECT 1
+      FROM mcp_servers w
+      WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+        AND w.visibility IN ('public', 'private')
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM openrouter_api_keys k
+      WHERE k.organization_id = t.organization_id
+        AND k.key_type = 'chat'
+        AND k.deleted IS FALSE
+        AND COALESCE(cardinality(k.disable_causes) > 0, k.disabled)
+  )
+  AND COALESCE((
+      SELECT cardinality(tv.tool_urns)
+      FROM toolset_versions tv
+      WHERE tv.toolset_id = t.id
+        AND tv.deleted IS FALSE
+      ORDER BY tv.version DESC
+      LIMIT 1
+  ), 0) > 0
+GROUP BY t.project_id
+ORDER BY hashtextextended(t.project_id::text, @rotation_seed), t.project_id
+LIMIT @project_limit;
+
+-- name: ListToolsetsForIndexing :many
+-- MCP requests can opt any enabled toolset into dynamic mode through the
+-- Gram-Mode header, regardless of its stored selection mode.
+-- Toolsets without a currently resolvable tool need no embeddings. Toolsets
+-- containing proxy tools are excluded because those tools cannot be embedded
+-- by the current RAG indexer.
+WITH latest_toolsets AS (
+    SELECT
+        t.id,
+        t.project_id,
+        t.slug,
+        tv.version,
+        tv.tool_urns
+    FROM toolsets t
+    JOIN projects p ON p.id = t.project_id
+        AND p.organization_id = t.organization_id
+        AND p.deleted IS FALSE
+    JOIN organization_metadata om ON om.id = p.organization_id
+    JOIN LATERAL (
+        SELECT version, tool_urns
+        FROM toolset_versions
+        WHERE toolset_id = t.id
+          AND deleted IS FALSE
+        ORDER BY version DESC
+        LIMIT 1
+    ) tv ON TRUE
+    WHERE t.deleted IS FALSE
+      -- Only a toolset whose canonical wrapper serves it is hosted.
+      AND EXISTS (
+          SELECT 1
+          FROM mcp_servers w
+          WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+            AND w.visibility IN ('public', 'private')
+      )
+      AND NOT EXISTS (
+          SELECT 1
+          FROM openrouter_api_keys k
+          WHERE k.organization_id = t.organization_id
+            AND k.key_type = 'chat'
+            AND k.deleted IS FALSE
+            AND COALESCE(cardinality(k.disable_causes) > 0, k.disabled)
+      )
+      AND t.project_id = ANY(@project_ids::uuid[])
+      AND cardinality(tv.tool_urns) > 0
+), candidates AS (
+    SELECT
+        t.id,
+        t.project_id,
+        t.slug,
+        t.version,
+        d.id AS deployment_id,
+        e.indexed,
+        t.tool_urns
+    FROM latest_toolsets t
+    JOIN LATERAL (
+        SELECT deployments.id, deployments.created_at
+        FROM deployments
+        WHERE deployments.project_id = t.project_id
+          AND EXISTS (
+              SELECT 1
+              FROM deployment_statuses
+              WHERE deployment_statuses.deployment_id = deployments.id
+                AND deployment_statuses.status = 'completed'
+          )
+        ORDER BY deployments.seq DESC
+        LIMIT 1
+    ) d ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT TRUE AS indexed
+        FROM toolset_embeddings
+        WHERE toolset_id = t.id
+          AND toolset_version = t.version
+          AND entry_key LIKE 'tools:%'
+          AND payload ->> '_gramIndexDeploymentId' = d.id::text
+          AND deleted IS FALSE
+        LIMIT 1
+    ) e ON TRUE
+)
+SELECT
+    candidates.project_id,
+    candidates.id AS toolset_id,
+    candidates.slug,
+    candidates.version AS toolset_version,
+    candidates.deployment_id
+FROM candidates
+WHERE candidates.indexed IS NULL
+  AND (
+      -- Keep the deployment id as the leading index condition on
+      -- http_tool_definitions_deployment_tool_urn_idx. Folding the packaged
+      -- deployments into an OR turns the deployment match into a post-filter
+      -- and walks the whole index for every candidate.
+      EXISTS (
+          SELECT 1
+          FROM http_tool_definitions definitions
+          WHERE definitions.deployment_id = candidates.deployment_id
+            AND definitions.tool_urn = ANY(candidates.tool_urns)
+            AND definitions.deleted IS FALSE
+      )
+      OR EXISTS (
+          SELECT 1
+          FROM deployments_packages
+          JOIN package_versions
+            ON package_versions.id = deployments_packages.version_id
+          JOIN http_tool_definitions definitions
+            ON definitions.deployment_id = package_versions.deployment_id
+          WHERE deployments_packages.deployment_id = candidates.deployment_id
+            AND definitions.tool_urn = ANY(candidates.tool_urns)
+            AND definitions.deleted IS FALSE
+      )
+      OR EXISTS (
+          SELECT 1
+          FROM function_tool_definitions definitions
+          WHERE definitions.tool_urn = ANY(candidates.tool_urns)
+            AND definitions.deployment_id = candidates.deployment_id
+            AND definitions.deleted IS FALSE
+      )
+  )
+-- Rotate the bounded scan each tick so already-running permanent-failure
+-- workflows cannot remain at the front and starve the rest of the backlog.
+ORDER BY hashtextextended(candidates.id::text, @rotation_seed), candidates.id
+LIMIT @scan_limit;

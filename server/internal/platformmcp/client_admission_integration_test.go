@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -9,6 +10,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -30,7 +34,7 @@ func TestClientAdmissionRoundTripsWithoutAConnection(t *testing.T) {
 		ClientID:       AssistantClientID,
 		Surface:        SurfaceProjectAssistant,
 	}
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 
 	request := registrationRequest(project, "client-admission", "client-admission-key")
@@ -88,4 +92,79 @@ func TestClientAdmissionRoundTripsWithoutAConnection(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "presets", issuer.ClientIDMetadataAdmissionMode.String, "the rejected writes left the stored mode alone")
+}
+
+func TestClientAdmissionAllowedWithActiveEMABindings(t *testing.T) {
+	t.Parallel()
+	for _, concurrentPreparation := range []bool{false, true} {
+		name := "existing binding"
+		if concurrentPreparation {
+			name = "concurrent preparation"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			defer cancel()
+			conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_admission_ema")
+			require.NoError(t, err)
+			principal, project := seedRegistrationLifecycle(t, ctx, conn)
+			store, err := NewRegistrationStore(conn)
+			require.NoError(t, err)
+			request := registrationRequest(project, "admission-ema", "admission-ema-key")
+			receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
+			require.NoError(t, err)
+			receipt, err = store.ConvergeRegistration(ctx, principal, project, request, receipt)
+			require.NoError(t, err)
+			receipt, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, request, receipt, "https://reviewed.example.test/admission-ema")
+			require.NoError(t, err)
+			service := NewClientAdmissionService(conn, audit.NewLogger())
+			registrationID := receipt.RegistrationID.UUID
+			issuerID, err := service.registrationIssuer(ctx, conn, principal, project, registrationID)
+			require.NoError(t, err)
+			q := remoterepo.New(conn)
+			remote, err := q.CreateRemoteSessionIssuer(ctx, remoterepo.CreateRemoteSessionIssuerParams{
+				ProjectID: conv.ToNullUUID(project.ID), OrganizationID: conv.ToPGText(principal.OrganizationID),
+				Slug: "admission-ema-remote", Issuer: "https://provider.example.test",
+				ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{},
+				TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
+			})
+			require.NoError(t, err)
+			bindingParams := remoterepo.EnsureEMABindingParams{
+				ProjectID: project.ID, OrganizationID: principal.OrganizationID,
+				UserSessionIssuerID: issuerID, RemoteSessionIssuerID: remote.ID, Resource: "https://resource.example.test/",
+			}
+			if concurrentPreparation {
+				tx := testenv.BeginTx(t, ctx, conn)
+				txq := remoterepo.New(tx)
+				_, err = txq.LockEMAUserIssuer(ctx, remoterepo.LockEMAUserIssuerParams{
+					ID: issuerID, ProjectID: conv.ToNullUUID(project.ID), OrganizationID: conv.ToPGText(principal.OrganizationID),
+				})
+				require.NoError(t, err)
+				done := make(chan error, 1)
+				go func() {
+					_, err := service.Set(ctx, principal, project, registrationID, "disabled")
+					done <- err
+				}()
+				testenv.WaitForQueryBlockedBy(t, ctx, conn, testenv.BackendPID(tx), "%LockEMAUserIssuer :one%")
+				require.Empty(t, done, "mode change must wait for preparation")
+				require.NoError(t, txq.EnsureEMABinding(ctx, bindingParams))
+				require.NoError(t, tx.Commit(ctx))
+				select {
+				case err = <-done:
+				case <-ctx.Done():
+					t.Fatal("mode change did not finish after preparation committed")
+				}
+			} else {
+				require.NoError(t, q.EnsureEMABinding(ctx, bindingParams))
+				_, err = service.Set(ctx, principal, project, registrationID, "disabled")
+			}
+			require.NoError(t, err, "admission mode does not affect identity-chaining bindings")
+			stored, err := service.Get(ctx, principal, project, registrationID)
+			require.NoError(t, err)
+			require.Equal(t, "disabled", stored.Mode)
+			binding, err := q.GetEMABinding(ctx, remoterepo.GetEMABindingParams(bindingParams))
+			require.NoError(t, err)
+			require.False(t, binding.State.Valid && binding.State.String == "unlinked", "the binding stays active")
+		})
+	}
 }

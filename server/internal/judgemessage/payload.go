@@ -15,49 +15,111 @@ const (
 	// one: without it an oversized payload can blow the judge model's context
 	// window, producing an error that a fail-open policy turns into an allow.
 	maxPayloadBodyLen = 16000
+	// maxPayloadToolIdentityLen bounds each tool identity field in runes.
+	maxPayloadToolIdentityLen = 256
 	// maxPayloadRenderedToolCall caps how many tool calls a single multi-call
 	// message renders. Oversized call lists keep head and tail calls, and set
 	// tool_calls_truncated.
 	maxPayloadRenderedToolCall = 50
+	// MaxTrajectoryBodyRunes bounds each contextual field independently.
+	// Context is supporting evidence, not a second copy of the full conversation.
+	MaxTrajectoryBodyRunes = 4000
 )
 
+type TrajectoryPayload struct {
+	PriorUserRequest                string `json:"prior_user_request,omitempty"`
+	PriorUserRequestDecoded         string `json:"prior_user_request_decoded,omitempty"`
+	PriorUserRequestTruncated       bool   `json:"prior_user_request_truncated,omitempty"`
+	RecentUntrustedContent          string `json:"recent_untrusted_content,omitempty"`
+	RecentUntrustedContentDecoded   string `json:"recent_untrusted_content_decoded,omitempty"`
+	RecentUntrustedContentTruncated bool   `json:"recent_untrusted_content_truncated,omitempty"`
+}
+
+func RenderTrajectory(t Trajectory) TrajectoryPayload {
+	priorUserRequest, priorUserRequestTruncated := truncatePayloadBody(t.PriorUserRequest, MaxTrajectoryBodyRunes)
+	recent, recentTruncated := truncatePayloadBody(t.RecentUntrustedContent, MaxTrajectoryBodyRunes)
+	return TrajectoryPayload{
+		PriorUserRequest:                priorUserRequest,
+		PriorUserRequestDecoded:         decodedView(priorUserRequest),
+		PriorUserRequestTruncated:       priorUserRequestTruncated,
+		RecentUntrustedContent:          recent,
+		RecentUntrustedContentDecoded:   decodedView(recent),
+		RecentUntrustedContentTruncated: recentTruncated,
+	}
+}
+
 type Payload struct {
-	ProducedBy         string            `json:"produced_by"`
-	Tool               *ToolPayload      `json:"tool,omitempty"`
-	BodyKind           string            `json:"body_kind"`
-	Body               string            `json:"body,omitempty"`
+	ProducedBy string       `json:"produced_by"`
+	Tool       *ToolPayload `json:"tool,omitempty"`
+	BodyKind   string       `json:"body_kind"`
+	Body       string       `json:"body,omitempty"`
+	// Decoded is a bounded deterministic view. Body remains the source evidence.
+	Decoded            string            `json:"decoded,omitempty"`
 	BodyTruncated      bool              `json:"body_truncated,omitempty"`
 	ToolCalls          []ToolCallPayload `json:"tool_calls,omitempty"`
 	ToolCallsTruncated bool              `json:"tool_calls_truncated,omitempty"`
 }
 
 type ToolPayload struct {
-	MCPServer   string `json:"mcp_server,omitempty"`
-	MCPFunction string `json:"mcp_function,omitempty"`
-	Name        string `json:"name,omitempty"`
+	// IdentityTruncated marks altered name or MCP identity fields.
+	IdentityTruncated bool   `json:"identity_truncated,omitempty"`
+	MCPServer         string `json:"mcp_server,omitempty"`
+	MCPFunction       string `json:"mcp_function,omitempty"`
+	Name              string `json:"name,omitempty"`
 }
 
 type ToolCallPayload struct {
-	Tool               *ToolPayload `json:"tool,omitempty"`
-	Arguments          string       `json:"arguments"`
-	ArgumentsTruncated bool         `json:"arguments_truncated,omitempty"`
+	Tool      *ToolPayload `json:"tool,omitempty"`
+	Arguments string       `json:"arguments"`
+	// Decoded is a bounded deterministic view. Arguments remain the source evidence.
+	Decoded            string `json:"decoded,omitempty"`
+	ArgumentsTruncated bool   `json:"arguments_truncated,omitempty"`
 }
 
-// Render returns the judge-visible payload as a compact JSON string. It is what
-// gets stored as a finding's Match for llm_judge / prompt_injection detections,
-// which have no literal offending substring — the "match" is the entire event
-// the judge saw. Best-effort: falls back to the raw body if marshaling fails.
-// RenderPayload already truncates body/args, so the result stays bounded.
+// Render returns the flagged event as a compact JSON string to store as a
+// finding's Match for llm_judge / prompt_injection detections, which have no
+// literal offending substring: the "match" is the entire event the judge saw.
+// The decoded view is judge-only and never rendered here: decoding turns
+// encoded material such as base64 credentials into readable plaintext, and
+// Match is persisted and UI-visible. Best-effort: falls back to the raw body
+// if marshaling fails. Body/args are truncated, so the result stays bounded.
 func Render(m Message) string {
-	b, err := json.Marshal(RenderPayload(m))
+	b, err := json.Marshal(renderPayload(m, false))
 	if err != nil {
 		return m.Body
 	}
 	return string(b)
 }
 
-// RenderPayload maps a judge message onto the JSON payload both prompt judges read.
+// RenderPayload maps a judge message onto the JSON payload both prompt judges
+// read, including the decoded view of each body/arguments string.
 func RenderPayload(m Message) Payload {
+	return renderPayload(m, true)
+}
+
+// Truncated reports whether the judge payload shortens any body, arguments, or
+// tool identity.
+func (m Message) Truncated() bool {
+	payload := renderPayload(m, false)
+	if payload.BodyTruncated || payload.ToolCallsTruncated || payload.Tool != nil && payload.Tool.IdentityTruncated {
+		return true
+	}
+	for _, call := range payload.ToolCalls {
+		if call.ArgumentsTruncated || call.Tool != nil && call.Tool.IdentityTruncated {
+			return true
+		}
+	}
+	return false
+}
+
+func renderPayload(m Message, includeDecoded bool) Payload {
+	decoded := func(s string) string {
+		if !includeDecoded {
+			return ""
+		}
+		return decodedView(s)
+	}
+
 	if len(m.ToolCalls) > 0 {
 		calls, truncatedCalls := payloadToolCalls(m.ToolCalls)
 		rendered := make([]ToolCallPayload, 0, len(calls))
@@ -66,6 +128,7 @@ func RenderPayload(m Message) Payload {
 			rendered = append(rendered, ToolCallPayload{
 				Tool:               payloadTool(c.ToolName, c.MCPServer, c.MCPFunction),
 				Arguments:          args,
+				Decoded:            decoded(args),
 				ArgumentsTruncated: argsTruncated,
 			})
 		}
@@ -74,6 +137,7 @@ func RenderPayload(m Message) Payload {
 			Tool:               nil,
 			BodyKind:           "tool_calls",
 			Body:               "",
+			Decoded:            "",
 			BodyTruncated:      false,
 			ToolCalls:          rendered,
 			ToolCallsTruncated: truncatedCalls,
@@ -87,10 +151,51 @@ func RenderPayload(m Message) Payload {
 		Tool:               payloadTool(m.ToolName, m.MCPServer, m.MCPFunction),
 		BodyKind:           bodyKind,
 		Body:               body,
+		Decoded:            decoded(body),
 		BodyTruncated:      truncated,
 		ToolCalls:          nil,
 		ToolCallsTruncated: false,
 	}
+}
+
+// STokenContent returns the content-bearing values present in a prepared judge
+// payload. It excludes structural labels such as produced_by and body_kind,
+// while retaining the rendered tool attribution and truncated body/arguments
+// the provider actually receives.
+func STokenContent(payload Payload) []string {
+	content := make([]string, 0, 5+len(payload.ToolCalls)*5)
+	appendToolContent := func(tool *ToolPayload) {
+		if tool == nil {
+			return
+		}
+		if tool.MCPServer != "" {
+			content = append(content, tool.MCPServer)
+		}
+		if tool.MCPFunction != "" {
+			content = append(content, tool.MCPFunction)
+		}
+		if tool.Name != "" {
+			content = append(content, tool.Name)
+		}
+	}
+
+	appendToolContent(payload.Tool)
+	if payload.Body != "" {
+		content = append(content, payload.Body)
+	}
+	if payload.Decoded != "" {
+		content = append(content, payload.Decoded)
+	}
+	for _, call := range payload.ToolCalls {
+		appendToolContent(call.Tool)
+		if call.Arguments != "" {
+			content = append(content, call.Arguments)
+		}
+		if call.Decoded != "" {
+			content = append(content, call.Decoded)
+		}
+	}
+	return content
 }
 
 func payloadToolCalls(calls []ToolCall) ([]ToolCall, bool) {
@@ -123,11 +228,14 @@ func payloadDescriptors(messageType message.Type) (producedBy, bodyKind string) 
 }
 
 func payloadTool(name, mcpServer, mcpFunction string) *ToolPayload {
+	name, nameTruncated := truncatePayloadBody(name, maxPayloadToolIdentityLen)
+	mcpServer, serverTruncated := truncatePayloadBody(mcpServer, maxPayloadToolIdentityLen)
+	mcpFunction, functionTruncated := truncatePayloadBody(mcpFunction, maxPayloadToolIdentityLen)
 	if mcpServer != "" || mcpFunction != "" {
-		return &ToolPayload{MCPServer: mcpServer, MCPFunction: mcpFunction, Name: ""}
+		return &ToolPayload{MCPServer: mcpServer, MCPFunction: mcpFunction, Name: "", IdentityTruncated: serverTruncated || functionTruncated}
 	}
 	if name != "" {
-		return &ToolPayload{MCPServer: "", MCPFunction: "", Name: name}
+		return &ToolPayload{MCPServer: "", MCPFunction: "", Name: name, IdentityTruncated: nameTruncated}
 	}
 	return nil
 }

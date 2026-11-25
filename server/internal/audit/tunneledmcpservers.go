@@ -34,6 +34,7 @@ type LogTunneledMcpServerCreateEvent struct {
 
 func (l *Logger) LogTunneledMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogTunneledMcpServerCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -83,6 +84,7 @@ func (l *Logger) LogTunneledMcpServerUpdate(ctx context.Context, dbtx repo.DBTX,
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -132,6 +134,7 @@ func (l *Logger) LogTunneledMcpServerRotate(ctx context.Context, dbtx repo.DBTX,
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -169,6 +172,7 @@ type LogTunneledMcpServerDeleteEvent struct {
 
 func (l *Logger) LogTunneledMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogTunneledMcpServerDeleteEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

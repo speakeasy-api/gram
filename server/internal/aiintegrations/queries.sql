@@ -39,23 +39,42 @@ ORDER BY created_at ASC, id ASC
 LIMIT 1;
 
 -- name: InsertConfig :one
+-- The API key is stored by SetConfigAPIKey in the same transaction.
 INSERT INTO ai_integration_configs (
     organization_id
   , provider
   , project_id
   , external_organization_id
-  , api_key_encrypted
   , enabled
   , billing_mode
+  , settings
 ) VALUES (
     @organization_id
   , @provider
   , @project_id
   , @external_organization_id
-  , @api_key_encrypted
   , @enabled
   , @billing_mode
+  -- Callers without provider settings pass nil; the column is NOT NULL.
+  , COALESCE(sqlc.narg(settings)::jsonb, '{}'::jsonb)
 )
+RETURNING *;
+
+-- name: SetConfigAPIKey :one
+-- Stores both copies of the API key sealed under the decided transition
+-- generation. No rows means the config is gone or the transition moved;
+-- aiproviderkeys tells the two apart.
+UPDATE ai_integration_configs AS c
+SET api_key_encrypted = sqlc.narg('platform_copy'),
+    api_key_org_encrypted = sqlc.narg('org_copy')
+WHERE c.id = @id
+  AND c.organization_id = @organization_id
+  AND c.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+    FOR KEY SHARE
+  ), 0) = @decided_generation
 RETURNING *;
 
 -- name: UpdateConfigSettings :one
@@ -64,6 +83,8 @@ SET project_id = @project_id,
     external_organization_id = @external_organization_id,
     enabled = @enabled,
     billing_mode = @billing_mode,
+    -- nil keeps the saved settings.
+    settings = COALESCE(sqlc.narg(settings)::jsonb, settings),
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND provider = @provider
@@ -102,6 +123,7 @@ LIMIT 1;
 -- caller's initial watermark (epoch for time-kind schedules, now for
 -- cursor-kind ones). Existing rows are untouched.
 -- name: EnsureProviderSyncSchedules :exec
+-- orgencryption:unfenced writes ai_integration_syncs; it only reads whether a config holds a key.
 INSERT INTO ai_integration_syncs (
     ai_integration_config_id
   , schedule
@@ -114,7 +136,7 @@ FROM ai_integration_configs c
 WHERE c.provider = @provider
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
 ON CONFLICT (ai_integration_config_id, schedule) DO NOTHING;
 
 -- name: SoftDeleteConfig :exec
@@ -145,7 +167,7 @@ JOIN ai_integration_syncs s
 WHERE c.provider = @provider
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
 ORDER BY c.organization_id, c.provider;
 
 -- name: ResetUsagePollState :exec
@@ -176,7 +198,7 @@ JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
 JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
   AND s.auto_paused_at IS NULL
   AND s.disabled_at IS NULL
   AND s.next_poll_after <= @poll_due_before
@@ -204,7 +226,7 @@ JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
 WHERE s.id = @sync_id
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL;
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL);
 
 -- name: GetProviderUsagePollConfigByID :one
 SELECT
@@ -229,7 +251,7 @@ JOIN ai_integration_syncs s
 WHERE c.id = @ai_integration_config_id
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
 LIMIT 1;
 
 -- name: GetUsagePollConfigByID :one
@@ -253,7 +275,7 @@ JOIN ai_integration_syncs s
 WHERE c.id = @ai_integration_config_id
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL;
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL);
 
 -- name: RecordUsagePollSuccess :exec
 UPDATE ai_integration_syncs
@@ -280,7 +302,9 @@ WHERE ai_integration_config_id = @ai_integration_config_id
 -- and, when pause_after is positive and the new count reaches it, pauses the
 -- schedule so candidate selection stops re-enqueueing it. Callers pass a zero
 -- pause_after for failures that should never pause (e.g. transient errors).
--- name: RecordUsagePollFailure :exec
+-- Returns rows updated, so callers can tell a recorded failure from one that
+-- matched no schedule (a config or sync deleted mid-poll).
+-- name: RecordUsagePollFailure :execrows
 UPDATE ai_integration_syncs
 SET next_poll_after = @next_poll_after,
     last_poll_error = @last_poll_error,
@@ -415,3 +439,48 @@ RETURNING *;
 SELECT count(*)
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = @ai_integration_config_id;
+
+-- Inference hooks are push integrations and deliberately have no poll schedules.
+-- name: GetAnthropicInferenceConfig :one
+SELECT * FROM ai_integration_configs
+WHERE organization_id = @organization_id
+  AND provider = 'anthropic_inference'
+  AND deleted IS FALSE;
+
+-- The random endpoint identifier is the credential lookup key before signature
+-- verification; it does not itself authorize ingestion.
+-- name: GetAnthropicInferenceConfigByID :one
+SELECT c.* FROM ai_integration_configs c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id
+WHERE c.id = @id AND c.provider = 'anthropic_inference'
+  AND c.deleted IS FALSE AND p.deleted IS FALSE;
+
+-- Serialize organization-level setup, including concurrent first-time requests.
+-- name: LockAnthropicInferenceConfig :exec
+SELECT pg_advisory_xact_lock(hashtextextended('anthropic_inference:' || @organization_id::text, 0));
+
+-- name: UpdateAnthropicInferenceConfig :one
+-- Stores both copies of the signing secrets sealed under the decided
+-- transition generation. No rows means the config is gone or the transition
+-- moved; aiproviderkeys tells the two apart.
+UPDATE ai_integration_configs AS c
+SET api_key_encrypted = sqlc.narg('platform_copy'),
+    api_key_org_encrypted = sqlc.narg('org_copy'),
+    enabled = @enabled,
+    updated_at = clock_timestamp()
+WHERE c.id = @id AND c.organization_id = @organization_id
+  AND c.project_id = @project_id AND c.provider = 'anthropic_inference'
+  AND c.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+    FOR KEY SHARE
+  ), 0) = @decided_generation
+RETURNING *;
+
+-- name: DeleteAnthropicInferenceConfig :one
+UPDATE ai_integration_configs
+SET deleted_at = clock_timestamp(), enabled = false
+WHERE organization_id = @organization_id AND project_id = @project_id
+  AND provider = 'anthropic_inference' AND deleted IS FALSE
+RETURNING *;

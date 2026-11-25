@@ -22,8 +22,12 @@ const (
 	customDomainHealthScheduleID            = "v1:custom-domain-health-schedule"
 	customDomainHealthSweepWorkflowID       = customDomainHealthScheduleID + "/scheduled"
 	customDomainHealthInterval              = 24 * time.Hour
-	customDomainHealthRunTimeout            = 30 * time.Minute
-	customDomainNotifyRunTimeout            = 15 * time.Minute
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	customDomainHealthCatchupWindow = customDomainHealthInterval - time.Second
+
+	customDomainHealthRunTimeout = 30 * time.Minute
+	customDomainNotifyRunTimeout = 15 * time.Minute
 )
 
 type CustomDomainHealthCheckParams struct {
@@ -186,10 +190,11 @@ func AddCustomDomainHealthSchedule(ctx context.Context, temporalEnv *tenv.Enviro
 	}
 
 	_, err := scheduleClient.Create(ctx, client.ScheduleOptions{
-		ID:      customDomainHealthScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    spec,
-		Action:  action,
+		CatchupWindow: customDomainHealthCatchupWindow,
+		ID:            customDomainHealthScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -197,6 +202,7 @@ func AddCustomDomainHealthSchedule(ctx context.Context, temporalEnv *tenv.Enviro
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, customDomainHealthCatchupWindow)
 				return &client.ScheduleUpdate{Schedule: &input.Description.Schedule, TypedSearchAttributes: nil}, nil
 			},
 		}); err != nil {

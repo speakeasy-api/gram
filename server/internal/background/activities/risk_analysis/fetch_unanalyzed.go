@@ -38,7 +38,6 @@ type PolicyForAnalysis struct {
 	OrganizationID   string
 	Version          int64
 	Sources          []string
-	MessageTypes     []string
 	PresidioEntities []string
 	CustomRuleIds    []string
 }
@@ -68,7 +67,7 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 
 	queries := repo.New(a.db)
 
-	policies, err := queries.ListEnabledRiskPoliciesByProject(ctx, args.ProjectID)
+	policies, err := queries.ListEnabledUnscopedRiskPoliciesByProject(ctx, args.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("list enabled risk policies: %w", err)
 	}
@@ -116,7 +115,6 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 			OrganizationID:   p.OrganizationID,
 			Version:          p.Version,
 			Sources:          p.Sources,
-			MessageTypes:     p.MessageTypes,
 			PresidioEntities: p.PresidioEntities,
 			CustomRuleIds:    p.CustomRuleIds,
 		}

@@ -1,5 +1,5 @@
 import { dateTimeFormatters } from "@/lib/dates";
-import { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
+import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 
 /**
  * Format Unix nanoseconds to a readable timestamp
@@ -7,25 +7,6 @@ import { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogr
 export function formatNanoTimestamp(nanos: string): string {
   const ms = Number(BigInt(nanos) / 1_000_000n);
   return dateTimeFormatters.logTimestamp.format(new Date(ms)).replace(",", "");
-}
-
-/**
- * Get severity color class
- */
-export function getSeverityColorClass(severity?: string): string {
-  switch (severity?.toUpperCase()) {
-    case "ERROR":
-    case "FATAL":
-      return "text-destructive-default";
-    case "WARN":
-      return "text-warning-default";
-    case "DEBUG":
-      return "text-muted-foreground";
-    case "INFO":
-    case undefined:
-    default:
-      return "text-foreground";
-  }
 }
 
 /**

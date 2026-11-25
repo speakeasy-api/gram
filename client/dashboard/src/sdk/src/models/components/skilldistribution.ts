@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const Channel = {
 /**
  * The distribution channel.
  */
-export type Channel = ClosedEnum<typeof Channel>;
+export type Channel = OpenEnum<typeof Channel>;
 
 /**
  * An active plugin or assistant distribution of a project skill.
@@ -49,6 +50,10 @@ export type SkillDistribution = {
    * The distribution ID.
    */
   id: string;
+  /**
+   * When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Loads are counted per skill, not per distribution.
+   */
+  lastLoadedOverMcpAt?: Date | undefined;
   /**
    * The pinned version, absent when tracking the latest valid version.
    */
@@ -88,9 +93,8 @@ export type SkillDistribution = {
 };
 
 /** @internal */
-export const Channel$inboundSchema: z.ZodMiniEnum<typeof Channel> = z.enum(
-  Channel,
-);
+export const Channel$inboundSchema: z.ZodMiniType<Channel, unknown> = openEnums
+  .inboundSchema(Channel);
 
 /** @internal */
 export const SkillDistribution$inboundSchema: z.ZodMiniType<
@@ -107,6 +111,9 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
     ),
     created_by_user_id: z.string(),
     id: z.string(),
+    last_loaded_over_mcp_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     pinned_version_id: z.optional(z.string()),
     plugin_id: z.optional(z.string()),
     plugin_name: z.optional(z.string()),
@@ -126,6 +133,7 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
       "assistant_name": "assistantName",
       "created_at": "createdAt",
       "created_by_user_id": "createdByUserId",
+      "last_loaded_over_mcp_at": "lastLoadedOverMcpAt",
       "pinned_version_id": "pinnedVersionId",
       "plugin_id": "pluginId",
       "plugin_name": "pluginName",

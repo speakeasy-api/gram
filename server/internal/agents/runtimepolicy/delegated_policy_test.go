@@ -1,0 +1,206 @@
+package runtimepolicy
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/stretchr/testify/require"
+)
+
+func TestNewDelegatedPolicyV1CanonicalizesAndClosesImplications(t *testing.T) {
+	t.Parallel()
+
+	policy, err := NewDelegatedPolicyV1([]authz.Grant{
+		authz.NewGrant(authz.ScopeProjectRead, "project-one"),
+		{Scope: authz.ScopeMCPWrite, Selector: authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   "server-one",
+		}},
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, []authz.Scope{authz.ScopeMCPWrite, authz.ScopeProjectRead}, delegatedPolicyScopes(policy.Requested))
+	require.Equal(t, []authz.Scope{authz.ScopeMCPConnect, authz.ScopeMCPRead, authz.ScopeMCPWrite, authz.ScopeProjectRead}, delegatedPolicyScopes(policy.Effective))
+
+	runtime := policy.RuntimeGrants()
+	require.Len(t, runtime, 4)
+	require.True(t, authz.GrantsSatisfy(runtime, authz.MCPServer(authz.MCPServerIDFrom("server-one"), authz.ProjectIDFrom("project-one")).ToolCall("tool-one", "")))
+	require.True(t, authz.GrantsSatisfy(runtime, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: "project-one"}))
+
+	encoded, err := EncodeDelegatedPolicy(DelegatedPolicyVersion1, policy)
+	require.NoError(t, err)
+	decoded, err := DecodeDelegatedPolicy(DelegatedPolicyVersion1, encoded)
+	require.NoError(t, err)
+	require.Equal(t, policy.Requested, decoded.Requested)
+	require.Equal(t, policy.Effective, decoded.Effective)
+}
+
+func TestDecodeDelegatedPolicyUsesEffectivePolicy(t *testing.T) {
+	t.Parallel()
+
+	selector := authz.NewSelector(authz.ScopeProjectRead, "project-one")
+	raw := mustPolicyJSON(t, DelegatedPolicy{
+		Requested: []DelegatedPolicyGrant{{Scope: authz.ScopeProjectRead, Selector: selector}},
+		Effective: []DelegatedPolicyGrant{{Scope: authz.ScopeProjectRead, Selector: selector}},
+	})
+	policy, err := DecodeDelegatedPolicy(DelegatedPolicyVersion1, raw)
+	require.NoError(t, err)
+
+	policy.Requested[0].Selector[authz.SelectorKeyResourceID] = "mutated-request"
+	runtime := policy.RuntimeGrants()
+	require.True(t, authz.GrantsSatisfy(runtime, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: "project-one"}))
+	require.False(t, authz.GrantsSatisfy(runtime, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: "mutated-request"}))
+
+	runtime[0].Selector[authz.SelectorKeyResourceID] = "mutated-runtime"
+	require.True(t, authz.GrantsSatisfy(policy.RuntimeGrants(), authz.Check{Scope: authz.ScopeProjectRead, ResourceID: "project-one"}))
+}
+
+func TestDecodeDelegatedPolicySkipsUnknownAndRetiredEntries(t *testing.T) {
+	t.Parallel()
+
+	entries := []DelegatedPolicyGrant{
+		{Scope: scopeMCPApprovalReadTombstone, Selector: authz.Selector{authz.SelectorKeyResourceKind: "mcp_approval", authz.SelectorKeyResourceID: "approval-one"}},
+		{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, "project-one")},
+		{Scope: authz.Scope("unknown:scope"), Selector: authz.Selector{authz.SelectorKeyResourceKind: "unknown", authz.SelectorKeyResourceID: "unknown-one"}},
+	}
+	raw := mustPolicyJSON(t, DelegatedPolicy{Requested: entries, Effective: entries})
+
+	policy, err := DecodeDelegatedPolicy(DelegatedPolicyVersion1, raw)
+	require.NoError(t, err)
+	require.Len(t, policy.Requested, 3)
+	require.Equal(t, []authz.Scope{authz.ScopeProjectRead}, grantScopes(policy.RuntimeGrants()))
+	require.True(t, authz.GrantsSatisfy(policy.RuntimeGrants(), authz.Check{Scope: authz.ScopeProjectRead, ResourceID: "project-one"}))
+}
+
+func TestDecodeDelegatedPolicyRejectsInvalidProfiles(t *testing.T) {
+	t.Parallel()
+
+	project := DelegatedPolicyGrant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, "project-one")}
+	mcp := DelegatedPolicyGrant{Scope: authz.ScopeMCPRead, Selector: authz.NewSelector(authz.ScopeMCPRead, "server-one")}
+
+	tests := map[string]struct {
+		version DelegatedPolicyVersion
+		raw     []byte
+	}{
+		"unsupported version":         {version: CurrentDelegatedPolicyVersion + 1, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{}, Effective: []DelegatedPolicyGrant{}})},
+		"unknown envelope field":      {version: 1, raw: []byte(`{"requested":[],"effective":[],"effect":"allow"}`)},
+		"trailing value":              {version: 1, raw: []byte(`{"requested":[],"effective":[]} {}`)},
+		"missing requested":           {version: 1, raw: []byte(`{"effective":[]}`)},
+		"null effective":              {version: 1, raw: []byte(`{"requested":[],"effective":null}`)},
+		"unknown grant field":         {version: 1, raw: []byte(`{"requested":[{"scope":"project:read","selector":{"resource_kind":"project","resource_id":"project-one"},"effect":"allow"}],"effective":[]}`)},
+		"case variant envelope field": {version: 1, raw: []byte(`{"Requested":[],"effective":[]}`)},
+		"case variant grant field":    {version: 1, raw: []byte(`{"requested":[{"Scope":"project:read","selector":{"resource_kind":"project","resource_id":"project-one"}}],"effective":[]}`)},
+		"duplicate envelope field":    {version: 1, raw: []byte(`{"requested":[],"requested":[],"effective":[]}`)},
+		"duplicate grant field":       {version: 1, raw: []byte(`{"requested":[{"scope":"project:read","scope":"mcp:read","selector":{"resource_kind":"project","resource_id":"project-one"}}],"effective":[]}`)},
+		"duplicate selector field":    {version: 1, raw: []byte(`{"requested":[{"scope":"project:read","selector":{"resource_kind":"project","resource_id":"project-one","resource_id":"project-two"}}],"effective":[]}`)},
+		"unordered requested":         {version: 1, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{project, mcp}, Effective: []DelegatedPolicyGrant{mcp, project}})},
+		"duplicate requested":         {version: 1, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{project, project}, Effective: []DelegatedPolicyGrant{project}})},
+		"duplicate effective":         {version: 1, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{project}, Effective: []DelegatedPolicyGrant{project, project}})},
+		"noncanonical closure":        {version: 1, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, "project-one")}}, Effective: []DelegatedPolicyGrant{{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, "project-one")}}})},
+		"unsafe active scope":         {version: 1, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{{Scope: authz.ScopeAgentWrite, Selector: authz.NewSelector(authz.ScopeAgentWrite, "agent-one")}}, Effective: []DelegatedPolicyGrant{{Scope: authz.ScopeAgentWrite, Selector: authz.NewSelector(authz.ScopeAgentWrite, "agent-one")}}})},
+		"malformed known selector":    {version: 1, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{{Scope: authz.ScopeProjectRead, Selector: authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: "project-one"}}}, Effective: []DelegatedPolicyGrant{{Scope: authz.ScopeProjectRead, Selector: authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: "project-one"}}}})},
+		"malformed unknown selector":  {version: 1, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{{Scope: authz.Scope("unknown:scope"), Selector: authz.Selector{authz.SelectorKeyResourceKind: "unknown"}}}, Effective: []DelegatedPolicyGrant{{Scope: authz.Scope("unknown:scope"), Selector: authz.Selector{authz.SelectorKeyResourceKind: "unknown"}}}})},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := DecodeDelegatedPolicy(test.version, test.raw)
+			require.ErrorIs(t, err, ErrInvalidDelegatedPolicy)
+		})
+	}
+}
+
+func TestNewDelegatedPolicyRejectsInvalidIssuerInput(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeAgentWrite, "agent-one")})
+	require.ErrorIs(t, err, ErrInvalidDelegatedPolicy)
+
+	grant := authz.NewGrant(authz.ScopeProjectRead, "project-one")
+	_, err = NewDelegatedPolicyV1([]authz.Grant{grant, grant})
+	require.ErrorIs(t, err, ErrInvalidDelegatedPolicy)
+}
+
+func delegatedPolicyScopes(grants []DelegatedPolicyGrant) []authz.Scope {
+	scopes := make([]authz.Scope, len(grants))
+	for i, grant := range grants {
+		scopes[i] = grant.Scope
+	}
+	return scopes
+}
+
+func grantScopes(grants []authz.Grant) []authz.Scope {
+	scopes := make([]authz.Scope, len(grants))
+	for i, grant := range grants {
+		scopes[i] = grant.Scope
+	}
+	return scopes
+}
+
+func mustPolicyJSON(t *testing.T, policy DelegatedPolicy) []byte {
+	t.Helper()
+	raw, err := json.Marshal(struct {
+		Requested []DelegatedPolicyGrant `json:"requested"`
+		Effective []DelegatedPolicyGrant `json:"effective"`
+	}{Requested: policy.Requested, Effective: policy.Effective})
+	require.NoError(t, err)
+	return raw
+}
+
+func TestDelegatedPolicyV3AdmitsAssistantScopes(t *testing.T) {
+	t.Parallel()
+	assistant := authz.NewGrant(authz.ScopeAssistantWrite, "11111111-1111-4111-8111-111111111111")
+
+	_, err := NewDelegatedPolicy(DelegatedPolicyVersion2, []authz.Grant{assistant})
+	require.ErrorIs(t, err, ErrInvalidDelegatedPolicy, "v2 predates the assistant scopes")
+
+	policy, err := NewDelegatedPolicy(DelegatedPolicyVersion3, []authz.Grant{assistant})
+	require.NoError(t, err)
+	encoded, err := EncodeDelegatedPolicy(DelegatedPolicyVersion3, policy)
+	require.NoError(t, err)
+	decoded, err := DecodeDelegatedPolicy(DelegatedPolicyVersion3, encoded)
+	require.NoError(t, err)
+	ref := authz.Assistant(authz.AssistantIDFrom(assistant.Selector.ResourceID()), authz.ProjectIDFrom("22222222-2222-4222-8222-222222222222"))
+	for _, check := range []authz.Check{ref.Write(), ref.Read()} {
+		allowed, err := authz.GrantsAuthorize(decoded.RuntimeGrants(), check)
+		require.NoError(t, err)
+		require.True(t, allowed, check.Scope)
+	}
+}
+
+// A new policy may not limit viewing or managing a server to some tools or
+// dispositions, but a stored one from before that rule still decodes.
+func TestDelegatedPolicyLimitsOnViewAreStoredOnly(t *testing.T) {
+	t.Parallel()
+
+	for _, limit := range []authz.Selector{
+		{authz.SelectorKeyTool: "tool-one"},
+		{authz.SelectorKeyDisposition: authz.DispositionReadOnly},
+	} {
+		selector := authz.NewSelector(authz.ScopeMCPRead, "server-one")
+		for key, value := range limit {
+			selector[key] = value
+		}
+		_, err := NewDelegatedPolicyV1([]authz.Grant{{Scope: authz.ScopeMCPRead, Selector: selector}})
+		require.ErrorContains(t, err, "is not allowed for scope")
+
+		_, err = DecodeDelegatedPolicy(DelegatedPolicyVersion1, storedPolicyJSON(t, selector))
+		require.NoError(t, err)
+	}
+
+	selector := authz.NewSelector(authz.ScopeMCPRead, "server-one")
+	selector[authz.SelectorKeyDisposition] = "not-a-disposition"
+	_, err := DecodeDelegatedPolicy(DelegatedPolicyVersion1, storedPolicyJSON(t, selector))
+	require.Error(t, err)
+}
+
+// storedPolicyJSON is a v1 policy as stored, viewing one server under selector.
+func storedPolicyJSON(t *testing.T, selector authz.Selector) []byte {
+	t.Helper()
+	requested := []DelegatedPolicyGrant{{Scope: authz.ScopeMCPRead, Selector: selector}}
+	effective, err := delegatedPolicyClosure(DelegatedPolicyVersion1, requested)
+	require.NoError(t, err)
+	return mustPolicyJSON(t, DelegatedPolicy{Requested: requested, Effective: effective})
+}

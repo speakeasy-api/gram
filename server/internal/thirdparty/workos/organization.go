@@ -2,13 +2,18 @@ package workos
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
+	"github.com/workos/workos-go/v6/pkg/workos_errors"
 )
 
-// Organization represents a WorkOS organization with the fields used by Gram.
+// Organization represents a WorkOS organization with the fields used by Speakeasy.
 type Organization struct {
 	ID         string
 	Name       string
@@ -30,8 +35,37 @@ type OrganizationDomain struct {
 	State  OrganizationDomainState
 }
 
+// IsVerified reports whether WorkOS treats the domain as verified. WorkOS
+// requires a verified domain before an SSO connection can be set up.
+func (s OrganizationDomainState) IsVerified() bool {
+	return s == OrganizationDomainStateVerified || s == OrganizationDomainStateLegacyVerified
+}
+
 type OrganizationDomainPolicy struct {
 	Domains []OrganizationDomain
+}
+
+// VerifiedDomains returns the normalized domain names WorkOS treats as
+// verified, without duplicates and in the order WorkOS lists them.
+func (p *OrganizationDomainPolicy) VerifiedDomains() []string {
+	verified := make([]string, 0, len(p.Domains))
+	for _, d := range p.Domains {
+		if !d.State.IsVerified() {
+			continue
+		}
+		domain := NormalizeDomain(d.Domain)
+		if domain != "" && !slices.Contains(verified, domain) {
+			verified = append(verified, domain)
+		}
+	}
+	return verified
+}
+
+// NormalizeDomain returns the form of a domain name Speakeasy stores. Domain names
+// are case-insensitive and a trailing dot only marks a fully qualified name,
+// so they are stored trimmed, without one trailing dot, and in lower case.
+func NormalizeDomain(domain string) string {
+	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
 }
 
 // GetOrganization fetches a WorkOS organization by id.
@@ -70,9 +104,9 @@ func (wc *Client) GetOrganizationDomainPolicy(ctx context.Context, orgID string)
 }
 
 // CreateOrganization creates a WorkOS organization with the given name and
-// sets its external_id to the Gram org ID. Returns the WorkOS org ID.
+// sets its external_id to the Speakeasy org ID. Returns the WorkOS org ID.
 func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error) {
-	o, err := wc.orgs.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+	o, err := wc.orgs.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct_v5 // deprecated WorkOS fields are intentionally omitted.
 		Name:           name,
 		Domains:        nil,
 		DomainData:     nil,
@@ -87,9 +121,44 @@ func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string
 	return o.ID, nil
 }
 
+// ErrOrganizationCreationRejected marks a provider validation refusal of the
+// initial create, never a failure after the remote organization was created.
+var ErrOrganizationCreationRejected = errors.New("WorkOS rejected organization creation")
+
+// CreateOrganizationWithVerifiedDomain asserts prior administrator verification
+// of hostname. It does not retry because creation has no idempotency key.
+func (wc *Client) CreateOrganizationWithVerifiedDomain(ctx context.Context, name, hostname string) (string, error) {
+	o, err := wc.orgsNoRetry.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct_v5 // deprecated WorkOS fields are intentionally omitted.
+		Name:           name,
+		Domains:        nil,
+		DomainData:     []organizations.OrganizationDomainData{{Domain: hostname, State: organizations.Verified}},
+		ExternalID:     "",
+		IdempotencyKey: "",
+		Metadata:       nil,
+	})
+	if err != nil {
+		// WorkOS documents 400 as malformed parameters and 422 as validation
+		// failure. No duplicate-domain-specific code or 409 contract is assumed.
+		var providerError workos_errors.HTTPError
+		if errors.As(err, &providerError) && (providerError.Code == http.StatusBadRequest || providerError.Code == http.StatusUnprocessableEntity) {
+			return "", fmt.Errorf("%w: %w", ErrOrganizationCreationRejected, err)
+		}
+		return "", fmt.Errorf("create organization with verified domain: %w", err)
+	}
+	if o.ID == "" {
+		return "", fmt.Errorf("create organization with verified domain: missing organization ID")
+	}
+	for _, domain := range o.Domains {
+		if domain.Domain == hostname && domain.State == organizations.OrganizationDomainVerified {
+			return o.ID, nil
+		}
+	}
+	return "", fmt.Errorf("create organization with verified domain: expected verified domain not returned")
+}
+
 // CreateOrganizationMembership adds a WorkOS user to a WorkOS organization
-// with the given role and returns the membership ID.
-func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
+// with the given role and returns the complete membership.
+func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (*Member, error) {
 	membership, err := wc.um.CreateOrganizationMembership(ctx, usermanagement.CreateOrganizationMembershipOpts{
 		UserID:         workosUserID,
 		OrganizationID: workosOrgID,
@@ -97,9 +166,33 @@ func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID
 		RoleSlugs:      nil,
 	})
 	if err != nil {
-		return "", fmt.Errorf("create organization membership: %w", err)
+		return nil, fmt.Errorf("create organization membership: %w", err)
 	}
-	return membership.ID, nil
+
+	// Creating an existing membership can succeed without applying the role.
+	member := convertMember(membership)
+	if roleSlug == "" || slices.Contains(member.RoleSlugs, roleSlug) {
+		return &member, nil
+	}
+
+	// Refresh before replacing roles so changes since creation are preserved.
+	// shortcut: writes after this read can still race; use atomic role-add when available.
+	membership, err = wc.um.GetOrganizationMembership(ctx, usermanagement.GetOrganizationMembershipOpts{
+		OrganizationMembership: membership.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("refresh organization membership: %w", err)
+	}
+	member = convertMember(membership)
+	if slices.Contains(member.RoleSlugs, roleSlug) {
+		return &member, nil
+	}
+
+	updated, err := wc.UpdateMemberRoles(ctx, member.ID, append(member.RoleSlugs, roleSlug))
+	if err != nil {
+		return nil, fmt.Errorf("apply requested membership role: %w", err)
+	}
+	return updated, nil
 }
 
 // EnsureOrgExternalID sets the WorkOS organization's external_id to gramOrgID
@@ -122,7 +215,17 @@ func (wc *Client) EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgI
 }
 
 func (wc *Client) UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error {
-	_, err := wc.orgs.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+	return updateOrganizationExternalID(ctx, wc.orgs, workosOrgID, externalID)
+}
+
+// UpdateOrganizationExternalIDWithoutRetry finishes administrator-verified
+// provisioning without automatically repeating a write after an uncertain outcome.
+func (wc *Client) UpdateOrganizationExternalIDWithoutRetry(ctx context.Context, workosOrgID, externalID string) error {
+	return updateOrganizationExternalID(ctx, wc.orgsNoRetry, workosOrgID, externalID)
+}
+
+func updateOrganizationExternalID(ctx context.Context, client *organizations.Client, workosOrgID, externalID string) error {
+	_, err := client.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{ //nolint:exhaustruct_v5 // deprecated WorkOS fields are intentionally omitted.
 		Organization:     workosOrgID,
 		Name:             "",
 		Domains:          nil,

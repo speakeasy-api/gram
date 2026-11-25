@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -156,6 +157,11 @@ func TestChatClient_GetCompletion_ClassifiesHTTPErrorsBySanitizedBody(t *testing
 			require.Equal(t, tc.wantCorruption, IsHistoryCorruptionCandidate(err))
 			require.Equal(t, tc.wantBadRequest, IsBadRequest(err))
 			require.Equal(t, tc.wantContentPolicy, IsContentPolicy(err))
+			var httpErr *HTTPError
+			require.ErrorAs(t, err, &httpErr)
+			require.Equal(t, tc.status, httpErr.StatusCode)
+			wantPermanent := tc.status >= http.StatusBadRequest && tc.status < http.StatusInternalServerError && tc.status != http.StatusRequestTimeout && tc.status != http.StatusTooManyRequests
+			require.Equal(t, wantPermanent, IsPermanentError(err))
 
 			require.NotContains(t, err.Error(), echoedRequestCanary, "response body must not reach the error message for any status")
 			require.Contains(t, err.Error(), strconv.Itoa(tc.status), "status must survive sanitization")
@@ -319,6 +325,7 @@ func newTestClientForServer(t *testing.T, server *httptest.Server) *ChatClient {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},

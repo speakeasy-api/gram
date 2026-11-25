@@ -20,6 +20,8 @@ type SidebarFooterActionProps = {
   label: string;
   className?: string;
   contentClassName?: string;
+  /** Extra classes on the label text (e.g. the brand shimmer sweep). */
+  labelClassName?: string;
   trailing?: ReactNode;
 } &
   // Exactly one of `to` (navigation) or `onClick` (in-place action) — both
@@ -33,12 +35,18 @@ export function SidebarFooterAction({
   label,
   className,
   contentClassName,
+  labelClassName,
   trailing,
 }: SidebarFooterActionProps): JSX.Element {
   const actionContent = (
     <>
       <Icon className="size-4 shrink-0" strokeWidth={1.75} />
-      <span className="truncate group-data-[collapsible=icon]:hidden">
+      <span
+        className={cn(
+          "truncate group-data-[collapsible=icon]:hidden",
+          labelClassName,
+        )}
+      >
         {label}
       </span>
     </>

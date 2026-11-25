@@ -1,12 +1,13 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { InputField } from "@/components/moon/input-field";
 import { Textarea } from "@/components/moon/textarea";
 import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
 import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
-import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
-import { MutationStatus } from "@tanstack/react-query";
-import { Fullscreen, Loader2, X } from "lucide-react";
+import type { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
+import type { MutationStatus } from "@tanstack/react-query";
+import { Fullscreen, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import * as z from "zod";
 
@@ -254,14 +255,14 @@ export function PromptEditor({
           <Button type="submit" disabled={isPending} size="md">
             {isPending ? (
               <Button.LeftIcon>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="mr-0" />
               </Button.LeftIcon>
             ) : null}
             <Button.Text>{isPending ? "Saving..." : "Save Prompt"}</Button.Text>
           </Button>
         </div>
       </form>
-      <aside className="bg-secondary sticky top-8 w-80 flex-shrink-0 space-y-6 p-6">
+      <aside className="bg-secondary sticky top-[calc(var(--page-sticky-top,0px)+2rem)] w-80 flex-shrink-0 space-y-6 p-6">
         <div>
           <h3 className="mb-2 text-sm font-medium">Prompt Templates</h3>
           <p className="text-muted-foreground text-sm">

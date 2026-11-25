@@ -3,7 +3,10 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,11 +21,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -42,7 +50,7 @@ func (s *Service) ListClients(ctx context.Context, payload *orgclientsgen.ListCl
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -54,7 +62,7 @@ func (s *Service) ListClients(ctx context.Context, payload *orgclientsgen.ListCl
 
 	rows, err := repo.New(s.db).ListOrganizationRemoteSessionClientsByIssuerID(ctx, repo.ListOrganizationRemoteSessionClientsByIssuerIDParams{
 		RemoteSessionIssuerID: issuerID,
-		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		OrganizationID:        authCtx.ActiveOrganizationID,
 		Cursor:                cursor,
 		LimitValue:            limit,
 	})
@@ -64,7 +72,7 @@ func (s *Service) ListClients(ctx context.Context, payload *orgclientsgen.ListCl
 
 	items := make([]*orgclientsgen.OrganizationRemoteSessionClient, 0, len(rows))
 	for _, row := range rows {
-		clientView, err := mv.BuildRemoteSessionClientView(row.RemoteSessionClient, row.UserSessionIssuerIds)
+		clientView, err := s.clientView(row.RemoteSessionClient, row.UserSessionIssuerIds)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 		}
@@ -101,7 +109,7 @@ func (s *Service) GetClient(ctx context.Context, payload *orgclientsgen.GetClien
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -116,7 +124,7 @@ func (s *Service) GetClient(ctx context.Context, payload *orgclientsgen.GetClien
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	view, err := mv.BuildRemoteSessionClientView(client.RemoteSessionClient, client.UserSessionIssuerIds)
+	view, err := s.clientView(client.RemoteSessionClient, client.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -138,13 +146,13 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
 	r := repo.New(s.db)
 
-	if _, err := r.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+	if _, err := r.GetOrganizationRemoteSessionRegistration(ctx, repo.GetOrganizationRemoteSessionRegistrationParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 	}); err != nil {
@@ -159,23 +167,67 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 		return nil, oops.E(oops.CodeUnexpected, err, "count remote sessions").LogError(ctx, logger)
 	}
 
-	mcpRows, err := r.ListOrganizationMcpServersForClient(ctx, clientID)
+	mcpRows, err := r.ListOrganizationMcpServersUsingRegistration(ctx, repo.ListOrganizationMcpServersUsingRegistrationParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ClientID:            conv.ToNullUUID(clientID),
+		IssuerID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		IncludeDeleteImpact: true,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
 	}
 
 	names := make([]string, 0, len(mcpRows))
 	for _, row := range mcpRows {
-		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), row.Url))
+		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), conv.Default(row.Url, row.Slug.String)))
+	}
+	trustedRows, err := r.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID(ctx, repo.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list identity-provider login references for client").LogError(ctx, logger)
+	}
+	trustedIssuers := make([]*orgclientsgen.TrustedClientUserSessionIssuerReference, 0, len(trustedRows))
+	for _, row := range trustedRows {
+		trustedIssuers = append(trustedIssuers, &orgclientsgen.TrustedClientUserSessionIssuerReference{
+			ID:   row.ID.String(),
+			Slug: row.Slug,
+		})
+	}
+	trustedReferenceCount, err := r.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, clientID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count identity-provider login references for client").LogError(ctx, logger)
+	}
+	canDelete := trustedReferenceCount == 0
+	var blockingReason *string
+	if !canDelete {
+		reason := "identity_provider_login"
+		blockingReason = &reason
+	}
+
+	emaCount, err := r.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(clientID), OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.Nil})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count identity-chaining bindings")
+	}
+
+	if canDelete && emaCount > 0 {
+		canDelete = false
+		reason := "identity_chaining"
+		blockingReason = &reason
 	}
 
 	return &orgclientsgen.OrganizationClientDeletePreflight{
-		SessionCount:   int(sessionCount),
-		McpServerNames: names,
+		SessionCount:              int(sessionCount),
+		McpServerNames:            names,
+		TrustedUserSessionIssuers: trustedIssuers,
+		CanDelete:                 canDelete,
+		BlockingReason:            blockingReason,
+		EmaBindingCount:           emaCount,
 	}, nil
 }
 
-// ListClientMcpServers lists the MCP servers a client is attached to in the
+// ListClientMcpServers lists the MCP servers that offer a client in the
 // caller's organization.
 func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsgen.ListClientMcpServersPayload) (*orgclientsgen.ListOrganizationMcpServersResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -190,14 +242,14 @@ func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsg
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
 	r := repo.New(s.db)
 
 	// Establish org ownership of the client before resolving its MCP servers.
-	if _, err := r.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+	if _, err := r.GetOrganizationRemoteSessionRegistration(ctx, repo.GetOrganizationRemoteSessionRegistrationParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 	}); err != nil {
@@ -207,7 +259,12 @@ func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsg
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	rows, err := r.ListOrganizationMcpServersForClient(ctx, clientID)
+	rows, err := r.ListOrganizationMcpServersUsingRegistration(ctx, repo.ListOrganizationMcpServersUsingRegistrationParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ClientID:            conv.ToNullUUID(clientID),
+		IssuerID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		IncludeDeleteImpact: false,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
 	}
@@ -241,7 +298,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -257,15 +314,27 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		return nil, oops.E(oops.CodeBadRequest, nil, "client_id is required").LogError(ctx, logger)
 	}
 
-	// Encrypt a supplied client secret before it touches the database; an absent
-	// secret leaves the stored ciphertext NULL.
-	var secretCiphertext pgtype.Text
-	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
-		ciphertext, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		secretCiphertext = conv.ToPGText(ciphertext)
+	owner, err := parseCreateCredentialOwner(ctx, logger, payload.CredentialOwner)
+	if err != nil {
+		return nil, err
+	}
+
+	authMethod := selfClientCreateAuthMethod(owner, payload.TokenEndpointAuthMethod)
+	hasSecret := payload.ClientSecret != nil && *payload.ClientSecret != ""
+
+	if err := requireSelfClientCredential(clientCredentialState{
+		owner:             owner,
+		method:            conv.PtrValOr(authMethod, ""),
+		hasSecret:         hasSecret,
+		hasKeySet:         payload.JSONWebKeySetID != nil,
+		legacyCallbackURL: false,
+	}); err != nil {
+		return nil, err
+	}
+
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, owner)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -309,21 +378,59 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		return nil, err
 	}
 
+	if err := requireSelfClientIssuer(owner, issuer); err != nil {
+		return nil, err
+	}
+
+	keySetID, err := s.resolveCreateKeySet(ctx, logger, txRepo, payload.JSONWebKeySetID, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := requirePrivateKeyJWTKeySet(authMethod, keySetID); err != nil {
+		return nil, err
+	}
+
+	provenance, err := parseRegistrationProvenance(ctx, logger, payload.ClientIDIssuedAt, payload.ClientSecretExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-		ProjectID:               clientProjectID,
-		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
-		RemoteSessionIssuerID:   issuerID,
-		ClientID:                clientID,
-		ClientSecretEncrypted:   secretCiphertext,
-		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
-		Scope:                   payload.Scope,
-		Audience:                conv.PtrToPGText(payload.Audience),
-		LegacyCallbackUrl:       false,
+		ForwardClientName:               false,
+		ProjectID:                       clientProjectID,
+		OrganizationID:                  conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID:           issuerID,
+		ClientID:                        clientID,
+		ClientIDIssuedAt:                provenance.clientIDIssuedAt,
+		ClientSecretExpiresAt:           provenance.clientSecretExpiresAt,
+		TokenEndpointAuthMethod:         conv.PtrToPGText(authMethod),
+		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
+		Scope:                           payload.Scope,
+		Audience:                        conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:               false,
+		JsonWebKeySetID:                 keySetID,
+		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CallbackBaseUrl:                 callbackBaseURL,
+		GrantTypes:                      clientCreateGrantTypes(owner),
+		CredentialOwner:                 conv.ToPGText(string(owner)),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session client").LogError(ctx, logger)
+	}
+
+	// An absent secret leaves the client without one.
+	if hasSecret {
+		created, err = s.secrets.Set(ctx, dbtx, created.ID, clientOwner(created), []byte(*payload.ClientSecret), provenance.clientSecretExpiresAt)
+		if err != nil {
+			return nil, clientSecretWriteError(ctx, logger, err)
+		}
+	}
+
+	// Standalone client: no user_session_issuer attachments.
+	snapshot, err := mv.BuildRemoteSessionClientView(created, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
@@ -334,6 +441,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(created.ID),
 		ClientID:               created.ClientID,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log organization admin remote session client creation").LogError(ctx, logger)
 	}
@@ -343,7 +451,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 	}
 
 	// Standalone client: no user_session_issuer attachments.
-	view, err := mv.BuildRemoteSessionClientView(created, nil)
+	view, err := s.clientView(created, nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -369,19 +477,19 @@ func (s *Service) resolveOrganizationClientProject(ctx context.Context, dbtx pgx
 	if payloadProjectID != nil && strings.TrimSpace(*payloadProjectID) != "" {
 		pid, err := uuid.Parse(*payloadProjectID)
 		if err != nil {
-			return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, logger)
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, logger)
 		}
 		if issuer.ProjectID.Valid && issuer.ProjectID.UUID != pid {
-			return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, nil, "project_id must match the issuer's project for a project-specific issuer").LogError(ctx, logger)
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, nil, "project_id must match the issuer's project for a project-specific issuer").LogError(ctx, logger)
 		}
 		if _, err := projectsrepo.New(dbtx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
 			ID:             pid,
 			OrganizationID: organizationID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "project not found in organization").LogError(ctx, logger)
+				return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "project not found in organization").LogError(ctx, logger)
 			}
-			return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "validate project").LogError(ctx, logger)
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeUnexpected, err, "validate project").LogError(ctx, logger)
 		}
 		clientProjectID = conv.ToNullUUID(pid)
 	}
@@ -393,7 +501,7 @@ func (s *Service) resolveOrganizationClientProject(ctx context.Context, dbtx pgx
 // Like CreateClient the project is resolved from the issuer or the
 // caller-supplied project_id (and may be organization-level under an
 // organization-level issuer), but the caller supplies no
-// credentials: Gram generates the client_id and serves the metadata document,
+// credentials: Speakeasy generates the client_id and serves the metadata document,
 // and the issuer must advertise CIMD support.
 func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.CreateCimdClientPayload) (*types.RemoteSessionClient, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -401,7 +509,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -410,6 +518,11 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 	issuerID, err := uuid.Parse(payload.RemoteSessionIssuerID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_issuer_id").LogError(ctx, logger)
+	}
+
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, CredentialOwnerSubject)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -461,17 +574,25 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 	}
 
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
+		ForwardClientName:     false,
 		ID:                    clientID,
 		ProjectID:             clientProjectID,
 		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: issuerID,
-		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.serverURL, clientID),
+		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.origins.ForClient(callbackBaseURL), clientID),
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
 		Scope:                 payload.Scope,
 		Audience:              conv.PtrToPGText(payload.Audience),
+		CallbackBaseUrl:       callbackBaseURL,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session client").LogError(ctx, logger)
+	}
+
+	// Standalone client: no user_session_issuer attachments.
+	snapshot, err := mv.BuildRemoteSessionClientView(created, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
@@ -482,6 +603,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(created.ID),
 		ClientID:               created.ClientID,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log organization admin remote session client creation").LogError(ctx, logger)
 	}
@@ -491,7 +613,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 	}
 
 	// Standalone client: no user_session_issuer attachments.
-	view, err := mv.BuildRemoteSessionClientView(created, nil)
+	view, err := s.clientView(created, nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -514,22 +636,19 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
-	// Encrypt a rotated client secret before it touches the database; an absent
-	// secret leaves the stored ciphertext untouched (narg NULL → COALESCE keeps).
-	var clientSecretEncrypted pgtype.Text
-	if payload.ClientSecret != nil {
-		if strings.TrimSpace(*payload.ClientSecret) == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "client_secret cannot be empty").LogError(ctx, logger)
-		}
-		ciphertext, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		clientSecretEncrypted = conv.ToPGText(ciphertext)
+	if payload.LegacyCallbackURL != nil && !authCtx.IsAdmin {
+		return nil, oops.E(oops.CodeForbidden, nil, "changing a client's legacy callback mode requires a platform admin").LogError(ctx, logger)
+	}
+
+	// A rotated client secret replaces the stored one; an absent secret leaves
+	// it untouched.
+	newSecret := payload.ClientSecret != nil
+	if newSecret && strings.TrimSpace(*payload.ClientSecret) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_secret cannot be empty").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -539,6 +658,27 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// Trusted-pair writers take the remote issuer advisory lock before the
+	// client row lock. Update takes the same order even when the client is not
+	// currently linked, so a concurrent link cannot observe an invalidated
+	// configuration.
+	preLock, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+		ID:             clientID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client before lock").LogError(ctx, logger)
+	}
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, preLock.RemoteSessionClient.RemoteSessionIssuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client update").LogError(ctx, logger)
+	}
+	if err := lockOrganizationClientForAuthMethodWrite(ctx, logger, txRepo, clientID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
 
 	existing, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
 		ID:             clientID,
@@ -550,6 +690,13 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
+	if existing.RemoteSessionClient.RemoteSessionIssuerID != preLock.RemoteSessionClient.RemoteSessionIssuerID {
+		return nil, oops.E(oops.CodeConflict, nil, "remote session client moved to another issuer; reload and retry").LogError(ctx, logger)
+	}
+
+	if err := idpmanagedresources.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+		return nil, err
+	}
 
 	// Issuer attachments are managed via the join table, so an org-admin update
 	// never changes them; the same set frames both the before and after views.
@@ -558,19 +705,81 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 	}
 
+	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, existing.RemoteSessionClient.JsonWebKeySetID); err != nil {
+		return nil, err
+	}
+
+	if err := requireSelfClientCredential(updatedClientCredentialState(existing.RemoteSessionClient, payload.TokenEndpointAuthMethod, newSecret, payload.LegacyCallbackURL)); err != nil {
+		return nil, err
+	}
+
+	if err := requireForwardClientNameOwner(CredentialOwner(existing.RemoteSessionClient.CredentialOwner), payload.ForwardClientName); err != nil {
+		return nil, err
+	}
+
+	newClientID, err := correctedClientID(existing.RemoteSessionClient, payload.ClientID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
-		ClientSecretEncrypted:   clientSecretEncrypted,
-		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
-		Scope:                   payload.Scope,
-		Audience:                conv.PtrToPGText(payload.Audience),
-		ID:                      clientID,
-		OrganizationID:          conv.ToPGText(authCtx.ActiveOrganizationID),
+		ClientID:                        newClientID,
+		DisplayName:                     updatedDisplayName(payload.DisplayName),
+		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
+		Scope:                           payload.Scope,
+		Audience:                        conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:               conv.PtrToPGBool(payload.LegacyCallbackURL),
+		ForwardClientName:               conv.PtrToPGBool(payload.ForwardClientName),
+		ID:                              clientID,
+		OrganizationID:                  conv.ToPGText(authCtx.ActiveOrganizationID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization admin remote session client").LogError(ctx, logger)
+	}
+
+	// A pasted-in replacement secret carries no issuer-reported expiry, and
+	// keeping the old secret's deadline would flag the new one as expired.
+	if newSecret {
+		updated, err = s.secrets.Set(ctx, dbtx, updated.ID, clientOwner(updated), []byte(*payload.ClientSecret), pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false})
+		if err != nil {
+			return nil, clientSecretWriteError(ctx, logger, err)
+		}
+	}
+
+	// Sessions obtained through the old client_id hold tokens the issuer bound
+	// to it, so they cannot be refreshed under the corrected one.
+	var revokedSessions []repo.SoftDeleteRemoteSessionsByClientIDRow
+	if newClientID.Valid {
+		revokedSessions, err = txRepo.SoftDeleteRemoteSessionsByClientID(ctx, updated.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "revoke remote sessions of the corrected client").LogError(ctx, logger)
+		}
+	}
+
+	trustedReferenceCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, updated.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count identity-provider login references for client").LogError(ctx, logger)
+	}
+	if trustedReferenceCount > 0 {
+		pair, pairErr := txRepo.LockTrustedRemoteSessionClientForOrganization(ctx, repo.LockTrustedRemoteSessionClientForOrganizationParams{
+			ClientID:       updated.ID,
+			IssuerID:       updated.RemoteSessionIssuerID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		if pairErr != nil {
+			return nil, oops.E(oops.CodeInvariantViolation, pairErr, "linked identity-provider client is no longer eligible").LogError(ctx, logger)
+		}
+		if validationErr := ValidateTrustedIdentityProviderClient(pair.RemoteSessionClient, pair.RemoteSessionIssuer); validationErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, validationErr, "update would make the client ineligible for identity-provider login: %v", validationErr).LogError(ctx, logger)
+		}
 	}
 
 	afterView, err := mv.BuildRemoteSessionClientView(updated, existing.UserSessionIssuerIds)
@@ -596,7 +805,104 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Best effort and post-commit, as on delete.
+	s.revoker.RevokeAllIssuedToDetached(ctx, revokedCredentials(revokedSessions), issuingClientAuth(existing.RemoteSessionClient))
+
+	// Set after the audit snapshot so it matches the snapshot before.
+	afterView.CallbackURL = s.clientCallbackURL(updated)
+	afterView.FederatedCallbackURL = s.origins.ClientFederatedCallbackURL(updated)
 	return afterView, nil
+}
+
+// RotateClient re-registers a client with its issuer in place, replacing the
+// upstream client_id and secret while the row, its bindings, and its
+// attachments stay. Every remote session minted against the old client_id is
+// revoked, so users reconnect once. The administrator's request is the
+// confirmation, so the issuer is not probed first the way an automatic
+// rotation is. The replacement is registered at the issuer's published
+// registration endpoint.
+func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.RotateClientPayload) (*types.RemoteSessionClient, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	clientID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
+		return nil, err
+	}
+
+	// Reachability is decided here, on the organization's own view of the
+	// client, so the rotator only ever runs against a row the caller manages.
+	existing, err := repo.New(s.db).GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+		ID:             clientID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
+	}
+
+	if err := idpmanagedresources.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+		return nil, err
+	}
+
+	rotated, err := s.rotator.Rotate(ctx, RotateClientRegistrationParams{
+		ClientID:                 existing.RemoteSessionClient.ID,
+		Trigger:                  RotationTriggerManual,
+		ExpectedClientID:         "",
+		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:         authCtx.Email,
+		ConfirmUpstreamRejection: false,
+		OrganizationID:           authCtx.ActiveOrganizationID,
+		RegistrationScope:        nil,
+	})
+	if err != nil {
+		if conflict, ok := errors.AsType[*oops.ShareableError](err); ok && conflict.Code == oops.CodeConflict {
+			return nil, conflict.LogWarn(ctx, logger)
+		}
+		var registrationErr *DynamicClientRegistrationError
+		switch {
+		case errors.Is(err, ErrRotationSnapshotChanged):
+			return nil, oops.E(oops.CodeConflict, err, "client or issuer changed during rotation; reload before retrying").LogWarn(ctx, logger)
+		case errors.Is(err, ErrClientNotRotatable):
+			return nil, oops.E(oops.CodeBadRequest, err, "only dynamically registered clients that sign users in and use a client secret or no client authentication can be rotated; client metadata document, managed, private_key_jwt and credential_owner self clients cannot").LogWarn(ctx, logger)
+		case errors.Is(err, ErrIssuerHasNoRegistrationEndpoint):
+			return nil, oops.E(oops.CodeBadRequest, err, "the identity provider publishes no registration endpoint to re-register the client at").LogWarn(ctx, logger)
+		case errors.Is(err, ErrClientRotationInProgress):
+			return nil, oops.E(oops.CodeConflict, err, "the client is already being rotated; reload to see the result").LogWarn(ctx, logger)
+		case errors.Is(err, ErrIssuerConfigurationChanged):
+			return nil, oops.E(oops.CodeConflict, err, "the identity provider configuration changed during rotation; reload and retry").LogWarn(ctx, logger)
+		case errors.Is(err, ErrClientRegistrationIneligibleForIdentityProviderLogin):
+			return nil, oops.E(oops.CodeBadRequest, err, "the identity provider returned a replacement client that is not eligible for identity-provider login").LogWarn(ctx, logger)
+		case errors.Is(err, ErrInvalidDynamicClientRegistrationEndpoint):
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid identity provider registration endpoint").LogWarn(ctx, logger)
+		case errors.As(err, &registrationErr) && registrationErr.StatusCode >= http.StatusBadRequest && registrationErr.StatusCode < http.StatusInternalServerError:
+			return nil, oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.ProviderMessage).LogWarn(ctx, logger)
+		case errors.As(err, &registrationErr):
+			return nil, oops.E(oops.CodeGatewayError, err, "failed to re-register the client with the identity provider").LogError(ctx, logger)
+		case errors.Is(err, clientsecrets.ErrUnattributed):
+			return nil, oops.E(oops.CodeFailedPrecondition, err, "this client was stored without its organization, so its secret cannot be stored while the organization moves to its own encryption key; backfill the client's organization first").LogWarn(ctx, logger)
+		case orgencryption.IsKeyProblem(err):
+			return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client could not be rotated; try again shortly").LogError(ctx, logger)
+		default:
+			return nil, oops.E(oops.CodeUnexpected, err, "rotate remote session client registration").LogError(ctx, logger)
+		}
+	}
+
+	view, err := s.clientView(rotated, existing.UserSessionIssuerIds)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
+	}
+	return view, nil
 }
 
 // DeleteClient soft-deletes a client in the caller's organization and
@@ -614,7 +920,7 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -626,7 +932,53 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 
 	txRepo := repo.New(dbtx)
 
-	deleted, err := txRepo.DeleteOrganizationRemoteSessionClient(ctx, repo.DeleteOrganizationRemoteSessionClientParams{
+	// Discovery and the writer scope both precede the first mutation: the
+	// scope has to name every project whose typed records this removal
+	// re-decides, and it must be held before any row lock is taken.
+	affectedServers, affectedProjects, err := serversLosingClientAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list servers losing the client").LogError(ctx, logger)
+	}
+	bindingServers, err := ReadClientBindingServers(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read servers on the client's issuers").LogError(ctx, logger)
+	}
+	for _, projectID := range bindingServers.Projects(authCtx.ActiveOrganizationID) {
+		if !slices.Contains(affectedProjects, projectID) {
+			affectedProjects = append(affectedProjects, projectID)
+		}
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, affectedProjects); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
+	}
+	// Gate the registrations those servers reach before locking the client
+	// row, so this never holds a row another transaction needs while waiting
+	// for a gate that transaction holds.
+	if err := authclientbackfill.PreflightServerAssociationsWithRegistrations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers, []uuid.UUID{clientID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
+	}
+	if _, err := txRepo.LockOrganizationRemoteSessionClientForAuthMethodWrite(ctx, repo.LockOrganizationRemoteSessionClientForAuthMethodWriteParams{
+		ID:             clientID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock organization admin remote session client for deletion").LogError(ctx, logger)
+	}
+	if err := recheckClientAssociationScope(ctx, dbtx, authCtx.ActiveOrganizationID, clientID, affectedServers); err != nil {
+		return err.LogWarn(ctx, logger)
+	}
+	trustedReferenceCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "count identity-provider login references for client").LogError(ctx, logger)
+	}
+	if trustedReferenceCount > 0 {
+		return oops.E(oops.CodeConflict, nil, "remote session client is used for identity-provider login; unlink it before deletion").LogWarn(ctx, logger)
+	}
+
+	// Read first so a managed client is refused rather than tombstoned.
+	existing, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 	})
@@ -634,12 +986,53 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
+		return oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
+	}
+
+	if err := idpmanagedresources.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+		return err
+	}
+
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
+		return err
+	}
+
+	deleted, err := txRepo.DeleteOrganizationRemoteSessionClient(ctx, repo.DeleteOrganizationRemoteSessionClientParams{
+		ID:             clientID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeConflict, err, "remote session client could not be deleted because its references changed; reload and retry").LogWarn(ctx, logger)
+		}
 		return oops.E(oops.CodeUnexpected, err, "delete organization admin remote session client").LogError(ctx, logger)
+	}
+
+	if err := txRepo.RetirePrincipalAttachmentsForDeletedRegistration(ctx, repo.RetirePrincipalAttachmentsForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: deleted.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire principal attachments for deleted client").LogError(ctx, logger)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
+	}
+
+	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
+		RemoteSessionClientID: deleted.ID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
+	}
+	// Those servers no longer reach this registration, so the links through
+	// which they offered its typed client are retired in the same transaction.
+	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the deleted client's servers").LogError(ctx, logger)
+	}
+	if err := txRepo.RetireOffersForDeletedRegistration(ctx, repo.RetireOffersForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: deleted.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire typed offers for deleted client").LogError(ctx, logger)
+	}
+	if err := bindingServers.Derive(ctx, dbtx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "derive upstream issuer of the deleted client's servers").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDelete(ctx, dbtx, audit.LogRemoteSessionClientDeleteEvent{
@@ -685,7 +1078,7 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp_server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -696,6 +1089,32 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// Discovery and the writer scope both precede the first mutation: the
+	// scope has to name every project whose typed records this removal
+	// re-decides, and it must be held before any row lock is taken.
+	affectedServers, affectedProjects, err := serversLosingClientAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list servers losing the client").LogError(ctx, logger)
+	}
+	bindingServers, err := ReadClientBindingServers(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read servers on the client's issuers").LogError(ctx, logger)
+	}
+	for _, projectID := range bindingServers.Projects(authCtx.ActiveOrganizationID) {
+		if !slices.Contains(affectedProjects, projectID) {
+			affectedProjects = append(affectedProjects, projectID)
+		}
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, affectedProjects); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
+	}
+	// Gate the registrations those servers reach before locking the client
+	// row, so this never holds a row another transaction needs while waiting
+	// for a gate that transaction holds.
+	if err := authclientbackfill.PreflightServerAssociationsWithRegistrations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers, []uuid.UUID{clientID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
+	}
 
 	// Establish org ownership of the client before detaching the MCP server.
 	clientRow, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
@@ -728,7 +1147,30 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
 	}
 
-	affected, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+	// Match preparation's user-issuer-before-client lock order, rechecking each
+	// tenant after waits. The server lock also stabilizes its issuer association.
+	if _, err := txRepo.LockOrganizationUserIssuerForDetach(ctx, repo.LockOrganizationUserIssuerForDetachParams{ID: server.UserSessionIssuerID.UUID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+	if _, err := txRepo.LockOrganizationMCPServerForDetach(ctx, repo.LockOrganizationMCPServerForDetachParams{ID: server.ID, ProjectID: server.ProjectID, UserSessionIssuerID: server.UserSessionIssuerID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+	if _, err := txRepo.LockEMAClientForLifecycle(ctx, repo.LockEMAClientForLifecycleParams{ID: clientID, ProjectID: client.ProjectID.UUID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+	if err := recheckClientAssociationScope(ctx, dbtx, authCtx.ActiveOrganizationID, clientID, affectedServers); err != nil {
+		return err.LogWarn(ctx, logger)
+	}
+
+	attached, err := lockAttachmentParentForUnlink(ctx, txRepo, authCtx.ActiveOrganizationID, clientID, server.UserSessionIssuerID.UUID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check agent attachments before unlink").LogError(ctx, logger)
+	}
+	if attached {
+		return oops.E(oops.CodeConflict, nil, agentBindingsOnReplacedClientMessage).LogWarn(ctx, logger)
+	}
+	affected, err := txRepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{
+		OrganizationID:        authCtx.ActiveOrganizationID,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   server.UserSessionIssuerID.UUID,
 	})
@@ -737,6 +1179,27 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	}
 	if affected == 0 {
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForClientUserIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, uuid.Nil, clientID, server.UserSessionIssuerID.UUID); err != nil {
+		return err
+	}
+
+	// The binding is removed for every server on the issuer, in any project,
+	// so their associations with this client go with it.
+	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove mcp server associations for detached client").LogError(ctx, logger)
+	}
+	// Same transaction as the binding removal: a server that stops reaching
+	// the registration stops offering the client derived from it.
+	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the detached client's servers").LogError(ctx, logger)
+	}
+	if err := bindingServers.Derive(ctx, dbtx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "derive upstream issuer of the detached client's servers").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{
@@ -758,4 +1221,51 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	}
 
 	return nil
+}
+
+// serversLosingClientAssociations is every live MCP server that has an
+// association with the client the caller is about to remove, with the project
+// it sits in. Read before the removal and before the writer scope lock,
+// because the pruning statements report only a count and the scope has to
+// name the projects it covers.
+//
+// Tombstoned associations are included: a server whose association an earlier
+// removal retired may still carry the link derived from it, and deciding it
+// again is how that is repaired rather than left for the offline backfill.
+// recheckClientAssociationScope confirms the servers discovered before the
+// scope was taken are still the servers this removal will prune. Associating a
+// server with a client takes a key-share lock on the client row, so once the
+// caller holds that row exclusively the set can no longer change; what this
+// catches is one that committed in the window between the discovery and that
+// lock. Pruning it without re-deciding it would leave the typed link behind,
+// so the caller is told to retry on the fresh set instead.
+func recheckClientAssociationScope(ctx context.Context, dbtx pgx.Tx, organizationID string, clientID uuid.UUID, discovered []uuid.UUID) *oops.ShareableError {
+	current, _, err := serversLosingClientAssociations(ctx, dbtx, organizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "re-list servers losing the client")
+	}
+	if !slices.Equal(discovered, current) {
+		return oops.E(oops.CodeConflict, nil, "this client's MCP servers changed while it was being removed; reload and retry")
+	}
+	return nil
+}
+
+func serversLosingClientAssociations(ctx context.Context, dbtx pgx.Tx, organizationID string, clientID uuid.UUID) ([]uuid.UUID, []uuid.UUID, error) {
+	rows, err := upstreamclientsrepo.New(dbtx).ListServersAssociatedWithClient(ctx, upstreamclientsrepo.ListServersAssociatedWithClientParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        conv.ToPGText(organizationID),
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("list servers losing client associations: %w", err)
+	}
+	var servers, projects []uuid.UUID
+	seen := map[uuid.UUID]bool{}
+	for _, row := range rows {
+		servers = append(servers, row.McpServerID)
+		if !seen[row.ProjectID] {
+			seen[row.ProjectID] = true
+			projects = append(projects, row.ProjectID)
+		}
+	}
+	return servers, projects, nil
 }

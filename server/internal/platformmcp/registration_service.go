@@ -1,16 +1,21 @@
-//nolint:exhaustruct,wrapcheck // Service defaults use optional zero values and preserve typed persistence errors.
+//nolint:exhaustruct_v5,wrapcheck // Service defaults use optional zero values and preserve typed persistence errors.
 package platformmcp
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/assets"
 )
 
 var ErrRegistrationUnavailable = errors.New("platform mcp catalog registration unavailable")
@@ -23,6 +28,7 @@ type CatalogRegistrationGateChecker interface {
 }
 
 type RegistrationPersistence interface {
+	FindReceipt(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, now time.Time) (OperationReceipt, bool, error)
 	ResolveProject(ctx context.Context, organizationID, projectSlug string) (ResolvedProject, error)
 	EligibleCatalogRegistrationTarget(ctx context.Context, organizationID string, project ResolvedProject) (bool, error)
 	BeginReceipt(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, now time.Time) (OperationReceipt, error)
@@ -31,7 +37,10 @@ type RegistrationPersistence interface {
 	ResolveRegistrationPendingSecretFields(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, declared []CatalogConfigurationField) ([]CatalogConfigurationField, error)
 	ResolveRegistrationCatalogIdentity(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogCandidate, error)
 	ResolveRegistrationDashboardSetup(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (RegistrationDashboardSetup, error)
+	ResolveRegistrationMCPID(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (uuid.UUID, error)
+	RegistrationIDForMCP(ctx context.Context, principal Principal, projectSlug, mcpID, operation string) (string, error)
 	IssueSetupHandoff(ctx context.Context, principal Principal, binding SetupHandoffBinding, now time.Time) (IssuedSetupHandoff, error)
+	GetProviderReadiness(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID) (Readiness, bool, error)
 }
 
 type RegisterCatalogMCPInput struct {
@@ -47,6 +56,9 @@ type IssueSetupHandoffInput struct {
 	RegistrationID string
 	ProviderKey    string
 	CatalogRef     string
+	// NextAction, when set, names the open setup step so the dashboard link
+	// can say what is left. Empty links to the settings page without a step.
+	NextAction string
 }
 
 type RegisterCatalogMCPResult struct {
@@ -57,6 +69,15 @@ type RegisterCatalogMCPResult struct {
 	Receipt             OperationReceipt
 	Registration        string
 	SecretFieldsPending []CatalogConfigurationField
+
+	// MCPID is the MCP server the registration created, the ID agents use.
+	MCPID string
+
+	// NextAction is the one required setup step left, or nextActionReady.
+	NextAction string
+
+	// ServerName is the display name the MCP server was added under.
+	ServerName string
 }
 
 // RegistrationDashboardSetup is the persisted, server-owned dashboard target
@@ -65,6 +86,9 @@ type RegisterCatalogMCPResult struct {
 type RegistrationDashboardSetup struct {
 	OrganizationSlug string
 	MCPServerRoute   string
+
+	// ServerName is the MCP server's display name, which may be empty.
+	ServerName string
 }
 
 // RegistrationService is the handler-facing boundary for one reviewed catalog
@@ -84,6 +108,9 @@ type RegistrationService struct {
 	clientAdmission            *ClientAdmissionService
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
+	logos                      *cardLogos
+	catalogLogos               *catalogLogos
+	signInLinks                *signInConnectLinks
 }
 
 func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
@@ -118,6 +145,23 @@ func (s *RegistrationService) WithTelemetry(telemetry LifecycleTelemetry) *Regis
 		s.telemetry = telemetry
 	}
 	return s
+}
+
+// WithCardLogos lets result cards show the logo stored for an MCP server.
+// Without it every card shows the server's first letter.
+func (s *RegistrationService) WithCardLogos(logger *slog.Logger, db *pgxpool.Pool, storage assets.BlobStore) *RegistrationService {
+	if s != nil && logger != nil && db != nil && storage != nil {
+		s.logos = &cardLogos{logger: logger, db: db, storage: storage}
+	}
+	return s
+}
+
+// cardLogo is the stored logo of a registration's MCP server, or empty.
+func (s *RegistrationService) cardLogo(ctx context.Context, principal Principal, project ResolvedProject, registrationID string) template.URL {
+	if s == nil {
+		return ""
+	}
+	return s.logos.registrationLogo(ctx, principal.OrganizationID, project.ID, registrationID)
 }
 
 func (s *RegistrationService) WithReadiness(readiness *ReadinessService) *RegistrationService {
@@ -202,8 +246,8 @@ func (s *RegistrationService) SetClientAdmission(ctx context.Context, principal 
 }
 
 // clientAdmissionTarget applies the shared preconditions of both admission
-// paths: an available deployment, the caller's operation budget, the rollout
-// gate, and an eligible project.
+// paths: an available deployment, the caller's operation budget, the
+// registration gate, and an eligible project.
 func (s *RegistrationService) clientAdmissionTarget(ctx context.Context, principal Principal, projectSlug, registrationID string) (ResolvedProject, uuid.UUID, error) {
 	if s == nil || s.gate == nil || s.store == nil || !s.clientAdmission.valid() || !s.budgets.LifecycleMetadata.valid() || projectSlug == "" || registrationID == "" {
 		return ResolvedProject{}, uuid.Nil, ErrClientAdmissionUnavailable
@@ -270,6 +314,15 @@ func (s *RegistrationService) RegistrationCatalogIdentity(ctx context.Context, p
 	return s.store.ResolveRegistrationCatalogIdentity(ctx, principal, project, registrationID)
 }
 
+// registrationIDForMCP resolves the Platform setup record behind the MCP
+// server an agent names by mcp_id, for the tool named by operation.
+func (s *RegistrationService) registrationIDForMCP(ctx context.Context, principal Principal, projectSlug, mcpID, operation string) (string, error) {
+	if s == nil || s.store == nil {
+		return "", ErrRegistrationUnavailable
+	}
+	return s.store.RegistrationIDForMCP(ctx, principal, projectSlug, mcpID, operation)
+}
+
 // DashboardSetupURL returns the existing Remote MCP server Authentication
 // settings page for a browser-catalogue registration. This is the browser-only
 // fallback for provider attachment; callers cannot provide an endpoint, source,
@@ -310,7 +363,7 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 		if s.catalog == nil {
 			return "", ErrRegistrationUnavailable
 		}
-		catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
+		catalog, err := s.inspectCatalogIdentity(ctx, input.ProviderKey, input.CatalogRef)
 		if err != nil {
 			return "", fmt.Errorf("inspect dashboard setup catalog candidate: %w", err)
 		}
@@ -318,10 +371,27 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 			return "", ErrCatalogRejected
 		}
 	}
-	return s.dashboardSettingsURL(ctx, principal, project, registrationID)
+	return s.dashboardSettingsURL(ctx, principal, project, registrationID, input.NextAction)
 }
 
-func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (string, error) {
+// dashboardSetupStep names the dashboard step a next action leaves open, as
+// the settings page's setup query parameter reads it, or "" for none.
+func dashboardSetupStep(nextAction string) string {
+	switch nextAction {
+	case nextActionSecureDashboardSetup:
+		return "credentials"
+	case nextActionContinueDashboardSetup:
+		// An administrator still has to configure the catalog server's OAuth
+		// client in the dashboard before anyone can sign in.
+		return "oauth-client"
+	case nextActionConnectSignIn:
+		return "sign-in"
+	default:
+		return ""
+	}
+}
+
+func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, nextAction string) (string, error) {
 	if s == nil || s.store == nil || s.dashboardURL == nil || registrationID == uuid.Nil {
 		return "", ErrRegistrationUnavailable
 	}
@@ -332,31 +402,56 @@ func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principa
 	if setup.OrganizationSlug == "" || setup.MCPServerRoute == "" {
 		return "", ErrRegistrationUnavailable
 	}
-	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", "x", setup.MCPServerRoute, "settings").String() + "#authentication", nil
+	settings := s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "settings")
+	// Every open step (credentials, OAuth client, sign-in) lives in the
+	// Authentication section; the step tells the page which one to explain.
+	if step := dashboardSetupStep(nextAction); step != "" {
+		settings.RawQuery = url.Values{"setup": {step}}.Encode()
+	}
+	settings.Fragment = "authentication"
+	return settings.String(), nil
 }
 
-// DashboardAuthorizationURL returns the Inspect page only after the upstream
-// provider is attached. Inspect owns the visible Connect/Authorize action.
-func (s *RegistrationService) DashboardAuthorizationURL(ctx context.Context, principal Principal, projectSlug, registrationID string) (string, error) {
+// DashboardAuthorization is where a user signs in to an MCP server's
+// upstream provider after it is attached.
+type DashboardAuthorization struct {
+	// URL is the MCP server's Inspect page, which owns the visible
+	// Connect/Authorize action.
+	URL string
+
+	// ServerName is the MCP server's display name, which may be empty.
+	ServerName string
+
+	// Logo is the MCP server's stored logo for its card, or empty.
+	Logo template.URL
+}
+
+// DashboardAuthorization returns the Inspect page only after the upstream
+// provider is attached.
+func (s *RegistrationService) DashboardAuthorization(ctx context.Context, principal Principal, projectSlug, registrationID string) (DashboardAuthorization, error) {
 	if s == nil || s.store == nil || s.dashboardURL == nil || projectSlug == "" || registrationID == "" {
-		return "", ErrRegistrationUnavailable
+		return DashboardAuthorization{}, ErrRegistrationUnavailable
 	}
 	parsedID, err := uuid.Parse(registrationID)
 	if err != nil {
-		return "", ErrSetupHandoffInvalid
+		return DashboardAuthorization{}, ErrSetupHandoffInvalid
 	}
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, projectSlug)
 	if err != nil {
-		return "", fmt.Errorf("resolve authorization setup project: %w", err)
+		return DashboardAuthorization{}, fmt.Errorf("resolve authorization setup project: %w", err)
 	}
 	setup, err := s.store.ResolveRegistrationDashboardSetup(ctx, principal, project, parsedID)
 	if err != nil {
-		return "", err
+		return DashboardAuthorization{}, err
 	}
 	if setup.OrganizationSlug == "" || setup.MCPServerRoute == "" {
-		return "", ErrRegistrationUnavailable
+		return DashboardAuthorization{}, ErrRegistrationUnavailable
 	}
-	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", "x", setup.MCPServerRoute, "inspect").String(), nil
+	return DashboardAuthorization{
+		URL:        s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "inspect").String(),
+		ServerName: setup.ServerName,
+		Logo:       s.cardLogo(ctx, principal, project, registrationID),
+	}, nil
 }
 
 // AttachDefaultIdentityProvider attaches the one OAuth provider advertised by
@@ -436,7 +531,7 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 		if s.catalog == nil {
 			return IssuedSetupHandoff{}, ErrRegistrationUnavailable
 		}
-		catalog, err := s.catalog.Inspect(ctx, candidate.ProviderKey, candidate.CatalogRef)
+		catalog, err := s.inspectCatalogIdentity(ctx, candidate.ProviderKey, candidate.CatalogRef)
 		if err != nil {
 			return IssuedSetupHandoff{}, fmt.Errorf("inspect setup handoff catalog candidate: %w", err)
 		}
@@ -501,6 +596,16 @@ type RegisterRemoteMCPResult struct {
 	Registration      string
 	NextAction        string
 	DashboardSetupURL string
+
+	// MCPID is the MCP server the registration created, the ID agents use.
+	MCPID string
+
+	// AutomaticClientRegistration says how an OAuth client is obtained from the
+	// server's provider; empty when the server needs no sign-in.
+	AutomaticClientRegistration string
+
+	// ServerName is the display name the MCP server was added under.
+	ServerName string
 }
 
 // RegisterRemoteMCP re-inspects the exact URL before persistence. An inspection
@@ -538,13 +643,17 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
 		return RegisterRemoteMCPResult{}, err
 	}
+	// The idempotency hash covers only what the caller chose: their display
+	// name, or the URL when they gave none. The upstream's own name can change
+	// between a call and its retry, so it must not change the request's hash.
+	requestedName := displayName
+	if requestedName == "" {
+		requestedName = inspection.CanonicalURL
+	}
 	if displayName == "" {
-		displayName = inspection.CanonicalURL
+		displayName = defaultDirectRemoteDisplayName(inspection)
 	}
-	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.IndexFunc(displayName, isDirectRemoteDisplayNameBreak) >= 0 {
-		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
-	}
-	configurationHash := catalogConfigurationHash(CatalogConfigurationValues{"name": displayName})
+	configurationHash := catalogConfigurationHash(CatalogConfigurationValues{"name": requestedName})
 	request := CatalogRegistrationRequest{
 		ProjectSlug:       project.Slug,
 		SourceKind:        directRemoteSourceKind,
@@ -564,9 +673,6 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 			return RegisterRemoteMCPResult{}, fmt.Errorf("converge direct remote registration: %w", err)
 		}
 	}
-	if receipt.ResultCode == receiptResultActiveCap {
-		return RegisterRemoteMCPResult{}, ErrRegistrationCap
-	}
 	if !receipt.RegistrationID.Valid {
 		return RegisterRemoteMCPResult{}, ErrRegistrationUnavailable
 	}
@@ -579,14 +685,31 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	setupURL := ""
 	nextAction := "ready"
 	if inspection.RequiresDashboardSetup {
-		setupURL, err = s.dashboardSettingsURL(ctx, principal, project, receipt.RegistrationID.UUID)
+		nextAction = nextActionSecureDashboardSetup
+		// Attachment can set up the provider's client automatically, so the
+		// only step left is the user's sign-in, which the agent can connect in
+		// chat. The dashboard link stays as the fallback.
+		if inspection.AttachmentSupported {
+			nextAction = nextActionConnectSignIn
+		}
+		// Only sign-in is a known step here. A remote that needs dashboard
+		// setup may want an OAuth client or an API key, and the inspection
+		// cannot tell which, so that link names no step.
+		linkAction := ""
+		if nextAction == nextActionConnectSignIn {
+			linkAction = nextAction
+		}
+		setupURL, err = s.dashboardSettingsURL(ctx, principal, project, receipt.RegistrationID.UUID, linkAction)
 		if err != nil {
 			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
 		}
-		nextAction = "secure_dashboard_setup_required"
+	}
+	mcpID, err := s.store.ResolveRegistrationMCPID(ctx, principal, project, receipt.RegistrationID.UUID)
+	if err != nil {
+		return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote registration server: %w", err)
 	}
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "direct_remote_registration", Phase: "complete", Outcome: "succeeded", State: ""})
-	return RegisterRemoteMCPResult{Project: project, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL}, nil
+	return RegisterRemoteMCPResult{Project: project, ServerName: displayName, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), MCPID: mcpID.String(), NextAction: nextAction, DashboardSetupURL: setupURL, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection)}, nil
 }
 
 func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal Principal, input RegisterCatalogMCPInput) (RegisterCatalogMCPResult, error) {
@@ -605,14 +728,6 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		return RegisterCatalogMCPResult{}, ErrRegistrationUnavailable
 	}
 
-	catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
-	if err != nil {
-		return RegisterCatalogMCPResult{}, fmt.Errorf("inspect registration catalog candidate: %w", err)
-	}
-	if catalog.ProviderKey != input.ProviderKey || catalog.CatalogRef != input.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
-		return RegisterCatalogMCPResult{}, ErrCatalogRejected
-	}
-
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
 	if err != nil {
 		return RegisterCatalogMCPResult{}, fmt.Errorf("resolve catalog registration project: %w", err)
@@ -620,33 +735,44 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
 		return RegisterCatalogMCPResult{}, err
 	}
+	configurationHash := catalogConfigurationHash(input.NonSecretConfig)
+	request := CatalogRegistrationRequest{
+		ProjectSlug: project.Slug, SourceKind: "catalog", CatalogProvider: input.ProviderKey, CatalogReference: input.CatalogRef,
+		ConfigurationHash: configurationHash, IdempotencyKey: input.IdempotencyKey,
+		InputHash: catalogRegistrationInputHash(project.Slug, "catalog", input.ProviderKey, input.CatalogRef, configurationHash),
+	}
+	// Find only: admission must not create or reclaim a receipt to discover prior work.
+	receipt, found, err := s.store.FindReceipt(ctx, principal, project, request, s.now())
+	if err != nil {
+		return RegisterCatalogMCPResult{}, fmt.Errorf("find catalog registration receipt: %w", err)
+	}
+	inspect := s.catalog.Inspect
+	if found {
+		inspect = s.inspectCatalogIdentity
+	}
+	catalog, err := inspect(ctx, input.ProviderKey, input.CatalogRef)
+	if err != nil {
+		return RegisterCatalogMCPResult{}, fmt.Errorf("inspect registration catalog candidate: %w", err)
+	}
+	if catalog.ProviderKey != input.ProviderKey || catalog.CatalogRef != input.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
+		return RegisterCatalogMCPResult{}, ErrCatalogRejected
+	}
 	configuration, err := catalog.resolveConfiguration(input.NonSecretConfig)
 	if err != nil {
 		return RegisterCatalogMCPResult{}, ErrCatalogConfigurationRejected
 	}
 	configuration.displayName = catalogDisplayName(catalog)
-	configurationHash := catalogConfigurationHash(input.NonSecretConfig)
-	request := CatalogRegistrationRequest{
-		ProjectSlug:       project.Slug,
-		SourceKind:        "catalog",
-		CatalogProvider:   catalog.ProviderKey,
-		CatalogReference:  catalog.CatalogRef,
-		ConfigurationHash: configurationHash,
-		IdempotencyKey:    input.IdempotencyKey,
-		InputHash:         catalogRegistrationInputHash(project.Slug, "catalog", catalog.ProviderKey, catalog.CatalogRef, configurationHash),
-	}
-	receipt, err := s.store.BeginReceipt(ctx, principal, project, request, s.now())
-	if err != nil {
-		return RegisterCatalogMCPResult{}, fmt.Errorf("begin catalog registration receipt: %w", err)
+	if !found {
+		receipt, err = s.store.BeginReceipt(ctx, principal, project, request, s.now())
+		if err != nil {
+			return RegisterCatalogMCPResult{}, fmt.Errorf("begin catalog registration receipt: %w", err)
+		}
 	}
 	if !receipt.Replayed || receipt.Status == receiptStatusPending {
 		receipt, err = s.store.ConvergeRegistration(ctx, principal, project, request, receipt)
 		if err != nil {
 			return RegisterCatalogMCPResult{}, fmt.Errorf("converge catalog registration: %w", err)
 		}
-	}
-	if receipt.ResultCode == receiptResultActiveCap {
-		return RegisterCatalogMCPResult{}, ErrRegistrationCap
 	}
 	if !receipt.RegistrationID.Valid {
 		return RegisterCatalogMCPResult{}, ErrRegistrationUnavailable
@@ -669,9 +795,28 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		}
 	}
 
+	// A server added before may already be signed in to. The stored check is
+	// the same evidence get_mcp_readiness reports; it is read, never probed.
+	ready := false
+	if receipt.AlreadyRegistered && principal.HasConnection() {
+		readiness, found, err := s.store.GetProviderReadiness(ctx, principal, project.ID, receipt.RegistrationID.UUID)
+		if err != nil {
+			return RegisterCatalogMCPResult{}, fmt.Errorf("read catalog registration readiness: %w", err)
+		}
+		ready = found && readiness.Fresh && readiness.State == ReadinessReady
+	}
+
+	mcpID, err := s.store.ResolveRegistrationMCPID(ctx, principal, project, receipt.RegistrationID.UUID)
+	if err != nil {
+		return RegisterCatalogMCPResult{}, fmt.Errorf("resolve catalog registration server: %w", err)
+	}
+
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: "succeeded", State: ""})
 	return RegisterCatalogMCPResult{
+		MCPID:               mcpID.String(),
+		NextAction:          catalogNextAction(catalog.ProviderKey, catalog.AuthSetup, len(pendingSecretFields) > 0, ready),
 		Project:             project,
+		ServerName:          configuration.displayName,
 		ProviderKey:         catalog.ProviderKey,
 		CatalogRef:          catalog.CatalogRef,
 		SetupIntent:         catalog.SetupIntent,
@@ -681,11 +826,49 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 	}, nil
 }
 
+// catalogNextAction picks the one required setup step left for a catalogue
+// registration. Sharing through a plugin is optional, so it is never a step.
+func catalogNextAction(providerKey, authSetup string, secretsPending, ready bool) string {
+	switch {
+	case secretsPending:
+		return nextActionSecureDashboardSetup
+	case ready:
+		return nextActionReady
+	case !isBrowserCatalogProviderKey(providerKey):
+		return nextActionStartSetup
+	}
+	switch authSetup {
+	case "none":
+		return nextActionReady
+	case "dcr", "cimd":
+		// The OAuth client is set up automatically, so only the user's
+		// sign-in is left, and the agent can connect it in chat.
+		return nextActionConnectSignIn
+	default:
+		// "manual" needs an administrator in the dashboard; "unknown" may.
+		return nextActionContinueDashboardSetup
+	}
+}
+
 // isDirectRemoteDisplayNameBreak rejects values that change the structure of a
 // rendered line or terminal message. A remote display name crosses dashboard,
 // plugin, audit, and MCP surfaces, so accepting only CR/LF is insufficient.
 func isDirectRemoteDisplayNameBreak(value rune) bool {
 	return unicode.IsControl(value) || value == '\u2028' || value == '\u2029'
+}
+
+// defaultDirectRemoteDisplayName names a remote MCP whose caller gave no name:
+// the upstream's own server name, then the URL's host name, then the URL.
+func defaultDirectRemoteDisplayName(inspection DirectRemoteInspection) string {
+	if name := directRemoteServerName(inspection.ServerName); name != "" {
+		return name
+	}
+	if parsed, err := url.Parse(inspection.CanonicalURL); err == nil {
+		if host := directRemoteServerName(parsed.Hostname()); host != "" {
+			return host
+		}
+	}
+	return inspection.CanonicalURL
 }
 
 func catalogDisplayName(catalog CatalogDetails) string {
@@ -704,4 +887,14 @@ func (s *RegistrationService) requireEligibleTarget(ctx context.Context, organiz
 		return ErrTargetIneligible
 	}
 	return nil
+}
+
+// inspectCatalogIdentity is used only after persistence has authorized retained work.
+func (s *RegistrationService) inspectCatalogIdentity(ctx context.Context, providerKey, catalogRef string) (CatalogDetails, error) {
+	if catalog, ok := s.catalog.(interface {
+		InspectIdentity(context.Context, string, string) (CatalogDetails, error)
+	}); ok {
+		return catalog.InspectIdentity(ctx, providerKey, catalogRef)
+	}
+	return s.catalog.Inspect(ctx, providerKey, catalogRef)
 }

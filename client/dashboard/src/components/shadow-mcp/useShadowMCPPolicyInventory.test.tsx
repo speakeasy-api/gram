@@ -1,7 +1,8 @@
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -30,6 +31,7 @@ function inventoryServer(
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: undefined,
     lastSeen: new Date("2026-01-02T10:00:00Z"),
+    blockedCallCount: 0,
     observedUseCount: 0,
     requestCount: 0,
     serverName: undefined,
@@ -72,10 +74,9 @@ describe("useShadowMCPPolicyInventory", () => {
     const linearServer = inventoryServer("https://linear.example.com/mcp");
     listInventory
       .mockResolvedValueOnce({
-        servers: [githubServer],
-        nextCursor: "page-2",
+        result: { servers: [githubServer], nextCursor: "page-2" },
       })
-      .mockResolvedValueOnce({ servers: [linearServer] });
+      .mockResolvedValueOnce({ result: { servers: [linearServer] } });
 
     const { result } = renderHook(
       () => useShadowMCPPolicyInventory("project-1", true),
@@ -120,7 +121,7 @@ describe("useShadowMCPPolicyInventory", () => {
     const githubServer = inventoryServer("https://github.example.com/mcp");
     listInventory
       .mockRejectedValueOnce(new Error("inventory unavailable"))
-      .mockResolvedValueOnce({ servers: [githubServer] });
+      .mockResolvedValueOnce({ result: { servers: [githubServer] } });
 
     const { result } = renderHook(
       () => useShadowMCPPolicyInventory("project-1", true),

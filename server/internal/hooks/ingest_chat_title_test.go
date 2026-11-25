@@ -1,0 +1,258 @@
+package hooks
+
+import (
+	"context"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/chat"
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+)
+
+// recordingTitleGenerator records the chats unified ingest asked to name.
+type recordingTitleGenerator struct {
+	mu      sync.Mutex
+	chatIDs []string
+}
+
+func (g *recordingTitleGenerator) ScheduleChatTitleGeneration(_ context.Context, chatID, _, _ string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.chatIDs = append(g.chatIDs, chatID)
+	return nil
+}
+
+func (g *recordingTitleGenerator) scheduled() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]string(nil), g.chatIDs...)
+}
+
+// A session is named once the assistant has answered: nothing is scheduled
+// for the prompt alone, and the stand-in it was seeded with is one the title
+// generator re-derives from the stored prompt.
+func TestIngest_SchedulesChatTitleGenerationOnAssistantTurns(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	titles := &recordingTitleGenerator{}
+	ti.service.chatTitleGenerator = titles
+
+	sessionID := "title-ingest-" + uuid.NewString()
+	prompt := "combine the domain verification task into the main setup task, we no longer need it standing on its own"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	_, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
+	require.NoError(t, err)
+	require.Empty(t, titles.scheduled())
+
+	reply := "Merged the two tasks; the verification steps are now step three of setup."
+	response := canonicalIngestPayload("claude", "assistant.responded", sessionID)
+	response.Data = &gen.HookIngestData{Message: &gen.HookMessageData{Text: &reply}}
+	_, err = ti.service.IngestAuthenticated(ctx, authCtx, response)
+	require.NoError(t, err)
+
+	chatID := sessionIDToUUID(sessionID).String()
+	require.Equal(t, []string{chatID}, titles.scheduled())
+
+	stored, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{
+		ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, chat.DerivedTitle(prompt), stored.Title.String)
+	require.True(t, chat.IsDerivedTitle(stored.Title.String, prompt))
+}
+
+// Tool traffic carries no topic: it schedules nothing, and a chat it opens is
+// seeded with the surface placeholder rather than a tool name generation could
+// never recognize as a stand-in.
+func TestIngest_ToolTrafficSeedsPlaceholderWithoutScheduling(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	titles := &recordingTitleGenerator{}
+	ti.service.chatTitleGenerator = titles
+
+	sessionID := "title-tools-" + uuid.NewString()
+	toolName := "Bash"
+	request := canonicalIngestPayload("claude", "tool.requested", sessionID)
+	request.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{Name: &toolName}}
+	_, err := ti.service.IngestAuthenticated(ctx, authCtx, request)
+	require.NoError(t, err)
+
+	completion := canonicalIngestPayload("claude", "tool.completed", sessionID)
+	completion.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{Name: &toolName, Output: "exit status 0"}}
+	_, err = ti.service.IngestAuthenticated(ctx, authCtx, completion)
+	require.NoError(t, err)
+
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, messages, 2, "both tool rows landed, so nothing was scheduled because of the event type")
+	require.Empty(t, titles.scheduled())
+
+	stored, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{
+		ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.True(t, chat.IsPlaceholderTitle(stored.Title.String), "seeded %q instead of a placeholder", stored.Title.String)
+}
+
+// A chat whose first captured event is a tool result is seeded with the surface
+// placeholder, not a cut of the tool's output.
+func TestIngest_ToolResultOpeningChatSeedsPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "title-tool-result-" + uuid.NewString()
+	toolName := "Bash"
+	completion := canonicalIngestPayload("claude", "tool.completed", sessionID)
+	completion.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{Name: &toolName, Output: "exit status 0"}}
+	_, err := ti.service.IngestAuthenticated(ctx, authCtx, completion)
+	require.NoError(t, err)
+
+	stored, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{
+		ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.True(t, chat.IsPlaceholderTitle(stored.Title.String), "seeded %q instead of a placeholder", stored.Title.String)
+}
+
+// An attachment-only event opens its chat under the resolved surface's
+// placeholder, not the one for the raw adapter the hook reported.
+func TestIngest_AttachmentOnlyCoworkChatSeedsCoworkPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "title-attachment-" + uuid.NewString()
+	surface := surfaceCowork
+	payload := canonicalIngestPayload("claude", "assistant.responded", sessionID)
+	payload.Session.Surface = &surface
+	payload.Data = &gen.HookIngestData{PromptAttachments: []*gen.HookPromptAttachmentEntry{{
+		EntryUUID:      "attachment-" + uuid.NewString(),
+		AttachmentKind: "file",
+		Content:        "quarterly numbers",
+	}}}
+	_, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
+	require.NoError(t, err)
+
+	stored, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{
+		ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, chat.DefaultCoworkChatTitle, stored.Title.String)
+}
+
+// A Claude Tag session is titled after its channel on every wake, so a
+// generated name would only be overwritten.
+func TestIngest_DoesNotScheduleChatTitleGenerationForClaudeTag(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	titles := &recordingTitleGenerator{}
+	ti.service.chatTitleGenerator = titles
+
+	sessionID := "title-tag-" + uuid.NewString()
+	prompt := `<wake reason="channel-activity"><channel id="DEMO_CHANNEL"><message from="human" trigger="true">&lt;@DEMO_BOT|Claude&gt; can you look into this</message></channel></wake>`
+	payload := canonicalIngestPayload("claude-code", "prompt.submitted", sessionID)
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	ti.service.recordCanonicalHook(ctx, payload, authCtx, canonicalActor{UserID: "", Email: ""}, time.Now(), "")
+
+	reply := "Looking into it now."
+	response := canonicalIngestPayload("claude-code", "assistant.responded", sessionID)
+	response.Data = &gen.HookIngestData{Message: &gen.HookMessageData{Text: &reply}}
+	ti.service.recordCanonicalHook(ctx, response, authCtx, canonicalActor{UserID: "", Email: ""}, time.Now(), "")
+
+	require.Empty(t, titles.scheduled())
+
+	stored, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{
+		ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Claude Tag in #DEMO_CHANNEL", stored.Title.String)
+}
+
+// promptReminders is the <system-reminder> stack Cowork and Claude Code put in
+// front of a prompt.
+const promptReminders = "<system-reminder>This session can reach the connected device, but no folder is connected yet.</system-reminder>\n" +
+	"<system-reminder>The user's timezone is America/New_York (UTC-05:00).</system-reminder>\n"
+
+func TestCanonicalChatTitle_SkipsLeadingSystemReminders(t *testing.T) {
+	t.Parallel()
+
+	text := promptReminders + "draft the quarterly report outline"
+	payload := canonicalIngestPayload(agentVariantCowork, "prompt.submitted", "reminder-title")
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &text}}
+
+	require.Equal(t, "draft the quarterly report outline", canonicalChatTitle(payload, "", agentVariantCowork))
+}
+
+// A prompt that is only reminders seeds the surface placeholder, never a raw
+// reminder.
+func TestCanonicalChatTitle_SeedsPlaceholderForReminderOnlyPrompt(t *testing.T) {
+	t.Parallel()
+
+	text := promptReminders
+	payload := canonicalIngestPayload(agentVariantCowork, "prompt.submitted", "reminder-only-title")
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &text}}
+
+	require.Equal(t, chat.DefaultCoworkChatTitle, canonicalChatTitle(payload, "", agentVariantCowork))
+}
+
+func TestClaudeTranscriptTitle_SkipsReminderOnlyUserRows(t *testing.T) {
+	t.Parallel()
+
+	reminderOnly := claudeTranscriptRow{role: "user", content: "<system-reminder>No folder is connected yet.</system-reminder>"}
+	prompt := claudeTranscriptRow{role: "user", content: "rename the exported files"}
+
+	require.Equal(t, "rename the exported files", claudeTranscriptTitle([]claudeTranscriptRow{reminderOnly, prompt}, agentVariantCowork))
+	require.Equal(t, chat.DefaultCoworkChatTitle, claudeTranscriptTitle([]claudeTranscriptRow{reminderOnly}, agentVariantCowork))
+}
+
+// An OpenClaw cron run opens with a "[cron:<uuid> <job>]" envelope. The chat is
+// named after the job, and that name is not a stand-in title generation would
+// replace.
+func TestCanonicalChatTitle_NamesOpenClawCronRunsAfterTheJob(t *testing.T) {
+	t.Parallel()
+
+	text := "[cron:0f0e0d0c-0b0a-4908-8706-050403020100 weekly-skill-review] Review the skill collection."
+	payload := canonicalIngestPayload("openclaw", "prompt.submitted", "cron-title")
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &text}}
+
+	title := canonicalChatTitle(payload, "", "openclaw")
+	require.Equal(t, "Cron: weekly-skill-review", title)
+	require.False(t, chat.IsPlaceholderTitle(title))
+	require.False(t, chat.IsDerivedTitle(title, text))
+}

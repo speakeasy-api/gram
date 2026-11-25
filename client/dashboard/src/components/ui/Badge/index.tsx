@@ -1,9 +1,10 @@
+// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
-import { BadgeVariant, BadgeSize } from "@/components/ui/lib/types";
+import type { BadgeVariant, BadgeSize } from "@/components/ui/lib/types";
 import { Skeleton } from "../Skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../Tooltip";
 

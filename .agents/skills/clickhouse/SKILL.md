@@ -1,18 +1,49 @@
 ---
 name: clickhouse
-description: Use when changing or reviewing Gram ClickHouse schemas, migrations, queries, inserts, tests, or performance for analytics, telemetry, risk, authz, and spend features
+description: Use when changing or reviewing Speakeasy ClickHouse schemas, migrations, CHECK constraints, queries, inserts, access principals, bootstrap SQL, Cloud compatibility, partial migration failures, or performance for analytics, telemetry, risk, authz, and spend features
 ---
 
 ## Official ClickHouse guidance
 
-Gram conventions and the checked-in schema remain authoritative. Also use:
+Speakeasy conventions and the checked-in schema remain authoritative. Also use:
 
 - `clickhouse-best-practices` when reviewing or changing a ClickHouse schema, query, insert strategy, or configuration. Read its applicable rule files and cite the rules in review findings.
 - `clickhouse-architecture-advisor` when choosing between ingestion patterns, raw tables and materialized views, partitioning or retention strategies, joins or enrichment, or mutable-state models.
 
+## Infrastructure ownership and Cloud compatibility
+
+Local ClickHouse success is **not** proof of ClickHouse Cloud compatibility. Local containers and CI accept DDL and authentication settings that Cloud rejects.
+
+| Object                                                         | Owner                                          |
+| -------------------------------------------------------------- | ---------------------------------------------- |
+| Databases, users, roles, credentials, role settings            | Terraform; never application schema migrations |
+| Tables, views, materialized views, schema-bound grants/revokes | Atlas migrations, mirrored in golang-migrate   |
+| Local/CI/Atlas development-database prerequisites              | `local/clickhouse/initdb/01-marts-definer.sql` |
+
+Provision infrastructure prerequisites **before** applying dependent migrations. Do not put `CREATE DATABASE`, `CREATE USER`, or `CREATE ROLE` into desired schema files or either migration flavor, or drop infrastructure-owned objects in down migrations. If generation proposes these statements, fix the bootstrap/baseline and regenerate; do not accept them just because local replay passes.
+
+**Cloud footguns:**
+
+- `CREATE DATABASE ... ENGINE = Atomic` is not supported in ClickHouse Cloud. Do not explicitly select the local database engine for Cloud.
+- `CREATE USER ... HOST NONE` without authentication is still a passwordless user definition. Cloud's default policy rejects it; `HOST NONE` does not waive the password requirement. Never relax that policy to accommodate a definer.
+- Provision Cloud definers through Terraform with a generated password that is not exposed to people, logs, outputs, or this repository. A definer does not need an interactive login, but still needs valid authentication configuration.
+
+**Local bootstrap is an exception, not a deployment template.** `01-marts-definer.sql` supplies the `marts` database, `marts_reader` role/limits, and `marts_definer` principal to local containers, CI replay, and Atlas's development database (`server/atlas.hcl`). Keep it idempotent. Its passwordless `HOST NONE` user is local-only; never copy it into Cloud provisioning or migrations.
+
+For marts, edit `server/clickhouse/mart.sql`. Views use `DEFINER = marts_definer SQL SECURITY DEFINER`: reads of underlying tables run with the definer's privileges, not the reader's. Migrations own the definer's narrowly scoped source grants and the reader's grants on approved views, **not** the principals. Atlas ignores grants in desired state, so keep explicit matching grants/revokes in both migration flavors. See [ClickHouse view SQL security](https://clickhouse.com/docs/sql-reference/statements/create/view#sql_security).
+
+## Partially applied migrations
+
+ClickHouse migrations can fail after earlier statements have taken effect. Editing the failed file and rehashing does **not** reconcile those effects with Atlas's recorded progress; repeated in-place edits can leave the runner stuck.
+
+- Treat published/applied migration files as immutable during normal development. Use a forward migration; if a failed revision prevents progress, recovery requires an explicit operator-controlled repair, not another automatic retry.
+- Before repair, stop concurrent migration/reconciliation attempts and inspect both the actual objects/grants and Atlas revision state. Identify the exact corrected migration artifact and which statements already ran.
+- Reconcile the database to that artifact deliberately. Rewinding with `atlas migrate set` changes revision bookkeeping; it does **not** undo SQL. Only consider rewinding to the preceding revision and applying one migration after proving **every** statement is safe to replay and accounting for existing effects. `IF NOT EXISTS` alone does not prove existing objects have the intended definition.
+- Verify database state and migration status before resuming automated reconciliation. Never blindly rewind, mark a failed migration applied, or clear its error to bypass unfinished work.
+
 ## Schema design and evolution
 
-The ClickHouse schema is defined in `server/clickhouse/schema.sql`. To change it, edit that file and generate a migration:
+The ClickHouse schema is defined in `server/clickhouse/schema.sql`, with marts views in `server/clickhouse/mart.sql`. Edit the relevant desired schema file and generate a migration:
 
 ```sh
 mise run clickhouse:diff <migration-name>
@@ -23,9 +54,15 @@ This produces migrations in **two flavors** that must always stay in sync:
 - `server/clickhouse/migrations/` — **Atlas** format. This is the source of truth: only these migrations are carried forward and applied in production.
 - `server/clickhouse/local/golang_migrate/` — **golang-migrate** format (`.up.sql`/`.down.sql` pairs). Used only for local development, so contributors without an Atlas Pro login can still run migrations.
 
-`mise run clickhouse:diff` generates both flavors together. If you ever hand-edit a migration (or the diff output), make the equivalent change in **both** directories, then run `mise run clickhouse:hash` to regenerate `atlas.sum`. Apply pending migrations locally with `mise run clickhouse:migrate`.
+`mise run clickhouse:diff` generates both flavors together. When adjusting a newly generated, unpublished migration (for example, adding grants Atlas ignores), make the equivalent change in **both** directories, then run `mise run clickhouse:hash` to regenerate `atlas.sum`. Hashing updates checksums, not database or revision state. Apply pending migrations locally with `mise run clickhouse:migrate`.
+
+**Every column needs a data classification.** End each column `COMMENT` with a line `@access: <class>` (for example `COMMENT 'Raw log body.\n@access: opaque-restricted'`). Classes are `confidential` (internal IDs, timestamps, Speakeasy-controlled enums, counts, short labels), `confidential-pii` (emails, personal names, IPs, person IDs in external IdPs), `opaque-confidential` (short customer- or producer-chosen identifiers and labels support needs: tool, skill, agent, MCP server and client names, span and event names, producer session IDs, attribute keys), `secret-restricted` (credentials, tokens and their hashes, encrypted auth material), `restricted` (billing-system IDs, customer-configured endpoints, other known-sensitive or uncertain data) or `opaque-restricted` (arbitrary customer, user or model content: messages, prompts, tool payloads, customer JSON, free-form descriptions). A `Nested(...)` column shares one comment across its subcolumns, so use the strictest class among them. The server test suite in CI fails on unclassified columns (run `go test ./internal/dataclassification/...` from `server/` locally; needs Docker); see `server/internal/dataclassification`.
+
+**Keep `CHECK` constraints minimal.** ClickHouse evaluates `CONSTRAINT ... CHECK` on every insert and rejects the whole batch on a violation. Use only simple single-column shape checks: `notEmpty(col)` or a length bound (`length(col) <= 64`). Do not encode enums (`status IN (...)`, `has([...], status)`), numeric ranges, or rules that relate columns (`(status = 'failed') = notEmpty(failure_reason)`). Each rule change would need an `ALTER TABLE ... DROP CONSTRAINT` / `ADD CONSTRAINT` migration in both flavors, while the Go parser or writer that builds the rows changes with the code. Validate there, drop or log rows that fail before the insert, and test it there. Decline reviewer suggestions to add or rely on such constraints, and do not describe their absence as a gap.
 
 **No semicolons in `COMMENT '...'` strings.** golang-migrate splits statements naively, so a semicolon inside a column/table comment breaks its parser and the local migrations fail to replay. Rephrase the comment instead.
+
+**No backfills in migrations.** Migrations ship DDL only: tables, views, materialized views and their grants. Populating a new table or materialized view from existing rows is an operator step that a human runs outside Atlas, in chunks. A backfill statement inside a migration can take down the replica executing it, and the file then stays partially applied and blocks every later migration.
 
 Three CI checks guard this on every PR:
 
@@ -50,7 +87,7 @@ The pre-aggregated **materialized views are the default read path** for anything
 - arbitrary user-supplied attribute-path filters (e.g. `@user.region`) that a fixed-column summary cannot express,
 - an event shape not yet captured by any summary (e.g. traceless trigger events).
 
-**Why it matters:** raw `telemetry_logs` reads are full-range table scans with per-row JSON extraction; the summary views are pre-aggregated and cheap. A filter dropdown, summary card, count, or default list that scans raw logs on every page load is a **performance bug** — the unified Tool Logs page regressed exactly this way before being moved back onto `trace_summaries`. If a summary is missing a column you need, prefer **extending the MV (+ a backfill migration)** over falling back to a raw-log scan.
+**Why it matters:** raw `telemetry_logs` reads are full-range table scans with per-row JSON extraction; the summary views are pre-aggregated and cheap. A filter dropdown, summary card, count, or default list that scans raw logs on every page load is a **performance bug** — the unified Tool Logs page regressed exactly this way before being moved back onto `trace_summaries`. If a summary is missing a column you need, prefer **extending the MV (+ an operator-run backfill, see "No backfills in migrations")** over falling back to a raw-log scan.
 
 **Reading `trace_summaries`** (one row per `trace_id`, `AggregatingMergeTree`): `GROUP BY trace_id`, use `*Merge` combinators for `AggregateFunction` columns (`anyIfMerge(http_status_code)`) and plain `any()`/`min()`/`sum()`/`max()` for `SimpleAggregateFunction` columns. Tool calls carry a real `trace_id` (recorded by the gateway in `ToolProxy.Do`), so hosted MCP, shadow MCP, skill, and local tool events are all present in the view.
 
@@ -107,8 +144,9 @@ When asked to add a new ClickHouse query to the telemetry package:
 - Use the target package's existing ClickHouse fixture pattern (`testenv.Launch` or `testenv.NewTestClickhouse`) and a real ClickHouse container.
 - For `async_insert=0`, read directly after the insert.
 - For `async_insert=1, wait_for_async_insert=1`, read directly after the insert returns.
-- For `async_insert=1, wait_for_async_insert=0`, call `testenv.FlushClickHouseAsyncInserts(t, conn)` after the application issues the write and before reading. Synchronize any application goroutine first; do not use `time.Sleep` or polling to wait for the async queue.
-- Do not use `clickhouse.WithAsync(false)` to request synchronous insertion: it enables fire-and-forget async inserts. Omit async options or set `async_insert=0` explicitly.
+- For fire-and-forget writes, set only `async_insert=1` on the query and leave `wait_for_async_insert` to the connection: production sets 0, and the test connection sets 1, so tests read directly after the insert returns. Synchronize any application goroutine that issues the write before reading. Never pin `wait_for_async_insert=0` per query; it overrides the test connection and makes reads race the async queue. Do not flush the queue with `SYSTEM FLUSH ASYNC INSERT QUEUE` as a barrier (it can miss batches already dequeued for a background flush), and do not use `time.Sleep` or polling, which only hides the race.
+- Every insert states its async posture. ClickHouse defaults `async_insert` to 1 since 26.2, so an insert that sends no async settings inherits it plus the server connection's `wait_for_async_insert=0` and becomes fire-and-forget in production, while tests (connection `async_insert=0`) never notice. Use `async_insert=0`, or `async_insert=1` with `wait_for_async_insert=1` when the caller reads its own writes. Use `async_insert=0` when a table has CHECK constraints whose violations the caller reports per insert: an async flush merges rows from many queries into one block, so one writer's bad row fails every insert in that flush.
+- Do not use `clickhouse.WithAsync(false)` to request synchronous insertion: it enables fire-and-forget async inserts. Set `async_insert=0` explicitly instead; omitting async options is fire-and-forget on the server connection too.
 - Use table-driven tests with descriptive `it`-prefix names and helper functions for test data insertion.
 
 See `server/internal/telemetry/README.md` for comprehensive documentation.

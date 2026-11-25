@@ -26,6 +26,8 @@ type CreateMetaMcpServerRequestBody struct {
 	// The visibility of the gateway. Defaults to private, which requires callers
 	// to authenticate.
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The allowed network surfaces. Omit to default to public_only.
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 }
 
 // UpdateMetaMcpServerRequestBody is the type of the "metaMcp" service
@@ -40,6 +42,17 @@ type UpdateMetaMcpServerRequestBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the gateway. Omit to leave it unchanged.
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The allowed network surfaces. Omit to preserve the stored mode.
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
+	// Custom server instructions replace Speakeasy's built-in gateway instructions
+	// in MCP initialize and server/discover responses. Omit to leave them
+	// unchanged; send an empty string to restore Speakeasy's built-in gateway
+	// instructions. Limited to 10000 Unicode characters after removing NUL
+	// characters and trimming whitespace.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// The default discovery mode for connections without an explicit override.
+	// Omit to preserve the stored default.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
 }
 
 // AddMetaMcpMemberRequestBody is the type of the "metaMcp" service
@@ -78,6 +91,19 @@ type CreateMetaMcpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the gateway.
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// Operator-authored server instructions returned in the gateway's MCP
+	// initialize response. Null when the gateway serves Speakeasy's built-in
+	// instructions.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this gateway can select Code Mode. True only when the code runtime
+	// is available, the organization has Code Mode, and the gateway requires
+	// sign-in through a user session issuer.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
+	// The effective default discovery mode. Unconfigured connections follow this
+	// value.
+	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -102,6 +128,19 @@ type GetMetaMcpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the gateway.
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// Operator-authored server instructions returned in the gateway's MCP
+	// initialize response. Null when the gateway serves Speakeasy's built-in
+	// instructions.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this gateway can select Code Mode. True only when the code runtime
+	// is available, the organization has Code Mode, and the gateway requires
+	// sign-in through a user session issuer.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
+	// The effective default discovery mode. Unconfigured connections follow this
+	// value.
+	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -132,6 +171,19 @@ type UpdateMetaMcpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the gateway.
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// Operator-authored server instructions returned in the gateway's MCP
+	// initialize response. Null when the gateway serves Speakeasy's built-in
+	// instructions.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this gateway can select Code Mode. True only when the code runtime
+	// is available, the organization has Code Mode, and the gateway requires
+	// sign-in through a user session issuer.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
+	// The effective default discovery mode. Unconfigured connections follow this
+	// value.
+	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -1866,6 +1918,19 @@ type MetaMcpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the gateway.
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// Operator-authored server instructions returned in the gateway's MCP
+	// initialize response. Null when the gateway serves Speakeasy's built-in
+	// instructions.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this gateway can select Code Mode. True only when the code runtime
+	// is available, the organization has Code Mode, and the gateway requires
+	// sign-in through a user session issuer.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
+	// The effective default discovery mode. Unconfigured connections follow this
+	// value.
+	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -1898,6 +1963,10 @@ func NewCreateMetaMcpServerResponseBody(res *types.MetaMcpServer) *CreateMetaMcp
 		Name:                res.Name,
 		UserSessionIssuerID: res.UserSessionIssuerID,
 		Visibility:          string(res.Visibility),
+		NetworkAccessMode:   string(res.NetworkAccessMode),
+		Instructions:        res.Instructions,
+		CodeModeEnabled:     res.CodeModeEnabled,
+		DiscoveryMode:       res.DiscoveryMode,
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 		MemberCount:         res.MemberCount,
@@ -1915,6 +1984,10 @@ func NewGetMetaMcpServerResponseBody(res *types.MetaMcpServer) *GetMetaMcpServer
 		Name:                res.Name,
 		UserSessionIssuerID: res.UserSessionIssuerID,
 		Visibility:          string(res.Visibility),
+		NetworkAccessMode:   string(res.NetworkAccessMode),
+		Instructions:        res.Instructions,
+		CodeModeEnabled:     res.CodeModeEnabled,
+		DiscoveryMode:       res.DiscoveryMode,
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 		MemberCount:         res.MemberCount,
@@ -1951,6 +2024,10 @@ func NewUpdateMetaMcpServerResponseBody(res *types.MetaMcpServer) *UpdateMetaMcp
 		Name:                res.Name,
 		UserSessionIssuerID: res.UserSessionIssuerID,
 		Visibility:          string(res.Visibility),
+		NetworkAccessMode:   string(res.NetworkAccessMode),
+		Instructions:        res.Instructions,
+		CodeModeEnabled:     res.CodeModeEnabled,
+		DiscoveryMode:       res.DiscoveryMode,
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 		MemberCount:         res.MemberCount,
@@ -3337,6 +3414,10 @@ func NewCreateMetaMcpServerPayload(body *CreateMetaMcpServerRequestBody, session
 		visibility := types.MetaMcpServerVisibility(*body.Visibility)
 		v.Visibility = &visibility
 	}
+	if body.NetworkAccessMode != nil {
+		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
+		v.NetworkAccessMode = &networkAccessMode
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3374,10 +3455,16 @@ func NewUpdateMetaMcpServerPayload(body *UpdateMetaMcpServerRequestBody, session
 		ID:                  *body.ID,
 		Name:                *body.Name,
 		UserSessionIssuerID: body.UserSessionIssuerID,
+		Instructions:        body.Instructions,
+		DiscoveryMode:       body.DiscoveryMode,
 	}
 	if body.Visibility != nil {
 		visibility := types.MetaMcpServerVisibility(*body.Visibility)
 		v.Visibility = &visibility
+	}
+	if body.NetworkAccessMode != nil {
+		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
+		v.NetworkAccessMode = &networkAccessMode
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -3475,6 +3562,11 @@ func ValidateCreateMetaMcpServerRequestBody(body *CreateMetaMcpServerRequestBody
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private"}))
 		}
 	}
+	if body.NetworkAccessMode != nil {
+		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
+		}
+	}
 	return
 }
 
@@ -3506,6 +3598,16 @@ func ValidateUpdateMetaMcpServerRequestBody(body *UpdateMetaMcpServerRequestBody
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private"}))
+		}
+	}
+	if body.NetworkAccessMode != nil {
+		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
+		}
+	}
+	if body.DiscoveryMode != nil {
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
 		}
 	}
 	return

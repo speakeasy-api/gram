@@ -23,6 +23,65 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
+func TestDeploymentsService_PrepareAndProcessRedeploy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
+
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	asset, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ContentType:   "application/x-yaml",
+		ContentLength: int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err)
+
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-prepare-redeploy-initial",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{{
+			AssetID: asset.Asset.ID,
+			Name:    "initial-doc",
+			Slug:    "initial-doc",
+		}},
+		Functions: []*gen.AddFunctionsForm{},
+		Packages:  []*gen.AddDeploymentPackageForm{},
+	})
+	require.NoError(t, err)
+
+	payload := &gen.RedeployPayload{DeploymentID: initial.Deployment.ID}
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsRedeploy)
+	require.NoError(t, err)
+
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction is the behavior under test.
+	require.NoError(t, err)
+	rolledBack, err := ti.service.PrepareRedeploy(ctx, tx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "created", rolledBack.Status)
+	require.NoError(t, tx.Rollback(ctx))
+
+	_, err = ti.service.ProcessRedeploy(ctx, rolledBack.ID)
+	require.Error(t, err)
+	afterRollbackCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeploymentsRedeploy)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterRollbackCount)
+
+	tx, err = ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction is the behavior under test.
+	require.NoError(t, err)
+	prepared, err := ti.service.PrepareRedeploy(ctx, tx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "created", prepared.Status)
+	require.NoError(t, tx.Commit(ctx))
+
+	processed, err := ti.service.ProcessRedeploy(ctx, prepared.ID)
+	require.NoError(t, err)
+	require.Equal(t, "completed", processed.Deployment.Status)
+	require.Equal(t, initial.Deployment.ID, *processed.Deployment.ClonedFrom)
+
+	replayed, err := ti.service.ProcessRedeploy(ctx, prepared.ID)
+	require.NoError(t, err)
+	require.Equal(t, processed.Deployment.ID, replayed.Deployment.ID)
+	require.Equal(t, "completed", replayed.Deployment.Status)
+}
+
 func TestDeploymentsService_Redeploy_BasicCloning(t *testing.T) {
 	t.Parallel()
 
@@ -401,6 +460,14 @@ func TestDeploymentsService_Redeploy_Validation(t *testing.T) {
 
 	assetStorage := assetstest.NewTestBlobStore(t)
 	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	t.Run("missing transaction", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := ti.service.PrepareRedeploy(ctx, nil, &gen.RedeployPayload{DeploymentID: uuid.NewString()})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "transaction is required")
+	})
 
 	t.Run("missing deployment ID", func(t *testing.T) {
 		t.Parallel()

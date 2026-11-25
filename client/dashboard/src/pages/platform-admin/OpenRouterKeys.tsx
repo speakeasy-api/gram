@@ -19,7 +19,12 @@ import { useEnableAdminOpenRouterKeyMutation } from "@gram/client/react-query/en
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
+import {
+  causeLabels,
+  effectiveDisabled,
+  keyAction,
+} from "./openRouterKeyState";
+import { StrictPlatformAdminGate } from "./StrictPlatformAdminGate";
 
 // Rows per page; also the ceiling on concurrent live usage fetches, since
 // only mounted rows request usage.
@@ -51,33 +56,11 @@ export default function PlatformAdminOpenRouterKeys(): JSX.Element {
   );
 }
 
-// Unlike PlatformAdminGate, no local-dev bypass: this page manages live
-// upstream OpenRouter credentials across every organization, so it stays
-// strictly admin-gated like Remote Identity Providers. Local developers can
-// still reach it through the impersonation toggle on the Overview page, which
-// flips the platform-admin flag itself.
-function StrictPlatformAdminGate({
-  children,
-}: {
-  children: React.ReactNode;
-}): JSX.Element {
-  const isPlatformAdmin = useIsPlatformAdmin();
-
-  if (!isPlatformAdmin) {
-    return (
-      <Text muted className="py-8 text-center">
-        This page is available to platform admins only.
-      </Text>
-    );
-  }
-
-  return <>{children}</>;
-}
-
 // Usage is fetched live per visible row rather than stored: nothing in the
 // database records current spend, and the periodic credits monitor only emits
 // metrics for alerting.
 function UsageCell({ row }: { row: AdminOpenRouterKey }): JSX.Element {
+  const disabled = effectiveDisabled(row);
   const usage = useAdminOpenRouterKeyUsage(
     {
       organizationId: row.organizationId,
@@ -85,14 +68,14 @@ function UsageCell({ row }: { row: AdminOpenRouterKey }): JSX.Element {
     },
     undefined,
     {
-      enabled: !row.disabled,
+      enabled: !disabled,
       staleTime: 5 * 60 * 1000,
       retry: false,
       throwOnError: false,
     },
   );
 
-  if (row.disabled) {
+  if (disabled) {
     return (
       <SimpleTooltip tooltip="Disabled keys are not polled for usage.">
         <Text muted small>
@@ -127,36 +110,37 @@ function KeysTable(): JSX.Element {
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useAdminOpenRouterKeys();
   const [search, setSearch] = useState("");
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-  const invalidate = () => {
-    void invalidateAllAdminOpenRouterKeys(queryClient);
-  };
+  const invalidate = () => invalidateAllAdminOpenRouterKeys(queryClient);
 
   const disable = useDisableAdminOpenRouterKeyMutation({
-    onSuccess: (key) => {
+    onSuccess: async (key) => {
       toast.success(
-        `Disabled the ${key.keyType} key for ${key.organizationName}.`,
+        `Admin lock added to the ${key.keyType} key for ${key.organizationName}.`,
       );
-      invalidate();
+      await invalidate();
     },
     onError: (err) => {
       toast.error(
         err instanceof Error ? err.message : "Failed to disable the key",
       );
     },
+    onSettled: () => setPendingKey(null),
   });
   const enable = useEnableAdminOpenRouterKeyMutation({
-    onSuccess: (key) => {
+    onSuccess: async (key) => {
       toast.success(
-        `Enabled the ${key.keyType} key for ${key.organizationName}.`,
+        `Admin lock removed from the ${key.keyType} key for ${key.organizationName}.`,
       );
-      invalidate();
+      await invalidate();
     },
     onError: (err) => {
       toast.error(
-        err instanceof Error ? err.message : "Failed to enable the key",
+        err instanceof Error ? err.message : "Failed to remove admin lock",
       );
     },
+    onSettled: () => setPendingKey(null),
   });
 
   const keys = useMemo(() => {
@@ -180,30 +164,43 @@ function KeysTable(): JSX.Element {
     resetOn: [search],
   });
 
+  const mutationPending =
+    pendingKey !== null || disable.isPending || enable.isPending;
+
   const rowActions = (row: AdminOpenRouterKey): Action[] => {
     const keyType = row.keyType === "internal" ? "internal" : "chat";
     const body = { organizationId: row.organizationId, keyType } as const;
+    const action = keyAction(row.disableCauses);
+    if (action === null) return [];
+
+    const rowKey = `${row.organizationId}:${keyType}`;
     const actions: Action[] = [];
-    if (row.disabled) {
+    if (action === "remove-admin-lock") {
       actions.push({
         icon: "play",
-        label: "Enable key",
-        disabled: enable.isPending,
-        onClick: () =>
+        label: "Remove admin lock",
+        disabled: mutationPending,
+        onClick: () => {
+          if (mutationPending) return;
+          setPendingKey(rowKey);
           enable.mutate({
             request: { enableOpenRouterKeyRequestBody: body },
-          }),
+          });
+        },
       });
     } else {
       actions.push({
         icon: "ban",
         label: "Disable key",
         destructive: true,
-        disabled: disable.isPending,
-        onClick: () =>
+        disabled: mutationPending,
+        onClick: () => {
+          if (mutationPending) return;
+          setPendingKey(rowKey);
           disable.mutate({
             request: { disableOpenRouterKeyRequestBody: body },
-          }),
+          });
+        },
       });
     }
     return actions;
@@ -257,7 +254,7 @@ function KeysTable(): JSX.Element {
       header: "Status",
       width: "110px",
       render: (row) =>
-        row.disabled ? (
+        effectiveDisabled(row) ? (
           <Badge variant="destructive" background className="shrink-0">
             <Badge.Text>Disabled</Badge.Text>
           </Badge>
@@ -268,10 +265,50 @@ function KeysTable(): JSX.Element {
         ),
     },
     {
+      key: "causes",
+      header: "Causes",
+      width: "180px",
+      render: (row) => {
+        const labels = causeLabels(row.disableCauses);
+        return labels.length > 0 ? (
+          <div className="space-y-1">
+            {labels.map((label) => (
+              <Text key={label} small>
+                {label}
+              </Text>
+            ))}
+          </div>
+        ) : row.disableCauses == null ? (
+          <Text muted small>
+            Unclassified legacy state{" "}
+            <span className="sr-only">
+              Disable causes were not recorded for this legacy key.
+            </span>
+          </Text>
+        ) : (
+          <Text muted small>
+            No disable causes
+          </Text>
+        );
+      },
+    },
+    {
       key: "actions",
       header: "",
       width: "56px",
-      render: (row) => <MoreActions actions={rowActions(row)} />,
+      render: (row) => {
+        const actions = rowActions(row);
+        if (actions.length === 0) return null;
+        const keyType = row.keyType === "internal" ? "internal" : "chat";
+        const rowKey = `${row.organizationId}:${keyType}`;
+        return (
+          <MoreActions
+            actions={actions}
+            triggerLoading={pendingKey === rowKey}
+            triggerDisabled={mutationPending}
+          />
+        );
+      },
     },
   ];
 

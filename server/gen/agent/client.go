@@ -9,31 +9,54 @@ package agent
 
 import (
 	"context"
+	"io"
 
 	goa "goa.design/goa/v3/pkg"
 )
 
 // Client is the "agent" service client.
 type Client struct {
-	GetPluginsEndpoint           goa.Endpoint
-	ListSyncedUsersEndpoint      goa.Endpoint
-	GetConfigurationEndpoint     goa.Endpoint
-	UpdateConfigurationEndpoint  goa.Endpoint
-	GetSessionMetaEndpoint       goa.Endpoint
-	ReportSessionMovedEndpoint   goa.Endpoint
-	CreateSessionHandoffEndpoint goa.Endpoint
+	GetPluginsEndpoint                   goa.Endpoint
+	GetMyConnectionsEndpoint             goa.Endpoint
+	GetClaudeObservabilityPluginEndpoint goa.Endpoint
+	HideMcpServerEndpoint                goa.Endpoint
+	UnhideMcpServerEndpoint              goa.Endpoint
+	ListSyncedUsersEndpoint              goa.Endpoint
+	GetConfigurationEndpoint             goa.Endpoint
+	UpdateConfigurationEndpoint          goa.Endpoint
+	ListAiScanTargetsEndpoint            goa.Endpoint
+	UpsertAiScanTargetEndpoint           goa.Endpoint
+	DeleteAiScanTargetEndpoint           goa.Endpoint
+	GetSessionMetaEndpoint               goa.Endpoint
+	ReportSessionMovedEndpoint           goa.Endpoint
+	ReportAIScanEndpoint                 goa.Endpoint
+	ReportStateEndpoint                  goa.Endpoint
+	ReportCrashEndpoint                  goa.Endpoint
+	CreateSessionHandoffEndpoint         goa.Endpoint
+	ListPendingAccessRequestsEndpoint    goa.Endpoint
 }
 
 // NewClient initializes a "agent" service client given the endpoints.
-func NewClient(getPlugins, listSyncedUsers, getConfiguration, updateConfiguration, getSessionMeta, reportSessionMoved, createSessionHandoff goa.Endpoint) *Client {
+func NewClient(getPlugins, getMyConnections, getClaudeObservabilityPlugin, hideMcpServer, unhideMcpServer, listSyncedUsers, getConfiguration, updateConfiguration, listAiScanTargets, upsertAiScanTarget, deleteAiScanTarget, getSessionMeta, reportSessionMoved, reportAIScan, reportState, reportCrash, createSessionHandoff, listPendingAccessRequests goa.Endpoint) *Client {
 	return &Client{
-		GetPluginsEndpoint:           getPlugins,
-		ListSyncedUsersEndpoint:      listSyncedUsers,
-		GetConfigurationEndpoint:     getConfiguration,
-		UpdateConfigurationEndpoint:  updateConfiguration,
-		GetSessionMetaEndpoint:       getSessionMeta,
-		ReportSessionMovedEndpoint:   reportSessionMoved,
-		CreateSessionHandoffEndpoint: createSessionHandoff,
+		GetPluginsEndpoint:                   getPlugins,
+		GetMyConnectionsEndpoint:             getMyConnections,
+		GetClaudeObservabilityPluginEndpoint: getClaudeObservabilityPlugin,
+		HideMcpServerEndpoint:                hideMcpServer,
+		UnhideMcpServerEndpoint:              unhideMcpServer,
+		ListSyncedUsersEndpoint:              listSyncedUsers,
+		GetConfigurationEndpoint:             getConfiguration,
+		UpdateConfigurationEndpoint:          updateConfiguration,
+		ListAiScanTargetsEndpoint:            listAiScanTargets,
+		UpsertAiScanTargetEndpoint:           upsertAiScanTarget,
+		DeleteAiScanTargetEndpoint:           deleteAiScanTarget,
+		GetSessionMetaEndpoint:               getSessionMeta,
+		ReportSessionMovedEndpoint:           reportSessionMoved,
+		ReportAIScanEndpoint:                 reportAIScan,
+		ReportStateEndpoint:                  reportState,
+		ReportCrashEndpoint:                  reportCrash,
+		CreateSessionHandoffEndpoint:         createSessionHandoff,
+		ListPendingAccessRequestsEndpoint:    listPendingAccessRequests,
 	}
 }
 
@@ -57,6 +80,89 @@ func (c *Client) GetPlugins(ctx context.Context, p *GetPluginsPayload) (res *Get
 		return
 	}
 	return ires.(*GetPluginsResult), nil
+}
+
+// GetMyConnections calls the "getMyConnections" endpoint of the "agent"
+// service.
+// GetMyConnections may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetMyConnections(ctx context.Context, p *GetMyConnectionsPayload) (res *GetMyConnectionsResult, err error) {
+	var ires any
+	ires, err = c.GetMyConnectionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetMyConnectionsResult), nil
+}
+
+// GetClaudeObservabilityPlugin calls the "getClaudeObservabilityPlugin"
+// endpoint of the "agent" service.
+// GetClaudeObservabilityPlugin may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetClaudeObservabilityPlugin(ctx context.Context, p *GetClaudeObservabilityPluginPayload) (res *GetClaudeObservabilityPluginResult, resp io.ReadCloser, err error) {
+	var ires any
+	ires, err = c.GetClaudeObservabilityPluginEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	o := ires.(*GetClaudeObservabilityPluginResponseData)
+	return o.Result, o.Body, nil
+}
+
+// HideMcpServer calls the "hideMcpServer" endpoint of the "agent" service.
+// HideMcpServer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) HideMcpServer(ctx context.Context, p *HideMcpServerPayload) (err error) {
+	_, err = c.HideMcpServerEndpoint(ctx, p)
+	return
+}
+
+// UnhideMcpServer calls the "unhideMcpServer" endpoint of the "agent" service.
+// UnhideMcpServer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UnhideMcpServer(ctx context.Context, p *UnhideMcpServerPayload) (err error) {
+	_, err = c.UnhideMcpServerEndpoint(ctx, p)
+	return
 }
 
 // ListSyncedUsers calls the "listSyncedUsers" endpoint of the "agent" service.
@@ -127,6 +233,75 @@ func (c *Client) UpdateConfiguration(ctx context.Context, p *UpdateConfiguration
 	return ires.(*DeviceAgentConfiguration), nil
 }
 
+// ListAiScanTargets calls the "listAiScanTargets" endpoint of the "agent"
+// service.
+// ListAiScanTargets may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListAiScanTargets(ctx context.Context, p *ListAiScanTargetsPayload) (res *ListAiScanTargetsResult, err error) {
+	var ires any
+	ires, err = c.ListAiScanTargetsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAiScanTargetsResult), nil
+}
+
+// UpsertAiScanTarget calls the "upsertAiScanTarget" endpoint of the "agent"
+// service.
+// UpsertAiScanTarget may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpsertAiScanTarget(ctx context.Context, p *UpsertAiScanTargetPayload) (res *AiScanTargetMutationResult, err error) {
+	var ires any
+	ires, err = c.UpsertAiScanTargetEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AiScanTargetMutationResult), nil
+}
+
+// DeleteAiScanTarget calls the "deleteAiScanTarget" endpoint of the "agent"
+// service.
+// DeleteAiScanTarget may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteAiScanTarget(ctx context.Context, p *DeleteAiScanTargetPayload) (res *DeleteAiScanTargetResult, err error) {
+	var ires any
+	ires, err = c.DeleteAiScanTargetEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DeleteAiScanTargetResult), nil
+}
+
 // GetSessionMeta calls the "getSessionMeta" endpoint of the "agent" service.
 // GetSessionMeta may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -168,6 +343,68 @@ func (c *Client) ReportSessionMoved(ctx context.Context, p *ReportSessionMovedPa
 	return
 }
 
+// ReportAIScan calls the "reportAIScan" endpoint of the "agent" service.
+// ReportAIScan may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ReportAIScan(ctx context.Context, p *ReportAIScanPayload) (err error) {
+	_, err = c.ReportAIScanEndpoint(ctx, p)
+	return
+}
+
+// ReportState calls the "reportState" endpoint of the "agent" service.
+// ReportState may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ReportState(ctx context.Context, p *ReportStatePayload) (res *ReportStateResult, err error) {
+	var ires any
+	ires, err = c.ReportStateEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ReportStateResult), nil
+}
+
+// ReportCrash calls the "reportCrash" endpoint of the "agent" service.
+// ReportCrash may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ReportCrash(ctx context.Context, p *ReportCrashPayload) (res *ReportCrashResult, err error) {
+	var ires any
+	ires, err = c.ReportCrashEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ReportCrashResult), nil
+}
+
 // CreateSessionHandoff calls the "createSessionHandoff" endpoint of the
 // "agent" service.
 // CreateSessionHandoff may return the following errors:
@@ -189,4 +426,27 @@ func (c *Client) CreateSessionHandoff(ctx context.Context, p *CreateSessionHando
 		return
 	}
 	return ires.(*CreateSessionHandoffResult), nil
+}
+
+// ListPendingAccessRequests calls the "listPendingAccessRequests" endpoint of
+// the "agent" service.
+// ListPendingAccessRequests may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListPendingAccessRequests(ctx context.Context, p *ListPendingAccessRequestsPayload) (res *ListPendingAccessRequestsResult, err error) {
+	var ires any
+	ires, err = c.ListPendingAccessRequestsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListPendingAccessRequestsResult), nil
 }

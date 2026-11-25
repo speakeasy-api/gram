@@ -28,17 +28,61 @@ const (
 	LifecycleOrganizationLimitName     = "platform-mcp-lifecycle-organization"
 	SessionRecallConnectionLimitName   = "platform-mcp-session-recall-connection"
 	SessionRecallOrganizationLimitName = "platform-mcp-session-recall-organization"
+	TeamMemoryConnectionLimitName      = "platform-mcp-team-memory-connection"
+	TeamMemoryOrganizationLimitName    = "platform-mcp-team-memory-organization"
 	RiskMutationConnectionLimitName    = "platform-mcp-risk-mutation-connection"
 	RiskMutationOrganizationLimitName  = "platform-mcp-risk-mutation-organization"
+	ReviewRequestConnectionLimitName   = "platform-mcp-review-request-connection"
+	ReviewRequestOrganizationLimitName = "platform-mcp-review-request-organization"
 )
 
 const (
-	// DocsQueriesPerConnectionPerMinute and DocsQueriesPerOrganizationPerMinute
-	// bound documentation search. Retrieval is in-process and cheap, so these
-	// exist to stop a loop from spending the caller's context on repeated
-	// queries rather than to protect a backend.
-	DocsQueriesPerConnectionPerMinute   = 10
-	DocsQueriesPerOrganizationPerMinute = 100
+	PluginAssignmentMutationConnectionLimitName   = "platform-mcp-plugin-assignment-mutation-connection"
+	PluginAssignmentMutationOrganizationLimitName = "platform-mcp-plugin-assignment-mutation-organization"
+	PluginMetadataMutationConnectionLimitName     = "platform-mcp-plugin-metadata-mutation-connection"
+	PluginMetadataMutationOrganizationLimitName   = "platform-mcp-plugin-metadata-mutation-organization"
+	AccessRoleMutationConnectionLimitName         = "platform-mcp-access-role-mutation-connection"
+	AccessRoleMutationOrganizationLimitName       = "platform-mcp-access-role-mutation-organization"
+	ShadowAccessDecisionConnectionLimitName       = "platform-mcp-shadow-access-decision-connection"
+	ShadowAccessDecisionOrganizationLimitName     = "platform-mcp-shadow-access-decision-organization"
+	ToolExposureReadConnectionLimitName           = "platform-mcp-tool-exposure-read-connection"
+	ToolExposureReadOrganizationLimitName         = "platform-mcp-tool-exposure-read-organization"
+	ToolExposureMutationConnectionLimitName       = "platform-mcp-tool-exposure-mutation-connection"
+	ToolExposureMutationOrganizationLimitName     = "platform-mcp-tool-exposure-mutation-organization"
+	DataExportToggleConnectionLimitName           = "platform-mcp-data-export-toggle-connection"
+	DataExportToggleOrganizationLimitName         = "platform-mcp-data-export-toggle-organization"
+	PluginRepublishConnectionLimitName            = "platform-mcp-plugin-republish-connection"
+	PluginRepublishOrganizationLimitName          = "platform-mcp-plugin-republish-organization"
+	ProjectMutationConnectionLimitName            = "platform-mcp-project-mutation-connection"
+	ProjectMutationOrganizationLimitName          = "platform-mcp-project-mutation-organization"
+	GatewayMutationConnectionLimitName            = "platform-mcp-gateway-mutation-connection"
+	GatewayMutationOrganizationLimitName          = "platform-mcp-gateway-mutation-organization"
+)
+
+const (
+	// DocsQueriesPerConnectionPerMinute allows iterative documentation research
+	// over the bounded in-process corpus without throttling ordinary reading.
+	DocsQueriesPerConnectionPerMinute = 120
+
+	// DocsQueriesPerOrganizationPerMinute leaves room for concurrent researchers
+	// while retaining a ceiling on repeated in-process retrieval.
+	DocsQueriesPerOrganizationPerMinute = 1200
+
+	// SkillsOperationsPerConnectionPerMinute leaves room for reviewing dozens of
+	// suggestions, including the reads and approvals sharing this allowance.
+	SkillsOperationsPerConnectionPerMinute = 120
+
+	// SkillsOperationsPerOrganizationPerMinute allows multiple connections to
+	// review skills concurrently while retaining an organization-wide ceiling.
+	SkillsOperationsPerOrganizationPerMinute = 1200
+
+	// LifecycleOperationsPerConnectionPerMinute supports read/change/read across
+	// several servers. The moderate ceiling also bounds client-admission writes.
+	LifecycleOperationsPerConnectionPerMinute = 30
+
+	// LifecycleOperationsPerOrganizationPerMinute leaves room for concurrent
+	// administrators without removing the shared metadata/admission ceiling.
+	LifecycleOperationsPerOrganizationPerMinute = 300
 
 	// DiagnosticQueriesPer* bound the summary reads: the project overview and
 	// the per-MCP diagnosis. They are generous because an administrator
@@ -60,6 +104,79 @@ const (
 	RiskMutationsPerConnectionPerMinute   = 5
 	RiskMutationsPerOrganizationPerMinute = 50
 
+	// PluginAssignmentMutationsPerConnectionPerMinute supports rolling out
+	// assignments across dozens of plugins while bounding access-affecting writes.
+	PluginAssignmentMutationsPerConnectionPerMinute = 30
+
+	// PluginAssignmentMutationsPerOrganizationPerMinute allows concurrent
+	// administrators to manage assignments under an organization-wide ceiling.
+	PluginAssignmentMutationsPerOrganizationPerMinute = 300
+
+	// AccessRoleMutationsPerConnectionPerMinute supports creating, updating and
+	// assigning roles in one bulk administration workflow.
+	AccessRoleMutationsPerConnectionPerMinute = 30
+
+	// AccessRoleMutationsPerOrganizationPerMinute bounds access-role changes
+	// across concurrent administrators independently of other mutation budgets.
+	AccessRoleMutationsPerOrganizationPerMinute = 300
+
+	ShadowAccessDecisionsPerConnectionPerMinute   = 5
+	ShadowAccessDecisionsPerOrganizationPerMinute = 50
+	ReviewRequestsPerConnectionPerMinute          = 5
+	ReviewRequestsPerOrganizationPerMinute        = 50
+
+	// PluginMetadataMutationsPer* bound creating and renaming plugins together
+	// on their own allowance. This is what stops a conversational create loop;
+	// there is no separate cap on how many plugins a project holds, because the
+	// dashboard has none and the two paths must refuse the same requests.
+	PluginMetadataMutationsPerConnectionPerMinute   = 5
+	PluginMetadataMutationsPerOrganizationPerMinute = 50
+
+	// ToolExposureReadsPerConnectionPerMinute allows paging through bounded
+	// project tool definitions without spending the separate mutation allowance.
+	ToolExposureReadsPerConnectionPerMinute = 120
+
+	// ToolExposureReadsPerOrganizationPerMinute supports concurrent tool
+	// inventory inspection while retaining an organization-wide read ceiling.
+	ToolExposureReadsPerOrganizationPerMinute = 1200
+
+	// ToolExposureMutationsPer* bound adding and removing a server's tools on
+	// their own allowance. Both tools share it, so alternating between them
+	// cannot multiply the permitted write rate: each allowed call takes the
+	// toolset row lock, appends a version, and republishes every plugin
+	// carrying the server.
+	ToolExposureMutationsPerConnectionPerMinute   = 5
+	ToolExposureMutationsPerOrganizationPerMinute = 50
+
+	// GatewayMutationsPer* bound creating gateways and setting their members
+	// on one allowance, so alternating between the two cannot multiply the
+	// write rate. Each allowed call locks the gateway and may republish every
+	// plugin carrying it.
+	GatewayMutationsPerConnectionPerMinute   = 5
+	GatewayMutationsPerOrganizationPerMinute = 50
+
+	// DataExportTogglesPer* bound pausing and resuming data export routes on
+	// their own allowance. Both tools share it, so alternating between them
+	// cannot multiply the permitted write rate. A person handling an incident
+	// pauses a handful of routes, never dozens a minute; each allowed call
+	// takes the route row lock and writes an audit entry.
+	DataExportTogglesPerConnectionPerMinute   = 5
+	DataExportTogglesPerOrganizationPerMinute = 50
+
+	// PluginRepublishesPer* bound republish_plugin on its own allowance. Each
+	// allowed call can regenerate every package in a project, so it is metered
+	// like the other package-affecting writes rather than like a read.
+	PluginRepublishesPerConnectionPerMinute   = 5
+	PluginRepublishesPerOrganizationPerMinute = 50
+
+	// ProjectMutationsPer* bound creating and renaming projects on their own
+	// allowance, shared by both tools so alternating between them cannot
+	// multiply the write rate. A person sets up a handful of projects at a
+	// time; a loop creating them by the dozen is a runaway agent, and every
+	// created project is a row an administrator has to delete by hand.
+	ProjectMutationsPerConnectionPerMinute   = 5
+	ProjectMutationsPerOrganizationPerMinute = 50
+
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the
 	// drill-downs carry, over DrilldownVolumeWindow. A per-minute call budget
@@ -69,12 +186,17 @@ const (
 	DrilldownRowsPerConnectionPerWindow          = 1000
 	DrilldownMetricQueriesPerConnectionPerWindow = 20
 
-	// SessionRecallsPer* bound continue_session. Metered separately and lower
-	// than every other read: each allowed call serves an entire session
-	// transcript as a digest, so this allowance must not be fundable by
-	// spending any other budget.
+	// SessionRecallsPer* bound session recall and captured chat search and reads.
+	// These reads share a separate, lower allowance because they return
+	// transcript content; metadata and aggregate reads cannot fund them.
 	SessionRecallsPerConnectionPerMinute   = 10
 	SessionRecallsPerOrganizationPerMinute = 100
+
+	// TeamMemoryCallsPer* bound search_team_memory and remember. They return
+	// masked summaries and memos, not transcripts, so they get their own
+	// allowance instead of competing with session recall.
+	TeamMemoryCallsPerConnectionPerMinute   = 20
+	TeamMemoryCallsPerOrganizationPerMinute = 200
 )
 
 // DrilldownVolumeWindow is the interval the drill-down volume caps refill over.
@@ -85,7 +207,7 @@ var (
 	ErrOperationBudgetUnavailable = errors.New("platform mcp operation budget unavailable")
 )
 
-// Limiter is the narrow Platform MCP boundary around Gram's shared rate limiter.
+// Limiter is the narrow Platform MCP boundary around Speakeasy's shared rate limiter.
 // It lets unit tests deterministically model an allowance, a throttle, or a
 // backing-store failure without depending on Redis.
 type Limiter interface {
@@ -179,12 +301,15 @@ func operationBudgetActorKey(principal Principal) (string, error) {
 // operations. Every value is injected at composition; no production defaults
 // are assigned here.
 type OperationBudgets struct {
-	Catalog      OperationBudget
-	Registration OperationBudget
-	Handoff      OperationBudget
-	SetupStart   OperationBudget
-	Repair       OperationBudget
-	Docs         OperationBudget
+	// RiskFindings meters row-level Watchdog reads independently.
+	RiskFindings   OperationBudget
+	Catalog        OperationBudget
+	Registration   OperationBudget
+	ReviewRequests OperationBudget
+	Handoff        OperationBudget
+	SetupStart     OperationBudget
+	Repair         OperationBudget
+	Docs           OperationBudget
 	// Skills meters authoring and distribution together. Reads and writes share
 	// one allowance because they are one workflow: a caller reads a skill to
 	// obtain the version token its next write needs, and metering the read
@@ -197,20 +322,29 @@ type OperationBudgets struct {
 	// an administrator walking the inventory does not spend the allowance the
 	// failure diagnosis it leads to will need.
 	Plugins OperationBudget
+	// AccessReads meters role/member access inspection separately. Member search
+	// returns masked personal data and must not be fundable by another read lane.
+	AccessReads OperationBudget
+	// AccessRoleMutations independently meters custom MCP access-role writes.
+	AccessRoleMutations OperationBudget
 	// Diagnostics meters the observability reads. They are bounded aggregate
-	// queries over Gram-owned telemetry, so the cost being metered is the
+	// queries over Speakeasy-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
 	Diagnostics OperationBudget
 	// SensitiveDiagnostics meters the bounded drill-downs. It is separate from
 	// Diagnostics so exhausting it is not possible by spending the summary
 	// allowance, and so it can be tightened on its own.
 	SensitiveDiagnostics OperationBudget
-	// SensitiveSessionRecall meters continue_session — the only operation that
-	// serves whole-transcript content — on its own low allowance.
+	// SensitiveSessionRecall meters continue_session, search_chats and read_chat
+	// together on a low allowance for transcript content.
 	SensitiveSessionRecall OperationBudget
+	// TeamMemory meters the team memory tools on their own allowance, so memory
+	// traffic and session recall cannot throttle each other.
+	TeamMemory OperationBudget
 	// RiskMutations is shared by policy and exclusion writes. Connection-less
 	// assistant calls consume only its organization bucket.
 	RiskMutations OperationBudget
+
 	// DrilldownVolume meters what the drill-downs return rather than how often
 	// they are called: rows and spans against one bucket, metric queries
 	// against another, both per connection over DrilldownVolumeWindow.
@@ -266,5 +400,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
+	return b.RiskFindings.valid() && b.Catalog.valid() && b.Registration.valid() && b.ReviewRequests.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Plugins.valid() && b.AccessReads.valid() && b.AccessRoleMutations.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.TeamMemory.valid() && b.DrilldownVolume.valid()
 }

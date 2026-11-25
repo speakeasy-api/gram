@@ -16,35 +16,39 @@ import (
 
 // Client is the "mcpServers" service client.
 type Client struct {
-	CreateMcpServerEndpoint      goa.Endpoint
-	GetMcpServerEndpoint         goa.Endpoint
-	ListMcpServersEndpoint       goa.Endpoint
-	ListMcpServersForOrgEndpoint goa.Endpoint
-	UpdateMcpServerEndpoint      goa.Endpoint
-	ListToolFiltersEndpoint      goa.Endpoint
-	SetToolMetadataBatchEndpoint goa.Endpoint
-	AddToolMetadataBatchEndpoint goa.Endpoint
-	ListToolMetadataEndpoint     goa.Endpoint
-	SetToolMetadataEndpoint      goa.Endpoint
-	DeleteToolMetadataEndpoint   goa.Endpoint
-	DeleteMcpServerEndpoint      goa.Endpoint
+	CreateMcpServerEndpoint         goa.Endpoint
+	GetMcpServerEndpoint            goa.Endpoint
+	ListMcpServersEndpoint          goa.Endpoint
+	ListMcpServersForOrgEndpoint    goa.Endpoint
+	UpdateMcpServerEndpoint         goa.Endpoint
+	SetSetupGuideCompletedEndpoint  goa.Endpoint
+	ListToolFiltersEndpoint         goa.Endpoint
+	SetToolMetadataBatchEndpoint    goa.Endpoint
+	AddToolMetadataBatchEndpoint    goa.Endpoint
+	ListToolMetadataEndpoint        goa.Endpoint
+	SetToolMetadataEndpoint         goa.Endpoint
+	DeleteToolMetadataEndpoint      goa.Endpoint
+	DeleteMcpServerEndpoint         goa.Endpoint
+	GetMcpServerUsageImpactEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "mcpServers" service client given the endpoints.
-func NewClient(createMcpServer, getMcpServer, listMcpServers, listMcpServersForOrg, updateMcpServer, listToolFilters, setToolMetadataBatch, addToolMetadataBatch, listToolMetadata, setToolMetadata, deleteToolMetadata, deleteMcpServer goa.Endpoint) *Client {
+func NewClient(createMcpServer, getMcpServer, listMcpServers, listMcpServersForOrg, updateMcpServer, setSetupGuideCompleted, listToolFilters, setToolMetadataBatch, addToolMetadataBatch, listToolMetadata, setToolMetadata, deleteToolMetadata, deleteMcpServer, getMcpServerUsageImpact goa.Endpoint) *Client {
 	return &Client{
-		CreateMcpServerEndpoint:      createMcpServer,
-		GetMcpServerEndpoint:         getMcpServer,
-		ListMcpServersEndpoint:       listMcpServers,
-		ListMcpServersForOrgEndpoint: listMcpServersForOrg,
-		UpdateMcpServerEndpoint:      updateMcpServer,
-		ListToolFiltersEndpoint:      listToolFilters,
-		SetToolMetadataBatchEndpoint: setToolMetadataBatch,
-		AddToolMetadataBatchEndpoint: addToolMetadataBatch,
-		ListToolMetadataEndpoint:     listToolMetadata,
-		SetToolMetadataEndpoint:      setToolMetadata,
-		DeleteToolMetadataEndpoint:   deleteToolMetadata,
-		DeleteMcpServerEndpoint:      deleteMcpServer,
+		CreateMcpServerEndpoint:         createMcpServer,
+		GetMcpServerEndpoint:            getMcpServer,
+		ListMcpServersEndpoint:          listMcpServers,
+		ListMcpServersForOrgEndpoint:    listMcpServersForOrg,
+		UpdateMcpServerEndpoint:         updateMcpServer,
+		SetSetupGuideCompletedEndpoint:  setSetupGuideCompleted,
+		ListToolFiltersEndpoint:         listToolFilters,
+		SetToolMetadataBatchEndpoint:    setToolMetadataBatch,
+		AddToolMetadataBatchEndpoint:    addToolMetadataBatch,
+		ListToolMetadataEndpoint:        listToolMetadata,
+		SetToolMetadataEndpoint:         setToolMetadata,
+		DeleteToolMetadataEndpoint:      deleteToolMetadata,
+		DeleteMcpServerEndpoint:         deleteMcpServer,
+		GetMcpServerUsageImpactEndpoint: getMcpServerUsageImpact,
 	}
 }
 
@@ -61,6 +65,7 @@ func NewClient(createMcpServer, getMcpServer, listMcpServers, listMcpServersForO
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) CreateMcpServer(ctx context.Context, p *CreateMcpServerPayload) (res *types.McpServer, err error) {
 	var ires any
@@ -83,6 +88,7 @@ func (c *Client) CreateMcpServer(ctx context.Context, p *CreateMcpServerPayload)
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) GetMcpServer(ctx context.Context, p *GetMcpServerPayload) (res *types.McpServer, err error) {
 	var ires any
@@ -106,6 +112,7 @@ func (c *Client) GetMcpServer(ctx context.Context, p *GetMcpServerPayload) (res 
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) ListMcpServers(ctx context.Context, p *ListMcpServersPayload) (res *ListMcpServersResult, err error) {
 	var ires any
@@ -129,6 +136,7 @@ func (c *Client) ListMcpServers(ctx context.Context, p *ListMcpServersPayload) (
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) ListMcpServersForOrg(ctx context.Context, p *ListMcpServersForOrgPayload) (res *ListMcpServersResult, err error) {
 	var ires any
@@ -152,10 +160,35 @@ func (c *Client) ListMcpServersForOrg(ctx context.Context, p *ListMcpServersForO
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) UpdateMcpServer(ctx context.Context, p *UpdateMcpServerPayload) (res *types.McpServer, err error) {
 	var ires any
 	ires, err = c.UpdateMcpServerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.McpServer), nil
+}
+
+// SetSetupGuideCompleted calls the "setSetupGuideCompleted" endpoint of the
+// "mcpServers" service.
+// SetSetupGuideCompleted may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) SetSetupGuideCompleted(ctx context.Context, p *SetSetupGuideCompletedPayload) (res *types.McpServer, err error) {
+	var ires any
+	ires, err = c.SetSetupGuideCompletedEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
@@ -175,6 +208,7 @@ func (c *Client) UpdateMcpServer(ctx context.Context, p *UpdateMcpServerPayload)
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) ListToolFilters(ctx context.Context, p *ListToolFiltersPayload) (res *types.ListToolFiltersResult, err error) {
 	var ires any
@@ -198,6 +232,7 @@ func (c *Client) ListToolFilters(ctx context.Context, p *ListToolFiltersPayload)
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) SetToolMetadataBatch(ctx context.Context, p *SetToolMetadataBatchPayload) (res *SetToolMetadataBatchResult, err error) {
 	var ires any
@@ -221,6 +256,7 @@ func (c *Client) SetToolMetadataBatch(ctx context.Context, p *SetToolMetadataBat
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) AddToolMetadataBatch(ctx context.Context, p *AddToolMetadataBatchPayload) (res *AddToolMetadataBatchResult, err error) {
 	var ires any
@@ -244,6 +280,7 @@ func (c *Client) AddToolMetadataBatch(ctx context.Context, p *AddToolMetadataBat
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) ListToolMetadata(ctx context.Context, p *ListToolMetadataPayload) (res *ListToolMetadataResult, err error) {
 	var ires any
@@ -267,6 +304,7 @@ func (c *Client) ListToolMetadata(ctx context.Context, p *ListToolMetadataPayloa
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) SetToolMetadata(ctx context.Context, p *SetToolMetadataPayload) (res *types.ToolMetadata, err error) {
 	var ires any
@@ -290,6 +328,7 @@ func (c *Client) SetToolMetadata(ctx context.Context, p *SetToolMetadataPayload)
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DeleteToolMetadata(ctx context.Context, p *DeleteToolMetadataPayload) (err error) {
 	_, err = c.DeleteToolMetadataEndpoint(ctx, p)
@@ -309,8 +348,33 @@ func (c *Client) DeleteToolMetadata(ctx context.Context, p *DeleteToolMetadataPa
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DeleteMcpServer(ctx context.Context, p *DeleteMcpServerPayload) (err error) {
 	_, err = c.DeleteMcpServerEndpoint(ctx, p)
 	return
+}
+
+// GetMcpServerUsageImpact calls the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+// GetMcpServerUsageImpact may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) GetMcpServerUsageImpact(ctx context.Context, p *GetMcpServerUsageImpactPayload) (res *types.McpServerUsageImpact, err error) {
+	var ires any
+	ires, err = c.GetMcpServerUsageImpactEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.McpServerUsageImpact), nil
 }

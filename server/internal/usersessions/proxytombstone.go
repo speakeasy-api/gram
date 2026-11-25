@@ -2,6 +2,7 @@ package usersessions
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -20,14 +21,21 @@ import (
 // The authorize and register endpoints are simply gone (they 404), which is the
 // right answer — a client turned away there re-discovers and completes on the
 // issuer-gated path. The token endpoint needs a live handler so a stale refresh
-// exchange gets invalid_grant rather than a 404; see handleRetiredProxyToken.
+// exchange gets invalid_grant rather than a 404; see retiredProxyTokenHandler.
 func attachRetiredProxy(mux goahttp.Muxer, service *Service) {
+	AttachRetiredProxy(mux, service.logger)
+}
+
+// AttachRetiredProxy mounts the retired OAuth proxy token tombstone on its own,
+// for serving tiers that host the /oauth surface without the user-session
+// management API. The tombstone only needs a logger.
+func AttachRetiredProxy(mux goahttp.Muxer, logger *slog.Logger) {
 	o11y.AttachHandler(mux, "POST", "/oauth/{mcpSlug}/token", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.handleRetiredProxyToken).ServeHTTP(w, r)
+		oops.ErrHandle(logger, retiredProxyTokenHandler(logger)).ServeHTTP(w, r)
 	})
 }
 
-// handleRetiredProxyToken answers the retired OAuth proxy token endpoint. The
+// retiredProxyTokenHandler answers the retired OAuth proxy token endpoint. The
 // proxy serving path is gone, so any client still exchanging a token here holds
 // a proxy refresh token minted before its MCP server migrated to a
 // user_session_issuer — where, previously, it would have kept exchanging it
@@ -38,22 +46,24 @@ func attachRetiredProxy(mux goahttp.Muxer, service *Service) {
 // reads as "server gone" and would strand the client on a dead refresh token.
 // Discovery already advertises the issuer's endpoints, so the re-authorization
 // completes on the issuer-gated path.
-func (s *Service) handleRetiredProxyToken(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	s.logger.InfoContext(ctx, "refused retired proxy token exchange",
-		attr.SlogToolsetMCPSlug(chi.URLParam(r, "mcpSlug")))
+func retiredProxyTokenHandler(logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		ctx := r.Context()
+		logger.InfoContext(ctx, "refused retired proxy token exchange",
+			attr.SlogToolsetMCPSlug(chi.URLParam(r, "mcpSlug")))
 
-	w.Header().Set("Content-Type", "application/json")
-	// Match the other OAuth token handlers: an intermediary must not replay a
-	// stale invalid_grant to a later client.
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Pragma", "no-cache")
-	w.WriteHeader(http.StatusBadRequest)
-	if err := json.NewEncoder(w).Encode(map[string]string{
-		"error":             "invalid_grant",
-		"error_description": "This MCP server has moved to a new authorization server. Re-authorize to continue.",
-	}); err != nil {
-		s.logger.ErrorContext(ctx, "failed to encode invalid_grant response", attr.SlogError(err))
+		w.Header().Set("Content-Type", "application/json")
+		// Match the other OAuth token handlers: an intermediary must not replay a
+		// stale invalid_grant to a later client.
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Pragma", "no-cache")
+		w.WriteHeader(http.StatusBadRequest)
+		if err := json.NewEncoder(w).Encode(map[string]string{
+			"error":             "invalid_grant",
+			"error_description": "This MCP server has moved to a new authorization server. Re-authorize to continue.",
+		}); err != nil {
+			logger.ErrorContext(ctx, "failed to encode invalid_grant response", attr.SlogError(err))
+		}
+		return nil
 	}
-	return nil
 }

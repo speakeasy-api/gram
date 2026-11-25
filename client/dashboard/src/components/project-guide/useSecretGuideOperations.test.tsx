@@ -1,5 +1,6 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
-import type { HookTraceSummary } from "@gram/client/models/components/hooktracesummary.js";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { act, renderHook as baseRenderHook } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +10,6 @@ import {
 } from "./projectGuideMachine";
 
 const queryHooks = vi.hoisted(() => ({
-  hooks: vi.fn(),
   policies: vi.fn(),
   results: vi.fn(),
 }));
@@ -24,6 +24,7 @@ const rbac = vi.hoisted(() => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "request-project",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "request-project" }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "organization-id" }),
@@ -31,11 +32,6 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({ useRBAC: () => rbac }));
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: authFetch }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    riskEvents: { href: () => "/projects/request-project/security/events" },
-  }),
 }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
@@ -47,9 +43,6 @@ vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
 }));
 vi.mock("@gram/client/react-query/riskCreatePolicy.js", () => ({
   useRiskCreatePolicyMutation: () => ({ mutateAsync }),
-}));
-vi.mock("@gram/client/react-query/listHooksTraces.js", () => ({
-  useListHooksTraces: queryHooks.hooks,
 }));
 vi.mock("@gram/client/react-query/riskListResults.js", () => ({
   invalidateAllRiskListResults: vi.fn(() => Promise.resolve()),
@@ -82,28 +75,19 @@ function policy(overrides: Partial<RiskPolicy> = {}): RiskPolicy {
     createdAt: new Date("2026-08-19T12:00:00Z"),
     enabled: true,
     id: "secrets-policy",
-    messageTypes: ["tool_request", "tool_response"],
     name: "Secrets",
     policyType: "standard",
     projectId: "project-id",
     score: 5,
     sources: ["gitleaks"],
+    detectionScopes: [
+      {
+        category: "secrets",
+        scopeInclude: 'kind in ["tool_request","tool_response"]',
+      },
+    ],
     updatedAt: new Date("2026-08-19T12:00:00Z"),
     version: 1,
-    ...overrides,
-  };
-}
-
-function trace(overrides: Partial<HookTraceSummary> = {}): HookTraceSummary {
-  return {
-    blockReason:
-      'Speakeasy blocked this tool call: matched policy "Secrets" (synthetic credential)',
-    gramUrn: "urn:gram:hook",
-    hookSource: "claude-code",
-    hookStatus: "blocked",
-    logCount: 1,
-    startTimeUnixNano: "1787140800000000000",
-    traceId: "old-trace",
     ...overrides,
   };
 }
@@ -144,7 +128,6 @@ function deferred<T>(): {
 beforeEach(() => {
   vi.clearAllMocks();
   queryHooks.policies.mockReturnValue(queryResult({ policies: [policy()] }));
-  queryHooks.hooks.mockReturnValue(queryResult({ traces: [] }));
   queryHooks.results.mockReturnValue(queryResult({ results: [] }));
   mutateAsync.mockResolvedValue(policy());
   authFetch.mockResolvedValue(
@@ -160,6 +143,10 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
 });
+
+function renderHook<Result>(callback: () => Result) {
+  return baseRenderHook(callback, { wrapper: MemoryRouter });
+}
 
 describe("useSecretGuideOperations", () => {
   it("starts without a selected client", () => {
@@ -190,9 +177,6 @@ describe("useSecretGuideOperations", () => {
       undefined,
       { throwOnError: false },
     );
-    expect(queryHooks.hooks.mock.calls[0]?.[0]).toMatchObject({
-      gramProject: "request-project",
-    });
     expect(queryHooks.results.mock.calls[0]?.[0]).toMatchObject({
       gramProject: "request-project",
       category: "secrets",
@@ -203,8 +187,8 @@ describe("useSecretGuideOperations", () => {
   it.each([
     { audienceType: "targeted" as const },
     { policyType: "prompt_based" as const },
-    { messageTypes: undefined },
-    { messageTypes: [] },
+    { detectionScopes: undefined },
+    { detectionScopes: [] },
     { sources: ["gitleaks", "prompt_injection"] },
   ])(
     "creates the exact policy when the existing policy is a near-miss: %o",
@@ -244,7 +228,12 @@ describe("useSecretGuideOperations", () => {
           audienceType: "everyone",
           autoName: true,
           enabled: true,
-          messageTypes: ["tool_request", "tool_response"],
+          detectionScopes: [
+            {
+              category: "secrets",
+              scopeInclude: 'kind in ["tool_request","tool_response"]',
+            },
+          ],
           policyType: "standard",
           sources: ["gitleaks"],
         },
@@ -523,16 +512,13 @@ describe("useSecretGuideOperations", () => {
     },
   );
 
-  it("captures the hook and risk baselines once before prompt interaction", async () => {
-    const hooks = queryResult({ traces: [trace()] });
+  it("captures the risk baseline once before prompt interaction", async () => {
     const results = queryResult({ results: [result()] });
-    queryHooks.hooks.mockReturnValue(hooks);
     queryHooks.results.mockReturnValue(results);
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
     const promptScope = { ...POLICY_SCOPE, step: 3, runId: 2 };
 
-    expect(hooks.refetch).not.toHaveBeenCalled();
     expect(results.refetch).not.toHaveBeenCalled();
     act(() =>
       hook.current.handleSignal(
@@ -540,7 +526,6 @@ describe("useSecretGuideOperations", () => {
         report,
       ),
     );
-    expect(hooks.refetch).not.toHaveBeenCalled();
     expect(results.refetch).not.toHaveBeenCalled();
     await act(async () => {
       expect(await hook.current.prepareTelemetryBaseline()).toBe(true);
@@ -552,23 +537,13 @@ describe("useSecretGuideOperations", () => {
       ),
     );
 
-    expect(hooks.refetch).toHaveBeenCalledOnce();
     expect(results.refetch).toHaveBeenCalledOnce();
     expect(report).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "event" }),
     );
   });
 
-  it("waits when post-baseline queries have no data yet", async () => {
-    const hooks = {
-      data: undefined,
-      isError: false,
-      isFetching: false,
-      isPending: false,
-      refetch: vi.fn(() =>
-        Promise.resolve({ data: { traces: [] }, isError: false }),
-      ),
-    };
+  it("waits when the post-baseline query has no data yet", async () => {
     const results = {
       data: undefined,
       isError: false,
@@ -578,7 +553,6 @@ describe("useSecretGuideOperations", () => {
         Promise.resolve({ data: { results: [] }, isError: false }),
       ),
     };
-    queryHooks.hooks.mockReturnValue(hooks);
     queryHooks.results.mockReturnValue(results);
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
@@ -609,18 +583,10 @@ describe("useSecretGuideOperations", () => {
   });
 
   it("does not publish a telemetry baseline after the operation is aborted", async () => {
-    const pendingTraces = deferred<{
-      data: { traces: HookTraceSummary[] };
-      isError: boolean;
-    }>();
     const pendingResults = deferred<{
       data: { results: RiskResult[] };
       isError: boolean;
     }>();
-    queryHooks.hooks.mockReturnValue({
-      ...queryResult({ traces: [] }),
-      refetch: () => pendingTraces.promise,
-    });
     queryHooks.results.mockReturnValue({
       ...queryResult({ results: [] }),
       refetch: () => pendingResults.promise,
@@ -643,7 +609,6 @@ describe("useSecretGuideOperations", () => {
       ),
     );
     await act(async () => {
-      pendingTraces.resolve({ data: { traces: [] }, isError: false });
       pendingResults.resolve({ data: { results: [] }, isError: false });
       await capture;
     });
@@ -652,17 +617,11 @@ describe("useSecretGuideOperations", () => {
   });
 
   it("keeps waiting when Step 5 starts before a baseline is ready", async () => {
-    const hooks = queryResult<{ traces: HookTraceSummary[] }>({ traces: [] });
     const results = queryResult<{ results: RiskResult[] }>({ results: [] });
-    hooks.refetch.mockResolvedValueOnce({
-      data: { traces: [] },
-      isError: true,
-    });
     results.refetch.mockResolvedValueOnce({
       data: { results: [] },
       isError: true,
     });
-    queryHooks.hooks.mockReturnValue(hooks);
     queryHooks.results.mockReturnValue(results);
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
@@ -689,20 +648,11 @@ describe("useSecretGuideOperations", () => {
     );
   });
 
-  it("completes only for post-baseline evidence from the selected client and policy", async () => {
-    const now = Date.now();
-    const hookData = { current: { traces: [trace()] } };
-    const riskData = { current: { results: [result()] } };
-    const refetchHooks = vi.fn(() =>
-      Promise.resolve({ data: hookData.current, isError: false }),
-    );
+  async function listenForRiskResults() {
+    const riskData = { current: { results: [result()] as RiskResult[] } };
     const refetchResults = vi.fn(() =>
       Promise.resolve({ data: riskData.current, isError: false }),
     );
-    queryHooks.hooks.mockImplementation(() => ({
-      ...queryResult(hookData.current),
-      refetch: refetchHooks,
-    }));
     queryHooks.results.mockImplementation(() => ({
       ...queryResult(riskData.current),
       refetch: refetchResults,
@@ -714,7 +664,7 @@ describe("useSecretGuideOperations", () => {
     await act(async () => {
       expect(await view.result.current.prepareTelemetryBaseline()).toBe(true);
     });
-    await waitFor(() => expect(refetchHooks).toHaveBeenCalledOnce());
+    await waitFor(() => expect(refetchResults).toHaveBeenCalledOnce());
 
     const listenScope = { ...POLICY_SCOPE, step: 4, runId: 3 };
     act(() =>
@@ -726,15 +676,14 @@ describe("useSecretGuideOperations", () => {
     expect(report).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "event" }),
     );
+    return { riskData, report, view, listenScope };
+  }
 
-    hookData.current = {
-      traces: [
-        trace({
-          traceId: "new-blocked-trace",
-          startTimeUnixNano: String(BigInt(now + 2_000) * 1_000_000n),
-        }),
-      ],
-    };
+  it("completes from a post-baseline finding for the guide's policy and synthetic secret", async () => {
+    const now = Date.now();
+    const { riskData, report, view, listenScope } =
+      await listenForRiskResults();
+
     riskData.current = {
       results: [
         result({
@@ -765,56 +714,39 @@ describe("useSecretGuideOperations", () => {
     );
   });
 
-  it("ignores a post-baseline risk result paired with an unrelated blocked trace", async () => {
+  it("ignores a post-baseline finding from another policy", async () => {
     const now = Date.now();
-    const hookData = { current: { traces: [] as HookTraceSummary[] } };
-    const riskData = { current: { results: [] as RiskResult[] } };
-    queryHooks.hooks.mockImplementation(() => ({
-      ...queryResult(hookData.current),
-      refetch: vi.fn(() =>
-        Promise.resolve({ data: hookData.current, isError: false }),
-      ),
-    }));
-    queryHooks.results.mockImplementation(() => ({
-      ...queryResult(riskData.current),
-      refetch: vi.fn(() =>
-        Promise.resolve({ data: riskData.current, isError: false }),
-      ),
-    }));
-    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
-    const view = renderHook(() => useSecretGuideOperations());
+    const { riskData, report, view } = await listenForRiskResults();
 
-    act(() => view.result.current.setClient("claude"));
-    await act(async () => {
-      expect(await view.result.current.prepareTelemetryBaseline()).toBe(true);
-    });
-    act(() =>
-      view.result.current.handleSignal(
-        { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
-        report,
-      ),
-    );
-
-    hookData.current = {
-      traces: [
-        trace({
-          hookSource: "cursor",
-          startTimeUnixNano: String(BigInt(now + 2_000) * 1_000_000n),
-          traceId: "wrong-client-trace",
-        }),
-        trace({
-          blockReason:
-            'Speakeasy blocked this tool call: matched policy "Another policy" (different request)',
-          startTimeUnixNano: String(BigInt(now + 2_000) * 1_000_000n),
-          traceId: "wrong-policy-trace",
-        }),
-      ],
-    };
     riskData.current = {
       results: [
         result({
           createdAt: new Date(now + 2_000),
-          id: "matching-result",
+          id: "other-policy-result",
+          matchRedacted: SYNTHETIC_SECRET_REDACTION,
+          policyId: "another-policy",
+          ruleId: "secret.github_pat",
+        }),
+      ],
+    };
+    view.rerender();
+
+    await waitFor(() => expect(queryHooks.results).toHaveBeenCalled());
+    expect(report).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "event" }),
+    );
+  });
+
+  it("ignores a post-baseline finding that recorded a non-blocking outcome", async () => {
+    const now = Date.now();
+    const { riskData, report, view } = await listenForRiskResults();
+
+    riskData.current = {
+      results: [
+        result({
+          createdAt: new Date(now + 2_000),
+          enforcementOutcome: "logged",
+          id: "logged-result",
           matchRedacted: SYNTHETIC_SECRET_REDACTION,
           ruleId: "secret.github_pat",
         }),
@@ -828,43 +760,10 @@ describe("useSecretGuideOperations", () => {
     );
   });
 
-  it("ignores delayed historical records that were outside the baseline page", async () => {
+  it("ignores delayed historical findings that were outside the baseline page", async () => {
     const now = Date.now();
-    const hookData = { current: { traces: [] as HookTraceSummary[] } };
-    const riskData = { current: { results: [] as RiskResult[] } };
-    queryHooks.hooks.mockImplementation(() => ({
-      ...queryResult(hookData.current),
-      refetch: vi.fn(() =>
-        Promise.resolve({ data: hookData.current, isError: false }),
-      ),
-    }));
-    queryHooks.results.mockImplementation(() => ({
-      ...queryResult(riskData.current),
-      refetch: vi.fn(() =>
-        Promise.resolve({ data: riskData.current, isError: false }),
-      ),
-    }));
-    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
-    const view = renderHook(() => useSecretGuideOperations());
+    const { riskData, report, view } = await listenForRiskResults();
 
-    await act(async () => {
-      expect(await view.result.current.prepareTelemetryBaseline()).toBe(true);
-    });
-    act(() =>
-      view.result.current.handleSignal(
-        { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
-        report,
-      ),
-    );
-
-    hookData.current = {
-      traces: [
-        trace({
-          startTimeUnixNano: String(BigInt(now - 60_000) * 1_000_000n),
-          traceId: "delayed-old-trace",
-        }),
-      ],
-    };
     riskData.current = {
       results: [
         result({
@@ -877,49 +776,16 @@ describe("useSecretGuideOperations", () => {
     };
     view.rerender();
 
-    await waitFor(() => expect(queryHooks.hooks).toHaveBeenCalled());
+    await waitFor(() => expect(queryHooks.results).toHaveBeenCalled());
     expect(report).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "event" }),
     );
   });
 
-  it("ignores otherwise correlated evidence for a different secret prompt", async () => {
+  it("ignores a post-baseline finding for a different secret", async () => {
     const now = Date.now();
-    const hookData = { current: { traces: [] as HookTraceSummary[] } };
-    const riskData = { current: { results: [] as RiskResult[] } };
-    queryHooks.hooks.mockImplementation(() => ({
-      ...queryResult(hookData.current),
-      refetch: vi.fn(() =>
-        Promise.resolve({ data: hookData.current, isError: false }),
-      ),
-    }));
-    queryHooks.results.mockImplementation(() => ({
-      ...queryResult(riskData.current),
-      refetch: vi.fn(() =>
-        Promise.resolve({ data: riskData.current, isError: false }),
-      ),
-    }));
-    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
-    const view = renderHook(() => useSecretGuideOperations());
+    const { riskData, report, view } = await listenForRiskResults();
 
-    await act(async () => {
-      expect(await view.result.current.prepareTelemetryBaseline()).toBe(true);
-    });
-    act(() =>
-      view.result.current.handleSignal(
-        { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
-        report,
-      ),
-    );
-
-    hookData.current = {
-      traces: [
-        trace({
-          startTimeUnixNano: String(BigInt(now + 2_000) * 1_000_000n),
-          traceId: "correlated-trace",
-        }),
-      ],
-    };
     riskData.current = {
       results: [
         result({
@@ -938,9 +804,7 @@ describe("useSecretGuideOperations", () => {
   });
 
   it("keeps the dummy-secret prompt copy-gated and retries telemetry without replacing the baseline", async () => {
-    const hooks = queryResult({ traces: [] });
     const results = queryResult({ results: [] });
-    queryHooks.hooks.mockReturnValue(hooks);
     queryHooks.results.mockReturnValue(results);
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
@@ -962,21 +826,15 @@ describe("useSecretGuideOperations", () => {
     );
 
     await waitFor(() => {
-      expect(hooks.refetch).toHaveBeenCalledTimes(2);
       expect(results.refetch).toHaveBeenCalledTimes(2);
     });
   });
 
   it("recaptures a missing baseline through the normal retry signal", async () => {
-    const hooks = queryResult<{ traces: HookTraceSummary[] }>({ traces: [] });
     const results = queryResult<{ results: RiskResult[] }>({ results: [] });
-    hooks.refetch
-      .mockResolvedValueOnce({ data: { traces: [] }, isError: true })
-      .mockResolvedValue({ data: { traces: [] }, isError: false });
     results.refetch
       .mockResolvedValueOnce({ data: { results: [] }, isError: true })
       .mockResolvedValue({ data: { results: [] }, isError: false });
-    queryHooks.hooks.mockReturnValue(hooks);
     queryHooks.results.mockReturnValue(results);
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
@@ -995,8 +853,6 @@ describe("useSecretGuideOperations", () => {
       ),
     );
 
-    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledTimes(2));
-    expect(hooks.refetch).toHaveBeenCalledTimes(2);
-    expect(results.refetch).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(results.refetch).toHaveBeenCalledTimes(2));
   });
 });

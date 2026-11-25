@@ -10,8 +10,9 @@ type Development struct {
 }
 
 var (
-	_ Provisioner = (*Development)(nil)
-	_ SpendClient = (*Development)(nil)
+	_ Provisioner       = (*Development)(nil)
+	_ ExistingKeyLookup = (*Development)(nil)
+	_ SpendClient       = (*Development)(nil)
 )
 
 func NewDevelopment(apiKey string) *Development {
@@ -20,6 +21,12 @@ func NewDevelopment(apiKey string) *Development {
 
 func (o *Development) ProvisionAPIKey(context.Context, string, KeyType) (string, error) {
 	return o.apiKey, nil
+}
+
+// LookupAPIKey returns the single development key; an empty key reads as
+// not provisioned.
+func (o *Development) LookupAPIKey(context.Context, string, KeyType) (string, bool, error) {
+	return o.apiKey, o.apiKey != "", nil
 }
 
 func (o *Development) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
@@ -36,6 +43,34 @@ func (o *Development) ReinstateAPIKeyLimit(ctx context.Context, orgID string, ke
 
 func (o *Development) ReinstateAPIKeyLimitWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int) (int, error) {
 	return o.ReinstateAPIKeyLimit(ctx, orgID, keyType, limit)
+}
+
+func (o *Development) AddAPIKeyDisableCause(context.Context, string, KeyType, DisableCause) (DisableCauseChange, error) {
+	return unchangedDisableCauseChange(), nil
+}
+
+func (o *Development) AddAPIKeyDisableCauseWithDB(context.Context, DBTX, string, KeyType, DisableCause) (DisableCauseChange, error) {
+	return unchangedDisableCauseChange(), nil
+}
+
+func (o *Development) RemoveAPIKeyDisableCause(context.Context, string, KeyType, DisableCause, *int) (int, DisableCauseChange, error) {
+	return 0, unchangedDisableCauseChange(), nil
+}
+
+func (o *Development) RemoveAPIKeyDisableCauseWithDB(context.Context, DBTX, string, KeyType, DisableCause, *int) (int, DisableCauseChange, error) {
+	return 0, unchangedDisableCauseChange(), nil
+}
+
+func (o *Development) PrepareEnterpriseTrialConversionKeyWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, floor int64) (EnterpriseTrialConversionKeyChange, error) {
+	return new(OpenRouter).PrepareEnterpriseTrialConversionKeyWithDB(ctx, db, orgID, keyType, floor)
+}
+
+func (o *Development) ReconcileAPIKeyDisabled(context.Context, string, KeyType) error {
+	return nil
+}
+
+func (o *Development) ReconcileAPIKeyConversionPolicy(context.Context, string, KeyType) error {
+	return nil
 }
 
 func (o *Development) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {

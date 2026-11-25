@@ -1,3 +1,4 @@
+import { CostsSetupEmptyState } from "@/components/setup-empty-state";
 import { formatCost } from "@/lib/money";
 import { Page } from "@/components/page-layout";
 import { telemetryListAttributeKeys } from "@gram/client/funcs/telemetryListAttributeKeys";
@@ -24,7 +25,6 @@ import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { resolveScopeBillingMode } from "@/components/estimated-cost-utils";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-dock";
-import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -61,6 +61,7 @@ import {
   isAttributionDim,
   isDataset,
   isDimension,
+  isDrillableValue,
   isFullSpendDataset,
   isSessionLeaf,
   isSessionsAxis,
@@ -1032,6 +1033,24 @@ export function CostsExplorer(): JSX.Element {
   const drillInto = (row: QueryRow) =>
     drillIntoDim(dataGroupBy, row.groupValue, row.dimensionValues);
 
+  // Drill from a clicked bar segment. The chart identifies a stack by its
+  // display label, so find the row that label came from and drill it exactly
+  // as a row click would. The "Other" fold and any label with no surviving row
+  // simply don't drill.
+  //
+  // The chart merges raw values that display the same into one segment, and a
+  // merged segment has no single row to drill — picking the first would take
+  // the user somewhere narrower than the bar they clicked, with no sign that
+  // the rest was dropped. Those segments don't drill either; their rows in the
+  // table below still do, one raw value at a time.
+  const drillIntoSeries = (label: string) => {
+    const matches = rows.filter(
+      (r) => displayName(dataGroupBy, r.groupValue) === label,
+    );
+    const row = matches.length === 1 ? matches[0] : undefined;
+    if (row && canDrill && isDrillableValue(row.groupValue)) drillInto(row);
+  };
+
   // Rows are drillable only when there's a *populated* level below the
   // displayed axis — so you can't drill into an empty breakdown.
   // (Availability-unknown during load falls back to the static chain, keeping
@@ -1300,6 +1319,7 @@ export function CostsExplorer(): JSX.Element {
       loading={loadingSlice}
       isError={isError}
       onSelectRange={handleChartRangeSelect}
+      onSelectSeries={drillIntoSeries}
     />
   );
 
@@ -1319,14 +1339,12 @@ export function CostsExplorer(): JSX.Element {
               agent, and model.
             </p>
           </div>
-          <div className="relative flex-1">
-            <div
-              className="pointer-events-none h-full select-none"
-              aria-hidden="true"
-            >
-              <ObservabilitySkeleton />
-            </div>
-            <EnableLoggingOverlay onEnabled={() => void refetch()} />
+          <div className="flex-1">
+            <EnableLoggingOverlay
+              onEnabled={() => void refetch()}
+              screenshotSrc="/empty-states/cost_empty.png"
+              screenshotAlt="Costs dashboard with attributed AI spend"
+            />
           </div>
         </div>
       </>
@@ -1341,6 +1359,24 @@ export function CostsExplorer(): JSX.Element {
         contextInfo={assistantContext}
         suggestions={assistantSuggestions}
       />
+      {!loadingSlice &&
+        !isError &&
+        data &&
+        rows.every(
+          (row) =>
+            (row.measures.totalCost ?? 0) === 0 &&
+            (row.measures.totalChats ?? 0) === 0 &&
+            (row.measures.totalToolCalls ?? 0) === 0 &&
+            llmTokens(row.measures) === 0,
+        ) && (
+          <CostsSetupEmptyState
+            filtered={
+              path.length > 0 ||
+              (dateRange !== "30d" && dateRange !== "90d") ||
+              !!customRange
+            }
+          />
+        )}
       <EntityProfile
         entity={currentEntity}
         path={path}

@@ -70,6 +70,10 @@ func TestService_CreateRole(t *testing.T) {
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}, {ResourceKind: "project", ResourceID: "project-2"}}},
 			{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
+			{Scope: string(authz.ScopeAgentRead), Selectors: nil},
+			{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
+			{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
+			{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
 		},
 		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
@@ -82,13 +86,21 @@ func TestService_CreateRole(t *testing.T) {
 	require.Equal(t, 2, role.MemberCount)
 	require.NotEmpty(t, role.CreatedAt)
 	require.NotEmpty(t, role.UpdatedAt)
-	require.Len(t, role.Grants, 2)
+	require.Len(t, role.Grants, 6)
 	roundtrip, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: role.ID})
 	require.NoError(t, err)
 	require.Equal(t, role.ID, roundtrip.ID)
+	require.Len(t, roundtrip.Grants, 6)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+role.ID))
-	require.Len(t, grants, 3)
+	require.Len(t, grants, 7)
+	scopes := make([]string, 0, len(grants))
+	for _, grant := range grants {
+		scopes = append(scopes, grant.Scope)
+	}
+	for _, scope := range []authz.Scope{authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer} {
+		require.Contains(t, scopes, string(scope))
+	}
 }
 
 func TestService_CreateRole_RejectsRiskPolicyGrant(t *testing.T) {
@@ -107,6 +119,27 @@ func TestService_CreateRole_RejectsRiskPolicyGrant(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 	require.ErrorContains(t, err, `managed by "risk_policy" grants`)
+	ti.roles.AssertNotCalled(t, "CreateRole", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestService_CreateRole_RejectsToolLimitOnWriteScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+
+	// Tool kinds only limit mcp:connect, so this rule is a bad request.
+	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
+		Name: "Read-only Writer",
+		Grants: []*gen.RoleGrant{
+			{Scope: string(authz.ScopeMCPWrite), Selectors: []*gen.Selector{
+				{ResourceKind: "mcp", ResourceID: "*", Disposition: conv.PtrEmpty("read_only")},
+			}},
+		},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.ErrorContains(t, err, `invalid selector for scope "mcp:write"`)
 	ti.roles.AssertNotCalled(t, "CreateRole", mock.Anything, mock.Anything, mock.Anything)
 }
 

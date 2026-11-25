@@ -1,17 +1,21 @@
-//nolint:exhaustruct // MCP SDK options deliberately rely on documented zero-value defaults.
+//nolint:exhaustruct_v5 // MCP SDK options deliberately rely on documented zero-value defaults.
 package platformmcp
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -90,7 +94,12 @@ type Gate interface {
 	Enabled(ctx context.Context, organizationID string) (bool, error)
 }
 
+// Authorizer admits an authenticated organization member and enforces the
+// explicit policy declared by each external tool or resource.
 type Authorizer interface {
+	PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error)
+	AuthorizeExternalCall(ctx context.Context, principal Principal, policy ExternalAuthorization) error
+	RequireLiveMembership(ctx context.Context, principal Principal) error
 	RequireLiveOrgAdmin(ctx context.Context, principal Principal) error
 }
 
@@ -104,14 +113,18 @@ type ReadinessRecorder interface {
 type Runtime struct {
 	// registrar holds every tool this deployment composed, so an admitted
 	// audience can be served from the same pass that built the endpoint.
-	registrar            *Registrar
-	authenticator        Authenticator
-	gate                 Gate
-	authorizer           Authorizer
+	registrar     *Registrar
+	authenticator Authenticator
+	gate          Gate
+	authorizer    Authorizer
+	// protectedResourceURL is the RFC 9728 metadata URL advertised when a
+	// request carries no platform origin. Empty disables the challenge hint.
 	protectedResourceURL string
 	readiness            ReadinessRecorder
 	telemetry            OAuthTelemetry
 	server               *mcp.Server
+	// discovery picks and serves the small tool surface for budgeted hosts.
+	discovery DiscoveryConfig
 }
 
 func NewRuntime(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource) *Runtime {
@@ -127,14 +140,16 @@ func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, ga
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
 func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) *Runtime {
-	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate)
+	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, nil, plugins, sessionRecall, nil, candidate, nil, nil, nil, nil)
 }
 
-func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor) *Runtime {
+func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessReads *AccessReadService, accessRoleMutations *AccessRoleMutationService, assistantIdentity *AssistantIdentityService, signalAuthoring *SignalAuthoringService, connectionMutations ...*MCPConnectionMutationService) *Runtime {
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		postgresReader.setInventoryCursorKey(cursorKeyMaterial)
 	}
-	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, riskMutations, candidate)
+	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations, assistantIdentity, signalAuthoring, connectionMutations...)
+	registrar.withExternalAuthorizer(authorizer)
+	registrar.withLogger(logger)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
@@ -144,30 +159,138 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 		telemetry:            noopOAuthTelemetry{},
 		server:               server,
 		registrar:            registrar,
+		discovery:            DiscoveryConfig{},
 	}
+	// Register the wrappers together so their order is reviewable: readiness is
+	// outside catalogue aggregation and therefore observes one completed external
+	// tools/list call, never the SDK pages the catalogue middleware reads inside.
+	// Discovery is outside the catalogue, so a meta-tool's dispatched call
+	// passes through it like a direct call.
+	middlewares := []mcp.Middleware{discoveryMiddleware(runtime, logger), capabilityCatalogueMiddleware(registrar)}
 	if readiness != nil {
-		runtime.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
-			return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
-				result, err := next(ctx, method, req)
-				if method == "tools/list" && err == nil && result != nil {
-					if principal, ok := PrincipalFromContext(ctx); ok {
-						if recordErr := runtime.readiness.RecordReady(ctx, principal, time.Now()); recordErr != nil {
-							// Discovery succeeded; the idempotent lifecycle projection is
-							// best-effort and must not turn an MCP response into a failure.
-							logger.WarnContext(ctx, "record platform mcp connection readiness", attr.SlogError(recordErr))
-						}
+		middlewares = append([]mcp.Middleware{readinessMiddleware(runtime, logger)}, middlewares...)
+	}
+	// Outermost, so every middleware and tool in a request reads one catalog snapshot.
+	middlewares = append([]mcp.Middleware{aiCatalogPinMiddleware(registrar)}, middlewares...)
+	runtime.server.AddReceivingMiddleware(middlewares...)
+	return runtime
+}
+
+func aiCatalogPinMiddleware(registrar *Registrar) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			return next(registrar.withAICatalogSnapshot(ctx), method, req)
+		}
+	}
+}
+
+func readinessMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			result, err := next(ctx, method, req)
+			if method == "tools/list" && err == nil && result != nil {
+				if principal, ok := PrincipalFromContext(ctx); ok {
+					if recordErr := runtime.readiness.RecordReady(ctx, principal, time.Now()); recordErr != nil {
+						// Discovery succeeded; the idempotent lifecycle projection is
+						// best-effort and must not turn an MCP response into a failure.
+						logger.WarnContext(ctx, "record platform mcp connection readiness", attr.SlogError(recordErr))
 					}
 				}
-				return result, err
 			}
-		})
+			return result, err
+		}
 	}
-	return runtime
+}
+
+// capabilityCatalogueMiddleware filters tools/list after the request context has
+// been prepared with the caller's current grants. The SDK paginates its shared
+// catalogue before middleware runs, so the first request gathers every internal
+// page and filters once. Callers therefore never receive sparse pages or cursors
+// whose hidden entries would reveal catalogue shape.
+func capabilityCatalogueMiddleware(registrar *Registrar) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if method != "tools/list" {
+				return next(ctx, method, req)
+			}
+			listReq, ok := req.(*mcp.ListToolsRequest)
+			if !ok {
+				return nil, ErrUnavailable
+			}
+			params := &mcp.ListToolsParams{}
+			if listReq.Params != nil {
+				*params = *listReq.Params
+			}
+			if params.Cursor != "" {
+				return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: "tools/list is not paginated for this caller"}
+			}
+
+			result, err := next(ctx, method, req)
+			if err != nil {
+				return nil, err
+			}
+			listed, ok := result.(*mcp.ListToolsResult)
+			if !ok {
+				return result, nil
+			}
+			tools := append([]*mcp.Tool(nil), listed.Tools...)
+			for pages := 1; listed.NextCursor != ""; pages++ {
+				if pages > len(registrar.For(AudienceExternal))+1 {
+					return nil, ErrUnavailable
+				}
+				nextReq := *listReq
+				nextParams := *params
+				nextParams.Cursor = listed.NextCursor
+				nextReq.Params = &nextParams
+				nextResult, nextErr := next(ctx, method, &nextReq)
+				if nextErr != nil {
+					return nil, nextErr
+				}
+				listed, ok = nextResult.(*mcp.ListToolsResult)
+				if !ok {
+					return nil, ErrUnavailable
+				}
+				tools = append(tools, listed.Tools...)
+			}
+			listed.Tools = registrar.FilterExternalTools(ctx, mustPrincipal(ctx), tools)
+			listed.NextCursor = ""
+			listed.TTLMs = 0
+			listed.CacheScope = "private"
+			return listed, nil
+		}
+	}
+}
+
+func mustPrincipal(ctx context.Context) Principal {
+	principal, _ := PrincipalFromContext(ctx)
+	return principal
 }
 
 func (r *Runtime) WithOAuthTelemetry(telemetry OAuthTelemetry) *Runtime {
 	if telemetry != nil {
 		r.telemetry = telemetry
+	}
+	return r
+}
+
+// WithDashboardLinks lets result cards link to dashboard pages on the
+// dashboard the request arrived for. db resolves a project ID to its slug in
+// the caller's organization; it may be nil.
+func (r *Runtime) WithDashboardLinks(dashboardURL, serverURL *url.URL, db platformrepo.DBTX) *Runtime {
+	if r != nil && r.registrar != nil {
+		r.registrar.withDashboardLinks(newCardLinks(dashboardURL, serverURL, db))
+	}
+	return r
+}
+
+// WithAICatalog injects the AI client catalog that identifies OAuth clients.
+// Every production runtime needs one.
+func (r *Runtime) WithAICatalog(catalog *aivendors.Store) *Runtime {
+	if catalog == nil {
+		panic("platformmcp: AI client catalog store is required")
+	}
+	if r != nil && r.registrar != nil {
+		r.registrar.withAICatalog(catalog)
 	}
 	return r
 }
@@ -186,6 +309,7 @@ func (r *Runtime) recordAuthOutcome(ctx context.Context, outcome, reason string)
 }
 
 func (r *Runtime) Handler() http.Handler {
+	r.registrar.requireAICatalog()
 	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return r.server
 	}, &mcp.StreamableHTTPOptions{
@@ -210,7 +334,13 @@ func (r *Runtime) Handler() http.Handler {
 			}
 			r.recordAuthOutcome(req.Context(), "unauthorized", "")
 			if r.protectedResourceURL != "" {
-				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+r.protectedResourceURL+`"`)
+				// The metadata lives on the platform host the request arrived
+				// on, which is also the only host its tokens are valid for.
+				resourceMetadata := r.protectedResourceURL
+				if base := requestPlatformBaseURL(req.Context()); base != nil {
+					resourceMetadata = platformProtectedResourceMetadataURL(base)
+				}
+				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+resourceMetadata+`"`)
 			}
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -226,19 +356,20 @@ func (r *Runtime) Handler() http.Handler {
 			http.Error(w, "Platform MCP is not enabled for this organization", http.StatusForbidden)
 			return
 		}
-		if err := r.authorizer.RequireLiveOrgAdmin(req.Context(), principal); err != nil {
+		ctx, err := r.authorizer.PrepareExternalContext(req.Context(), principal)
+		if err != nil {
 			if isAuthorizationDenied(err) {
-				r.recordAuthOutcome(req.Context(), "access_denied", "authorization_denied")
+				r.recordAuthOutcome(req.Context(), "access_denied", "membership_denied")
 				http.Error(w, "forbidden", http.StatusForbidden)
 			} else {
-				r.recordAuthOutcome(req.Context(), "temporarily_unavailable", "")
+				r.recordAuthOutcome(req.Context(), "temporarily_unavailable", "authorization_unavailable")
 				http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			}
 			return
 		}
 
 		r.recordAuthOutcome(req.Context(), "succeeded", "")
-		req = req.WithContext(contextWithPrincipal(req.Context(), principal))
+		req = req.WithContext(ctx)
 		req.Body = http.MaxBytesReader(w, req.Body, MaxBodyBytes)
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Pragma", "no-cache")
@@ -316,5 +447,6 @@ func (r *Runtime) AssistantTools() []Descriptor {
 	if r == nil {
 		return nil
 	}
+	r.registrar.requireAICatalog()
 	return r.registrar.For(AudienceAssistant)
 }

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import {
@@ -94,10 +95,10 @@ describe("welcomeHeadline", () => {
     ).toEqual(["Choose your", "first move"]);
   });
 
-  it("keeps Pick up where you left off for a single resume card", () => {
+  it("keeps Pick up where you left off on one line for a resume card", () => {
     expect(
       welcomeHeadline({ columnCount: 1, isTrial: false, isZeroData: false }),
-    ).toEqual(["Pick up where", "you left off"]);
+    ).toEqual(["Pick up where you left off"]);
   });
 });
 

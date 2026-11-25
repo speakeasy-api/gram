@@ -6,10 +6,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -59,7 +67,7 @@ func TestHandleRegister_PrivateKeyJWT(t *testing.T) {
 	// one.
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(row, code, verifier))
-	requireInvalidClient(t, tw)
+	requireInvalidClient(t, tw, http.StatusBadRequest)
 
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw = postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(row, code, verifier), signer.assertion(t, row.ClientID, advertisedIssuer)))
@@ -129,6 +137,27 @@ func TestHandleRegister_SecretMintingByMethod(t *testing.T) {
 	require.NotContains(t, public, "client_secret")
 }
 
+func TestHandleRegister_JWTBearerWithoutRedirects(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	body := `{"client_name":"assertion-only","grant_types":["urn:ietf:params:oauth:grant-type:jwt-bearer"],"token_endpoint_auth_method":"none"}`
+	w, resp := registerJSON(t, ti, toolset.McpSlug.String, body)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Equal(t, []any{}, resp["redirect_uris"])
+	require.Equal(t, []any{}, resp["response_types"])
+
+	clientID, ok := resp["client_id"].(string)
+	require.True(t, ok)
+	row, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+		UserSessionIssuerID: issuer.ID,
+		ClientID:            clientID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, row.RedirectUris)
+}
+
 // A CIMD document declaring private_key_jwt with an inline key set resolves
 // to a row the token endpoint holds to an assertion.
 func TestOAuthCIMD_PrivateKeyJWTInlineKeys(t *testing.T) {
@@ -158,7 +187,7 @@ func TestOAuthCIMD_PrivateKeyJWTInlineKeys(t *testing.T) {
 
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(row, code, verifier))
-	requireInvalidClient(t, tw)
+	requireInvalidClient(t, tw, http.StatusBadRequest)
 
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw = postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(row, code, verifier), signer.assertion(t, row.ClientID, advertisedIssuer)))
@@ -242,7 +271,7 @@ func TestOAuthCIMD_AuthMethodDowngradeRefused(t *testing.T) {
 	})
 	lapseCIMDCache(t, ctx, ti, row)
 	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 
 	after, err := queries.GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{UserSessionIssuerID: toolset.UserSessionIssuerID.UUID, ClientID: ds.clientID})
 	require.NoError(t, err)
@@ -304,11 +333,129 @@ func TestHandleGetAuthorizationServer_AdvertisesPrivateKeyJWT(t *testing.T) {
 	var meta struct {
 		Methods []string `json:"token_endpoint_auth_methods_supported"`
 		Algs    []string `json:"token_endpoint_auth_signing_alg_values_supported"`
+		Grants  []string `json:"grant_types_supported"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
+	// Client authentication remains supported without the removed runtime token issuer.
+	require.NotContains(t, meta.Grants, "client_credentials")
 	require.Contains(t, meta.Methods, "private_key_jwt")
 	require.Contains(t, meta.Algs, "RS256")
 	require.Contains(t, meta.Algs, "ES256")
 	require.NotContains(t, meta.Algs, "HS256")
 	require.NotContains(t, meta.Algs, "none")
+}
+
+type authorizationServerGrantMetadata struct {
+	GrantTypes    []string `json:"grant_types_supported"`
+	GrantProfiles []string `json:"authorization_grant_profiles_supported"`
+}
+
+func loadAuthorizationServerGrantMetadata(t *testing.T, ctx context.Context, ti *testInstance, slug string) authorizationServerGrantMetadata {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+slug, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", slug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleGetAuthorizationServer(w, req))
+	require.Equal(t, http.StatusOK, w.Code)
+	var meta authorizationServerGrantMetadata
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
+	return meta
+}
+
+// A self-registering client may claim jwt-bearer, yet an endpoint without
+// ID-JAG must not advertise it: the advertised list is built per endpoint, not
+// from the registration list.
+func TestHandleGetAuthorizationServer_OmitsIDJAGWithoutTrustedIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	require.Contains(t, usersessions.RegistrableGrantTypes, oauthwire.GrantTypeJWTBearer)
+
+	meta := loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
+	// jwt-bearer is advertised because this deployment serves the clientless
+	// workload grant, which is a different use of the same grant type. The
+	// ID-JAG profile is what says the endpoint accepts an authenticated
+	// identity assertion, and it stays absent.
+	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
+	require.Empty(t, meta.GrantProfiles)
+}
+
+func TestHandleGetAuthorizationServer_AdvertisesIDJAGWithTrustedIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	remoteIssuer, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "metadata-id-jag-" + uuid.NewString(),
+		Issuer:                            "https://identity.example.test",
+		JwksUri:                           conv.ToPGText("https://identity.example.test/jwks"),
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{},
+		ResponseTypesSupported:            []string{},
+		TokenEndpointAuthMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	issuer, err := usersessions_repo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessions_repo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                         "metadata-id-jag-" + uuid.NewString(),
+		AuthnChallengeMode:           "chain",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remoteIssuer.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
+
+	meta := loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
+	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
+	require.Equal(t, []string{oauthwire.GrantProfileIDJAG}, meta.GrantProfiles)
+
+	// Only admitted client ID metadata document clients may exchange an ID-JAG.
+	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeDisabled)
+	meta = loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
+	require.Empty(t, meta.GrantProfiles)
+}
+
+// A trusted issuer without a jwks_uri cannot have its assertions verified.
+func TestHandleGetAuthorizationServer_OmitsIDJAGWithoutTrustedIssuerJWKS(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	remoteIssuer, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "metadata-id-jag-" + uuid.NewString(),
+		Issuer:                            "https://identity.example.test",
+		JwksUri:                           pgtype.Text{},
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{},
+		ResponseTypesSupported:            []string{},
+		TokenEndpointAuthMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	issuer, err := usersessions_repo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessions_repo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                         "metadata-id-jag-" + uuid.NewString(),
+		AuthnChallengeMode:           "chain",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remoteIssuer.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
+
+	require.Empty(t, loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String).GrantProfiles)
 }

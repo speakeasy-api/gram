@@ -27,29 +27,33 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/platformtools/threadcontext"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type toolsCallParams struct {
@@ -89,7 +93,6 @@ func handleToolsCall(
 	metrics *mcpmetrics.Metrics,
 	identityCoverage *mcptoolexecution.IdentityCoverageCheckpoint,
 	authzEngine *authz.Engine,
-	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
@@ -99,12 +102,14 @@ func handleToolsCall(
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	telemLogger *tm.Logger,
+	toolCallLogger *otelpub.Logger,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporalEnv *temporal.Environment,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
+	scan *mcpriskscan.Evaluator,
+	local hostedLocalTools,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -125,6 +130,54 @@ func handleToolsCall(
 	// Direct internal callers do not pass through handleRequest's method
 	// boundary, so record them once the toolset supplies the organization.
 	recordToolsCallIdentityCoverage(ctx, identityCoverage, toolset.OrganizationID, payload)
+
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
+	}
+	// Dynamic search/describe return before execution, but still need request
+	// attribution. Preserve their availability when optional lookup fails.
+	attributionErr := payload.resolveServingAttribution(ctx, logger, db, toolsetID)
+	attributedMCPServerID := payload.servingServerID()
+
+	// A local tool's name is taken on the server, so it is matched before any
+	// of the server's own tools and before the filters that narrow them.
+	if local != nil && attributedMCPServerID != nil {
+		if tool, ok := localToolNamed(local(ctx, logger, toolset.OrganizationID, payload), params.Name); ok {
+			// A local tool's arguments are the agent's words like any other
+			// call's, so request risk policies screen them before it answers.
+			decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+				Surface:         mcpriskscan.SurfaceHostedMCP,
+				Method:          mcpriskscan.MethodToolsCall,
+				OrganizationID:  toolset.OrganizationID,
+				ProjectID:       payload.projectID.String(),
+				ServerID:        attributedMCPServerID.String(),
+				MetaServerID:    payload.metaMcpServerID,
+				ToolsetID:       toolset.ID,
+				ToolName:        params.Name,
+				ResourceURI:     "",
+				PromptName:      "",
+				ChatID:          payload.chatID,
+				ToolAnnotations: nil,
+			}, mcpriskscan.BorrowPayload(params.Arguments)))
+			if decision.HeldForApproval() {
+				identity := serverInfoHostedToolset
+				if payload.metaMcpServerID != "" {
+					identity = serverInfoMetaServer
+				}
+				return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, identity)
+			}
+			if decision.Denied() {
+				return nil, oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
+			}
+			return answerHostedLocalToolCall(ctx, logger, clientInfoStore, payload, req.ID, tool, params.Arguments, reqMeta.ClientInfo)
+		}
+	}
+	// A gateway let this call through only because it named a local tool, so
+	// none of the server's own tools may answer it.
+	if localToolsOnly(ctx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "%s", remotemcp.ToolNotApprovedMessage).LogInfo(ctx, logger)
+	}
 
 	// Apply the ?tags= filter before any tool resolution — dynamic dispatch,
 	// proxy matching, and the static name lookup all read this slice, so a
@@ -155,9 +208,13 @@ func handleToolsCall(
 	if dynamicFacade {
 		switch params.Name {
 		case searchToolsToolName:
-			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporalEnv)
+			found, searchErr := handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore)
+			payload.resultSucceeded = searchErr == nil
+			return found, searchErr
 		case describeToolsToolName:
-			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
+			described, describeErr := handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
+			payload.resultSucceeded = describeErr == nil
+			return described, describeErr
 		case executeToolToolName:
 			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
 			if err != nil {
@@ -184,107 +241,92 @@ func handleToolsCall(
 	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		mcpURL = requestContext.Host + requestContext.ReqURL
-		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
+		// Count attempts even when legacy server attribution fails. Resolve the
+		// optional metric identity before recording, without changing authorization.
+		defer func() {
+			metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, conv.PtrValOr(optionalUUIDString(attributedMCPServerID), ""), params.Name)
+		}()
 	}
 
 	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
 
-	toolsetID, err := uuid.Parse(toolset.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
+	if attributionErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, attributionErr, "resolve MCP server for toolset").LogError(ctx, logger)
 	}
 
-	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)
-
-	var plan *gateway.ToolCallPlan
-	var toolURN urn.Tool
-
-	// Try proxy tool match first - captures full plan via closure
-	var matchedPlan *gateway.ToolCallPlan
-	resolve := func(ctx context.Context, u urn.Tool, pid uuid.UUID) (*externalmcp.ToolCallPlan, error) {
-		fullPlan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, u, pid)
-		if err != nil {
-			return nil, fmt.Errorf("get tool call plan by URN: %w", err)
-		}
-		matchedPlan = fullPlan
-		return fullPlan.ExternalMCP, nil
-	}
-
-	var planInputs *externalmcp.ToolCallPlan
-	if !payload.skipProxyTools {
-		planInputs, err = executor.MatchPlanInputs(ctx, params.Name, uuid.UUID(projectID), resolve)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to match proxy tool").LogError(ctx, logger)
-		}
-	}
-
+	// Tool variations can rename two tools onto one name, so the whole slice is
+	// scanned: picking the first match would dispatch an arbitrary one of them.
 	var tool *types.Tool
-
-	if planInputs != nil {
-		// Matched a proxy tool - use captured plan with updated tool name
-		matchedPlan.ExternalMCP.ToolName = planInputs.ToolName
-		plan = matchedPlan
-		toolURN = plan.Descriptor.URN
-	} else {
-		// Fall through to materialized tool handling. Tool variations can
-		// rename two tools onto one name, so the whole slice is scanned:
-		// picking the first match would dispatch an arbitrary one of them.
-		for _, t := range toolset.Tools {
-			if conv.IsProxyTool(t) {
-				continue
-			}
-
-			baseTool, err := conv.ToBaseTool(t)
-			if err != nil {
-				continue
-			}
-			if baseTool.Name == params.Name {
-				if tool != nil {
-					return nil, oops.E(oops.CodeInvalid, nil, "ambiguous tool name: %q matches more than one tool in this toolset", params.Name).LogError(ctx, logger)
-				}
-				tool = t
-			}
-		}
-
-		if tool == nil {
-			return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").LogError(ctx, logger)
-		}
-
-		urn, err := conv.GetToolURN(*tool)
+	for _, t := range toolset.Tools {
+		baseTool, err := conv.ToBaseTool(t)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").LogError(ctx, logger)
+			continue
 		}
-		toolURN = *urn
+		if baseTool.Name == params.Name {
+			if tool != nil {
+				return nil, oops.E(oops.CodeInvalid, nil, "ambiguous tool name: %q matches more than one tool in this toolset", params.Name).LogError(ctx, logger)
+			}
+			tool = t
+		}
+	}
 
-		plan, err = toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, uuid.UUID(projectID))
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").LogError(ctx, logger)
-		}
+	if tool == nil {
+		return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").LogError(ctx, logger)
+	}
+
+	parsedURN, err := conv.GetToolURN(*tool)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").LogError(ctx, logger)
+	}
+	toolURN := *parsedURN
+
+	plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, uuid.UUID(projectID))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").LogError(ctx, logger)
+	}
+
+	// A gateway dispatch that fails before the telemetry row below is
+	// registered is logged by the gateway, under this resolved tool.
+	metaAttempt, _ := ctx.Value(metaToolCallAttemptKey{}).(*metaToolCallAttempt)
+	if metaAttempt != nil {
+		metaAttempt.descriptor = plan.Descriptor
 	}
 
 	// Per-tool RBAC check: if the user is authenticated on a private MCP,
 	// verify they have mcp:connect for this specific tool (not just the server).
 	// The connection-level check only validates the server; this narrows to the
 	// tool and disposition dimensions. Public MCPs skip this — they're open to
-	// everyone, mirroring the connection-level guard in impl.go.
-	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
-		var disposition string
-		if tool != nil {
-			baseTool, err := conv.ToBaseTool(tool)
-			if err == nil {
-				disposition = conv.DispositionFromAnnotations(baseTool.Annotations)
-			}
+	// everyone, mirroring the connection-level guard in impl.go. Both the
+	// privacy read and the resource id follow the wrapper when one fronts
+	// the request.
+	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
+		// A tool whose annotations cannot be read is refused: classifying it
+		// as unannotated would guess at a value the tool may not have.
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "read tool annotations for authorization").LogError(ctx, logger)
 		}
-		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
-			Tool:        params.Name,
-			Disposition: disposition,
-			ProjectID:   payload.projectID.String(),
-		})); err != nil {
+		disposition := toolDisposition(ctx, logger, params.Name, baseTool.Annotations)
+		if err := authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(payload.mcpConnectResourceID(toolset.ID)), authz.ProjectIDOf(payload.projectID)).ToolCall(params.Name, disposition)); err != nil {
 			return nil, fmt.Errorf("authorize MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
 		}
 	}
 
-	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
+	// A gateway execute_read_only_tool call runs only tools whose annotations
+	// classify them read-only, the classification per-tool RBAC uses above. It
+	// runs after RBAC so a caller who may not call the tool learns nothing
+	// about its annotations.
+	if metaAttempt != nil && metaAttempt.dispositions == memberToolReadOnly {
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "read tool annotations for read-only call").LogError(ctx, logger)
+		}
+		if toolDisposition(ctx, logger, params.Name, baseTool.Annotations) != authz.DispositionReadOnly {
+			return nil, oops.E(oops.CodeForbidden, nil, "%s", readOnlyToolRefusal(params.Name)).LogInfo(ctx, logger)
+		}
+	}
+
+	userConfig, credentialSources, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
 	if err != nil {
 		return nil, err
 	}
@@ -315,13 +357,19 @@ func handleToolsCall(
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
-		OAuthToken: oauthToken,
 		GramEmail:  gramEmail,
 		GramChatID: payload.chatID,
 		MCPClient:  clientIdentity,
+		Credentials: &toolconfig.CredentialReport{
+			Sent:            nil,
+			GrantFailure:    "",
+			CallerVariables: nil,
+			ServerVariable:  "",
+			Challenges:      nil,
+		},
 	}
 
-	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
+	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, payload.projectID, toolsetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to filter omitted environment variables").LogError(ctx, logger)
 	}
@@ -331,9 +379,11 @@ func handleToolsCall(
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	rw := &toolCallResponseWriter{
-		headers:    make(http.Header),
-		body:       new(bytes.Buffer),
-		statusCode: http.StatusOK,
+		headers:       make(http.Header),
+		body:          new(bytes.Buffer),
+		statusCode:    http.StatusOK,
+		failure:       nil,
+		resultIsError: false,
 	}
 
 	requestBodyBytes := params.Arguments
@@ -348,20 +398,71 @@ func handleToolsCall(
 		return nil, err
 	}
 
-	// Assistant-initiated calls leave a durable audit trail entry on dispatch,
-	// regardless of how the tool execution turns out. Ordinary user MCP
-	// traffic is not audited here.
-	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+	if plan.Kind == gateway.ToolKindPlatform {
+		if definition, ok := platformtools.FindToolDescriptor(toolURN, platformExtras...); ok {
+			ctx, toolCallEnv, _, err = platformtools.PrepareThreadContext(ctx, definition, toolCallEnv, bytes.NewReader(params.Arguments), func(ctx context.Context, threadID uuid.UUID, write bool) (contextvalues.AssistantPrincipal, string, error) {
+				principal, chatID, err := threadcontext.Resolve(ctx, db, authzEngine, threadID, write)
+				if err != nil {
+					return principal, chatID, fmt.Errorf("resolve platform thread: %w", err)
+				}
+				return principal, chatID, nil
+			})
+			if err != nil {
+				return nil, platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
+			}
+		}
+	}
+
+	// Automatic and explicit assistant targets leave a durable dispatch audit
+	// trail without changing the identity of the caller.
+	if principal, ok := contextvalues.GetAssistantToolTarget(ctx); ok {
 		recordAssistantToolCallAudit(ctx, logger, auditLogger, db, assistantToolCallAudit{
 			organizationID: toolset.OrganizationID,
 			projectID:      payload.projectID,
 			principal:      principal,
-			chatID:         payload.chatID,
+			chatID:         toolCallEnv.GramChatID,
 			toolsetSlug:    payload.toolset,
 			toolName:       params.Name,
 			toolURN:        toolURN,
 			params:         params.Arguments,
 		})
+	}
+
+	serverID := ""
+	if attributedMCPServerID != nil {
+		serverID = attributedMCPServerID.String()
+	}
+	externalUserID := payload.externalUserID
+	if externalUserID == "" && oauthToken != "" {
+		externalUserID = jwtclaims.UnsafeExtractSubject(oauthToken)
+	}
+
+	callerID, callerEmail := toolCallCaller(ctx, payload, descriptor.OrganizationID, gramEmail)
+	agentID := ""
+	if agent, ok := contextvalues.EffectiveAgent(ctx); ok {
+		agentID = agent.ID
+	}
+
+	// One id names the call on its telemetry_logs row and its agent_events row.
+	call := toolCall{
+		id:              uuid.NewString(),
+		start:           time.Now(),
+		organizationID:  descriptor.OrganizationID,
+		projectID:       descriptor.ProjectID,
+		sessionID:       payload.sessionID,
+		chatID:          toolCallEnv.GramChatID,
+		toolName:        descriptor.Name,
+		toolURN:         toolURN.String(),
+		toolsetSlug:     payload.toolset,
+		mcpServerID:     serverID,
+		metaMCPServerID: payload.metaMcpServerID,
+		mcpURL:          mcpURL,
+		clientName:      clientIdentity.Name,
+		clientVersion:   clientIdentity.Version,
+		externalUserID:  externalUserID,
+		userID:          callerID,
+		userEmail:       callerEmail,
+		agentID:         agentID,
 	}
 
 	logAttrs := tm.HTTPLogAttributes{}
@@ -380,7 +481,10 @@ func handleToolsCall(
 			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
-			ChatID:                conv.PtrEmpty(payload.chatID),
+			ChatID:                conv.PtrEmpty(toolCallEnv.GramChatID),
+			MCPServerID:           optionalUUIDString(attributedMCPServerID),
+			MCPEndpointID:         optionalUUIDString(payload.mcpEndpointID),
+			MetaMCPServerID:       conv.PtrEmpty(payload.metaMcpServerID),
 			Type:                  plan.BillingType,
 			ResourceURI:           "",
 			FunctionCPUUsage:      functionCPU,
@@ -389,19 +493,29 @@ func handleToolsCall(
 		})
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
+		logAttrs[attr.ToolCallIDKey] = call.id
+		logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(rw.statusCode, rw.resultIsError)
+		logAttrs[attr.ToolCallDurationKey] = time.Since(call.start).Seconds()
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		logAttrs.RecordAuthenticatedActor(ctx)
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
-
-		if payload.chatID != "" {
-			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
+		// A call the gateway answered with an error has no tool output, so
+		// the row carries the error's most specific client-safe message, the
+		// same text its tool event records.
+		if rw.failure != nil {
+			message := toolCallFailureMessage(rw.failure)
+			logAttrs[attr.ErrorMessageKey] = message
+			if rw.body.Len() == 0 {
+				logAttrs.RecordResponseBodyContent([]byte(message))
+			}
 		}
-		externalUserID := payload.externalUserID
-		if externalUserID == "" && oauthToken != "" {
-			externalUserID = jwtclaims.UnsafeExtractSubject(oauthToken)
+
+		if toolCallEnv.GramChatID != "" {
+			logAttrs[attr.GenAIConversationIDKey] = toolCallEnv.GramChatID
 		}
 		if externalUserID != "" {
 			logAttrs[attr.ExternalUserIDKey] = externalUserID
@@ -410,10 +524,12 @@ func handleToolsCall(
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
 		logAttrs.RecordToolsetSlug(payload.toolset)
-		if payload.mcpServerID != nil {
-			logAttrs[attr.McpServerIDKey] = payload.mcpServerID.String()
+		recordServingLogAttrs(logAttrs, attributedMCPServerID, payload.mcpEndpointID)
+		if payload.metaMcpServerID != "" {
+			logAttrs[attr.MetaMcpServerIDKey] = payload.metaMcpServerID
 		}
 		logAttrs.RecordMCPURL(mcpURL)
+		logAttrs.RecordMCPClient(clientIdentity.Name, clientIdentity.Version)
 		params := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{
@@ -430,9 +546,82 @@ func handleToolsCall(
 		}
 		telemLogger.Log(ctx, params)
 	}()
+	if metaAttempt != nil {
+		metaAttempt.logged = true
+	}
 
-	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
+	// The record is built when the call returns, so a call the scan stops still
+	// shows, and published off the response path.
+	defer func() {
+		record := call.record(time.Now(), rw.statusCode, rw.resultIsError, rw.failure)
+		go publishToolCallRecord(context.WithoutCancel(ctx), toolCallLogger, logger, call, record)
+	}()
+
+	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+		Surface:         mcpriskscan.SurfaceHostedMCP,
+		Method:          mcpriskscan.MethodToolsCall,
+		OrganizationID:  descriptor.OrganizationID,
+		ProjectID:       descriptor.ProjectID,
+		ServerID:        serverID,
+		MetaServerID:    payload.metaMcpServerID,
+		ToolsetID:       toolset.ID,
+		ToolName:        descriptor.Name,
+		ResourceURI:     "",
+		PromptName:      "",
+		ChatID:          toolCallEnv.GramChatID,
+		ToolAnnotations: nil,
+	}, mcpriskscan.BorrowPayload(params.Arguments))
+	decision := scan.Scan(ctx, requestSubject)
+	if decision.HeldForApproval() {
+		// A held call is an instruction, not a refusal: the agent reads the
+		// tool result, requests approval and retries.
+		rw.resultIsError = true
+		identity := serverInfoHostedToolset
+		if payload.metaMcpServerID != "" {
+			identity = serverInfoMetaServer
+		}
+		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, identity)
+	}
+	if decision.Denied() {
+		failure := oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
+	}
+	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+		invocation.dispatched = true
+	}
+	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
+		// A call the shutdown drain abandoned is answered before any other
+		// classification, which would log it as a gateway failure.
+		if errors.Is(err, shutdowndrain.ErrInterrupted) {
+			interruption := interruptedAtShutdown(ctx, logger, metrics, logAttrs, mcpversions.MethodToolsCall, string(plan.Kind), err)
+			rw.statusCode = http.StatusServiceUnavailable
+			// Whatever the tool wrote before the interrupt is incomplete, so
+			// it is not logged as the call's response.
+			rw.body.Reset()
+			rw.failure = interruption.Failure
+			return nil, interruption.Response
+		}
+		// The proxy refused a body it could not decode before contacting the
+		// tool's server, so a Code Mode program can fix it and call again.
+		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && errors.Is(err, gateway.ErrToolInputRejected) {
+			invocation.dispatched = false
+			invocation.rejected = true
+			invocation.message = "invalid request body"
+		}
+		// A function tool on a deployment without Functions is answered as a
+		// failed tool result, so the agent reads why the tool cannot run
+		// instead of a protocol error that suggests tools/call is unsupported.
+		if errors.Is(err, functions.ErrFunctionsDisabled) {
+			logger.WarnContext(ctx, "function tool call refused: functions are disabled", attr.SlogToolName(params.Name), attr.SlogError(err))
+			rw.resultIsError = true
+			identity := serverInfoHostedToolset
+			if payload.metaMcpServerID != "" {
+				identity = serverInfoMetaServer
+			}
+			return marshalToolErrorResult(ctx, logger, req.ID, functions.ErrFunctionsDisabled.Error(), identity)
+		}
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
 			recordToolCallErrorStatus(ctx, rw, rejected)
 			return nil, rejected
@@ -449,6 +638,21 @@ func handleToolsCall(
 	}
 
 	outputBytes = int64(rw.body.Len())
+
+	// Classified before any branch below can return, so a refused response is still recorded.
+	if plan.Kind == gateway.ToolKindHTTP {
+		payload.upstreamRejection = httpToolRejectionHappened(rw.statusCode, toolCallEnv.Credentials, credentialSources)
+	}
+
+	// The proxy refused the input before contacting the tool's server, so a
+	// Code Mode program can fix its arguments and call again.
+	if rw.headers.Get(gateway.ToolInputRejectedHeader) != "" {
+		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+			invocation.dispatched = false
+			invocation.rejected = true
+			invocation.message = toolInputRejection(rw.body.Bytes())
+		}
+	}
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
@@ -468,12 +672,27 @@ func handleToolsCall(
 	}
 
 	var meta map[string]any
-	if tool != nil && tool.FunctionToolDefinition != nil {
+	if tool.FunctionToolDefinition != nil {
 		meta = tool.FunctionToolDefinition.Meta
 	}
 
-	// External MCP tools and MCP passthrough tools already return properly formatted responses
-	if plan.Kind == gateway.ToolKindExternalMCP || isMCPPassthrough(meta) {
+	// MCP passthrough tools already return properly formatted responses
+	if isMCPPassthrough(meta) {
+		responsePayload, parseErr := mcpriskscan.ParseToolResultPayload(rw.body.Bytes())
+		if parseErr != nil {
+			responsePayload = mcpriskscan.Payload{}
+		}
+		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+		if decision.Denied() {
+			discardWithheldBody(rw.body)
+			failure := oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
+			recordToolCallErrorStatus(ctx, rw, failure)
+			return nil, failure
+		}
+		// The call's records follow the upstream's own isError verdict.
+		rw.resultIsError = dialect.MCPResultIsError(rw.body.Bytes())
+		payload.backendAnswered = backendSucceeded(rw.statusCode, rw.resultIsError)
+		payload.resultSucceeded = payload.backendAnswered
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
@@ -481,21 +700,38 @@ func handleToolsCall(
 			cacheHints:     nil,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
+			failure := oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
+			recordToolCallErrorStatus(ctx, rw, failure)
+			return nil, failure
 		}
 
 		return bs, nil
 	}
 
-	chunk, structured, err := formatResult(*rw, plan.Kind)
+	responseContent, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
+		failure := oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
+	}
+	if plan.Kind != gateway.ToolKindPrompt {
+		responsePayload, parseErr := mcpriskscan.ToolResultPayload(responseContent, structured)
+		if parseErr != nil {
+			responsePayload = mcpriskscan.Payload{}
+		}
+		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+		if decision.Denied() {
+			discardWithheldBody(rw.body)
+			failure := oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
+			recordToolCallErrorStatus(ctx, rw, failure)
+			return nil, failure
+		}
 	}
 
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
-			Content:           []json.RawMessage{chunk},
+			Content:           responseContent,
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
@@ -503,29 +739,140 @@ func handleToolsCall(
 		cacheHints:     nil,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
+		failure := oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 
+	// A prompt is rendered and a platform tool is run by Speakeasy, not a backend.
+	payload.resultSucceeded = backendSucceeded(rw.statusCode, false)
+	payload.backendAnswered = payload.resultSucceeded && plan.Kind != gateway.ToolKindPrompt && plan.Kind != gateway.ToolKindPlatform
 	return bs, nil
+}
+
+// backendSucceeded is a backend answer with a 2xx status and no isError result.
+func backendSucceeded(status int, resultIsError bool) bool {
+	return status >= 200 && status < 300 && !resultIsError
+}
+
+// credentialSource is who supplied a variable a tool call may send as a credential.
+type credentialSource string
+
+const (
+	// credentialSourceSaved is an admin-set environment, the default for any variable not marked otherwise.
+	credentialSourceSaved credentialSource = "saved"
+
+	// credentialSourceCaller is a value the caller sent in a request header.
+	credentialSourceCaller credentialSource = "caller"
+
+	// credentialSourcePerson is the caller's own sign-in.
+	credentialSourcePerson credentialSource = "person"
+
+	// credentialSourceShared is the organization's shared sign-in.
+	credentialSourceShared credentialSource = "shared"
+)
+
+// httpToolRejectionHappened says who fixes an HTTP tool call whose provider rejected its credential (see [remotemcp.CredentialRejected]),
+// from the credentials the call actually sent. A caller's own credential, or none, writes nothing, and so does a
+// provider the caller chose through the server URL.
+func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, sources map[string]credentialSource) mcpconnectionattempts.Code {
+	var none mcpconnectionattempts.Code
+	if report == nil || !remotemcp.CredentialRejected(status, report.Challenges) {
+		return none
+	}
+	sourceOf := func(credential toolconfig.AppliedCredential) credentialSource {
+		if !credential.System && slices.ContainsFunc(report.CallerVariables, func(variable string) bool {
+			return strings.EqualFold(variable, credential.Variable)
+		}) {
+			return credentialSourceCaller
+		}
+		if source, ok := sources[strings.ToLower(credential.Variable)]; ok && !credential.System {
+			return source
+		}
+		return credentialSourceSaved
+	}
+
+	// The caller chose the provider; a relative token URL resolves against its URL too.
+	if report.ServerVariable != "" && sourceOf(toolconfig.AppliedCredential{Variable: report.ServerVariable, System: false, ClientGrant: false, Carrier: ""}) == credentialSourceCaller {
+		return none
+	}
+
+	var sent remotemcp.UpstreamCredentialSent
+	for _, credential := range report.Sent {
+		switch sourceOf(credential) {
+		case credentialSourceCaller:
+			if credential.ClientGrant {
+				return none
+			}
+		case credentialSourcePerson:
+			sent.Attached = true
+		case credentialSourceShared:
+			sent.Self = true
+		case credentialSourceSaved:
+			if credential.ClientGrant {
+				sent.Self = true
+			} else {
+				sent.Configured = true
+			}
+		}
+	}
+
+	// The proxy answered 401 itself because it could not get a client credentials token.
+	switch report.GrantFailure {
+	case toolconfig.ClientGrantRejected:
+		return mcpconnectionattempts.CodeSharedCredentialRejected
+	case toolconfig.ClientGrantUnavailable:
+		return mcpconnectionattempts.CodeRemoteSessionUnavailable
+	case toolconfig.ClientGrantBlocked:
+		return mcpconnectionattempts.CodeAddressNotAllowed
+	case toolconfig.ClientGrantAddressNotFound:
+		return mcpconnectionattempts.CodeAddressNotFound
+	case toolconfig.ClientGrantMisconfigured:
+		return mcpconnectionattempts.CodeCredentialMisconfigured
+	}
+	code, _ := remotemcp.UpstreamFailureHappened(status, true, sent, false, "")
+	return code
+}
+
+// oauthTokenCovers reports whether dispatch writes token into the scheme's access token variable.
+func oauthTokenCovers(security *gateway.HTTPToolSecurity, token oauthTokenInputs) bool {
+	return (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") &&
+		(len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key))
 }
 
 // toolCallRejection answers a failed tool execution that the caller has to fix
 // — arguments naming a resource that does not exist, a payload an upstream
 // rejected as malformed, a scope the configured credential never had — with a
 // bad request logged at warn, and reports true. It reports false for a failure
-// that Gram or an upstream is answerable for, which the caller then reports as
+// that Speakeasy or an upstream is answerable for, which the caller then reports as
 // the server fault it is.
 //
 // Caller mistakes are ordinary and arrive in volume: a single misconfigured
 // client can emit hundreds an hour, enough at error level to hold this
 // component's error-rate monitors at their threshold and mask a genuine
 // regression for a whole alert window.
+//
+// When the failure carries a ShareableError, the rejection answers with the
+// innermost one's code and message, which name what the caller has to change
+// (every ShareableError public message is written to be client-safe).
+// Otherwise it answers with a generic rejection.
 func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args ...slog.Attr) (*oops.ShareableError, bool) {
 	if !oops.IsClientFault(err) {
 		return nil, false
 	}
 
+	if inner := oops.Innermost(err); inner != nil {
+		return oops.E(inner.Code, err, "%s", inner.Error()).LogWarn(ctx, logger, args...), true
+	}
+
 	return oops.E(oops.CodeBadRequest, err, "tool call was rejected as invalid or not permitted").LogWarn(ctx, logger, args...), true
+}
+
+// toolCallFailureMessage is what a failed tool call records as its error, on
+// its Tool logs row and its tool event alike: the most specific client-safe
+// message the failure carries.
+func toolCallFailureMessage(failure *oops.ShareableError) string {
+	return oops.Innermost(failure).Error()
 }
 
 // recordToolCallErrorStatus keeps deferred billing and telemetry metadata in
@@ -535,6 +882,7 @@ func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args
 func recordToolCallErrorStatus(ctx context.Context, rw *toolCallResponseWriter, err error) {
 	if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 		rw.statusCode = shareableErr.HTTPStatus(ctx)
+		rw.failure = shareableErr
 	}
 }
 
@@ -544,37 +892,42 @@ func resolveUserConfiguration(
 	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
 	plan *gateway.ToolCallPlan,
-) (*toolconfig.CaseInsensitiveEnv, error) {
+) (*toolconfig.CaseInsensitiveEnv, map[string]credentialSource, error) {
 	userConfig := toolconfig.NewCaseInsensitiveEnv()
+	sources := make(map[string]credentialSource)
+	set := func(key, value string, source credentialSource) {
+		userConfig.Set(key, value)
+		sources[strings.ToLower(key)] = source
+	}
 
-	// IMPORTANT: we must only attach gram environments to authenticated payloads. Gram environments contain
-	// secrets owned by Gram projects and should not be usable by public clients
+	// IMPORTANT: we must only attach gram environments to authenticated payloads. Speakeasy environments contain
+	// secrets owned by Speakeasy projects and should not be usable by public clients
 	if payload.environment != "" && payload.authenticated {
 		storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
 		switch {
 		case errors.Is(err, toolconfig.ErrNotFound):
-			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
+			return nil, nil, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
 		}
 
 		for k, v := range storedEnvVars {
-			userConfig.Set(k, v)
+			set(k, v, credentialSourceSaved)
 		}
 	}
 
 	for k, v := range payload.mcpEnvVariables {
-		userConfig.Set(k, v)
+		set(k, v, credentialSourceCaller)
 	}
 
 	// Process OAuth tokens for HTTP tools
 	if plan != nil && plan.Kind == gateway.ToolKindHTTP {
 		for _, security := range plan.HTTP.Security {
 			for _, token := range payload.oauthTokenInputs {
-				if (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
+				if oauthTokenCovers(security, token) {
 					for _, envVar := range security.EnvVariables {
 						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
-							userConfig.Set(envVar, token.Token)
+							set(envVar, token.Token, token.source())
 						}
 					}
 				}
@@ -591,7 +944,15 @@ func resolveUserConfiguration(
 		}
 	}
 
-	return userConfig, nil
+	return userConfig, sources, nil
+}
+
+// source says whose sign-in the token is.
+func (t oauthTokenInputs) source() credentialSource {
+	if t.shared {
+		return credentialSourceShared
+	}
+	return credentialSourcePerson
 }
 
 func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingRepository billing.Repository) error {
@@ -618,7 +979,7 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 	}
 
 	if periodUsage.ToolCalls >= hardToolCallsLimit {
-		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").LogError(ctx, logger)
+		return oops.E(oops.CodeForbidden, remotemcp.ErrToolUsageLimitReached, "tool usage limit reached").LogError(ctx, logger)
 	}
 
 	return nil
@@ -629,7 +990,7 @@ var dynamicExecuteToolSchema = json.RawMessage(`{
 		"properties": {
 			"name": {
 				"type": "string",
-				"description": "Exact name of the tool to execute."
+				"description": "Exact name of the tool to execute. The key is name, not tool."
 			},
 			"arguments": {
 				"description": "JSON payload to forward to the tool as its arguments."
@@ -655,7 +1016,7 @@ func processExecuteToolCall(ctx context.Context, logger *slog.Logger, argsRaw js
 
 	name := strings.TrimSpace(args.Name)
 	if name == "" {
-		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool").LogError(ctx, logger)
+		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool: pass the tool's exact name as \"name\"").LogError(ctx, logger)
 	}
 
 	payload := args.Arguments
@@ -680,6 +1041,11 @@ type toolCallResponseWriter struct {
 	statusCode int
 	headers    http.Header
 	body       *bytes.Buffer
+	// failure is the error the gateway answered with; nil when the tool
+	// produced the response itself.
+	failure *oops.ShareableError
+	// resultIsError is the upstream's isError on a forwarded result.
+	resultIsError bool
 }
 
 func (w *toolCallResponseWriter) Header() http.Header {
@@ -699,16 +1065,21 @@ func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
+func discardWithheldBody(body *bytes.Buffer) {
+	body.Reset()
+}
+
 // formatResult turns a tool's raw HTTP response body into an MCP content
-// chunk. When the body is a JSON object it also returns it verbatim as
+// array. When the body is a JSON object it also returns it verbatim as
 // structuredContent so spec-compliant clients (MCP 2025-06-18) receive a
 // parsed object instead of having to re-parse the stringified text block.
 // structured is nil for non-JSON bodies and for JSON that is not an object
 // (arrays/scalars), which the spec reserves the field for.
-func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk json.RawMessage, structured json.RawMessage, err error) {
+func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (content []json.RawMessage, structured json.RawMessage, err error) {
 	body := rw.body.Bytes()
 	if len(body) == 0 {
-		return nil, nil, nil
+		// MCP requires an array of content blocks, not null or [null].
+		return []json.RawMessage{}, nil, nil
 	}
 
 	ct := rw.headers.Get("content-type")
@@ -738,7 +1109,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk j
 			}
 		}
 
-		return bs, structured, nil
+		return []json.RawMessage{bs}, structured, nil
 	case strings.HasPrefix(mt, "image/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
@@ -752,7 +1123,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk j
 			return nil, nil, fmt.Errorf("serialize image content: %w", err)
 		}
 
-		return bs, nil, nil
+		return []json.RawMessage{bs}, nil, nil
 	case strings.HasPrefix(mt, "audio/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
@@ -766,7 +1137,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk j
 			return nil, nil, fmt.Errorf("serialize audio content: %w", err)
 		}
 
-		return bs, nil, nil
+		return []json.RawMessage{bs}, nil, nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported content type %q", ct)
 	}
@@ -792,9 +1163,10 @@ func filterOmittedEnvVars(
 	ctx context.Context,
 	env toolconfig.ToolCallEnv,
 	repo *mcpmetadata_repo.Queries,
+	projectID uuid.UUID,
 	toolsetID uuid.UUID,
 ) error {
-	rawMetadata, err := repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
+	rawMetadata, err := repo.GetMetadataByBackendID(ctx, mcpmetadata_repo.GetMetadataByBackendIDParams{ProjectID: projectID, BackendID: toolsetID, ToolsetBackend: true})
 	if err != nil {
 		// Fallback behavior for backwards compatibility
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -839,4 +1211,15 @@ func filterOmittedEnvVars(
 	}
 
 	return nil
+}
+
+// toolInputRejection extracts the proxy's input refusal from its error body.
+func toolInputRejection(body []byte) string {
+	var refusal struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &refusal); err == nil && refusal.Error != "" {
+		return refusal.Error
+	}
+	return strings.TrimSpace(string(body))
 }

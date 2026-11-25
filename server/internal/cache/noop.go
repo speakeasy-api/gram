@@ -11,6 +11,7 @@ var NoopCache = &noopCache{}
 type noopCache struct{}
 
 var _ Cache = (*noopCache)(nil)
+var _ LeaseCache = (*noopCache)(nil)
 
 // Delete implements [Cache].
 func (s *noopCache) Delete(ctx context.Context, key string) error {

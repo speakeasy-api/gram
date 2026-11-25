@@ -25,7 +25,7 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersCreateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"unproxied_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"network_access_mode\": \"dual\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"unproxied_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
@@ -45,8 +45,16 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 		if body.ToolVariationsGroupID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 		}
+		if body.UserSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+		}
 		if !(body.Visibility == "disabled" || body.Visibility == "private" || body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"disabled", "private", "public"}))
+		}
+		if body.NetworkAccessMode != nil {
+			if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -78,7 +86,12 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 		ToolsetID:             body.ToolsetID,
 		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
+		UserSessionIssuerID:   body.UserSessionIssuerID,
 		Visibility:            types.McpServerVisibility(body.Visibility),
+	}
+	if body.NetworkAccessMode != nil {
+		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
+		v.NetworkAccessMode = &networkAccessMode
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -89,7 +102,7 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 
 // BuildGetMcpServerPayload builds the payload for the mcpServers getMcpServer
 // endpoint from CLI flags.
-func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpServerSlug string, mcpServersGetMcpServerSessionToken string, mcpServersGetMcpServerApikeyToken string, mcpServersGetMcpServerProjectSlugInput string) (*mcpservers.GetMcpServerPayload, error) {
+func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpServerSlug string, mcpServersGetMcpServerToolsetID string, mcpServersGetMcpServerSessionToken string, mcpServersGetMcpServerApikeyToken string, mcpServersGetMcpServerProjectSlugInput string) (*mcpservers.GetMcpServerPayload, error) {
 	var err error
 	var id *string
 	{
@@ -105,6 +118,16 @@ func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpS
 	{
 		if mcpServersGetMcpServerSlug != "" {
 			slug = &mcpServersGetMcpServerSlug
+		}
+	}
+	var toolsetID *string
+	{
+		if mcpServersGetMcpServerToolsetID != "" {
+			toolsetID = &mcpServersGetMcpServerToolsetID
+			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var sessionToken *string
@@ -128,6 +151,7 @@ func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpS
 	v := &mcpservers.GetMcpServerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -232,7 +256,7 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersUpdateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"unproxied_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"clear_user_session_issuer\": false,\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"network_access_mode\": \"dual\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"unproxied_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.EnvironmentID != nil {
@@ -253,8 +277,16 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 		if body.ToolVariationsGroupID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 		}
+		if body.UserSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+		}
 		if !(body.Visibility == "disabled" || body.Visibility == "private" || body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"disabled", "private", "public"}))
+		}
+		if body.NetworkAccessMode != nil {
+			if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -279,15 +311,65 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 		}
 	}
 	v := &mcpservers.UpdateMcpServerPayload{
-		ID:                    body.ID,
-		Name:                  body.Name,
-		EnvironmentID:         body.EnvironmentID,
-		RemoteMcpServerID:     body.RemoteMcpServerID,
-		TunneledMcpServerID:   body.TunneledMcpServerID,
-		ToolsetID:             body.ToolsetID,
-		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
-		ToolVariationsGroupID: body.ToolVariationsGroupID,
-		Visibility:            types.McpServerVisibility(body.Visibility),
+		ID:                     body.ID,
+		Name:                   body.Name,
+		EnvironmentID:          body.EnvironmentID,
+		RemoteMcpServerID:      body.RemoteMcpServerID,
+		TunneledMcpServerID:    body.TunneledMcpServerID,
+		ToolsetID:              body.ToolsetID,
+		UnproxiedMcpServerID:   body.UnproxiedMcpServerID,
+		ToolVariationsGroupID:  body.ToolVariationsGroupID,
+		UserSessionIssuerID:    body.UserSessionIssuerID,
+		ClearUserSessionIssuer: body.ClearUserSessionIssuer,
+		Visibility:             types.McpServerVisibility(body.Visibility),
+	}
+	if body.NetworkAccessMode != nil {
+		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
+		v.NetworkAccessMode = &networkAccessMode
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetSetupGuideCompletedPayload builds the payload for the mcpServers
+// setSetupGuideCompleted endpoint from CLI flags.
+func BuildSetSetupGuideCompletedPayload(mcpServersSetSetupGuideCompletedBody string, mcpServersSetSetupGuideCompletedSessionToken string, mcpServersSetSetupGuideCompletedApikeyToken string, mcpServersSetSetupGuideCompletedProjectSlugInput string) (*mcpservers.SetSetupGuideCompletedPayload, error) {
+	var err error
+	var body SetSetupGuideCompletedRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpServersSetSetupGuideCompletedBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"completed\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersSetSetupGuideCompletedSessionToken != "" {
+			sessionToken = &mcpServersSetSetupGuideCompletedSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersSetSetupGuideCompletedApikeyToken != "" {
+			apikeyToken = &mcpServersSetSetupGuideCompletedApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersSetSetupGuideCompletedProjectSlugInput != "" {
+			projectSlugInput = &mcpServersSetSetupGuideCompletedProjectSlugInput
+		}
+	}
+	v := &mcpservers.SetSetupGuideCompletedPayload{
+		ID:        body.ID,
+		Completed: body.Completed,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -635,6 +717,45 @@ func BuildDeleteMcpServerPayload(mcpServersDeleteMcpServerID string, mcpServersD
 		}
 	}
 	v := &mcpservers.DeleteMcpServerPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetMcpServerUsageImpactPayload builds the payload for the mcpServers
+// getMcpServerUsageImpact endpoint from CLI flags.
+func BuildGetMcpServerUsageImpactPayload(mcpServersGetMcpServerUsageImpactID string, mcpServersGetMcpServerUsageImpactSessionToken string, mcpServersGetMcpServerUsageImpactApikeyToken string, mcpServersGetMcpServerUsageImpactProjectSlugInput string) (*mcpservers.GetMcpServerUsageImpactPayload, error) {
+	var err error
+	var id string
+	{
+		id = mcpServersGetMcpServerUsageImpactID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersGetMcpServerUsageImpactSessionToken != "" {
+			sessionToken = &mcpServersGetMcpServerUsageImpactSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersGetMcpServerUsageImpactApikeyToken != "" {
+			apikeyToken = &mcpServersGetMcpServerUsageImpactApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersGetMcpServerUsageImpactProjectSlugInput != "" {
+			projectSlugInput = &mcpServersGetMcpServerUsageImpactProjectSlugInput
+		}
+	}
+	v := &mcpservers.GetMcpServerUsageImpactPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

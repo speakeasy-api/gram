@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * Canonical Gram hook event type.
+ * Canonical Speakeasy hook event type.
  */
 export const HookIngestEventType = {
   SessionStarted: "session.started",
@@ -23,14 +23,16 @@ export const HookIngestEventType = {
   UsageReported: "usage.reported",
   SkillActivated: "skill.activated",
   NotificationReported: "notification.reported",
+  ClientDeliveryFailed: "client.delivery_failed",
+  ClientInstallFailed: "client.install_failed",
 } as const;
 /**
- * Canonical Gram hook event type.
+ * Canonical Speakeasy hook event type.
  */
 export type HookIngestEventType = ClosedEnum<typeof HookIngestEventType>;
 
 /**
- * Canonical Gram feature event.
+ * Canonical Speakeasy feature event.
  */
 export type HookIngestEvent = {
   /**
@@ -38,7 +40,7 @@ export type HookIngestEvent = {
    */
   occurredAt?: Date | undefined;
   /**
-   * Canonical Gram hook event type.
+   * Canonical Speakeasy hook event type.
    */
   type: HookIngestEventType;
 };

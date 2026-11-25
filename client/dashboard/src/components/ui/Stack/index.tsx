@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { getResponsiveClasses } from "@/components/ui/lib/responsiveUtils";
-import { Gap, Padding, ResponsiveValue } from "@/components/ui/lib/types";
+import type { Gap, Padding, ResponsiveValue } from "@/components/ui/lib/types";
 import {
   gapMapper,
   paddingMapper,

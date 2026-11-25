@@ -8,6 +8,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,7 @@ import (
 type assembledCompletion struct {
 	MessageID    string
 	Model        string
+	Provider     string
 	Content      string
 	ToolCalls    []openrouter.ToolCall
 	FinishReason *string
@@ -37,6 +39,7 @@ type assembledCompletion struct {
 func (a assembledCompletion) Message() or.ChatMessages {
 	content := or.CreateChatAssistantMessageContentStr(a.Content)
 	msg := or.ChatAssistantMessage{
+		Model:            nil,
 		Role:             or.ChatAssistantMessageRoleAssistant,
 		Content:          optionalnullable.From(&content),
 		Name:             nil,
@@ -76,10 +79,11 @@ func teeCompletionStream(src io.Reader, onDelta func(string)) (assembledCompleti
 	out := assembledCompletion{
 		MessageID:    "",
 		Model:        "",
+		Provider:     "",
 		Content:      "",
 		ToolCalls:    nil,
 		FinishReason: nil,
-		Usage:        openrouter.Usage{}, //nolint:exhaustruct // zero usage until a chunk carries it
+		Usage:        openrouter.Usage{}, //nolint:exhaustruct_v5 // zero usage until a chunk carries it
 	}
 	var content strings.Builder
 	toolCalls := map[int]openrouter.ToolCall{}
@@ -95,7 +99,7 @@ func teeCompletionStream(src io.Reader, onDelta func(string)) (assembledCompleti
 			continue
 		}
 		payload := strings.TrimPrefix(line, "data: ")
-		if payload == "[DONE]" {
+		if payload == completionStreamDone {
 			break
 		}
 
@@ -111,6 +115,9 @@ func teeCompletionStream(src io.Reader, onDelta func(string)) (assembledCompleti
 		}
 		if chunk.Model != "" {
 			out.Model = chunk.Model
+		}
+		if chunk.Provider != "" {
+			out.Provider = chunk.Provider
 		}
 		if chunk.Usage != nil {
 			out.Usage = *chunk.Usage
@@ -179,7 +186,10 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 	if err != nil {
 		return nil, s.classifyCompletionError(ctx, "get completion stream", err)
 	}
-	defer o11y.NoLogDefer(func() error { return streamBody.Close() })
+	// Closing records the stream's span attributes. The fallback below closes
+	// it early so the plain completion it returns is what the span describes.
+	closeStream := sync.OnceValue(streamBody.Close)
+	defer o11y.NoLogDefer(closeStream)
 
 	// Publishing rides the request context: if the caller goes away the turn is
 	// abandoned anyway, and a detached publish would outlive its only reader.
@@ -206,6 +216,9 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 		s.logger.WarnContext(ctx, "teed completion produced no content; falling back to a plain completion",
 			attr.SlogChatID(chatID.String()),
 		)
+		if closeErr := closeStream(); closeErr != nil {
+			s.logger.WarnContext(ctx, "close empty completion stream", attr.SlogError(closeErr))
+		}
 		plain, plainErr := s.completionClient.GetCompletion(ctx, req)
 		if plainErr != nil {
 			return nil, s.classifyCompletionError(ctx, "completion failed", plainErr)
@@ -225,6 +238,7 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 		Message:      &message,
 		MessageID:    assembled.MessageID,
 		Model:        assembled.Model,
+		Provider:     assembled.Provider,
 		Usage:        assembled.Usage,
 		FinishReason: assembled.FinishReason,
 		ToolCalls:    assembled.ToolCalls,

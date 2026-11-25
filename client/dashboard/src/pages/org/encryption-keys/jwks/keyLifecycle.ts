@@ -25,6 +25,9 @@ export function availableKeyActions(state: KeyState): KeyLifecycleAction[] {
     case "revoked":
       return [];
   }
+  // Revocation withdraws any live key, even if its signing state is newer than
+  // this dashboard. State-specific transitions still require a known state.
+  return ["revoke"];
 }
 
 export function keyStateLabel(state: KeyState): string {
@@ -38,6 +41,7 @@ export function keyStateLabel(state: KeyState): string {
     case "revoked":
       return "Revoked";
   }
+  return "Unknown";
 }
 
 // keyStateDescription is the one-line meaning of a state for tooltips and
@@ -53,6 +57,7 @@ export function keyStateDescription(state: KeyState): string {
     case "revoked":
       return "Withdrawn. Tokens signed with it no longer verify.";
   }
+  return "Key status unavailable. Refresh to check its status. You can still revoke this key.";
 }
 
 export function keyStateBadgeVariant(state: KeyState): BadgeVariant {
@@ -66,6 +71,7 @@ export function keyStateBadgeVariant(state: KeyState): BadgeVariant {
     case "revoked":
       return "destructive";
   }
+  return "neutral";
 }
 
 // keyAlgorithm reads the algorithm the published JWK document advertises. The

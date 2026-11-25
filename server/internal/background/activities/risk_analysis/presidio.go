@@ -9,12 +9,11 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
-	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -28,10 +27,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/presidiofp"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
-// SourcePresidio is the source label written on every risk_results row
-// produced by the Presidio path, including dead-letter sentinels.
+// SourcePresidio is the source label on every Presidio finding, including
+// dead-letter sentinels.
 const SourcePresidio = "presidio"
 
 // DeadLetterRuleID was moved to rules.go to live alongside the other
@@ -106,17 +106,17 @@ var presidioEntityDescriptions = map[string]string{
 // PIIScanner detects personally identifiable information in text.
 type PIIScanner interface {
 	// AnalyzeBatch sends multiple texts to the PII analyzer and returns
-	// findings for each. The outer slice is indexed by input position.
-	// When entities is non-empty, only those entity types are detected.
+	// result metadata for each input position. When entities is non-empty,
+	// only those entity types are detected.
 	//
 	// scoreThreshold is the minimum recognizer confidence a match must clear
 	// to be returned. A value <=0 or >1 is treated as unset and the default
 	// (DefaultPresidioScoreThreshold) is applied.
 	//
-	// Permanent per-message failures surface as a single Finding with
-	// DeadLetterReason populated rather than as an error; the returned
-	// error is non-nil only on outer-ctx cancellation.
-	AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) ([][]scanners.Finding, error)
+	// Permanent per-message failures surface as a non-completed Result with
+	// one Finding whose DeadLetterReason is populated; the returned error is
+	// non-nil only on outer-ctx cancellation.
+	AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) ([]scanners.Result, error)
 }
 
 // DefaultPresidioScoreThreshold is the minimum recognizer confidence applied
@@ -236,6 +236,19 @@ func isFindingLevelDropped(entityType string) bool {
 	return drop
 }
 
+// FilterPinnedEntities trims blocklisted entity types from a pinned list so
+// callers outside this package (the realtime pub/sub path) apply the same
+// policy as the local scanner. Nil stays nil (default entity set).
+func FilterPinnedEntities(entities []string) []string {
+	return filterEntities(entities)
+}
+
+// IsEntityFindingDropped reports whether findings of this entity type must
+// never surface regardless of how the scan was scoped.
+func IsEntityFindingDropped(entityType string) bool {
+	return isFindingLevelDropped(entityType)
+}
+
 // filterEntities removes blocklisted entity types from the caller's list.
 // Returns nil unchanged so Presidio's default entity set still applies for
 // callers that didn't pin a list. Returns an empty (non-nil) slice when the
@@ -274,6 +287,7 @@ func filterEntities(entities []string) []string {
 type PresidioClient struct {
 	baseURL              string
 	httpClient           *guardian.HTTPClient
+	stokenCodec          *stokens.Codec
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	requestTimeout       time.Duration
@@ -350,6 +364,7 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 	return &PresidioClient{
 		baseURL:              strings.TrimRight(baseURL, "/"),
 		httpClient:           httpClient,
+		stokenCodec:          stokens.NewCodec(),
 		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
 		logger:               logger,
 		requestTimeout:       analyzeRequestTimeout,
@@ -377,7 +392,7 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 // Returns a non-nil error only on outer-ctx cancellation. Per-message
 // failures surface as DeadLetterReason sentinels so the rest of the batch
 // can still write.
-func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) (_ [][]scanners.Finding, err error) {
+func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, scoreThreshold float64, onProgress func()) (_ []scanners.Result, err error) {
 	n := len(texts)
 	if n == 0 {
 		return nil, nil
@@ -396,7 +411,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		}
 	}
 	if allEmpty {
-		return make([][]scanners.Finding, n), nil
+		return make([]scanners.Result, n), nil
 	}
 
 	// Apply the entity blocklist at the lowest level so every caller (hook
@@ -404,7 +419,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	filtered := filterEntities(entities)
 	if len(entities) > 0 && len(filtered) == 0 {
 		// Caller pinned only blocklisted entities; nothing to scan for.
-		return make([][]scanners.Finding, n), nil
+		return make([]scanners.Result, n), nil
 	}
 	entities = filtered
 
@@ -419,14 +434,14 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		span.End()
 	}()
 
-	results := make([][]scanners.Finding, n)
+	results := make([]scanners.Result, n)
 	var deadLetters atomic.Int64
 
 	var wg sync.WaitGroup
 	for i, text := range texts {
 		wg.Go(func() {
-			finding, dl := p.analyzeOne(ctx, i, text, entities, scoreThreshold, onProgress)
-			results[i] = finding
+			result, dl := p.analyzeOne(ctx, i, text, entities, scoreThreshold, onProgress)
+			results[i] = result
 			if dl {
 				deadLetters.Add(1)
 			}
@@ -442,25 +457,22 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	return results, nil
 }
 
-// analyzeOne runs the retry loop for a single text. Returns the per-text
-// findings slice (real findings, or a single dead-letter sentinel) and a
-// boolean indicating whether the result was a dead letter.
-func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, scoreThreshold float64, onProgress func()) ([]scanners.Finding, bool) {
+// analyzeOne runs the retry loop for a single text. The prepared YAML/truncated
+// input is counted once before retries so successful retry attempts cannot
+// multiply usage. The boolean reports whether the result is a dead letter.
+func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, scoreThreshold float64, onProgress func()) (scanners.Result, bool) {
 	if onProgress != nil {
 		onProgress()
 	}
 
-	// Reformat JSON payloads as YAML with literal block scalars for
-	// strings containing newlines. Presidio's recognizers (notably
-	// US_DRIVER_LICENSE, IBAN) trip on JSON-escaped multiline content
-	// where `\n`, `\uXXXX`, etc. produce digit-and-letter runs that look
-	// like license numbers or codes. The YAML literal form keeps the
-	// underlying characters but emits real newlines, so the surrounding
-	// markup no longer fabricates matches. Non-JSON payloads pass
-	// through unchanged.
+	// Reformat JSON payloads as YAML with literal block scalars for strings
+	// containing newlines before both token counting and the analyzer request.
+	source := text
 	text = reformatJSONAsYAML(text)
+	reformatted := text
 
-	if originalSize := len(text); originalSize > presidioMaxMessageBytes {
+	truncated := len(text) > presidioMaxMessageBytes
+	if originalSize := len(text); truncated {
 		text = truncateAtRuneBoundary(text, presidioMaxMessageBytes)
 		p.logger.WarnContext(ctx, "presidio: truncating oversized message",
 			attr.SlogRiskScanTextSize(originalSize),
@@ -471,15 +483,26 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		}
 	}
 
+	stokenCount, countErr := p.stokenCodec.Count(ctx, text)
+	if countErr != nil {
+		p.logger.WarnContext(ctx, "presidio: count prepared scanner content",
+			attr.SlogError(countErr),
+			attr.SlogRiskScanBatchIndex(idx),
+		)
+	}
+
 	var lastErr error
 	for attempt := 1; attempt <= p.maxAttempts; attempt++ {
 		if ctx.Err() != nil {
-			return nil, false
+			return scanners.Result{Findings: nil, STokens: int64(stokenCount), Completed: false}, false
 		}
 
 		findings, err := p.analyzeOnce(ctx, text, entities, scoreThreshold, onProgress)
 		if err == nil {
-			return findings, false
+			if reformatted != source {
+				remapPresidioOffsets(source, reformatted, findings)
+			}
+			return scanners.Result{Findings: findings, STokens: int64(stokenCount), Completed: countErr == nil && !truncated}, false
 		}
 
 		lastErr = err
@@ -491,7 +514,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		// timeouts (analyzeRequestTimeout) and other transient errors
 		// should consume retry budget instead.
 		if ctx.Err() != nil {
-			return nil, false
+			return scanners.Result{Findings: nil, STokens: int64(stokenCount), Completed: false}, false
 		}
 
 		if attempt == p.maxAttempts {
@@ -506,7 +529,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		)
 
 		if !sleepCtx(ctx, computeRetryBackoff(p.baseBackoff, attempt-1)) {
-			return nil, false
+			return scanners.Result{Findings: nil, STokens: int64(stokenCount), Completed: false}, false
 		}
 	}
 
@@ -521,21 +544,25 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 	}
 
 	ruleID, description := DescribePresidioDeadLetter()
-	return []scanners.Finding{{
-		Source:              SourcePresidio,
-		RuleID:              ruleID,
-		Description:         description,
-		Match:               "",
-		StartPos:            0,
-		EndPos:              0,
-		Tags:                []string{},
-		Confidence:          0,
-		DeadLetterReason:    lastErr.Error(),
-		McpLookupToolCallID: "",
-		SpanGroupKey:        "",
-		Field:               "",
-		Path:                "",
-	}}, true
+	return scanners.Result{
+		Findings: []scanners.Finding{{
+			Source:              SourcePresidio,
+			RuleID:              ruleID,
+			Description:         description,
+			Match:               "",
+			StartPos:            0,
+			EndPos:              0,
+			Tags:                []string{},
+			Confidence:          0,
+			DeadLetterReason:    lastErr.Error(),
+			McpLookupToolCallID: "",
+			SpanGroupKey:        "",
+			Field:               "",
+			Path:                "",
+		}},
+		STokens:   int64(stokenCount),
+		Completed: false,
+	}, true
 }
 
 // analyzeOnce issues a single POST /analyze for one text, gated by the
@@ -728,6 +755,32 @@ func computeRetryBackoff(base time.Duration, attempt int) time.Duration {
 	return time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- jitter, not security-sensitive
 }
 
+// remapPresidioOffsets moves finding offsets from the reformatted text
+// Presidio scanned onto the source text, matching the same occurrence of each
+// match, which relies on reformatJSONAsYAML keeping source key order. When
+// the two texts hold a different number of occurrences (one spanned a JSON
+// escape), the ordinal is ambiguous and the finding gets an empty span rather
+// than offsets into the wrong text.
+func remapPresidioOffsets(source, scanned string, findings []scanners.Finding) {
+	for i := range findings {
+		f := &findings[i]
+		if f.Match == "" || f.StartPos < 0 || f.StartPos > len(scanned) {
+			continue
+		}
+		if strings.Count(source, f.Match) != strings.Count(scanned, f.Match) {
+			f.StartPos, f.EndPos = 0, 0
+			continue
+		}
+		nth := strings.Count(scanned[:f.StartPos], f.Match)
+		pos := 0
+		for from, k := 0, 0; k <= nth; k++ {
+			pos = from + strings.Index(source[from:], f.Match)
+			from = pos + len(f.Match)
+		}
+		f.StartPos, f.EndPos = pos, pos+len(f.Match)
+	}
+}
+
 // reformatJSONAsYAML tries to parse text as a JSON value and re-emit it as
 // YAML where any string containing a newline is written as a literal block
 // scalar (`|`). The resulting text carries the same semantic content but
@@ -746,12 +799,11 @@ func reformatJSONAsYAML(text string) string {
 	}
 	dec := json.NewDecoder(strings.NewReader(text))
 	dec.UseNumber()
-	var data any
-	if err := dec.Decode(&data); err != nil {
+	node, err := decodeJSONAsYAMLNode(dec, 0)
+	if err != nil {
 		return text
 	}
 
-	node := jsonValueToYAMLNode(data)
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
@@ -764,42 +816,60 @@ func reformatJSONAsYAML(text string) string {
 	return buf.String() + text[dec.InputOffset():]
 }
 
-func jsonValueToYAMLNode(v any) *yaml.Node {
-	switch x := v.(type) {
-	case nil:
-		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
-	case bool:
-		val := "false"
-		if x {
-			val = "true"
-		}
-		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: val}
-	case json.Number:
-		return &yaml.Node{Kind: yaml.ScalarNode, Value: x.String()}
-	case string:
-		return jsonStringToYAMLNode(x)
-	case []any:
-		seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-		for _, item := range x {
-			seq.Content = append(seq.Content, jsonValueToYAMLNode(item))
-		}
-		return seq
-	case map[string]any:
-		m := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		keys := make([]string, 0, len(x))
-		for k := range x {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			m.Content = append(m.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k},
-				jsonValueToYAMLNode(x[k]),
-			)
-		}
-		return m
+// maxJSONNestingDepth bounds recursion on hostile input, matching the limit
+// encoding/json enforces when decoding into a value.
+const maxJSONNestingDepth = 10000
+
+// decodeJSONAsYAMLNode reads one JSON value from the token stream, keeping
+// object keys in source order so values appear in the order of the source.
+func decodeJSONAsYAMLNode(dec *json.Decoder, depth int) (*yaml.Node, error) {
+	if depth > maxJSONNestingDepth {
+		return nil, errors.New("json nesting too deep")
 	}
-	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprint(v)}
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("read json token: %w", err)
+	}
+	switch x := tok.(type) {
+	case nil:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}, nil
+	case bool:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: strconv.FormatBool(x)}, nil
+	case json.Number:
+		return &yaml.Node{Kind: yaml.ScalarNode, Value: x.String()}, nil
+	case string:
+		return jsonStringToYAMLNode(x), nil
+	case json.Delim:
+		// Token rejects stray closers, so x opens an object or an array.
+		isObject := x == '{'
+		n := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		if isObject {
+			n.Kind, n.Tag = yaml.MappingNode, "!!map"
+		}
+		for dec.More() {
+			if isObject {
+				keyTok, err := dec.Token()
+				if err != nil {
+					return nil, fmt.Errorf("read json key: %w", err)
+				}
+				key, ok := keyTok.(string)
+				if !ok {
+					return nil, fmt.Errorf("unexpected json key %T", keyTok)
+				}
+				n.Content = append(n.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key})
+			}
+			child, err := decodeJSONAsYAMLNode(dec, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			n.Content = append(n.Content, child)
+		}
+		if _, err := dec.Token(); err != nil {
+			return nil, fmt.Errorf("read json closer: %w", err)
+		}
+		return n, nil
+	}
+	return nil, fmt.Errorf("unexpected json token %T", tok)
 }
 
 func jsonStringToYAMLNode(s string) *yaml.Node {
@@ -808,19 +878,6 @@ func jsonStringToYAMLNode(s string) *yaml.Node {
 		n.Style = yaml.LiteralStyle
 	}
 	return n
-}
-
-// truncateAtRuneBoundary returns the longest prefix of s whose byte length is
-// <= n and that does not split a UTF-8 rune. Returns s unchanged when it
-// already fits.
-func truncateAtRuneBoundary(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	for n > 0 && !utf8.RuneStart(s[n]) {
-		n--
-	}
-	return s[:n]
 }
 
 // sleepCtx pauses for d, returning false if ctx is cancelled before the
@@ -846,6 +903,6 @@ func isCancelErr(err error) bool {
 // StubPIIScanner is a no-op implementation for environments without Presidio.
 type StubPIIScanner struct{}
 
-func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
-	return make([][]scanners.Finding, len(texts)), nil
+func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([]scanners.Result, error) {
+	return make([]scanners.Result, len(texts)), nil
 }

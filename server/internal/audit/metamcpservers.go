@@ -44,6 +44,7 @@ type LogMetaMcpServerCreateEvent struct {
 
 func (l *Logger) LogMetaMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogMetaMcpServerCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -95,6 +96,7 @@ func (l *Logger) LogMetaMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, eve
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -132,6 +134,7 @@ type LogMetaMcpServerDeleteEvent struct {
 
 func (l *Logger) LogMetaMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogMetaMcpServerDeleteEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -182,6 +185,7 @@ func (l *Logger) logMetaMcpMember(ctx context.Context, dbtx repo.DBTX, action Ac
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

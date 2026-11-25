@@ -13,10 +13,10 @@ import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
   Classifications,
+  ListSkillsQueryParamSort,
   ListSkillsRequest,
   ListSkillsResponse,
   ListSkillsSecurity,
-  Sort,
   SourceKinds,
 } from "../models/operations/listskills.js";
 import { unwrapAsync } from "../types/fp.js";
@@ -88,6 +88,7 @@ export function buildSkillsQuery(
       sourceKinds: request?.sourceKinds,
       classifications: request?.classifications,
       tags: request?.tags,
+      accessibleBy: request?.accessibleBy,
       sort: request?.sort,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
@@ -134,6 +135,7 @@ export function buildSkillsInfiniteQuery(
       sourceKinds: request?.sourceKinds,
       classifications: request?.classifications,
       tags: request?.tags,
+      accessibleBy: request?.accessibleBy,
       sort: request?.sort,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
@@ -177,7 +179,8 @@ export function queryKeySkills(
     sourceKinds?: Array<SourceKinds> | undefined;
     classifications?: Array<Classifications> | undefined;
     tags?: Array<string> | undefined;
-    sort?: Sort | undefined;
+    accessibleBy?: Array<string> | undefined;
+    sort?: ListSkillsQueryParamSort | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;
@@ -194,7 +197,8 @@ export function queryKeySkillsInfinite(
     sourceKinds?: Array<SourceKinds> | undefined;
     classifications?: Array<Classifications> | undefined;
     tags?: Array<string> | undefined;
-    sort?: Sort | undefined;
+    accessibleBy?: Array<string> | undefined;
+    sort?: ListSkillsQueryParamSort | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

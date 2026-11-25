@@ -1,7 +1,8 @@
 // TODO: https://linear.app/speakeasy/issue/SXF-170/table-component
+import { Spinner } from "@/components/ui/Spinner";
+import type { PropsWithChildren } from "react";
 import React, {
   forwardRef,
-  PropsWithChildren,
   type ReactNode,
   useCallback,
   useMemo,
@@ -9,7 +10,7 @@ import React, {
   useState,
 } from "react";
 import { cn } from "@/lib/utils";
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { isGroupOf } from "@/components/ui/lib/typeUtils";
 import styles from "./styles.module.css";
 import {
@@ -338,15 +339,12 @@ function getNextSort<T extends object>(
   const direction = getSortDirection(column, sort);
   const id = getColumnSortId(column);
 
-  if (direction === "asc") {
-    return { id, direction: "desc" };
-  }
-
-  if (direction === "desc") {
-    return null;
-  }
-
-  return { id, direction: "asc" };
+  // Two states, not three. The column being sorted toggles asc and desc; it
+  // never cycles back to unsorted, because "sorted by nothing" is not an
+  // order a reader asks for — it only reads as the control having lost its
+  // place. The unsorted icon still belongs on every OTHER column, which is
+  // where it means something: click to sort by this instead.
+  return { id, direction: direction === "asc" ? "desc" : "asc" };
 }
 
 function getSortButtonLabel<T extends object>(
@@ -358,10 +356,6 @@ function getSortButtonLabel<T extends object>(
 
   if (direction === "asc") {
     return `Sort by ${label} descending`;
-  }
-
-  if (direction === "desc") {
-    return `Clear sort for ${label}`;
   }
 
   return `Sort by ${label} ascending`;
@@ -552,7 +546,7 @@ const Body = React.forwardRef(function Body<T extends object>(
   return (
     <BodyContainer ref={ref} className={cn(hasMore && "pb-16", className)}>
       {data.length === 0 ? (
-        <NoResultsMessage>{noResultsMessage}</NoResultsMessage>
+        <NoResultsRow>{noResultsMessage}</NoResultsRow>
       ) : (
         data.map(renderBodyRow)
       )}
@@ -611,17 +605,44 @@ const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
       onClick();
     };
 
+    // A click that started on a control inside the row belongs to that control:
+    // without this a row-level navigation also fires for the actions menu, a
+    // link, or a checkbox, and steals it.
+    const handleClick = (event: React.MouseEvent<HTMLTableRowElement>) => {
+      if (!onClick) return;
+      if (event.target instanceof Element) {
+        // A row action rendered through a portal — a dropdown menu, a dialog —
+        // sits outside the <tr> in the DOM but still bubbles here through
+        // React's tree. Nothing outside the row is the row's own click.
+        if (!event.currentTarget.contains(event.target)) return;
+        const control = event.target.closest(
+          // Portalled menu items and other composite widgets are divs carrying
+          // an interactive role rather than native elements, so match on role
+          // as well as on tag.
+          'a,button,input,select,textarea,[role="button"],[role="link"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="checkbox"],[role="option"]',
+        );
+        // Bounded to this row: an unbounded closest() would also match a
+        // clickable ancestor wrapping the whole table.
+        if (control && event.currentTarget.contains(control)) return;
+      }
+      onClick();
+    };
+
     return (
       <tr
         ref={ref}
         {...rest}
         className={cn(
-          "-z-0 [grid-column:1/-1] grid max-w-full [grid-template-columns:subgrid] border-b transition-colors last:border-none hover:bg-muted/50 data-[state=selected]:bg-muted",
+          // Hovers use the accent token, not muted: in dark mode muted equals
+          // the card surface, so a muted hover paints invisibly.
+          "-z-0 [grid-column:1/-1] grid max-w-full [grid-template-columns:subgrid] border-b transition-colors last:border-none hover:bg-accent/50 data-[state=selected]:bg-muted",
+          // Clickable rows highlight at full accent so the hover reads as an
+          // affordance, not just a scan aid.
           isClickable &&
-            "cursor-pointer focus-visible:bg-muted/50 focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none",
+            "cursor-pointer hover:bg-accent focus-visible:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none",
           className,
         )}
-        onClick={onClick}
+        onClick={handleClick}
         onKeyDown={isClickable ? handleKeyDown : onKeyDown}
         tabIndex={isClickable ? 0 : tabIndex}
       >
@@ -735,14 +756,16 @@ function RowExpandable<T extends object>({
         renderRow={renderRow}
       />
       {/* This grid stuff is a cute way to make the height animate smoothly when expanding/collapsing */}
-      <div
+      <tr
         className={cn(
           "[grid-column:1/-1] grid overflow-hidden transition-[grid-template-rows] duration-300",
           isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
       >
-        <div className="min-h-0 overflow-auto">{content}</div>
-      </div>
+        <td colSpan={columns.length} className="min-h-0 overflow-auto p-0">
+          {content}
+        </td>
+      </tr>
     </>
   );
 }
@@ -798,7 +821,12 @@ function CellContainer({ children, className }: PropsWithChildrenAndClassName) {
     <td
       className={cn(
         styles.tableCell,
-        `flex max-w-full items-center`,
+        // min-w-0 lets a cell shrink below its content: an unbreakable value
+        // (a long agent id) would otherwise set the grid track's floor and
+        // push the whole row into overflow. overflow-hidden then keeps what
+        // does not fit inside the column rather than painting over the next
+        // one — a cell that wants an ellipsis still asks for it itself.
+        `flex max-w-full min-w-0 items-center overflow-hidden`,
         className,
       )}
     >
@@ -829,29 +857,37 @@ function Cell<T extends object>(
   return <CellContainer className={className}>{content}</CellContainer>;
 }
 
-function NoResultsMessage({
-  className,
-  children,
-}: PropsWithChildrenAndClassName) {
-  const Wrapper = ({ children, className }: PropsWithChildrenAndClassName) => (
-    <div
+// The row itself, for the one caller that already sits inside a <tbody>: the
+// automatic empty state Table.Body renders in place of its rows.
+function NoResultsRow({ className, children }: PropsWithChildrenAndClassName) {
+  return (
+    <tr
       className={cn(
         "[grid-column:1/-1] grid [grid-template-columns:subgrid]",
         className,
       )}
     >
-      {children}
-    </div>
+      {/* Padded to the same inset as a data cell: the message sits in the grid
+          where a row would, so flush-left text reads as a broken row. */}
+      <td className="text-muted-foreground [grid-column:1/-1] px-4 py-6 text-sm">
+        {children}
+      </td>
+    </tr>
   );
+}
 
-  const ContentWrapper = ({ children }: PropsWithChildren) => (
-    <div className="[grid-column:1/-1]">{children}</div>
-  );
-
+// Carries its own <tbody>, because callers place it as a direct child of
+// <Table> in place of a Table.Body. A bare <tr> there is invalid markup: the
+// browser hoists it into a section of its own and the hydrated tree stops
+// matching the rendered one.
+function NoResultsMessage({
+  className,
+  children,
+}: PropsWithChildrenAndClassName) {
   return (
-    <Wrapper className={className}>
-      <ContentWrapper>{children}</ContentWrapper>
-    </Wrapper>
+    <BodyContainer>
+      <NoResultsRow className={className}>{children}</NoResultsRow>
+    </BodyContainer>
   );
 }
 
@@ -909,7 +945,7 @@ function LoadMore<T extends object>({
           {isLoading ? (
             <>
               Loading
-              <Loader2 className="animate-spin" />
+              <Spinner className="mr-0" />
             </>
           ) : (
             "Load more"

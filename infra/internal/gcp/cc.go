@@ -56,6 +56,10 @@ func (c *ConfigConnectorPubSub) Generate(ctx context.Context) error {
 		return fmt.Errorf("discover pubsub schemas: %w", err)
 	}
 
+	if err := ValidateStorageSchemas(desiredTopics, desiredSubs, desiredSchemas); err != nil {
+		return fmt.Errorf("validate storage schemas: %w", err)
+	}
+
 	if err := c.writeValues(ctx, buildPubSubValues(ctx, c.logger, desiredTopics, desiredSubs, desiredSchemas)); err != nil {
 		return fmt.Errorf("write pubsub values: %w", err)
 	}

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
   CREDITS_EXHAUSTED_MESSAGE,
@@ -5,7 +6,7 @@ import {
 } from "./streamErrorMessage";
 
 describe("describeStreamError", () => {
-  it("matches Gram goa 402 with name=insufficient_credits at top-level", () => {
+  it("matches Speakeasy goa 402 with name=insufficient_credits at top-level", () => {
     const error = {
       name: "insufficient_credits",
       message: "token balance exhausted",
@@ -14,7 +15,7 @@ describe("describeStreamError", () => {
     expect(describeStreamError(error)).toBe(CREDITS_EXHAUSTED_MESSAGE);
   });
 
-  it("matches Gram error packed into responseBody JSON", () => {
+  it("matches Speakeasy error packed into responseBody JSON", () => {
     const error = {
       responseBody: JSON.stringify({
         name: "insufficient_credits",

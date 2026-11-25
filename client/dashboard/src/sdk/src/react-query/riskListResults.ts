@@ -113,6 +113,9 @@ export function setRiskListResultsData(
     parameters: {
       policyId?: string | undefined;
       chatId?: string | undefined;
+      mcpServerId?: string | undefined;
+      resultId?: string | undefined;
+      executionId?: string | undefined;
       category?: string | undefined;
       ruleId?: string | undefined;
       userId?: string | undefined;
@@ -142,6 +145,9 @@ export function invalidateRiskListResults(
     [parameters: {
       policyId?: string | undefined;
       chatId?: string | undefined;
+      mcpServerId?: string | undefined;
+      resultId?: string | undefined;
+      executionId?: string | undefined;
       category?: string | undefined;
       ruleId?: string | undefined;
       userId?: string | undefined;

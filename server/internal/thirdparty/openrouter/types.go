@@ -189,10 +189,15 @@ type OpenAIChatRequest struct {
 	// dropped from the wire and the provider would silently fall back to its
 	// non-zero default. initializeRequest always assigns a concrete value
 	// (defaulting to 1.0), so this field is always intentionally set.
-	Temperature    float32                            `json:"temperature"`
+	Temperature float32 `json:"temperature"`
+
+	// MaxTokens caps generated tokens, reasoning included. Inbound proxy
+	// requests decode into it but do not forward it.
+	MaxTokens      *int                               `json:"max_tokens,omitempty"`
 	ResponseFormat *or.ResponseFormat                 `json:"response_format,omitempty"`
 	Reasoning      *Reasoning                         `json:"reasoning,omitempty"`
 	CacheControl   *or.AnthropicCacheControlDirective `json:"cache_control,omitempty"`
+	Provider       *ProviderRouting                   `json:"provider,omitempty"`
 	// OpenRouter caps SessionID at 256 chars and Metadata at 16 entries with
 	// 64-char keys and 512-char values; callers must respect both.
 	SessionID string            `json:"session_id,omitempty"`
@@ -201,6 +206,10 @@ type OpenAIChatRequest struct {
 	Trace     *TraceConfig      `json:"trace,omitempty"`
 	Plugins   []RequestPlugin   `json:"plugins,omitempty"`
 }
+
+// FinishReasonLength is the finish_reason for a completion stopped by
+// max_tokens. Its body is partial, not an answer.
+const FinishReasonLength = "length"
 
 // RequestPlugin is one entry in the outbound `plugins` array: the web-search
 // plugin ("web") and the response-healing plugin ("response-healing").
@@ -259,6 +268,13 @@ type ToolCall struct {
 	Function ToolCallFunction `json:"function"`
 }
 
+// ProviderRouting is OpenRouter's provider preference for a request: try the
+// providers in Order, and with AllowFallbacks false, no others.
+type ProviderRouting struct {
+	Order          []string `json:"order,omitempty"`
+	AllowFallbacks bool     `json:"allow_fallbacks"`
+}
+
 // Tool defines a function tool available to the model
 type Tool struct {
 	Type         string                      `json:"type"` // always "function"
@@ -288,10 +304,13 @@ type ChunkChoice struct {
 
 // StreamingChunk represents a streaming response chunk from OpenAI
 type StreamingChunk struct {
-	ID                string        `json:"id"`
-	Object            string        `json:"object"`
-	Created           int64         `json:"created"`
-	Model             string        `json:"model"`
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+
+	// Provider is the exact provider identity reported for this chunk.
+	Provider          string        `json:"provider,omitempty"`
 	SystemFingerprint string        `json:"system_fingerprint"`
 	Choices           []ChunkChoice `json:"choices"`
 	Usage             *Usage        `json:"usage"`
@@ -324,7 +343,7 @@ type CompletionTokensDetails struct {
 	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
-// GramMetadata is a Gram-specific extension attached to chat completion
+// GramMetadata is a Speakeasy-specific extension attached to chat completion
 // responses to surface upstream model attributes resolved by the proxy.
 type GramMetadata struct {
 	ContextWindow int `json:"context_window"`
@@ -332,10 +351,13 @@ type GramMetadata struct {
 
 // OpenAIChatResponse represents the response structure from OpenAI for non-streaming responses
 type OpenAIChatResponse struct {
-	ID           string           `json:"id"`
-	Object       string           `json:"object"`
-	Created      int64            `json:"created"`
-	Model        string           `json:"model"`
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+
+	// Provider is the exact provider identity reported for this completion.
+	Provider     string           `json:"provider,omitempty"`
 	Choices      []ResponseChoice `json:"choices"`
 	Usage        *Usage           `json:"usage,omitempty"`
 	GramMetadata *GramMetadata    `json:"gram_metadata,omitempty"`

@@ -31,7 +31,7 @@ func newJudgeMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *j
 
 	evaluations, err := meter.Int64Counter(
 		meterJudgeEvaluations,
-		metric.WithDescription("Total LLM judge evaluations that issued a completion call"),
+		metric.WithDescription("Total LLM judge evaluation attempts"),
 		metric.WithUnit("{evaluation}"),
 	)
 	if err != nil {
@@ -80,7 +80,7 @@ func newJudgeMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *j
 	}
 }
 
-// RecordEvaluation records the outcome and latency of a completed judge call.
+// RecordEvaluation records the outcome and latency of a judge evaluation attempt.
 func (m *judgeMetrics) RecordEvaluation(ctx context.Context, orgID string, outcome o11y.Outcome, duration time.Duration) {
 	attrs := metric.WithAttributes(
 		attr.OrganizationID(orgID),

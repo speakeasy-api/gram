@@ -1,11 +1,8 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  Check,
-  ChevronRight,
-  KeyRound,
-  Loader2,
-} from "lucide-react";
+import { ArrowLeft, Check, ChevronRight } from "lucide-react";
+import { AIIntegrationCredentialInput } from "@/pages/org/ai-integration-credential-input";
+import { AIIntegrationWorkspaceFields } from "@/pages/org/ai-integration-workspace-fields";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
@@ -30,8 +27,6 @@ import { StepContainer } from "../step-container";
 
 interface AdditionalAgentConfigStepProps {
   onComplete: () => void;
-  onSkip: () => void;
-  onBack: () => void;
 }
 
 type ProviderStatus = "not_started" | "complete";
@@ -45,8 +40,6 @@ const ADDITIONAL_AGENT_CONFIG_PROVIDERS: AdditionalAgentConfigProvider[] = [
 
 export function AdditionalAgentConfigStep({
   onComplete,
-  onSkip,
-  onBack,
 }: AdditionalAgentConfigStepProps): JSX.Element {
   const [drawerProviderId, setDrawerProviderId] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<
@@ -95,19 +88,9 @@ export function AdditionalAgentConfigStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <KeyRound className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Additional agent configuration"
       description="Optionally connect admin and compliance APIs so Speakeasy can import usage, spend, and review data across the agent platforms your team uses."
       onContinue={onComplete}
-      onSkip={onSkip}
-      skipLabel="Skip for now"
-      continueLabel="Continue"
-      showBack
-      onBack={onBack}
     >
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -391,16 +374,12 @@ function ProviderConfigDrawer({
                     <Label htmlFor={apiKeyFieldId}>
                       {provider.apiKeyLabel}
                     </Label>
-                    <Input
+                    <AIIntegrationCredentialInput
                       id={apiKeyFieldId}
-                      placeholder={
-                        form.hasSavedKey
-                          ? "•••••• (saved)"
-                          : provider.apiKeyPlaceholder
-                      }
+                      provider={provider}
                       value={form.apiKey}
                       onChange={form.setApiKey}
-                      type="password"
+                      hasSavedKey={form.hasSavedKey}
                       disabled={form.isLoading || form.isMutating}
                     />
                     {provider.helpText ? (
@@ -424,6 +403,12 @@ function ProviderConfigDrawer({
                       />
                     </div>
                   ) : null}
+
+                  <AIIntegrationWorkspaceFields
+                    provider={provider}
+                    form={form}
+                    active
+                  />
                 </div>
               ) : null}
             </div>
@@ -458,7 +443,7 @@ function ProviderConfigDrawer({
           >
             {form.isMutating ? (
               <Button.LeftIcon>
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Spinner className="mr-0 h-3 w-3" />
               </Button.LeftIcon>
             ) : null}
             <Button.Text>{form.isMutating ? "Saving..." : "Save"}</Button.Text>

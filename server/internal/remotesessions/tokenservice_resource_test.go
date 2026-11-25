@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 func TestResolveAccessToken_RefreshIncludesResource(t *testing.T) {
@@ -20,7 +21,7 @@ func TestResolveAccessToken_RefreshIncludesResource(t *testing.T) {
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject := setupRefreshFixtureWithAudience(t, pgtype.Text{String: "", Valid: false}, &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "https://mcp.example.com/mcp")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "https://mcp.example.com/mcp")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -34,7 +35,7 @@ func TestResolveAccessToken_RefreshOmitsResourceWhenEmpty(t *testing.T) {
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject := setupRefreshFixtureWithAudience(t, conv.ToPGText("https://api.example.com"), &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)

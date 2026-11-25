@@ -63,9 +63,10 @@ func seedGramSession(
 		UserSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		SubjectUrn:          subject,
 		Jti:                 "jti-" + slug,
-		RefreshTokenHash:    "hash-" + slug,
+		RefreshTokenHash:    conv.ToPGText("hash-" + slug),
 		RefreshExpiresAt:    conv.ToPGTimestamptz(time.Now().Add(refreshExpiresIn)),
 		ExpiresAt:           conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 }
@@ -85,6 +86,12 @@ func enableOrgAutoRefreshFeature(
 		FeatureName:    string(feature),
 	})
 	require.NoError(t, err)
+}
+
+func seedSweepOffer(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID, signIn, clientID uuid.UUID, slug string) {
+	t.Helper()
+	serverID := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, slug, "https://"+slug+".example.com/mcp")
+	offerRegistration(t, ctx, ti.conn, organizationID, projectID, serverID, clientID)
 }
 
 func seedSweepSession(
@@ -109,12 +116,13 @@ func seedSweepSession(
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
 
+	seedSweepOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerID, clientUUID, slug)
 	var refreshToken pgtype.Text
 	if withRefreshToken {
 		refreshToken = conv.ToPGText("refresh-ciphertext")
 	}
 	subject := urn.NewUserSubject("subject-" + slug)
-	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientUUID,
@@ -182,7 +190,7 @@ func TestRefreshSweep_RequiresDueOptedInRenewableSession(t *testing.T) {
 		{name: "fresh", slug: "fresh", withRefreshToken: true, autoRefresh: true, updatedAgo: 23 * time.Hour, withGramSession: true},
 		{name: "no refresh grant", slug: "no-refresh", autoRefresh: true, updatedAgo: 25 * time.Hour, withGramSession: true},
 		{name: "opted out", slug: "opted-out", withRefreshToken: true, updatedAgo: 25 * time.Hour, withGramSession: true},
-		{name: "no live Gram session", slug: "no-gram", withRefreshToken: true, autoRefresh: true, updatedAgo: 25 * time.Hour},
+		{name: "no live Speakeasy session", slug: "no-gram", withRefreshToken: true, autoRefresh: true, updatedAgo: 25 * time.Hour},
 	}
 
 	for _, tt := range tests {
@@ -435,8 +443,9 @@ func seedSweepSharedGrant(
 		UserSessionIssuerID:   issuerB,
 	}))
 
+	seedSweepOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerB, clientUUID, slug)
 	subject := urn.NewUserSubject("subject-" + slug)
-	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   issuerA,
 		RemoteSessionClientID: clientUUID,

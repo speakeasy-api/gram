@@ -25,7 +25,7 @@ func TestService_redirectSignupError(t *testing.T) {
 		},
 	}
 
-	result, err := svc.redirectSignupError(t.Context(), nil, errors.New("provisioning failed"))
+	result, err := svc.redirectSignupError(t.Context(), nil, authErrInit, errors.New("provisioning failed"))
 	require.NoError(t, err, "signup failures are reported by redirect, not by error")
 	require.Equal(t, "http://localhost:3000/dashboard/sign-up?signin_error=init_error", result.Location)
 	require.Empty(t, result.SessionToken)
@@ -45,7 +45,7 @@ func TestService_redirectSignupError_TrimsTrailingSlash(t *testing.T) {
 		},
 	}
 
-	result, err := svc.redirectSignupError(t.Context(), nil, errors.New("provisioning failed"))
+	result, err := svc.redirectSignupError(t.Context(), nil, authErrInit, errors.New("provisioning failed"))
 	require.NoError(t, err)
 	require.Equal(t, "http://localhost:3000/dashboard/sign-up?signin_error=init_error", result.Location)
 }
@@ -64,12 +64,12 @@ func TestService_redirectSignupError_PreservesDestination(t *testing.T) {
 		},
 	}
 
-	state := encodeStateParam("/~/toolsets?tab=all", "nonce")
-	payload := &gen.CallbackPayload{Code: "code", State: &state}
+	state := encodeStateParam("/@self/projects/default/toolsets?tab=all", "nonce")
+	payload := &gen.CallbackPayload{Code: new("code"), State: &state}
 
-	result, err := svc.redirectSignupError(t.Context(), payload, errors.New("provisioning failed"))
+	result, err := svc.redirectSignupError(t.Context(), payload, authErrInit, errors.New("provisioning failed"))
 	require.NoError(t, err)
-	require.Equal(t, "http://localhost:3000/sign-up?signin_error=init_error&redirect=%2F~%2Ftoolsets%3Ftab%3Dall", result.Location)
+	require.Equal(t, "http://localhost:3000/sign-up?signin_error=init_error&redirect=%2F%40self%2Fprojects%2Fdefault%2Ftoolsets%3Ftab%3Dall", result.Location)
 }
 
 // TestService_redirectSignupError_DropsForeignDestination confirms an
@@ -87,9 +87,9 @@ func TestService_redirectSignupError_DropsForeignDestination(t *testing.T) {
 	}
 
 	state := encodeStateParam("https://evil.example/phish", "nonce")
-	payload := &gen.CallbackPayload{Code: "code", State: &state}
+	payload := &gen.CallbackPayload{Code: new("code"), State: &state}
 
-	result, err := svc.redirectSignupError(t.Context(), payload, errors.New("provisioning failed"))
+	result, err := svc.redirectSignupError(t.Context(), payload, authErrInit, errors.New("provisioning failed"))
 	require.NoError(t, err)
 	require.Equal(t, "http://localhost:3000/sign-up?signin_error=init_error", result.Location)
 }

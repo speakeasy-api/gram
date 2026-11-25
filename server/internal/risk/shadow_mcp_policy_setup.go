@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -32,9 +33,44 @@ func validateShadowMCPDisposition(disposition string, sources []string, action s
 		return oops.E(oops.CodeInvalid, nil, "invalid shadow mcp disposition %q", disposition)
 	}
 	if disposition != "" && (action != "block" || !slices.Contains(sources, shadowmcp.SourceShadowMCP)) {
-		return oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
+		return oops.E(oops.CodeInvalid, nil, "shadow_mcp_disposition only applies to a policy that detects shadow_mcp and denies, and this policy is %s", shadowMCPPolicyShape(sources, action))
 	}
 	return nil
+}
+
+// shadowMCPPolicyShape describes a policy's detection and action in the words
+// the policy editor uses, so a rejection names the configuration the caller
+// actually sent instead of leaving them to infer it.
+func shadowMCPPolicyShape(sources []string, action string) string {
+	detection := "no built-in detectors"
+	switch {
+	case slices.Contains(sources, shadowmcp.SourceShadowMCP):
+		detection = shadowmcp.SourceShadowMCP
+	case len(sources) > 0:
+		detection = strings.Join(sources, ", ")
+	}
+	return fmt.Sprintf("detecting %s with the %q action", detection, action)
+}
+
+// ShadowMCPRetiredAllowAllMessage explains why an allow_all policy cannot stop
+// being a blocking shadow MCP policy, naming the specific edit that would do
+// it and the way out.
+func ShadowMCPRetiredAllowAllMessage(currentSources []string, currentAction string, sources []string, action string) string {
+	var edits []string
+	if slices.Contains(currentSources, shadowmcp.SourceShadowMCP) && !slices.Contains(sources, shadowmcp.SourceShadowMCP) {
+		edits = append(edits, "turning off shadow_mcp detection")
+	}
+	if currentAction != action {
+		edits = append(edits, fmt.Sprintf("changing the action from %q to %q", currentAction, action))
+	}
+	edit := strings.Join(edits, " and ")
+	if edit == "" {
+		edit = "this change"
+	}
+	return fmt.Sprintf(
+		"this policy allows every shadow MCP server except the ones on its blocked list, so it only means anything while it detects shadow_mcp and denies; %s would leave its blocked list with nothing to enforce. Delete this policy and create the one you want instead",
+		edit,
+	)
 }
 
 // shadowMCPPolicyAutoName returns the fixed auto-generated name for a policy
@@ -66,29 +102,6 @@ func validateShadowMCPBlockedURLs(disposition string, rawURLs []string) ([]strin
 		return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp blocked urls require an allow_all shadow mcp policy")
 	}
 	return canonicalURLs, nil
-}
-
-// loadShadowMCPBlockedURLs reads the canonical blocked-URL set of an
-// allow_all policy from its risk_policy:block grants. Block rules are
-// project-wide, so only the URL selector matters — the grant audience is
-// always the all-users principal.
-func loadShadowMCPBlockedURLs(ctx context.Context, db repo.DBTX, organizationID string, policyID string) ([]string, error) {
-	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyBlock,
-		ResourceID:     policyID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list shadow mcp policy block grants: %w", err)
-	}
-	urls := make([]string, 0, len(grants))
-	for _, grant := range grants {
-		if serverURL := grant.Selector[authz.SelectorKeyServerURL]; serverURL != "" {
-			urls = append(urls, serverURL)
-		}
-	}
-	slices.Sort(urls)
-	return slices.Compact(urls), nil
 }
 
 // ShadowMCPPolicyURLReconciler replaces the URL grants owned by one risk policy.
@@ -144,4 +157,22 @@ func validateShadowMCPAllowedURLs(
 		}
 	}
 	return canonicalURLs, nil
+}
+
+// shadowMCPBlockedURLsFromGrants is an allow_all policy's blocked list as one
+// user sees it: the server URLs of the policy's risk_policy:block rules among
+// that user's grants, which already include the roles and the everyone
+// principal the user holds.
+func shadowMCPBlockedURLsFromGrants(grants []authz.Grant, policyID string) []string {
+	urls := make([]string, 0)
+	for _, grant := range grants {
+		if grant.Scope != authz.ScopeRiskPolicyBlock || grant.Selector[authz.SelectorKeyResourceID] != policyID {
+			continue
+		}
+		if serverURL := grant.Selector[authz.SelectorKeyServerURL]; serverURL != "" {
+			urls = append(urls, serverURL)
+		}
+	}
+	slices.Sort(urls)
+	return slices.Compact(urls)
 }

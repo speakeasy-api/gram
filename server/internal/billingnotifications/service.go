@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -15,8 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/email"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -31,18 +30,16 @@ type Service struct {
 	logger            *slog.Logger
 	db                *pgxpool.Pool
 	sender            Sender
-	features          feature.Provider
-	siteURL           *url.URL
+	orgHosts          *orghost.Resolver
 	resolveRecipients func(context.Context, accessrepo.DBTX, string, string, *string) ([]string, error)
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sender Sender, features feature.Provider, siteURL *url.URL) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sender Sender, orgHosts *orghost.Resolver) *Service {
 	return &Service{
 		logger:            logger.With(attr.SlogComponent("billing-notifications")),
 		db:                db,
 		sender:            sender,
-		features:          features,
-		siteURL:           siteURL,
+		orgHosts:          orgHosts,
 		resolveRecipients: ResolveRecipients,
 	}
 }
@@ -111,7 +108,7 @@ func (s *Service) SendTrialEndingSoon(ctx context.Context, input SendTrialEnding
 	template := email.TrialEndingSoon{
 		OrganizationName: organization.Name,
 		TrialEndDate:     state.TrialEndsAt.UTC().Format("January 2, 2006"),
-		ActionURL:        s.siteURL.JoinPath(organization.Slug, "billing").String(),
+		ActionURL:        s.actionURL(organization, "billing"),
 	}
 	return SendTrialEndingSoonResult{}, s.deliver(ctx, input.OrganizationID, "", recipients, resolutionErr, template,
 		"trial-ending-soon", input.OrganizationID, state.TrialCreatedAt.UTC().Format(time.RFC3339Nano), state.TrialEndsAt.UTC().Format(time.RFC3339Nano))
@@ -166,16 +163,6 @@ func (s *Service) SendAccessPaused(ctx context.Context, input SendAccessPausedIn
 		if trialErr != nil {
 			return fmt.Errorf("get demoted trial: %w", trialErr)
 		}
-		if s.features == nil {
-			return nil
-		}
-		enabled, flagErr := s.features.IsFlagEnabled(ctx, feature.FlagPaygSelfServeBilling, input.OrganizationID, feature.OrgProjectGroups(organization.Slug, ""))
-		if flagErr != nil || !enabled {
-			if flagErr != nil {
-				s.logger.WarnContext(ctx, "evaluate PAYG email rollout", attr.SlogOrganizationID(input.OrganizationID), attr.SlogError(flagErr))
-			}
-			return nil
-		}
 	}
 
 	var configuredEmail *string
@@ -185,7 +172,7 @@ func (s *Service) SendAccessPaused(ctx context.Context, input SendAccessPausedIn
 	recipients, resolutionErr := s.resolveRecipients(ctx, s.db, input.OrganizationID, string(billing.TierPayg), configuredEmail)
 	template := email.AccessPaused{
 		OrganizationName: organization.Name,
-		ActionURL:        s.siteURL.JoinPath(organization.Slug).String(),
+		ActionURL:        s.actionURL(organization),
 	}
 	return s.deliver(ctx, input.OrganizationID, input.EventID, recipients, resolutionErr, template, "access-paused", input.EventID)
 }
@@ -227,9 +214,20 @@ func (s *Service) SendPaygActivated(ctx context.Context, input SendPaygActivated
 	template := email.PaygActivated{
 		OrganizationName:      organization.Name,
 		TumPricePerMillionUsd: billing.TUMPricePerMillionUSD,
-		ActionURL:             s.siteURL.JoinPath(organization.Slug, "billing").String(),
+		ActionURL:             s.actionURL(organization, "billing"),
 	}
 	return s.deliver(ctx, input.OrganizationID, input.EventID, recipients, resolutionErr, template, "payg-activated", input.EventID)
+}
+
+// actionURL links to a page of the organization's dashboard on its default
+// host. It is empty when the process has no dashboard URL for the
+// organization, as the other notification emails leave their links.
+func (s *Service) actionURL(organization orgrepo.OrganizationMetadatum, page ...string) string {
+	siteURL := s.orgHosts.SiteURL(organization.DefaultHost)
+	if siteURL == nil {
+		return ""
+	}
+	return siteURL.JoinPath(append([]string{organization.Slug}, page...)...).String()
 }
 
 // deliver sends one template to every resolved recipient. A recipient

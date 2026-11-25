@@ -2022,9 +2022,10 @@ func marshalKillswitchesKillswitchComingSoonCapabilityToKillswitchComingSoonCapa
 // *killswitches.KillswitchMCPServer.
 func marshalKillswitchesKillswitchMCPServerToKillswitchMCPServerResponseBody(v *killswitches.KillswitchMCPServer) *KillswitchMCPServerResponseBody {
 	res := &KillswitchMCPServerResponseBody{
-		ID:        v.ID,
-		Name:      v.Name,
-		ProjectID: v.ProjectID,
+		ID:          v.ID,
+		Name:        v.Name,
+		ProjectID:   v.ProjectID,
+		ProjectName: v.ProjectName,
 	}
 
 	return res

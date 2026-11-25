@@ -1,3 +1,9 @@
+import {
+  auditActorPrincipal,
+  auditSubjectPrincipal,
+  useAuditPrincipals,
+} from "@/components/auditlogs/audit-principals";
+import { AuditPrincipalLink } from "@/components/auditlogs/principals";
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { Link as TextLink } from "@/components/ui/Link";
@@ -6,14 +12,22 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ActionIconTile } from "@/components/auditlogs/feed";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import { useSlugs } from "@/contexts/Sdk";
-import { formatSubjectLabel, renderVerb } from "@/lib/audit-log-format";
-import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
+import {
+  formatSubjectLabel,
+  getActorLabel,
+  renderVerb,
+} from "@/lib/audit-log-format";
+import { format } from "date-fns/format";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
+import { isToday } from "date-fns/isToday";
+import { isYesterday } from "date-fns/isYesterday";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
 type Props = {
   logs: AuditLog[];
   isPending: boolean;
-  viewAllHref: string;
+  /** Omitted when the viewer can't open the org audit log. */
+  viewAllHref?: string;
 };
 
 export function ActivityTimelineCard({
@@ -21,6 +35,7 @@ export function ActivityTimelineCard({
   isPending,
   viewAllHref,
 }: Props): JSX.Element {
+  const identities = useAuditPrincipals(logs);
   const logGroups = groupLogsByDate(logs);
   const { orgSlug } = useSlugs();
 
@@ -29,13 +44,15 @@ export function ActivityTimelineCard({
       title="Activity Timeline"
       tooltip="Recent administrative activity in this project — changes to sources, MCP server changes, API key rotations, environment edits, and access role updates. Grouped by day, most recent first."
       action={
-        <Link
-          to={viewAllHref}
-          className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline"
-        >
-          View all
-          <ChevronRight className="size-3" />
-        </Link>
+        viewAllHref && (
+          <Link
+            to={viewAllHref}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline"
+          >
+            View all
+            <ChevronRight className="size-3" />
+          </Link>
+        )
       }
     >
       {isPending ? (
@@ -53,9 +70,12 @@ export function ActivityTimelineCard({
               <p className="text-eyebrow mb-2">{group.label}</p>
               <ul className="divide-border divide-y">
                 {group.logs.map((log) => {
-                  const actor =
-                    log.actorDisplayName ?? log.actorSlug ?? "Unknown";
+                  // Via the shared helper: an agent actor carries no
+                  // display name, and this read "Unknown" for every change
+                  // an agent made.
+                  const actor = getActorLabel(log);
                   const actionLabel = renderVerb(log);
+                  const subjectPrincipal = auditSubjectPrincipal(log);
                   const subjectLabel = log.subjectDisplayName
                     ? formatSubjectLabel(
                         log.subjectDisplayName,
@@ -71,14 +91,29 @@ export function ActivityTimelineCard({
                       <ActionIconTile action={log.action} className="mt-0.5" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm">
-                          <span className="font-medium">{actor}</span>{" "}
+                          <AuditPrincipalLink
+                            principal={auditActorPrincipal(log)}
+                            identities={identities}
+                            fallback={actor}
+                            className="font-medium"
+                          />{" "}
                           <span className="text-muted-foreground">
                             {actionLabel}
                           </span>
-                          {log.subjectDisplayName && (
+                          {(log.subjectDisplayName || subjectPrincipal) && (
                             <>
                               {" "}
-                              {href ? (
+                              {subjectPrincipal ? (
+                                <AuditPrincipalLink
+                                  principal={subjectPrincipal}
+                                  identities={identities}
+                                  fallback={
+                                    log.subjectDisplayName ||
+                                    subjectPrincipal.urn
+                                  }
+                                  className="font-medium"
+                                />
+                              ) : href ? (
                                 <TextLink
                                   asChild
                                   size="sm"

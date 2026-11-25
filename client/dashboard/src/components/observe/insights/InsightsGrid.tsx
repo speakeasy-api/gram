@@ -1,0 +1,606 @@
+import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
+import { withAlpha } from "@/components/chart/palette";
+import {
+  useCardColors,
+  useInsightOtherColor,
+  useInsightSeriesColors,
+} from "@/components/observe/insights/insightsPalette";
+import {
+  InsightCard,
+  MetricSpark,
+} from "@/components/observe/insights/InsightCard";
+import {
+  RankedList,
+  type RankedRow,
+} from "@/components/observe/insights/RankedList";
+import { useObserveLogsLink } from "@/components/observe/observeDeepLink";
+import {
+  SKILL_LOAD_CHANNEL_LABELS,
+  splitLoads,
+  splitSkillLoads,
+  type SkillLoadChannel,
+} from "@/components/observe/skillLoadChannel";
+import { buildToolUsageTimeSeries } from "@/components/observe/toolUsageTimeSeriesChartData";
+import { cn } from "@/lib/utils";
+import { Link } from "react-router";
+import { targetScope } from "./targetScope";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
+import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
+import type { ToolUsageClientSummary } from "@gram/client/models/components/toolusageclientsummary.js";
+import type { ToolUsageTargetSummary } from "@gram/client/models/components/toolusagetargetsummary.js";
+import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
+import type { ToolUsageTargetToolBreakdownRow } from "@gram/client/models/components/toolusagetargettoolbreakdownrow.js";
+import type { ToolUsageTotals } from "@gram/client/models/components/toolusagetotals.js";
+import type { ToolUsageUserSummary } from "@gram/client/models/components/toolusageusersummary.js";
+import { useEffect, useMemo, useState } from "react";
+
+type SectionState = { pending: boolean; error: boolean };
+
+/**
+ * Skill load counts split by channel. Present only where skills are served over
+ * MCP; without it the skill card stays a single total, as it was before skills
+ * could arrive any other way.
+ *
+ * The KPI reads skill-scoped totals, not the target ranking: that ranking is
+ * capped across every target type, so busy servers can push skills out of it.
+ * `hookBySkill` is the hook-only ranking; `complete` says it was not cut off,
+ * so a skill missing from it had no hook loads.
+ */
+export type SkillChannelCounts = {
+  total: SectionState & { value: number };
+  hookTotal: SectionState & { value: number };
+  hookBySkill: SectionState & {
+    counts: ReadonlyMap<string, number>;
+    complete: boolean;
+  };
+};
+
+// The MCP part is the stronger fill: it is the served path these cards exist to
+// show, and the two parts must differ in lightness, not hue alone.
+const SKILL_CHANNEL_OPACITY: Record<SkillLoadChannel, number> = {
+  mcp: 0.35,
+  hook: 0.12,
+};
+
+const SERVER_TARGET_TYPES = new Set([
+  "hosted_mcp_server",
+  "tunneled_mcp_server",
+  "meta_mcp_server",
+  "shadow_mcp_server",
+]);
+
+function percent(rate: number): string {
+  return `${(rate * 100).toFixed(1)}%`;
+}
+
+/**
+ * The insights board: one question per card, each answered by a number or a
+ * ranked list, and each card a way into the rows behind it.
+ *
+ * It replaces six full-width stacked bar charts that all looked alike and
+ * answered "who used what" six slightly different ways. The questions here are
+ * the ones the admin journey actually asks — what ran, what failed, which
+ * servers, tools, skills, clients and people are behind it.
+ */
+export function InsightsGrid({
+  totals,
+  targets,
+  users,
+  clients,
+  targetToolBreakdown,
+  timeSeries,
+  from,
+  to,
+  serverNameMappings,
+  status,
+  skillChannels,
+  onRangeSelect,
+}: {
+  totals: ToolUsageTotals | undefined;
+  targets: ToolUsageTargetSummary[];
+  users: ToolUsageUserSummary[];
+  clients: ToolUsageClientSummary[];
+  targetToolBreakdown: ToolUsageTargetToolBreakdownRow[];
+  timeSeries: ToolUsageTargetTimeSeriesPoint[];
+  from: Date;
+  to: Date;
+  serverNameMappings: ReturnType<typeof useServerNameMappings>;
+  status: {
+    totals: SectionState;
+    targets: SectionState;
+    users: SectionState;
+    clients: SectionState;
+    targetToolBreakdown: SectionState;
+    targetTimeSeries: SectionState;
+  };
+  skillChannels?: SkillChannelCounts;
+  onRangeSelect?: (from: Date, to: Date) => void;
+}): JSX.Element {
+  const logsLink = useObserveLogsLink();
+  const cardColors = useCardColors();
+  const insightSeriesColors = useInsightSeriesColors();
+  const insightOtherColor = useInsightOtherColor();
+  const [highlightedServer, setHighlightedServer] = useState<string | null>(
+    null,
+  );
+
+  const displayLabel = (target: ToolUsageTargetSummary) =>
+    target.targetType === "shadow_mcp_server"
+      ? (serverNameMappings.rawToDisplay.get(target.targetLabel) ??
+        target.targetLabel)
+      : target.targetLabel;
+
+  const chartData = useMemo(
+    () =>
+      buildToolUsageTimeSeries(
+        timeSeries,
+        (point) =>
+          point.targetType === "shadow_mcp_server"
+            ? (serverNameMappings.rawToDisplay.get(point.targetLabel) ??
+              point.targetLabel)
+            : point.targetLabel,
+        from,
+        to,
+        undefined,
+        insightSeriesColors,
+        insightOtherColor,
+      ),
+    [
+      timeSeries,
+      from,
+      to,
+      serverNameMappings,
+      insightSeriesColors,
+      insightOtherColor,
+    ],
+  );
+
+  // A server keeps one colour everywhere it appears: its stack segment, its
+  // row in "most used", its row in "most errors". The chart builder is the one
+  // that decides those colours — it ranks the series and folds everything past
+  // the palette into a single "Other" — so the lists read their colours back
+  // off it rather than ranking a second time and disagreeing at the fold.
+  const seriesColors = useMemo(() => {
+    const colors = new Map<string, string>();
+    for (const dataset of chartData.datasets) {
+      if (dataset.label && typeof dataset.backgroundColor === "string") {
+        colors.set(dataset.label, dataset.backgroundColor);
+      }
+    }
+    return colors;
+  }, [chartData.datasets]);
+
+  const colorForServerRow = (row: RankedRow) =>
+    seriesColors.get(row.label) ?? insightOtherColor;
+
+  // Hovering a server row isolates it: the others fade rather than disappear,
+  // so the bar heights stay put and the eye can still see the share it takes
+  // out of each day.
+  const datasets = useMemo(
+    () =>
+      chartData.datasets.map((dataset) => {
+        const color =
+          seriesColors.get(dataset.label ?? "") ?? insightOtherColor;
+        const dimmed =
+          highlightedServer !== null && dataset.label !== highlightedServer;
+        return {
+          ...dataset,
+          // withAlpha, not a hex suffix: the palette mixes `#rrggbb` and
+          // `hsl(...)` forms, and appending "1f" to an hsl string makes a
+          // color the canvas can't parse — it then keeps whatever fill it had
+          // last, so the fold segment stayed pure black while everything else
+          // faded.
+          backgroundColor: dimmed ? withAlpha(color, 0.12) : color,
+          hoverBackgroundColor: color,
+        };
+      }),
+    [chartData.datasets, seriesColors, highlightedServer, insightOtherColor],
+  );
+
+  // Hovering a row the chart does not draw — a skill, a local tool, a server
+  // folded into "Other" — would dim every series and highlight nothing.
+  const highlightRow = (row: RankedRow | null) =>
+    setHighlightedServer(row && seriesColors.has(row.label) ? row.label : null);
+
+  // The headline trend: total calls per bucket, for the sparkline silhouettes.
+  // A range or filter change can drop the hovered row out from under the
+  // pointer, which would otherwise leave the chart dimmed with nothing lit.
+  useEffect(() => {
+    setHighlightedServer(null);
+  }, [timeSeries, targets]);
+
+  const callSeries = useMemo(() => {
+    const buckets = new Map<string, number>();
+    for (const point of timeSeries) {
+      buckets.set(
+        point.bucketStartNs,
+        (buckets.get(point.bucketStartNs) ?? 0) + Number(point.eventCount),
+      );
+    }
+    return [...buckets.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([, count]) => count);
+  }, [timeSeries]);
+
+  const failureSeries = useMemo(() => {
+    const buckets = new Map<string, number>();
+    for (const point of timeSeries) {
+      buckets.set(
+        point.bucketStartNs,
+        (buckets.get(point.bucketStartNs) ?? 0) + Number(point.failureCount),
+      );
+    }
+    return [...buckets.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([, count]) => count);
+  }, [timeSeries]);
+
+  // Agent names are not on a usage row — it carries "agent:<uuid>" and
+  // nothing else — so the inventory is read once for the card rather than per
+  // row. Asked for only when a row on screen actually names an agent.
+  const agents = useReadableAgents(
+    users.some((user) => user.userKind === "agent_id"),
+  );
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
+
+  const servers = targets.filter((target) =>
+    SERVER_TARGET_TYPES.has(target.targetType),
+  );
+  const skills = targets.filter((target) => target.targetType === "skill");
+
+  const serverRows: RankedRow[] = servers.map((target) => ({
+    id: `${target.targetType}:${target.targetId}`,
+    label: displayLabel(target),
+    value: Number(target.eventCount),
+    href: logsLink(targetScope(target)),
+  }));
+
+  const erroringRows: RankedRow[] = [...targets]
+    .filter((target) => Number(target.failureCount) > 0)
+    .sort((a, b) => Number(b.failureCount) - Number(a.failureCount))
+    .map((target) => ({
+      id: `err:${target.targetType}:${target.targetId}`,
+      label: displayLabel(target),
+      value: Number(target.failureCount),
+      secondary: percent(target.failureRate),
+      href: logsLink({
+        ...targetScope(target),
+        // A skill's identity is its tool name; targetScope only narrows to the
+        // type, which would open every failing skill.
+        ...(target.targetType === "skill" ? { toolName: target.targetId } : {}),
+        statuses: ["error"],
+      }),
+    }));
+
+  // The split is a refinement of the totals: until the hook-only reads land,
+  // or if they fail, the cards fall back to the single total rather than
+  // blanking what the primary reads already answered.
+  const sectionReady = (section: SectionState) =>
+    !section.pending && !section.error;
+  const skillTotalSplit =
+    skillChannels &&
+    sectionReady(skillChannels.total) &&
+    sectionReady(skillChannels.hookTotal)
+      ? splitLoads(skillChannels.total.value, skillChannels.hookTotal.value)
+      : undefined;
+  const skillSplitBySkill =
+    skillChannels && sectionReady(skillChannels.hookBySkill)
+      ? splitSkillLoads(
+          skills.map((target) => ({
+            targetId: target.targetId,
+            eventCount: Number(target.eventCount),
+          })),
+          skillChannels.hookBySkill.counts,
+          skillChannels.hookBySkill.complete,
+        )
+      : undefined;
+
+  const skillRows: RankedRow[] = skills.map((target) => {
+    const split = skillSplitBySkill?.get(target.targetId);
+    return {
+      id: `skill:${target.targetId}`,
+      label: target.targetLabel,
+      value: Number(target.eventCount),
+      href: logsLink({ targetTypes: ["skill"], toolName: target.targetId }),
+      segments: split
+        ? (["mcp", "hook"] as const).map((channel) => ({
+            value: split[channel],
+            color: cardColors.skills,
+            opacity: SKILL_CHANNEL_OPACITY[channel],
+          }))
+        : undefined,
+    };
+  });
+
+  const clientRows: RankedRow[] = clients.map((client) => ({
+    id: `client:${client.clientKey}`,
+    label: client.clientLabel,
+    value: Number(client.eventCount),
+    href: logsLink({ clientKey: client.clientKey }),
+  }));
+
+  const userRows: RankedRow[] = users.map((user) => {
+    // An agent's label arrives as the raw string "agent:<uuid>", so the name
+    // comes from the inventory read above and the row is drawn by the shared
+    // renderer — the same face and the same wording every other surface uses,
+    // instead of this card's own "Agent 1a2b3c4d".
+    const agent =
+      user.userKind === "agent_id" ? agentsById.get(user.userKey) : undefined;
+    return {
+      id: `user:${user.userKey}`,
+      label:
+        user.userKind === "agent_id"
+          ? actingPrincipalText({ id: user.userKey, name: agent?.name })
+          : user.userLabel,
+      ...(user.userKind === "agent_id"
+        ? {
+            content: (
+              <ActingPrincipal
+                agent={{ id: user.userKey, name: agent?.name }}
+                // Linked only once the agent resolved: an id read off a
+                // telemetry row is not proof the reader may open that agent.
+                // No authorizer either — telemetry attributes a call to one
+                // principal, so naming a person would invent a delegation.
+                linked={Boolean(agent)}
+              />
+            ),
+          }
+        : {}),
+      value: Number(user.eventCount),
+      // Only an email narrows the logs. Linking an agent row to an
+      // unfiltered page looked like a drill-down that silently did nothing,
+      // so it does not link at all.
+      href:
+        user.userKind === "email"
+          ? logsLink({ userEmail: user.userKey })
+          : undefined,
+    };
+  });
+
+  // Tools are ranked across every target: "which tool is busiest" is a question
+  // about the catalog, not about one server's slice of it.
+  const toolRows: RankedRow[] = useMemo(() => {
+    const totalsByTool = new Map<string, number>();
+    for (const row of targetToolBreakdown) {
+      totalsByTool.set(
+        row.toolName,
+        (totalsByTool.get(row.toolName) ?? 0) + Number(row.eventCount),
+      );
+    }
+    return [...totalsByTool.entries()]
+      .sort(([, a], [, b]) => b - a)
+      .map(([toolName, count]) => ({
+        id: `tool:${toolName}`,
+        label: toolName,
+        value: count,
+        href: logsLink({ toolName }),
+      }));
+  }, [targetToolBreakdown, logsLink]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div
+        className={cn(
+          "grid grid-cols-2 gap-4",
+          skillChannels ? "lg:grid-cols-5" : "lg:grid-cols-4",
+        )}
+      >
+        <InsightCard
+          title="Tool calls"
+          href={logsLink()}
+          loading={status.totals.pending}
+          error={status.totals.error}
+        >
+          <MetricSpark
+            value={(Number(totals?.eventCount) || 0).toLocaleString()}
+            series={callSeries}
+          />
+        </InsightCard>
+
+        <InsightCard
+          title="Failures"
+          href={logsLink({ statuses: ["error"] })}
+          loading={status.totals.pending}
+          error={status.totals.error}
+        >
+          <MetricSpark
+            value={(Number(totals?.failureCount) || 0).toLocaleString()}
+            series={failureSeries}
+            tone={Number(totals?.failureCount) > 0 ? "destructive" : "default"}
+            caption={
+              totals ? `${percent(totals.failureRate)} of calls` : undefined
+            }
+          />
+        </InsightCard>
+
+        <InsightCard
+          title="Tools used"
+          href={logsLink()}
+          loading={status.totals.pending}
+          error={status.totals.error}
+        >
+          <MetricSpark
+            value={(Number(totals?.uniqueTools) || 0).toLocaleString()}
+            series={[]}
+            caption={`across ${Number(totals?.uniqueTargets) || 0} sources`}
+          />
+        </InsightCard>
+
+        {/* "Callers", not "people": `uniqueUsers` counts distinct calling
+            identities, and an agent is one of them. The old title reported
+            a machine as a member of staff. */}
+        <InsightCard
+          title="Callers"
+          href={logsLink()}
+          loading={status.totals.pending}
+          error={status.totals.error}
+        >
+          <MetricSpark
+            value={(Number(totals?.uniqueUsers) || 0).toLocaleString()}
+            series={[]}
+            caption="people and agents active in this window"
+          />
+        </InsightCard>
+
+        {skillChannels && (
+          <InsightCard
+            title="Skill loads"
+            href={logsLink({ targetTypes: ["skill"] })}
+            loading={skillChannels.total.pending}
+            error={skillChannels.total.error}
+          >
+            <MetricSpark
+              value={skillChannels.total.value.toLocaleString()}
+              series={[]}
+              caption={
+                skillTotalSplit
+                  ? `${skillTotalSplit.mcp.toLocaleString()} over MCP · ${skillTotalSplit.hook.toLocaleString()} from hooks`
+                  : undefined
+              }
+            />
+          </InsightCard>
+        )}
+      </div>
+
+      <InsightCard
+        title="Calls over time"
+        href={logsLink()}
+        loading={status.targetTimeSeries.pending}
+        error={status.targetTimeSeries.error}
+      >
+        <StackedTimeBarChart
+          labels={chartData.labels}
+          timestamps={chartData.timestamps}
+          bucketMs={chartData.bucketMs}
+          tooltipLabels={chartData.tooltipLabels}
+          datasets={datasets}
+          onRangeSelect={onRangeSelect}
+        />
+      </InsightCard>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <InsightCard
+          title="Most used MCP servers"
+          href={logsLink()}
+          loading={status.targets.pending}
+          error={status.targets.error}
+        >
+          <RankedList
+            color={colorForServerRow}
+            onRowHover={highlightRow}
+            rows={serverRows}
+          />
+        </InsightCard>
+
+        <InsightCard
+          title="Most used tools"
+          href={logsLink()}
+          loading={status.targetToolBreakdown.pending}
+          error={status.targetToolBreakdown.error}
+        >
+          <RankedList color={cardColors.tools} rows={toolRows} />
+        </InsightCard>
+
+        <InsightCard
+          title="Most used clients"
+          href={logsLink()}
+          loading={status.clients.pending}
+          error={status.clients.error}
+        >
+          <RankedList
+            color={cardColors.clients}
+            rows={clientRows}
+            emptyMessage="No client reported a name in this window"
+          />
+        </InsightCard>
+
+        <InsightCard
+          title="Most errors"
+          href={logsLink({ statuses: ["error"] })}
+          loading={status.targets.pending}
+          error={status.targets.error}
+        >
+          <RankedList
+            color={colorForServerRow}
+            onRowHover={highlightRow}
+            rows={erroringRows}
+            emptyMessage="Nothing failed"
+          />
+        </InsightCard>
+
+        <InsightCard
+          title="Most used skills"
+          href={logsLink({ targetTypes: ["skill"] })}
+          loading={status.targets.pending}
+          error={status.targets.error}
+        >
+          {skillRows.some((row) => row.segments) && (
+            <div className="text-muted-foreground -mt-1 flex items-center gap-3 text-xs">
+              {(["mcp", "hook"] as const).map((channel) => {
+                const swatch = (
+                  <span
+                    aria-hidden
+                    className="size-2.5"
+                    style={{
+                      backgroundColor: cardColors.skills,
+                      opacity: SKILL_CHANNEL_OPACITY[channel] * 2,
+                    }}
+                  />
+                );
+                const href = logsLink({
+                  targetTypes: ["skill"],
+                  loadedVia: channel,
+                });
+                return href ? (
+                  <Link
+                    key={channel}
+                    to={href}
+                    className="hover:text-foreground inline-flex items-center gap-1 no-underline hover:underline"
+                  >
+                    {swatch}
+                    {SKILL_LOAD_CHANNEL_LABELS[channel]}
+                  </Link>
+                ) : (
+                  <span
+                    key={channel}
+                    className="inline-flex items-center gap-1"
+                  >
+                    {swatch}
+                    {SKILL_LOAD_CHANNEL_LABELS[channel]}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <RankedList
+            color={cardColors.skills}
+            rows={skillRows}
+            emptyMessage="No skills invoked"
+          />
+        </InsightCard>
+
+        <InsightCard
+          // "Callers", not "people": an agent ranks here too, and the card
+          // counted it as a person because the title said so.
+          title="Busiest callers"
+          href={logsLink()}
+          loading={status.users.pending}
+          error={status.users.error}
+        >
+          <RankedList color={cardColors.people} rows={userRows} />
+        </InsightCard>
+      </div>
+    </div>
+  );
+}

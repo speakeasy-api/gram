@@ -8,9 +8,14 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/features"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 // GetProductFeatures exposes device_agent as a member-readable signal derived
@@ -61,7 +66,7 @@ func TestProductFeaturesService_PlatformMCP(t *testing.T) {
 
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeaturePlatformMCP),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeaturePlatformMCP),
 		Enabled:        true,
 	}))
 	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
@@ -80,11 +85,57 @@ func TestProductFeaturesService_SkillCaptureMetadataOnly(t *testing.T) {
 	require.False(t, res.SkillCaptureMetadataOnly)
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSkillCaptureMetadataOnly),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkillCaptureMetadataOnly),
 		Enabled:        true,
 	}))
 	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
 		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)
 	require.True(t, res.SkillCaptureMetadataOnly)
+}
+
+// GetProductFeatures reports the organization's upstream auth enforcement
+// state for members, though only the admin enforcement endpoint changes it.
+func TestProductFeaturesService_GetProductFeatures_UpstreamAuthEnforced(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	res, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
+	require.NoError(t, err)
+	require.NotNil(t, res.UpstreamAuthEnforced)
+	require.False(t, *res.UpstreamAuthEnforced)
+
+	require.NoError(t, ti.client.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureUpstreamAuthEnforced, true))
+
+	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
+	require.NoError(t, err)
+	require.NotNil(t, res.UpstreamAuthEnforced)
+	require.True(t, *res.UpstreamAuthEnforced)
+}
+
+// assistants_available reports the deployment's assistant runtime, the same
+// for every organization.
+func TestProductFeaturesService_GetProductFeatures_AssistantsAvailable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	res, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
+	require.NoError(t, err)
+	require.NotNil(t, res.AssistantsAvailable)
+	require.True(t, *res.AssistantsAvailable)
+
+	logger := testenv.NewLogger(t)
+	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	disabled := productfeatures.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, ti.redisClient, authzEngine, audit.NewLogger(), productfeatures.DeploymentCapabilities{AssistantsAvailable: false, FunctionsAvailable: true})
+	res, err = disabled.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
+	require.NoError(t, err)
+	require.NotNil(t, res.AssistantsAvailable)
+	require.False(t, *res.AssistantsAvailable)
 }

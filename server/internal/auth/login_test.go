@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -59,6 +61,47 @@ func TestService_Login(t *testing.T) {
 		require.NoError(t, err)
 		redirectURI := parsedURL.Query().Get("redirect_uri")
 		require.Equal(t, expectedRedirectURI, redirectURI)
+	})
+
+	t.Run("login return URL follows the request's platform host", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name     string
+			origin   requestorigin.Origin
+			expected string
+		}{
+			{
+				name:     "extra platform host",
+				origin:   requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: "https://ai.speakeasy.com"},
+				expected: "https://ai.speakeasy.com/rpc/auth.callback",
+			},
+			{
+				name:     "configured server host",
+				origin:   requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: "http://localhost:8080"},
+				expected: "http://localhost:8080/rpc/auth.callback",
+			},
+			{
+				name:     "custom domain never receives the login callback",
+				origin:   requestorigin.Origin{Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://mcp.customer.example"},
+				expected: "http://localhost:8080/rpc/auth.callback",
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				ctx, instance := newTestAuthService(t, defaultMockUserInfo())
+				ctx = requestorigin.WithContext(ctx, tt.origin)
+
+				result, err := instance.service.Login(ctx, &gen.LoginPayload{})
+				require.NoError(t, err)
+
+				parsedURL, err := url.Parse(result.Location)
+				require.NoError(t, err)
+				require.Equal(t, tt.expected, parsedURL.Query().Get("redirect_uri"))
+			})
+		}
 	})
 
 	t.Run("login without redirect creates state with nonce", func(t *testing.T) {
@@ -591,4 +634,45 @@ func nonceFromLocation(t *testing.T, location string) string {
 	require.NoError(t, json.Unmarshal(raw, &state))
 	require.NotEmpty(t, state.Nonce)
 	return state.Nonce
+}
+
+func TestService_LoginStoresSignupAttribution(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	ctx, instance := newTestAuthService(t, userInfo)
+
+	orgName := "Acme Inc"
+	source, medium, campaign, session := "linkedin", "paid", "q4-mcp-gateway", "sess-123"
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{
+		OrgName:            &orgName,
+		UtmSource:          &source,
+		UtmMedium:          &medium,
+		UtmCampaign:        &campaign,
+		AnalyticsSessionID: &session,
+	})
+	require.NoError(t, err)
+
+	nonce := nonceFromLocation(t, result.Location)
+	var stored identity.SignupAttribution
+	require.NoError(t, instance.nonceStore.Get(ctx, "auth:signup_attribution:"+nonce, &stored))
+	require.Equal(t, "linkedin", stored.UTMSource)
+	require.Equal(t, "paid", stored.UTMMedium)
+	require.Equal(t, "q4-mcp-gateway", stored.UTMCampaign)
+	require.Equal(t, "sess-123", stored.SessionID)
+	require.NotEmpty(t, stored.Host)
+}
+
+func TestService_LoginWithoutAttributionStoresNone(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	ctx, instance := newTestAuthService(t, userInfo)
+
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{})
+	require.NoError(t, err)
+
+	nonce := nonceFromLocation(t, result.Location)
+	var stored identity.SignupAttribution
+	require.ErrorIs(t, instance.nonceStore.Get(ctx, "auth:signup_attribution:"+nonce, &stored), redisCache.ErrCacheMiss)
 }

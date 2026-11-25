@@ -98,7 +98,7 @@ func TestVerifyURL_RBACForbidden(t *testing.T) {
 	require.True(t, ok)
 
 	// Hold only project:read; verify takes the write scope because it is a
-	// pre-flight for create and makes Gram issue an outbound request.
+	// pre-flight for create and makes Speakeasy issue an outbound request.
 	ctx = withExactAuthzGrants(t, ctx, ti.conn,
 		authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()),
 	)

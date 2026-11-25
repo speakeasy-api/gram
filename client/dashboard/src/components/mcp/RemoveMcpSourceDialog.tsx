@@ -1,0 +1,208 @@
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Spinner } from "@/components/ui/Spinner";
+import { Text } from "@/components/ui/Text";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { useState } from "react";
+import { toast } from "sonner";
+
+export type RemoveMcpSourceDialogContentProps = {
+  /** Dialog title, e.g. "Delete remote MCP server". */
+  title: string;
+  /** Noun phrase in the description, e.g. "the remote MCP source". */
+  entityDescription: string;
+  /** The server being deleted; its name is what the user types to confirm. */
+  serverName: string;
+  successMessage: string;
+  failureMessage: string;
+  /** The other servers the same source backs, which go with it. */
+  linkedMcpServers: McpServer[];
+  isPending: boolean;
+  errorMessage: string | undefined;
+  onClose: () => void;
+  onSuccess: () => void;
+  /** Performs the deletion; rejects on failure. */
+  onConfirm: () => Promise<void>;
+  /** Who uses this server, shown above the typed confirmation. */
+  usage?: React.ReactNode;
+};
+
+function endpointSummary(
+  isLoading: boolean,
+  isError: boolean,
+  slugs: string[],
+): string {
+  if (isLoading) return "Loading endpoints";
+  if (isError) return "Unable to load endpoints";
+  if (slugs.length === 0) return "No endpoints attached";
+  const noun = slugs.length === 1 ? "endpoint" : "endpoints";
+  return `${slugs.length} ${noun}: ${slugs.join(", ")}`;
+}
+
+// Endpoint slugs per MCP server, from one project-wide list rather than one
+// filtered request per row.
+function endpointSlugsByMcpServer(
+  endpoints: readonly McpEndpoint[],
+): Map<string, string[]> {
+  const byServer = new Map<string, string[]>();
+  for (const endpoint of endpoints) {
+    if (!endpoint.mcpServerId) continue;
+    const slugs = byServer.get(endpoint.mcpServerId) ?? [];
+    slugs.push(endpoint.slug);
+    byServer.set(endpoint.mcpServerId, slugs);
+  }
+  return byServer;
+}
+
+function LinkedMcpServerRow({
+  server,
+  summary,
+}: {
+  server: McpServer;
+  summary: string;
+}) {
+  return (
+    <li className="flex flex-col gap-1 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <Text small className="font-medium" title={server.id}>
+          {server.name || "Unnamed server"}
+        </Text>
+        <Badge variant="neutral">
+          <Badge.Text>{server.visibility}</Badge.Text>
+        </Badge>
+      </div>
+      <Text small muted>
+        {summary}
+      </Text>
+    </li>
+  );
+}
+
+/**
+ * Confirm-to-delete dialog body for MCP source kinds (remote, tunneled,
+ * unproxied). Owns the typed-confirmation input, the linked-server summary,
+ * and toast plumbing; callers own their delete mutation and pass its state in.
+ */
+export function RemoveMcpSourceDialogContent({
+  title,
+  entityDescription,
+  serverName,
+  successMessage,
+  failureMessage,
+  linkedMcpServers,
+  isPending,
+  errorMessage,
+  onClose,
+  onSuccess,
+  onConfirm,
+  usage,
+}: RemoveMcpSourceDialogContentProps): JSX.Element {
+  const [confirmation, setConfirmation] = useState("");
+  const inputMatches = confirmation.trim() === serverName;
+  const {
+    data: endpointsData,
+    isError: endpointsError,
+    isLoading: endpointsLoading,
+  } = useMcpEndpoints(undefined, undefined, {
+    enabled: linkedMcpServers.length > 0,
+  });
+  const slugsByServer = endpointSlugsByMcpServer(
+    endpointsData?.mcpEndpoints ?? [],
+  );
+
+  const handleConfirm = async () => {
+    try {
+      await onConfirm();
+      toast.success(successMessage);
+      onSuccess();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : failureMessage;
+      toast.error(message);
+    }
+  };
+
+  return (
+    <>
+      <Dialog.Header>
+        <Dialog.Title>{title}</Dialog.Title>
+        <Dialog.Description>
+          This permanently deletes <strong>{serverName}</strong>,{" "}
+          {entityDescription} behind it, and their addresses. This cannot be
+          undone.
+        </Dialog.Description>
+      </Dialog.Header>
+
+      {linkedMcpServers.length > 0 && (
+        <div className="space-y-3">
+          <Text small muted>
+            {linkedMcpServers.length === 1
+              ? "The source also backs another server, which will be deleted too:"
+              : `The source also backs these ${linkedMcpServers.length} servers, which will be deleted too:`}
+          </Text>
+          {/* Bounded so a source with many servers cannot push the
+              confirmation controls below the fold. */}
+          <ul className="divide-border max-h-64 divide-y overflow-y-auto border">
+            {linkedMcpServers.map((server) => (
+              <LinkedMcpServerRow
+                key={server.id}
+                server={server}
+                summary={endpointSummary(
+                  endpointsLoading,
+                  endpointsError,
+                  slugsByServer.get(server.id) ?? [],
+                )}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {usage}
+
+      <div className="grid gap-2">
+        <Text small>
+          To confirm, type the server name:{" "}
+          <strong className="break-all">{serverName}</strong>
+        </Text>
+        <Input
+          value={confirmation}
+          onChange={setConfirmation}
+          placeholder={serverName}
+          mutedPlaceholder
+          disabled={isPending}
+          aria-label="Type the server name to confirm"
+          autoComplete="off"
+        />
+      </div>
+
+      {errorMessage !== undefined && (
+        <Alert variant="error" dismissible={false}>
+          {errorMessage}
+        </Alert>
+      )}
+
+      <Dialog.Footer>
+        <Button variant="secondary" onClick={onClose} disabled={isPending}>
+          <Button.Text>Cancel</Button.Text>
+        </Button>
+        <Button
+          variant="destructive-primary"
+          disabled={!inputMatches || isPending}
+          onClick={() => void handleConfirm()}
+        >
+          {isPending && (
+            <Button.LeftIcon>
+              <Spinner className="mr-0 size-4" />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>{isPending ? "Deleting" : "Delete"}</Button.Text>
+        </Button>
+      </Dialog.Footer>
+    </>
+  );
+}

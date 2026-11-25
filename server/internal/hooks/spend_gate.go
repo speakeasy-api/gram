@@ -18,6 +18,9 @@ import (
 // (fail-open): a nil gate, an unresolved org/user identity, and cache
 // infrastructure errors.
 func (s *Service) checkSpendGate(ctx context.Context, ev hookevents.Event) *spendrules.Block {
+	ctx, span := s.tracer.Start(ctx, "hooks.checkSpendGate")
+	defer span.End()
+
 	if s.spendGate == nil {
 		return nil
 	}

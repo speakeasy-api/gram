@@ -120,7 +120,7 @@ func (g GrantCheck) Evaluate(grants []Grant) (GrantExpressionResult, error) {
 	}
 
 	grant, _ := matchingGrant(grants, g.Check.expand())
-	if grant == nil {
+	if grant == nil || personalCheckUnbound(g.Check) {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonMissingBase}, nil
 	}
 
@@ -137,7 +137,7 @@ func (g GrantCheck) grantSet(grants []Grant) (grantSet, error) {
 	// matchingGrant already applies Check expansion and the Check's
 	// selector match mode. Grant expressions do not reimplement selector logic.
 	grant, _ := matchingGrant(grants, checks)
-	if grant == nil {
+	if grant == nil || personalCheckUnbound(g.Check) {
 		return grantSet{}, nil
 	}
 
@@ -283,7 +283,7 @@ func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exclusion Gra
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
 	}
 	baseGrant, _ := matchingGrant(grants, base.Check.expand())
-	if baseGrant == nil {
+	if baseGrant == nil || personalCheckUnbound(base.Check) {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonMissingBase}, nil
 	}
 
@@ -294,7 +294,7 @@ func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exclusion Gra
 	}
 
 	exclusionGrant, _ := matchingGrant(grants, expandWithoutRoot(exclusion.Check))
-	if exclusionGrant != nil {
+	if exclusionGrant != nil && !personalCheckUnbound(exclusion.Check) {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonExclusionMatched}, nil
 	}
 
@@ -350,4 +350,49 @@ func writeGrantSetKeyPart(b *strings.Builder, value string) {
 	b.WriteByte(':')
 	b.WriteString(value)
 	b.WriteByte('|')
+}
+
+// RiskPolicyApplication says whether a risk policy governs a request. The zero
+// value applies, so a result nobody filled in never lets a request past a
+// policy.
+type RiskPolicyApplication string
+
+const (
+	// RiskPolicyGoverns means the policy must be enforced: the caller is in
+	// its audience with no exemption for this request, or neither could be
+	// determined.
+	RiskPolicyGoverns RiskPolicyApplication = ""
+	// RiskPolicyExempt means the caller is in the audience and an exemption
+	// covers this request.
+	RiskPolicyExempt RiskPolicyApplication = "exempt"
+	// RiskPolicyNotInAudience means no grant places the caller in the policy's
+	// audience.
+	RiskPolicyNotInAudience RiskPolicyApplication = "not_in_audience"
+)
+
+// Applies reports whether the policy governs the request. Only the two named
+// reasons for leaving a caller alone say no.
+func (a RiskPolicyApplication) Applies() bool {
+	return a != RiskPolicyExempt && a != RiskPolicyNotInAudience
+}
+
+// EvaluateRiskPolicy decides whether the policy governs a request made with
+// these grants. When the question cannot be answered it returns
+// RiskPolicyGoverns together with the error: a policy that cannot be evaluated
+// applies, and the caller logs the error rather than dropping the policy.
+func EvaluateRiskPolicy(grants []Grant, policyID string, dims RiskPolicyDimensions) (RiskPolicyApplication, error) {
+	result, err := RiskPolicyApplies(policyID, dims).Evaluate(grants)
+	if err != nil {
+		return RiskPolicyGoverns, fmt.Errorf("evaluate risk policy application: %w", err)
+	}
+	switch {
+	case result.Satisfied:
+		return RiskPolicyGoverns, nil
+	case result.Reason == GrantExpressionReasonMissingBase:
+		return RiskPolicyNotInAudience, nil
+	case result.Reason == GrantExpressionReasonExclusionMatched:
+		return RiskPolicyExempt, nil
+	default:
+		return RiskPolicyGoverns, fmt.Errorf("evaluate risk policy application: unexpected reason %q", result.Reason)
+	}
 }

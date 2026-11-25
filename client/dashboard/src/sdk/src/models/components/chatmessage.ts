@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ChatParticipant,
+  ChatParticipant$inboundSchema,
+} from "./chatparticipant.js";
 
 export type ChatMessage = {
   /**
@@ -41,6 +45,10 @@ export type ChatMessage = {
    * The model that generated the message
    */
   model: string;
+  /**
+   * Observed per-message conversation participants, independent of message ownership.
+   */
+  participants?: Array<ChatParticipant> | undefined;
   /**
    * The agent prompt/turn ID associated with this message, when available.
    */
@@ -82,6 +90,7 @@ export const ChatMessage$inboundSchema: z.ZodMiniType<ChatMessage, unknown> = z
       id: z.string(),
       is_risk: z.optional(z.boolean()),
       model: z.string(),
+      participants: z.optional(z.array(ChatParticipant$inboundSchema)),
       prompt_id: z.optional(z.string()),
       role: z.string(),
       seq: z.int(),

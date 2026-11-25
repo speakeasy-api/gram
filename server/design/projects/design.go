@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("projects", func() {
-	Description("Manages projects in Gram.")
+	Description("Manages projects in Speakeasy.")
 
 	Security(security.ByKey, func() {
 		Scope("producer")
@@ -57,6 +57,30 @@ var _ = Service("projects", func() {
 		Meta("openapi:operationId", "createProject")
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateProject"}`)
+	})
+
+	Method("updateProject", func() {
+		Description("Update the display name of the current project.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(UpdateProjectForm)
+			Meta("openapi:typename", "UpdateProjectForm")
+			security.ProjectPayload()
+			security.SessionPayload()
+		})
+		Result(UpdateProjectResult)
+
+		HTTP(func() {
+			POST("/rpc/projects.update")
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "updateProject")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateProject"}`)
 	})
 
 	Method("listProjects", func() {
@@ -237,6 +261,18 @@ var CreateProjectResult = Type("CreateProjectResult", func() {
 	Required("project")
 
 	Attribute("project", shared.Project, "The created project")
+})
+
+var UpdateProjectForm = Type("UpdateProjectForm", func() {
+	Required("name")
+
+	Attribute("name", String, "The display name of the project")
+})
+
+var UpdateProjectResult = Type("UpdateProjectResult", func() {
+	Required("project")
+
+	Attribute("project", shared.Project, "The updated project")
 })
 
 var ListProjectsPayload = Type("ListProjectsPayload", func() {

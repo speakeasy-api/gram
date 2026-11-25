@@ -11,10 +11,17 @@ import {
 import { Text } from "@/components/ui/Text";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import type { ReactNode } from "react";
+import { MCPFindingContext } from "../MCPFindingContext";
+import { isMCPFinding, type MCPFindingNames } from "../mcp-finding-context";
 import { CategoryLabel } from "../risk-ui";
-import { getRuleTitleFallback, isShadowMcpSource } from "../risk-utils";
+import {
+  getRuleTitleFallback,
+  isRationaleSource,
+  isShadowMcpSource,
+} from "../risk-utils";
+import { isLlmAnalyzerRuleId } from "../rule-ids";
 import { hasRevealableEvent, isRedactionFingerprint } from "../unmask";
 import {
   isRestorable,
@@ -34,6 +41,7 @@ const TIMESTAMP_FORMAT = "MMM d, yyyy h:mm a";
 export function SuppressedFindingDrawer({
   finding,
   exclusion,
+  mcpFindingNames,
   onClose,
   onRestore,
   onViewRule,
@@ -41,6 +49,7 @@ export function SuppressedFindingDrawer({
 }: {
   /** The finding to detail; null keeps the drawer closed. */
   finding: RiskResult | null;
+  mcpFindingNames?: MCPFindingNames;
   /** The exclusion behind a rule suppression, when it still exists. */
   exclusion: RiskExclusion | undefined;
   onClose: () => void;
@@ -71,7 +80,11 @@ export function SuppressedFindingDrawer({
               <FindingSection finding={finding} />
               <Separator />
               <EvidenceSection finding={finding} />
-              <SessionSection finding={finding} onViewSession={onViewSession} />
+              <SessionSection
+                finding={finding}
+                mcpFindingNames={mcpFindingNames}
+                onViewSession={onViewSession}
+              />
             </div>
             <SheetFooter>
               <FindingActions
@@ -128,7 +141,14 @@ function SuppressionSection({
   );
 }
 
+// The rule row shows the raw id so it can be pasted into an exclusion
+// expression. The LLM analyzer's ids name the engine (`secret.llm`) and its
+// single rule per category only restates the category above, so the row
+// carries the rule's label instead. Its description is the model's reasoning
+// for this one finding, which the row title says outright — as it does for a
+// judge verdict — rather than the static rule blurb every other source stores.
 function FindingSection({ finding }: { finding: RiskResult }): JSX.Element {
+  const llmRule = isLlmAnalyzerRuleId(finding.ruleId);
   return (
     <div className="space-y-4">
       <DetailRow label="Category">
@@ -136,11 +156,23 @@ function FindingSection({ finding }: { finding: RiskResult }): JSX.Element {
       </DetailRow>
       {finding.ruleId && (
         <DetailRow label="Rule">
-          <span className="font-mono break-all">{finding.ruleId}</span>
+          {llmRule ? (
+            getRuleTitleFallback(finding.ruleId)
+          ) : (
+            <span className="font-mono break-all">{finding.ruleId}</span>
+          )}
         </DetailRow>
       )}
       {finding.description && (
-        <DetailRow label="Description">{finding.description}</DetailRow>
+        <DetailRow
+          label={
+            isRationaleSource(finding.source)
+              ? "Why this was flagged"
+              : "Description"
+          }
+        >
+          {finding.description}
+        </DetailRow>
       )}
       {finding.confidence != null && (
         <DetailRow label="Confidence">
@@ -217,10 +249,26 @@ function revealGuidance(finding: RiskResult): string {
 function SessionSection({
   finding,
   onViewSession,
+  mcpFindingNames,
 }: {
   finding: RiskResult;
   onViewSession: (chatId: string) => void;
+  mcpFindingNames?: MCPFindingNames;
 }): JSX.Element {
+  if (isMCPFinding(finding)) {
+    return (
+      <>
+        <Separator />
+        <DetailRow label="MCP context">
+          <MCPFindingContext
+            showOutcome
+            finding={finding}
+            names={mcpFindingNames}
+          />
+        </DetailRow>
+      </>
+    );
+  }
   const chatId = finding.chatId;
   if (!chatId) return <></>;
   return (

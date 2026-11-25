@@ -16,6 +16,12 @@ import (
 
 // Manage organization-level AI provider integrations.
 type Service interface {
+	// Get the organization Anthropic inference hook setup.
+	GetAnthropicInferenceConfig(context.Context, *GetAnthropicInferenceConfigPayload) (res *AnthropicInferenceConfig, err error)
+	// Prepare a webhook URL or update its signing secret and enabled state.
+	UpsertAnthropicInferenceConfig(context.Context, *UpsertAnthropicInferenceConfigPayload) (res *AnthropicInferenceConfig, err error)
+	// Disconnect the organization Anthropic inference hook and revoke its URL.
+	DeleteAnthropicInferenceConfig(context.Context, *DeleteAnthropicInferenceConfigPayload) (err error)
 	// Get the org-wide AI integration config for a provider. Returns an empty
 	// config (enabled=false, has_api_key=false) when none is set.
 	GetConfig(context.Context, *GetConfigPayload) (res *AIIntegrationConfig, err error)
@@ -23,6 +29,10 @@ type Service interface {
 	UpsertConfig(context.Context, *UpsertConfigPayload) (res *AIIntegrationConfig, err error)
 	// Delete the org-wide AI integration config for a provider.
 	DeleteConfig(context.Context, *DeleteConfigPayload) (err error)
+	// List the Google Workspace organizational units a saved gemini_compliance
+	// connection can export, using its stored service account and delegated admin.
+	// Requires the admin.directory.orgunit.readonly delegation scope.
+	ListOrgUnits(context.Context, *ListOrgUnitsPayload) (res *ListAIIntegrationOrgUnitsResult, err error)
 	// List the sync schedules and their scheduler state for a provider's org-wide
 	// AI integration config. Returns an empty list when no config is set.
 	ListSchedules(context.Context, *ListSchedulesPayload) (res *ListAIIntegrationSchedulesResult, err error)
@@ -54,7 +64,7 @@ const ServiceName = "aiIntegrations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"getConfig", "upsertConfig", "deleteConfig", "listSchedules", "setScheduleEnabled", "retrySchedule"}
+var MethodNames = [10]string{"getAnthropicInferenceConfig", "upsertAnthropicInferenceConfig", "deleteAnthropicInferenceConfig", "getConfig", "upsertConfig", "deleteConfig", "listOrgUnits", "listSchedules", "setScheduleEnabled", "retrySchedule"}
 
 // AIIntegrationConfig is the result type of the aiIntegrations service
 // getConfig method.
@@ -64,14 +74,25 @@ type AIIntegrationConfig struct {
 	// Organization the config belongs to.
 	OrganizationID string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID); omitted for providers that do not need one.
+	// UUID); for gemini_compliance, the Google Vault matter exports are created
+	// in. Omitted for providers that do not need one.
 	ExternalOrganizationID *string
+	// gemini_compliance only: the Google Workspace admin email the service account
+	// acts as. Omitted for other providers.
+	DelegatedUser *string
+	// gemini_compliance only: the selected Google Workspace organizational unit.
+	// Omitted until one is saved.
+	OrgUnitID *string
+	// gemini_compliance only: the selected organizational unit's path; "/" is the
+	// whole organization. Omitted until one is saved.
+	OrgUnitPath *string
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
 	// 'unknown'. Empty/omitted when not declared.
@@ -100,6 +121,18 @@ type AIIntegrationConfig struct {
 	CreatedAt *string
 	// ISO 8601 timestamp of the most recent change. Omitted when no config is set.
 	UpdatedAt *string
+}
+
+// A Google Workspace organizational unit the delegated admin can read.
+type AIIntegrationOrgUnit struct {
+	// Organizational unit ID, e.g. id:03ph8a2z1a2b3c4.
+	ID string
+	// Full path; "/" is the root, covering the whole organization.
+	Path string
+	// Display name. Empty when Google omits it.
+	Name string
+	// Admin-entered description. Omitted when empty.
+	Description *string
 }
 
 // AIIntegrationScheduleState is the result type of the aiIntegrations service
@@ -138,14 +171,40 @@ type AIIntegrationScheduleState struct {
 	AutoPausedAt *string
 }
 
+// AnthropicInferenceConfig is the result type of the aiIntegrations service
+// getAnthropicInferenceConfig method.
+type AnthropicInferenceConfig struct {
+	// Integration identifier. Omitted before setup.
+	ID *string
+	// Webhook path on the API server. Omitted before setup.
+	WebhookPath      *string
+	HasSigningSecret bool
+	Enabled          bool
+}
+
+// DeleteAnthropicInferenceConfigPayload is the payload type of the
+// aiIntegrations service deleteAnthropicInferenceConfig method.
+type DeleteAnthropicInferenceConfigPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
 // DeleteConfigPayload is the payload type of the aiIntegrations service
 // deleteConfig method.
 type DeleteConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
+}
+
+// GetAnthropicInferenceConfigPayload is the payload type of the aiIntegrations
+// service getAnthropicInferenceConfig method.
+type GetAnthropicInferenceConfigPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
 }
 
 // GetConfigPayload is the payload type of the aiIntegrations service getConfig
@@ -154,8 +213,16 @@ type GetConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
+}
+
+// ListAIIntegrationOrgUnitsResult is the result type of the aiIntegrations
+// service listOrgUnits method.
+type ListAIIntegrationOrgUnitsResult struct {
+	// Units the saved delegated admin can read, including the root.
+	OrgUnits []*AIIntegrationOrgUnit
 }
 
 // ListAIIntegrationSchedulesResult is the result type of the aiIntegrations
@@ -169,13 +236,23 @@ type ListAIIntegrationSchedulesResult struct {
 	Schedules []*AIIntegrationScheduleState
 }
 
+// ListOrgUnitsPayload is the payload type of the aiIntegrations service
+// listOrgUnits method.
+type ListOrgUnitsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// AI provider identifier. Only gemini_compliance is supported.
+	Provider string
+}
+
 // ListSchedulesPayload is the payload type of the aiIntegrations service
 // listSchedules method.
 type ListSchedulesPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
 }
 
@@ -185,7 +262,8 @@ type RetrySchedulePayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
 	// Schedule identifier (e.g. cursor, anthropic_compliance,
 	// anthropic_analytics_usage).
@@ -198,7 +276,8 @@ type SetScheduleEnabledPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
 	// Schedule identifier (e.g. cursor, anthropic_compliance,
 	// anthropic_analytics_usage).
@@ -207,24 +286,47 @@ type SetScheduleEnabledPayload struct {
 	Enabled bool
 }
 
+// UpsertAnthropicInferenceConfigPayload is the payload type of the
+// aiIntegrations service upsertAnthropicInferenceConfig method.
+type UpsertAnthropicInferenceConfigPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// New Anthropic signing secret. Omit to preserve the saved secret.
+	SigningSecret *string
+	// Enable inspection. Requires a saved signing secret.
+	Enabled *bool
+}
+
 // UpsertConfigPayload is the payload type of the aiIntegrations service
 // upsertConfig method.
 type UpsertConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
-	// Provider API key. Stored encrypted at rest; never returned on reads.
+	// Provider API key. For gemini_compliance, the Google service account JSON key
+	// file, unchanged. Empty keeps the saved key. Stored encrypted at rest; never
+	// returned on reads.
 	APIKey string
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID).
+	// UUID). Optional for gemini_compliance (an open Google Vault matter UUID);
+	// omit it and Speakeasy finds or creates its own matter.
 	ExternalOrganizationID *string
+	// gemini_compliance only: the Google Workspace admin email the service account
+	// acts as through domain-wide delegation. Omit to keep the saved value.
+	DelegatedUser *string
+	// gemini_compliance only: the Google Workspace organizational unit to export,
+	// from listOrgUnits. Select the root unit for the whole organization. Syncing
+	// starts once one is saved. Omit to keep the saved value.
+	OrgUnitID *string
 	// How the provider org is billed: 'metered', 'flat_rate', or 'unknown'.
 	// Free-form; omit to leave the existing value unchanged.
 	BillingMode *string
-	// Whether the integration should be active.
+	// Whether the integration should be active. gemini_compliance stays inactive
+	// until an organizational unit is saved.
 	Enabled bool
 }
 

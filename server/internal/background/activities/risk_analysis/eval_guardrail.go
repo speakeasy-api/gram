@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,14 +36,28 @@ type MessageVerdict struct {
 	promptpolicy.Verdict
 }
 
+const evalPromptGuardrailMessageLimit = 200
+
+// EvalPromptGuardrailResult contains bounded replay verdicts and scope metadata.
+type EvalPromptGuardrailResult struct {
+	// Verdicts contains one result per judged message in transcript order.
+	Verdicts []MessageVerdict
+
+	// InScopeMessageCount is the number of messages that matched the guardrail scope.
+	InScopeMessageCount int
+
+	// MessageLimitHit reports whether in-scope messages exceeded the replay limit.
+	MessageLimitHit bool
+}
+
 // EvalPromptGuardrail replays a prompt_based guardrail against a sequence of
-// chat messages and returns one verdict per in-scope message, ordered by input
-// index. It reuses the exact role-to-type mapping, tool-call flattening, and judge
+// chat messages and returns one verdict per judged message in transcript order.
+// It reuses the exact role-to-type mapping, tool-call flattening, and judge
 // prompt the batch analyzer runs, so a workbench replay matches production
 // judging. It performs no writes, enforcement, or outbox side effects.
 //
 // Scoping is by message_types and CEL scope predicates; when both are empty
-// every supported message is judged.
+// every supported message is in scope.
 func EvalPromptGuardrail(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -53,10 +68,10 @@ func EvalPromptGuardrail(
 	messages []EvalMessage,
 	messageTypes []string,
 	includeCEL, exemptCEL string,
-) ([]MessageVerdict, error) {
+) (EvalPromptGuardrailResult, error) {
 	scope, err := CompileScope(eng, includeCEL, exemptCEL)
 	if err != nil {
-		return nil, fmt.Errorf("compile eval scope: %w", err)
+		return EvalPromptGuardrailResult{}, fmt.Errorf("compile eval scope: %w", err)
 	}
 
 	inScope := make([]int, 0, len(messages))
@@ -71,7 +86,7 @@ func EvalPromptGuardrail(
 		}
 		ok, err := scope.InScope(batchMessageView(msg))
 		if err != nil {
-			return nil, fmt.Errorf("eval scope for message %s: %w", m.ID, err)
+			return EvalPromptGuardrailResult{}, fmt.Errorf("eval scope for message %s: %w", m.ID, err)
 		}
 		if !ok {
 			continue
@@ -80,23 +95,31 @@ func EvalPromptGuardrail(
 		inScope = append(inScope, i)
 	}
 
-	verdicts := make([]MessageVerdict, len(inScope))
-	if len(inScope) == 0 {
-		return verdicts, nil
+	judgedIndices := inScope
+	if len(judgedIndices) > evalPromptGuardrailMessageLimit {
+		judgedIndices = judgedIndices[:evalPromptGuardrailMessageLimit]
+	}
+	result := EvalPromptGuardrailResult{
+		Verdicts:            make([]MessageVerdict, len(judgedIndices)),
+		InScopeMessageCount: len(inScope),
+		MessageLimitHit:     len(inScope) > len(judgedIndices),
+	}
+	if len(judgedIndices) == 0 {
+		return result, nil
 	}
 
 	if judge == nil || strings.TrimSpace(prompt) == "" {
-		for vi, idx := range inScope {
-			verdicts[vi] = messageVerdictSkeleton(idx, built[idx])
+		for vi, idx := range judgedIndices {
+			result.Verdicts[vi] = messageVerdictSkeleton(idx, built[idx])
 			if !cfg.FailOpen {
-				applyFailClosedFallback(&verdicts[vi], nil)
+				applyFailClosedFallback(&result.Verdicts[vi], nil)
 			}
 		}
-		return verdicts, nil
+		return result, nil
 	}
 
 	judgeFanout(
-		ctx, judge, orgID, projectID, prompt, cfg, built, inScope,
+		ctx, judge, orgID, projectID, prompt, cfg, built, judgedIndices,
 		func(pos, idx int, verdict *promptpolicy.Verdict, err error, latency time.Duration) {
 			out := messageVerdictSkeleton(idx, built[idx])
 			out.LatencyMs = latency.Milliseconds()
@@ -105,11 +128,10 @@ func EvalPromptGuardrail(
 			} else if verdict != nil {
 				out.Verdict = *verdict
 			}
-			verdicts[pos] = out
+			result.Verdicts[pos] = out
 		},
-		nil,
 	)
-	return verdicts, nil
+	return result, nil
 }
 
 // messageVerdictSkeleton builds the un-matched verdict carrying the message's
@@ -132,10 +154,63 @@ func messageVerdictSkeleton(idx int, msg batchMessage) MessageVerdict {
 			PromptTokens:     0,
 			CompletionTokens: 0,
 			TotalTokens:      0,
+			STokens:          0,
+			Completed:        false,
+			Model:            "",
+			Provider:         "",
 		},
 	}
 }
 
 func applyFailClosedFallback(verdict *MessageVerdict, err error) {
 	verdict.Verdict = promptpolicy.FailClosedVerdict(err)
+}
+
+// judgeConcurrency bounds the number of in-flight judge calls per replay.
+const judgeConcurrency = 8
+
+// judgeFanout evaluates the given message indices against a guardrail prompt
+// with at most judgeConcurrency calls in flight, invoking apply for each result
+// (pos is the position within indices, idx the original message index, verdict
+// nil when the judge skipped, err non-nil when it degraded, latency the
+// wall-clock call time).
+func judgeFanout(
+	ctx context.Context,
+	judge promptpolicy.Evaluator,
+	orgID, projectID, prompt string,
+	cfg promptpolicy.Config,
+	msgs []batchMessage,
+	indices []int,
+	apply func(pos, idx int, verdict *promptpolicy.Verdict, err error, latency time.Duration),
+) {
+	for start := 0; start < len(indices); start += judgeConcurrency {
+		if err := ctx.Err(); err != nil {
+			for pos := start; pos < len(indices); pos++ {
+				idx := indices[pos]
+				apply(pos, idx, nil, err, 0)
+			}
+			return
+		}
+
+		end := min(start+judgeConcurrency, len(indices))
+		var wg sync.WaitGroup
+		for pos := start; pos < end; pos++ {
+			wg.Add(1)
+			go func(pos int) {
+				defer wg.Done()
+				idx := indices[pos]
+				started := time.Now()
+				verdict, err := judge(ctx, promptpolicy.Input{
+					OrgID:     orgID,
+					ProjectID: projectID,
+					UserID:    msgs[idx].UserID,
+					Prompt:    prompt,
+					Message:   batchJudgeMessage(msgs[idx]),
+					Config:    cfg,
+				})
+				apply(pos, idx, verdict, err, time.Since(started))
+			}(pos)
+		}
+		wg.Wait()
+	}
 }

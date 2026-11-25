@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"mime"
@@ -24,10 +25,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -54,6 +59,7 @@ type resourceContent struct {
 func handleResourcesRead(
 	ctx context.Context,
 	logger *slog.Logger,
+	metrics *mcpmetrics.Metrics,
 	db *pgxpool.Pool,
 	payload *mcpInputs,
 	req *rawRequest,
@@ -63,6 +69,7 @@ func handleResourcesRead(
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
 	platformExtras []platformtools.ExternalTool,
+	scan *mcpriskscan.Evaluator,
 ) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -79,6 +86,16 @@ func handleResourcesRead(
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), nil, nil, platformExtras...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
+	}
+
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
+	}
+
+	// Attribution must not turn an otherwise valid resource read into an error.
+	if err := payload.resolveServingAttribution(ctx, logger, db, toolsetID); err != nil {
+		logger.WarnContext(ctx, "failed to resolve resource serving attribution", attr.SlogError(err))
 	}
 
 	var resourceURN urn.Resource
@@ -106,14 +123,9 @@ func handleResourcesRead(
 
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
-	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
+	userConfig, _, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	toolsetID, err := uuid.Parse(toolset.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
 	}
 
 	systemConfig, err := env.LoadSystemEnv(ctx, payload.projectID, toolsetID, string(resourceURN.Kind), resourceURN.Source)
@@ -161,6 +173,9 @@ func handleResourcesRead(
 			ToolsetID:             &toolset.ID,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
+			MCPServerID:           optionalUUIDString(payload.servingServerID()),
+			MCPEndpointID:         optionalUUIDString(payload.mcpEndpointID),
+			MetaMCPServerID:       nil,
 			ChatID:                nil,
 			Type:                  plan.BillingType,
 			ResponseStatusCode:    rw.statusCode,
@@ -174,6 +189,7 @@ func handleResourcesRead(
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		logAttrs.RecordAuthenticatedActor(ctx)
 		if payload.apiKeyID != "" {
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
@@ -182,6 +198,7 @@ func handleResourcesRead(
 		}
 
 		logAttrs.RecordToolsetSlug(payload.toolset)
+		recordServingLogAttrs(logAttrs, payload.servingServerID(), payload.mcpEndpointID)
 		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{
 			Timestamp: time.Now(),
@@ -200,18 +217,55 @@ func handleResourcesRead(
 		telemLogger.Log(ctx, params)
 	}()
 
+	serverID := ""
+	if payload.mcpServerID != nil {
+		serverID = payload.mcpServerID.String()
+	}
+	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+		Surface:         mcpriskscan.SurfaceHostedMCP,
+		Method:          mcpriskscan.MethodResourcesRead,
+		OrganizationID:  descriptor.OrganizationID,
+		ProjectID:       descriptor.ProjectID,
+		ServerID:        serverID,
+		MetaServerID:    payload.metaMcpServerID,
+		ToolsetID:       toolset.ID,
+		ToolName:        "",
+		ResourceURI:     descriptor.URI,
+		PromptName:      "",
+		ChatID:          payload.chatID,
+		ToolAnnotations: nil,
+	}, mcpriskscan.BorrowPayload(nil))
+	decision := scan.Scan(ctx, requestSubject)
+	if decision.Denied() {
+		return nil, oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+	}
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
-		OAuthToken: "", // Resources do not support OAuth tokens for external MCP
 		GramEmail:  "",
 		GramChatID: payload.chatID,
 		// Resource reads reach functions through a separate payload that
 		// carries no caller identity, and the functions SDK exposes none on a
 		// resource handler.
-		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		Credentials: nil,
 	}, plan, logAttrs)
 	if err != nil {
+		if errors.Is(err, shutdowndrain.ErrInterrupted) {
+			interruption := interruptedAtShutdown(ctx, logger, metrics, logAttrs, mcpversions.MethodResourcesRead, string(plan.Kind), err)
+			rw.statusCode = http.StatusServiceUnavailable
+			// Whatever the tool wrote before the interrupt is incomplete, so
+			// it is not logged as the call's response.
+			rw.body.Reset()
+			return nil, interruption.Response
+		}
+		// Resource reads have no error result to carry the reason, so a
+		// disabled deployment answers as a missing resource with the reason as
+		// its message, logged at warn because nothing is broken.
+		if errors.Is(err, functions.ErrFunctionsDisabled) {
+			rw.statusCode = http.StatusNotFound
+			return nil, oops.E(oops.CodeNotFound, err, "%s", functions.ErrFunctionsDisabled.Error()).LogWarn(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").LogError(ctx, logger)
 	}
 
@@ -236,6 +290,15 @@ func handleResourcesRead(
 	}
 
 	if isMCPPassthrough(resourceDef.Meta) {
+		responsePayload, parseErr := mcpriskscan.ParseResourceResultPayload(rw.body.Bytes())
+		if parseErr != nil {
+			responsePayload = mcpriskscan.Payload{}
+		}
+		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+		if decision.Denied() {
+			discardWithheldBody(rw.body)
+			return nil, oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		}
 		// For MCP passthrough tools, return the raw result we get from the underlying mcp server
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
@@ -247,6 +310,8 @@ func handleResourcesRead(
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP passthrough result").LogError(ctx, logger)
 		}
 
+		payload.backendAnswered = rw.statusCode >= 200 && rw.statusCode < 300
+		payload.resultSucceeded = payload.backendAnswered
 		return bs, nil
 	}
 
@@ -271,6 +336,15 @@ func handleResourcesRead(
 	} else {
 		content.Text = rw.body.String()
 	}
+	responsePayload := mcpriskscan.TextResponsePayload(nil)
+	if !isBinary {
+		responsePayload = mcpriskscan.TextResponsePayload(rw.body.Bytes())
+	}
+	decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+	if decision.Denied() {
+		discardWithheldBody(rw.body)
+		return nil, oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+	}
 
 	bs, err := json.Marshal(result[resourceReadResult]{
 		ID: req.ID,
@@ -288,6 +362,8 @@ func handleResourcesRead(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/read result").LogError(ctx, logger)
 	}
 
+	payload.backendAnswered = rw.statusCode >= 200 && rw.statusCode < 300
+	payload.resultSucceeded = payload.backendAnswered
 	return bs, nil
 }
 

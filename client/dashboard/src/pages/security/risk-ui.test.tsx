@@ -1,16 +1,37 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EventMatchDialog, RuleLabel } from "./risk-ui";
+import {
+  CategoryLabel,
+  EventMatchDialog,
+  MaskedMatch,
+  RuleLabel,
+} from "./risk-ui";
+
+const contentAccess = vi.hoisted(() => ({ restricted: false }));
+
+vi.mock("./use-risk-content-restricted", () => ({
+  useRiskContentRestricted: () => contentAccess.restricted,
+}));
 
 const hasScope = vi.fn<(scope: string) => boolean>();
+const unmaskMutation = vi.hoisted(() => ({ mutate: vi.fn() }));
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope }),
 }));
 
 vi.mock("@gram/client/react-query/riskUnmaskResult.js", () => ({
-  useRiskUnmaskResultMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useRiskUnmaskResultMutation: () => ({
+    mutate: unmaskMutation.mutate,
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/components/code", () => ({
@@ -36,9 +57,35 @@ function renderCell(
 }
 
 afterEach(cleanup);
-beforeEach(() => hasScope.mockReset());
+beforeEach(() => {
+  contentAccess.restricted = false;
+  hasScope.mockReset();
+  unmaskMutation.mutate.mockReset();
+});
 
 describe("EventMatchDialog", () => {
+  it.each(["<redacted len=0>", ""])(
+    "does not claim absent event content is hidden during impersonation (%s)",
+    (matchRedacted) => {
+      contentAccess.restricted = true;
+      renderCell(RATIONALE, matchRedacted);
+
+      expect(screen.getByText(RATIONALE)).toBeTruthy();
+      expect(screen.queryByText("Hidden during impersonation")).toBeNull();
+      expect(screen.queryByRole("button")).toBeNull();
+    },
+  );
+
+  it("marks stored event content as hidden during impersonation", () => {
+    contentAccess.restricted = true;
+    renderCell(RATIONALE);
+
+    expect(screen.getByText(RATIONALE)).toBeTruthy();
+    expect(screen.getByText("Hidden during impersonation")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(unmaskMutation.mutate).not.toHaveBeenCalled();
+  });
+
   it("shows the judge rationale inline instead of a bare reveal prompt", () => {
     hasScope.mockReturnValue(true);
     renderCell(RATIONALE);
@@ -78,11 +125,94 @@ describe("EventMatchDialog", () => {
     expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
   });
 
-  it("falls back to visible Hidden text without chat:read and no rationale", () => {
+  it("names the missing permission without chat:read and no rationale", async () => {
     hasScope.mockReturnValue(false);
     renderCell(undefined);
 
-    expect(screen.getByText("Hidden")).toBeTruthy();
+    expect(screen.getByText("chat:read")).toBeTruthy();
+    // The fingerprint moves to the tooltip, off the page until hovered.
+    expect(screen.queryByText("<redacted len=42 sha=deadbeef>")).toBeNull();
+    await expectFingerprintInTooltip();
+    expect(screen.queryByText("Hidden")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
+  });
+
+  it("shows the LLM analyzer's reasoning with no reveal, since it stores no match", () => {
+    hasScope.mockReturnValue(true);
+    const reasoning =
+      "The tool output contains an AWS access key id followed by its secret.";
+    // The analyzer reports no spans, so the server fingerprints the empty
+    // match to the no-match sentinel — same shape as a judge verdict.
+    renderCell(reasoning, "<redacted len=0>");
+
+    expect(screen.getByText(reasoning)).toBeTruthy();
+    expect(screen.queryByText("Click to reveal")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByText("<redacted len=0>")).toBeNull();
+  });
+});
+
+// Focus opens the tooltip without pointer events.
+async function expectFingerprintInTooltip() {
+  const trigger = screen.getByText("chat:read").closest("[tabindex]");
+  expect(trigger).toBeTruthy();
+  fireEvent.focus(trigger!);
+  expect(
+    (await screen.findAllByText("<redacted len=42 sha=deadbeef>")).length,
+  ).toBeGreaterThan(0);
+}
+
+function renderMasked(matchRedacted = "<redacted len=42 sha=deadbeef>") {
+  render(
+    <TooltipProvider>
+      <MaskedMatch
+        resultId="00000000-0000-0000-0000-000000000001"
+        matchRedacted={matchRedacted}
+      />
+    </TooltipProvider>,
+  );
+}
+
+describe("MaskedMatch", () => {
+  it("names the missing permission without chat:read, and offers no reveal", async () => {
+    hasScope.mockReturnValue(false);
+    renderMasked();
+
+    expect(screen.getByText("chat:read")).toBeTruthy();
+    expect(screen.queryByText("<redacted len=42 sha=deadbeef>")).toBeNull();
+    await expectFingerprintInTooltip();
+    expect(screen.queryByText("Hidden")).toBeNull();
+    expect(screen.queryByText("Click to reveal")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
+  });
+
+  it("keeps the reveal affordance when chat:read is granted", () => {
+    hasScope.mockReturnValue(true);
+    renderMasked();
+
+    expect(screen.getByText("Click to reveal")).toBeTruthy();
+    expect(screen.queryByText("<redacted len=42 sha=deadbeef>")).toBeNull();
+  });
+
+  it("uses chat:read for MCP evidence and shows the legacy state", () => {
+    hasScope.mockImplementation((scope) => scope === "chat:read");
+    renderMasked("<redacted len=18 sha=deadbeef>");
+
+    fireEvent.click(screen.getByRole("button", { name: /click to reveal/i }));
+    expect(hasScope).toHaveBeenCalledWith("chat:read", undefined);
+    expect(unmaskMutation.mutate).toHaveBeenCalledTimes(1);
+
+    const options = unmaskMutation.mutate.mock.calls[0]?.[1];
+    act(() => {
+      options.onSuccess({
+        id: "00000000-0000-0000-0000-000000000001",
+        match: "",
+        revealState: "evidence_not_stored",
+      });
+    });
+    expect(screen.getByText("Evidence not stored")).toBeTruthy();
   });
 });
 
@@ -102,5 +232,40 @@ describe("RuleLabel", () => {
   it("renders the rule title for detector sources", () => {
     render(<RuleLabel source="presidio" ruleId="pii.us_ssn" />);
     expect(screen.getByText("US Social Security Number")).toBeTruthy();
+  });
+
+  it.each([
+    ["secret.llm", "Secret"],
+    ["pii.llm", "PII"],
+    ["prompt_injection.llm", "Prompt injection"],
+    ["destructive_tool.llm", "Destructive tool"],
+    ["cli_destructive.llm", "Destructive command"],
+    ["llm_analyzer.dead_letter", "Analysis unavailable"],
+  ])(
+    "renders %s from the LLM analyzer as %s, never the raw id",
+    (ruleId, label) => {
+      render(<RuleLabel source="llm_analyzer" ruleId={ruleId} />);
+      const line = screen.getByText(label);
+      expect(line.getAttribute("title")).toBe(label);
+      expect(document.body.textContent).not.toContain(ruleId);
+    },
+  );
+});
+
+describe("CategoryLabel", () => {
+  it.each([
+    ["secret.llm", "Secrets"],
+    ["pii.llm", "Personal Identifiable Information"],
+    ["prompt_injection.llm", "Prompt Injection"],
+    ["destructive_tool.llm", "Destructive Tools"],
+    ["cli_destructive.llm", "Destructive CLI Commands"],
+  ])("classifies the LLM analyzer's %s under %s", (ruleId, label) => {
+    render(
+      <TooltipProvider>
+        <CategoryLabel source="llm_analyzer" ruleId={ruleId} />
+      </TooltipProvider>,
+    );
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/llm/i);
   });
 });

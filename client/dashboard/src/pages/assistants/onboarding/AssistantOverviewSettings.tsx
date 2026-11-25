@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { ModelSelect } from "@/components/model-select";
@@ -5,21 +6,31 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AVAILABLE_MODELS } from "@/lib/models";
-import { Assistant } from "@gram/client/models/components/assistant.js";
-import { UpdateAssistantForm } from "@gram/client/models/components/updateassistantform.js";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
+import type { UpdateAssistantForm } from "@gram/client/models/components/updateassistantform.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Row, Section } from "./PanelSection";
+import {
+  REASONING_EFFORT_LABELS,
+  REASONING_EFFORT_HELP,
+  KIT_REASONING_EFFORT_HELP,
+  type ReasoningEffort,
+  reasoningEffortOrDefault,
+} from "./reasoning-effort";
+import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
+import { AssistantRuntimeSettings } from "./AssistantRuntimeSettings";
 
 type OverviewDraft = {
   name: string;
   model: string;
+  reasoningEffort: ReasoningEffort;
   maxConcurrency: string;
   warmTtlSeconds: string;
 };
@@ -28,6 +39,7 @@ function draftFromAssistant(assistant: Assistant): OverviewDraft {
   return {
     name: assistant.name,
     model: assistant.model,
+    reasoningEffort: reasoningEffortOrDefault(assistant.reasoningEffort),
     maxConcurrency: String(assistant.maxConcurrency),
     warmTtlSeconds: String(assistant.warmTtlSeconds),
   };
@@ -51,11 +63,14 @@ export function AssistantOverviewSettings({
   onUpdated?: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const project = useProject();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("project:write");
+  const canWrite = hasScope("assistant:write", assistant.id, project.id);
 
   const [draft, setDraft] = useState<OverviewDraft | null>(null);
   const editing = draft !== null;
+  const isKit = assistant.runtimeVersion === 3;
+  const incompatibleReasoning = isKit && draft?.reasoningEffort === "none";
 
   const update = useAssistantsUpdateMutation({
     onSuccess: () => {
@@ -71,6 +86,8 @@ export function AssistantOverviewSettings({
     editing &&
     (draft.name.trim() !== assistant.name ||
       draft.model !== assistant.model ||
+      draft.reasoningEffort !==
+        reasoningEffortOrDefault(assistant.reasoningEffort) ||
       draft.maxConcurrency !== String(assistant.maxConcurrency) ||
       draft.warmTtlSeconds !== String(assistant.warmTtlSeconds));
 
@@ -79,6 +96,9 @@ export function AssistantOverviewSettings({
   };
 
   const validate = (current: OverviewDraft): string | null => {
+    if (isKit && current.reasoningEffort === "none") {
+      return KIT_REASONING_EFFORT_HELP;
+    }
     if (current.name.trim() === "") {
       return "Name cannot be empty";
     }
@@ -104,7 +124,7 @@ export function AssistantOverviewSettings({
   };
 
   const save = () => {
-    if (!draft) return;
+    if (!draft || !canWrite || update.isPending) return;
     const problem = validate(draft);
     if (problem) {
       toast.error(problem);
@@ -113,6 +133,7 @@ export function AssistantOverviewSettings({
     const form: Omit<UpdateAssistantForm, "id"> = {
       name: draft.name.trim(),
       model: draft.model,
+      reasoningEffort: draft.reasoningEffort,
       maxConcurrency: Number(draft.maxConcurrency),
       warmTtlSeconds: Number(draft.warmTtlSeconds),
     };
@@ -147,10 +168,10 @@ export function AssistantOverviewSettings({
           size="sm"
           className="h-auto px-2 py-0.5 text-xs"
           onClick={save}
-          disabled={update.isPending}
+          disabled={update.isPending || incompatibleReasoning}
         >
           {update.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <Spinner className="mr-0 h-3 w-3" label="Saving" />
           ) : (
             "Save"
           )}
@@ -175,8 +196,17 @@ export function AssistantOverviewSettings({
       action={canWrite ? (editing ? editingActions : editAction) : undefined}
     >
       <Row label="Status">
-        <AssistantStatusToggle assistant={assistant} onUpdated={onUpdated} />
+        <AssistantStatusToggle
+          assistant={assistant}
+          canWrite={canWrite}
+          onUpdated={onUpdated}
+        />
       </Row>
+      <AssistantRuntimeSettings
+        assistant={assistant}
+        canWrite={canWrite}
+        onUpdated={onUpdated}
+      />
       <Row label="Name">
         {editing ? (
           <Input
@@ -205,6 +235,27 @@ export function AssistantOverviewSettings({
           <Text small>{modelLabel(assistant.model)}</Text>
         )}
       </Row>
+      <Row label="Reasoning effort">
+        {editing ? (
+          <ReasoningEffortSelect
+            disabledOff={isKit}
+            value={draft.reasoningEffort}
+            onValueChange={setField("reasoningEffort")}
+            disabled={update.isPending || !canWrite}
+          />
+        ) : (
+          <Text small>
+            {
+              REASONING_EFFORT_LABELS[
+                reasoningEffortOrDefault(assistant.reasoningEffort)
+              ]
+            }
+          </Text>
+        )}
+      </Row>
+      <Text small muted>
+        {isKit ? KIT_REASONING_EFFORT_HELP : REASONING_EFFORT_HELP}
+      </Text>
       <Row label="Owner">
         <AssistantOwner
           createdByUserId={assistant.createdByUserId}

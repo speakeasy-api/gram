@@ -1,0 +1,46 @@
+package shared
+
+import . "goa.design/goa/v3/dsl"
+
+var ProductFeatureName = Type("ProductFeatureName", String, func() {
+	MaxLength(60)
+	Enum(
+		"logs", "tool_io_logs", "session_capture", "authz_challenge_logging",
+		"sso", "scim", "hooks_browser_login", "hooks_fail_open",
+		"custom_model_keys", "skills", "skill_capture_metadata_only",
+		"ai_platform_push_integrations", "platform_mcp",
+		"customer_managed_encryption_keys", "remote_session_auto_refresh",
+		"remote_session_auto_refresh_enforced",
+		"session_portability", "network_ingress", "signals_intelligence",
+		"organization_gateway_disabled", "code_mode",
+	)
+})
+
+var ProductFeatures = ResultType("application/vnd.product-features", func() {
+	Attribute("logs_enabled", Boolean, "Whether logging is enabled")
+	Attribute("tool_io_logs_enabled", Boolean, "Whether tool I/O logging is enabled")
+	Attribute("session_capture_enabled", Boolean, "Whether Claude Code session capture is enabled")
+	Attribute("authz_challenge_logging_enabled", Boolean, "Whether authz challenge logging to ClickHouse is enabled")
+	Attribute("sso_enabled", Boolean, "Whether SSO setup is enabled for the organization")
+	Attribute("scim_enabled", Boolean, "Whether SCIM/directory sync setup is enabled for the organization")
+	Attribute("hooks_browser_login_enabled", Boolean, "Whether generated hook plugins may mint per-user keys via the interactive browser login")
+	Attribute("hooks_fail_open_enabled", Boolean, "Whether hooks fail open when the Speakeasy control plane is unreachable or erroring — blocking policies are not enforced for the duration of the outage")
+	Attribute("custom_model_keys_enabled", Boolean, "Whether the organization can supply its own model provider API keys (BYOK)")
+	Attribute("skills_enabled", Boolean, "Whether the Skills page is enabled for the organization")
+	Attribute("skill_capture_metadata_only", Boolean, "Whether skill capture stores activation metadata without requesting manifest content")
+	Attribute("ai_platform_push_integrations_enabled", Boolean, "Whether the organization can provision push integrations for AI platforms")
+	Attribute("platform_mcp_enabled", Boolean, "Whether the organization can use the Speakeasy Platform MCP capability")
+	Attribute("customer_managed_encryption_keys_enabled", Boolean, "Whether the organization can manage the external credentials and cloud KMS keys backing customer-managed encryption")
+	Attribute("remote_session_auto_refresh_enabled", Boolean, "Whether consent screens expose automatic remote-session refresh for the organization")
+	Attribute("remote_session_auto_refresh_enforced_enabled", Boolean, "Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference")
+	Attribute("session_portability_enabled", Boolean, "Whether agent session portability is enabled for the organization: session sharing links, move reporting with lineage, and picker title enrichment via the device agent")
+	Attribute("network_ingress_enabled", Boolean, "Whether the organization has the staff-managed private network ingress entitlement")
+	Attribute("signals_intelligence_enabled", Boolean, "Whether the organization can configure signals intelligence")
+	Attribute("organization_gateway_disabled", Boolean, "Whether an organization admin turned the organization gateway off, so its routes answer 404")
+	Attribute("code_mode_enabled", Boolean, "Whether the organization has the staff-managed gateway Code Mode entitlement")
+	Attribute("device_agent", Boolean, "Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.")
+	Attribute("assistants_available", Boolean, "Whether this deployment can run assistants. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled assistant runtime provider. Absent from staff admin responses.")
+	Attribute("functions_available", Boolean, "Whether this deployment can run Speakeasy Functions. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled Functions provider. Absent from staff admin responses.")
+	Attribute("upstream_auth_enforced", Boolean, "Whether upstream auth enforcement is on for the organization. Absent when the state could not be read. Staff change it through the admin enforcement endpoint.")
+	Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "sso_enabled", "scim_enabled", "hooks_browser_login_enabled", "hooks_fail_open_enabled", "custom_model_keys_enabled", "skills_enabled", "skill_capture_metadata_only", "ai_platform_push_integrations_enabled", "platform_mcp_enabled", "customer_managed_encryption_keys_enabled", "remote_session_auto_refresh_enabled", "remote_session_auto_refresh_enforced_enabled", "session_portability_enabled", "network_ingress_enabled", "signals_intelligence_enabled", "organization_gateway_disabled", "code_mode_enabled", "device_agent")
+})

@@ -16,46 +16,100 @@ import (
 
 // Client is the "plugins" service client.
 type Client struct {
-	ListPluginsEndpoint                 goa.Endpoint
-	GetPluginEndpoint                   goa.Endpoint
-	CreatePluginEndpoint                goa.Endpoint
-	UpdatePluginEndpoint                goa.Endpoint
-	DeletePluginEndpoint                goa.Endpoint
-	AddPluginServerEndpoint             goa.Endpoint
-	UpdatePluginServerEndpoint          goa.Endpoint
-	RemovePluginServerEndpoint          goa.Endpoint
-	SetPluginAssignmentsEndpoint        goa.Endpoint
-	ListAudiencesEndpoint               goa.Endpoint
-	DownloadPluginPackageEndpoint       goa.Endpoint
-	DownloadObservabilityPluginEndpoint goa.Endpoint
-	DownloadCodexInstallScriptEndpoint  goa.Endpoint
-	GetPublishStatusEndpoint            goa.Endpoint
-	PublishPluginsEndpoint              goa.Endpoint
-	GetMarketplaceSettingsEndpoint      goa.Endpoint
-	UpdateMarketplaceSettingsEndpoint   goa.Endpoint
+	ListDistributionPluginsEndpoint       goa.Endpoint
+	GetDistributionPluginEndpoint         goa.Endpoint
+	ListPluginsEndpoint                   goa.Endpoint
+	GetPluginEndpoint                     goa.Endpoint
+	CreatePluginEndpoint                  goa.Endpoint
+	UpdatePluginEndpoint                  goa.Endpoint
+	DeletePluginEndpoint                  goa.Endpoint
+	AddPluginServerEndpoint               goa.Endpoint
+	UpdatePluginServerEndpoint            goa.Endpoint
+	RemovePluginServerEndpoint            goa.Endpoint
+	SetPluginAssignmentsEndpoint          goa.Endpoint
+	ListAudiencesEndpoint                 goa.Endpoint
+	DownloadPluginPackageEndpoint         goa.Endpoint
+	RotateObservabilityCredentialEndpoint goa.Endpoint
+	DownloadObservabilityPluginEndpoint   goa.Endpoint
+	DownloadCodexInstallScriptEndpoint    goa.Endpoint
+	GetPublishStatusEndpoint              goa.Endpoint
+	PublishPluginsEndpoint                goa.Endpoint
+	GetMarketplaceSettingsEndpoint        goa.Endpoint
+	UpdateMarketplaceSettingsEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "plugins" service client given the endpoints.
-func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, listAudiences, downloadPluginPackage, downloadObservabilityPlugin, downloadCodexInstallScript, getPublishStatus, publishPlugins, getMarketplaceSettings, updateMarketplaceSettings goa.Endpoint) *Client {
+func NewClient(listDistributionPlugins, getDistributionPlugin, listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, listAudiences, downloadPluginPackage, rotateObservabilityCredential, downloadObservabilityPlugin, downloadCodexInstallScript, getPublishStatus, publishPlugins, getMarketplaceSettings, updateMarketplaceSettings goa.Endpoint) *Client {
 	return &Client{
-		ListPluginsEndpoint:                 listPlugins,
-		GetPluginEndpoint:                   getPlugin,
-		CreatePluginEndpoint:                createPlugin,
-		UpdatePluginEndpoint:                updatePlugin,
-		DeletePluginEndpoint:                deletePlugin,
-		AddPluginServerEndpoint:             addPluginServer,
-		UpdatePluginServerEndpoint:          updatePluginServer,
-		RemovePluginServerEndpoint:          removePluginServer,
-		SetPluginAssignmentsEndpoint:        setPluginAssignments,
-		ListAudiencesEndpoint:               listAudiences,
-		DownloadPluginPackageEndpoint:       downloadPluginPackage,
-		DownloadObservabilityPluginEndpoint: downloadObservabilityPlugin,
-		DownloadCodexInstallScriptEndpoint:  downloadCodexInstallScript,
-		GetPublishStatusEndpoint:            getPublishStatus,
-		PublishPluginsEndpoint:              publishPlugins,
-		GetMarketplaceSettingsEndpoint:      getMarketplaceSettings,
-		UpdateMarketplaceSettingsEndpoint:   updateMarketplaceSettings,
+		ListDistributionPluginsEndpoint:       listDistributionPlugins,
+		GetDistributionPluginEndpoint:         getDistributionPlugin,
+		ListPluginsEndpoint:                   listPlugins,
+		GetPluginEndpoint:                     getPlugin,
+		CreatePluginEndpoint:                  createPlugin,
+		UpdatePluginEndpoint:                  updatePlugin,
+		DeletePluginEndpoint:                  deletePlugin,
+		AddPluginServerEndpoint:               addPluginServer,
+		UpdatePluginServerEndpoint:            updatePluginServer,
+		RemovePluginServerEndpoint:            removePluginServer,
+		SetPluginAssignmentsEndpoint:          setPluginAssignments,
+		ListAudiencesEndpoint:                 listAudiences,
+		DownloadPluginPackageEndpoint:         downloadPluginPackage,
+		RotateObservabilityCredentialEndpoint: rotateObservabilityCredential,
+		DownloadObservabilityPluginEndpoint:   downloadObservabilityPlugin,
+		DownloadCodexInstallScriptEndpoint:    downloadCodexInstallScript,
+		GetPublishStatusEndpoint:              getPublishStatus,
+		PublishPluginsEndpoint:                publishPlugins,
+		GetMarketplaceSettingsEndpoint:        getMarketplaceSettings,
+		UpdateMarketplaceSettingsEndpoint:     updateMarketplaceSettings,
 	}
+}
+
+// ListDistributionPlugins calls the "listDistributionPlugins" endpoint of the
+// "plugins" service.
+// ListDistributionPlugins may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) ListDistributionPlugins(ctx context.Context, p *ListDistributionPluginsPayload) (res *ListDistributionPluginsResult, err error) {
+	var ires any
+	ires, err = c.ListDistributionPluginsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListDistributionPluginsResult), nil
+}
+
+// GetDistributionPlugin calls the "getDistributionPlugin" endpoint of the
+// "plugins" service.
+// GetDistributionPlugin may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) GetDistributionPlugin(ctx context.Context, p *GetDistributionPluginPayload) (res *DistributionPlugin, err error) {
+	var ires any
+	ires, err = c.GetDistributionPluginEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DistributionPlugin), nil
 }
 
 // ListPlugins calls the "listPlugins" endpoint of the "plugins" service.
@@ -70,6 +124,7 @@ func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin,
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) ListPlugins(ctx context.Context, p *ListPluginsPayload) (res *ListPluginsResult, err error) {
 	var ires any
@@ -92,6 +147,7 @@ func (c *Client) ListPlugins(ctx context.Context, p *ListPluginsPayload) (res *L
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) GetPlugin(ctx context.Context, p *GetPluginPayload) (res *Plugin, err error) {
 	var ires any
@@ -114,6 +170,7 @@ func (c *Client) GetPlugin(ctx context.Context, p *GetPluginPayload) (res *Plugi
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) CreatePlugin(ctx context.Context, p *CreatePluginPayload) (res *Plugin, err error) {
 	var ires any
@@ -126,6 +183,7 @@ func (c *Client) CreatePlugin(ctx context.Context, p *CreatePluginPayload) (res 
 
 // UpdatePlugin calls the "updatePlugin" endpoint of the "plugins" service.
 // UpdatePlugin may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -136,6 +194,7 @@ func (c *Client) CreatePlugin(ctx context.Context, p *CreatePluginPayload) (res 
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) UpdatePlugin(ctx context.Context, p *UpdatePluginPayload) (res *Plugin, err error) {
 	var ires any
@@ -158,6 +217,7 @@ func (c *Client) UpdatePlugin(ctx context.Context, p *UpdatePluginPayload) (res 
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DeletePlugin(ctx context.Context, p *DeletePluginPayload) (err error) {
 	_, err = c.DeletePluginEndpoint(ctx, p)
@@ -177,6 +237,7 @@ func (c *Client) DeletePlugin(ctx context.Context, p *DeletePluginPayload) (err 
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) AddPluginServer(ctx context.Context, p *AddPluginServerPayload) (res *PluginServer, err error) {
 	var ires any
@@ -200,6 +261,7 @@ func (c *Client) AddPluginServer(ctx context.Context, p *AddPluginServerPayload)
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) UpdatePluginServer(ctx context.Context, p *UpdatePluginServerPayload) (res *PluginServer, err error) {
 	var ires any
@@ -223,6 +285,7 @@ func (c *Client) UpdatePluginServer(ctx context.Context, p *UpdatePluginServerPa
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) RemovePluginServer(ctx context.Context, p *RemovePluginServerPayload) (err error) {
 	_, err = c.RemovePluginServerEndpoint(ctx, p)
@@ -242,6 +305,7 @@ func (c *Client) RemovePluginServer(ctx context.Context, p *RemovePluginServerPa
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) SetPluginAssignments(ctx context.Context, p *SetPluginAssignmentsPayload) (res *SetPluginAssignmentsResult, err error) {
 	var ires any
@@ -264,6 +328,7 @@ func (c *Client) SetPluginAssignments(ctx context.Context, p *SetPluginAssignmen
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) ListAudiences(ctx context.Context, p *ListAudiencesPayload) (res *ListAudiencesResult, err error) {
 	var ires any
@@ -288,6 +353,7 @@ func (c *Client) ListAudiences(ctx context.Context, p *ListAudiencesPayload) (re
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DownloadPluginPackage(ctx context.Context, p *DownloadPluginPackagePayload) (res *DownloadPluginPackageResult, resp io.ReadCloser, err error) {
 	var ires any
@@ -297,6 +363,30 @@ func (c *Client) DownloadPluginPackage(ctx context.Context, p *DownloadPluginPac
 	}
 	o := ires.(*DownloadPluginPackageResponseData)
 	return o.Result, o.Body, nil
+}
+
+// RotateObservabilityCredential calls the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+// RotateObservabilityCredential may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) RotateObservabilityCredential(ctx context.Context, p *RotateObservabilityCredentialPayload) (res *RotateObservabilityCredentialResult, err error) {
+	var ires any
+	ires, err = c.RotateObservabilityCredentialEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RotateObservabilityCredentialResult), nil
 }
 
 // DownloadObservabilityPlugin calls the "downloadObservabilityPlugin" endpoint
@@ -312,6 +402,7 @@ func (c *Client) DownloadPluginPackage(ctx context.Context, p *DownloadPluginPac
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DownloadObservabilityPlugin(ctx context.Context, p *DownloadObservabilityPluginPayload) (res *DownloadObservabilityPluginResult, resp io.ReadCloser, err error) {
 	var ires any
@@ -336,6 +427,7 @@ func (c *Client) DownloadObservabilityPlugin(ctx context.Context, p *DownloadObs
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DownloadCodexInstallScript(ctx context.Context, p *DownloadCodexInstallScriptPayload) (res *DownloadCodexInstallScriptResult, resp io.ReadCloser, err error) {
 	var ires any
@@ -360,6 +452,7 @@ func (c *Client) DownloadCodexInstallScript(ctx context.Context, p *DownloadCode
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) GetPublishStatus(ctx context.Context, p *GetPublishStatusPayload) (res *PublishStatusResult, err error) {
 	var ires any
@@ -382,6 +475,7 @@ func (c *Client) GetPublishStatus(ctx context.Context, p *GetPublishStatusPayloa
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) PublishPlugins(ctx context.Context, p *PublishPluginsPayload) (res *PublishPluginsResult, err error) {
 	var ires any
@@ -405,6 +499,7 @@ func (c *Client) PublishPlugins(ctx context.Context, p *PublishPluginsPayload) (
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) GetMarketplaceSettings(ctx context.Context, p *GetMarketplaceSettingsPayload) (res *MarketplaceSettingsResult, err error) {
 	var ires any
@@ -428,6 +523,7 @@ func (c *Client) GetMarketplaceSettings(ctx context.Context, p *GetMarketplaceSe
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) UpdateMarketplaceSettings(ctx context.Context, p *UpdateMarketplaceSettingsPayload) (res *UpdateMarketplaceSettingsResult, err error) {
 	var ires any

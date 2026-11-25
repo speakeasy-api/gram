@@ -4,7 +4,7 @@ cwd: ../..
 
 # Plugins — Package Format
 
-This doc describes the exact files Gram generates for each supported platform when a plugin is published or downloaded as a ZIP.
+This doc describes the exact files Speakeasy generates for each supported platform when a plugin is published or downloaded as a ZIP.
 
 ## Repository layout (published to GitHub)
 
@@ -52,6 +52,22 @@ When plugins are published, all platform configs land in a single repo. The root
 │   ├── .codex-plugin/plugin.json
 │   └── .mcp.json
 │
+├── <org-slug>-observability-openclaw/ # OpenClaw observability plugin
+│   ├── openclaw.plugin.json
+│   ├── package.json
+│   ├── index.js                       # plugin module; proxies typed hooks to agenthooks
+│   ├── speakeasy.json
+│   └── hooks/
+│       ├── bootstrap.sh
+│       └── bootstrap.ps1
+│
+├── <org-slug>-observability-pi/       # Pi observability extension
+│   ├── extensions/speakeasy-observability/index.ts
+│   ├── speakeasy.json
+│   └── hooks/
+│       ├── bootstrap.sh
+│       └── bootstrap.ps1
+│
 ├── <org-slug>-observability-copilot/  # Copilot observability plugin
 │   ├── plugin.json                    # at the package root, not a vendor dir
 │   ├── speakeasy.json
@@ -62,8 +78,7 @@ When plugins are published, all platform configs land in a single repo. The root
 │
 └── agent-plugins/<plugin-slug>/       # Portable Agent Plugins 1.0 package
     ├── .cursor-plugin/plugin.json     # Native Cursor overlay
-    ├── .codex-plugin/plugin.json      # Native Codex overlay
-    ├── .mcp.json                      # Native Codex MCP config
+    ├── .mcp.json                      # Native Cursor MCP config
     ├── plugin.json
     ├── mcp.json
     └── skills/
@@ -74,17 +89,24 @@ Cursor plugins are grouped under the `cursor-plugins/` subdirectory, declared vi
 then resolved relative to that root (bare names, no `./` prefix).
 
 Compatible plugins are also published under `agent-plugins/` without changing the
-native Cursor or Codex marketplace entries.
+native Cursor or Codex marketplace entries. Codex must install the native
+`<plugin-slug>-codex/` package (or `speakeasy-codex/` for Platform MCP), not
+the portable package: its AP1.0 manifest selects Codex's restricted Agent Plugins
+tool budget. The portable package retains its Cursor overlay and MCP config,
+but does not include a Codex overlay. Native Codex ZIP downloads likewise have
+no root AP1.0 manifest; the explicit `agent-plugin` ZIP remains AP1.0.
 
 ## Marketplace manifests
 
 Each platform has a top-level `marketplace.json` that lists all plugins in the repo.
 
+`<marketplace-name>` is the project's marketplace settings override when set, otherwise `<org-slug>-speakeasy` for the organization's default project and `<org-slug>-<project-slug>-speakeasy` for any other project (`naming.MarketplaceName`). It is not the GitHub repository name (`<org-slug>-<project-slug>-plugins`). Clients register the marketplace under this name, so Claude Code's `extraKnownMarketplaces` key and the `<plugin>@<marketplace-name>` suffix in `enabledPlugins` must use it exactly, or Claude Code ignores the entry's `autoUpdate` or never installs the plugin.
+
 **Claude** (`.claude-plugin/marketplace.json`):
 
 ```json
 {
-  "name": "<org-slug>-gram",
+  "name": "<marketplace-name>",
   "owner": { "name": "Org Name", "email": "" },
   "plugins": [
     {
@@ -101,7 +123,7 @@ declared via `metadata.pluginRoot`; `source` values are bare names relative to t
 
 ```json
 {
-  "name": "<org-slug>-gram",
+  "name": "<marketplace-name>",
   "owner": { "name": "Org Name", "email": "" },
   "metadata": { "pluginRoot": "cursor-plugins" },
   "plugins": [
@@ -118,7 +140,7 @@ declared via `metadata.pluginRoot`; `source` values are bare names relative to t
 
 ```json
 {
-  "name": "<org-slug>-gram",
+  "name": "<marketplace-name>",
   "interface": {
     "displayName": "Org Name Plugins",
     "shortDescription": ""
@@ -161,7 +183,7 @@ Directory: `<plugin-slug>/`
 }
 ```
 
-The `userConfig` array is populated only for public servers that require user-supplied env vars. Private servers with a Gram API key have no `userConfig` (the key is embedded directly in the MCP config headers).
+The `userConfig` array is populated only for public servers that require user-supplied env vars. Private servers with a Speakeasy API key have no `userConfig` (the key is embedded directly in the MCP config headers).
 
 ### `.mcp.json`
 
@@ -188,7 +210,7 @@ For public servers, headers are omitted and an env var reference is used for aut
       "type": "http",
       "url": "https://app.getgram.ai/mcp/<toolset-mcp-slug>",
       "headers": {
-        "Authorization": "Bearer ${GRAM_API_KEY}"
+        "Authorization": "Bearer ${SPEAKEASY_AI_API_KEY}"
       }
     }
   }
@@ -237,10 +259,18 @@ Directory: `<plugin-slug>-codex/`
   "name": "<plugin-slug>-codex",
   "version": "1.0.0",
   "description": "Plugin description",
-  "interface": "mcp",
-  "mcpServers": ["Display Name"]
+  "interface": {
+    "displayName": "Plugin name",
+    "shortDescription": "Plugin description",
+    "longDescription": "Plugin description"
+  },
+  "mcpServers": "./.mcp.json"
 }
 ```
+
+Codex descriptions fall back to `Tools and skills for <plugin-name>.` when blank.
+The short description is flattened to one line and capped at 240 Unicode characters;
+the long description retains line breaks and is capped at 4,000 characters.
 
 ### `.mcp.json`
 
@@ -250,7 +280,7 @@ Directory: `<plugin-slug>-codex/`
     "Display Name": {
       "type": "http",
       "url": "https://app.getgram.ai/mcp/<toolset-mcp-slug>",
-      "bearer_token_env_var": "GRAM_API_KEY"
+      "bearer_token_env_var": "SPEAKEASY_AI_API_KEY"
     }
   }
 }
@@ -271,7 +301,7 @@ Directory: `<org-slug>-observability/`
 ```json
 {
   "name": "<org-slug>-observability",
-  "description": "Required: Gram observability hooks for Org Name.",
+  "description": "Required: Speakeasy observability hooks for Org Name.",
   "version": "1.0.0",
   "author": "Org Name"
 }
@@ -294,7 +324,7 @@ Directory: `<org-slug>-observability/`
 }
 ```
 
-**`hooks/hook.sh`** — forwards event JSON to Gram:
+**`hooks/hook.sh`** — forwards event JSON to Speakeasy:
 
 ```bash
 #!/usr/bin/env bash
@@ -327,14 +357,14 @@ Cursor's hook events differ from Claude's — they use camelCase and Cursor-spec
 }
 ```
 
-Cursor's hook script posts to `/rpc/hooks.cursor` with an additional `Gram-Project` header (Cursor's endpoint requires it):
+Cursor's hook script posts to `/rpc/hooks.cursor` with an additional `Speakeasy-AI-Project` header (Cursor's endpoint requires it):
 
 ```bash
 #!/usr/bin/env bash
 curl -s -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <hooks-api-key>" \
-  -H "Gram-Project: <project-slug>" \
+  -H "Speakeasy-AI-Project: <project-slug>" \
   -d @- \
   "https://app.getgram.ai/rpc/hooks.cursor"
 ```
@@ -362,8 +392,8 @@ Copilot is an [Agent Plugins 1.0](https://github.com/agentplugins/agent-plugins-
     "preToolUse": [
       {
         "type": "command",
-        "bash": "bash \"$COPILOT_PLUGIN_ROOT/hooks/bootstrap.sh\" --config=\"$COPILOT_PLUGIN_ROOT/speakeasy.json\" agenthooks run --provider=copilot-cli --timeout=60s",
-        "powershell": "& \"$env:COPILOT_PLUGIN_ROOT/hooks/bootstrap.ps1\" \"--config=$env:COPILOT_PLUGIN_ROOT/speakeasy.json\" agenthooks run --provider=copilot-cli --timeout=60s; exit $LASTEXITCODE",
+        "bash": "bash \"$COPILOT_PLUGIN_ROOT/hooks/bootstrap.sh\" --config=\"$COPILOT_PLUGIN_ROOT/speakeasy.json\" agenthooks run --provider=copilot --timeout=60s",
+        "powershell": "& \"$env:COPILOT_PLUGIN_ROOT/hooks/bootstrap.ps1\" \"--config=$env:COPILOT_PLUGIN_ROOT/speakeasy.json\" agenthooks run --provider=copilot --timeout=60s; exit $LASTEXITCODE",
         "timeoutSec": 60
       }
     ]
@@ -386,9 +416,45 @@ Four differences from the other dialects, each load-bearing:
 
 The hook config ships at `hooks/hooks.json` **only**. Copilot parses both `<root>/hooks.json` and `<root>/hooks/hooks.json`, so shipping both registers every hook twice.
 
-**Surface support.** Copilot CLI and VS Code are distinct runtimes. The plugin file invokes `copilot-cli`, whose native camelCase input and flat responses remain unchanged. Managed installation materializes the manifest as one PascalCase `vscode-copilot` registration, whose snake_case input and nested responses are codec-owned. Do not materialize that file alongside another VS Code/CLI shared registration: both runtimes scan the same hook locations and overlapping files double-fire in Copilot CLI.
+**Surface support.** Copilot CLI and VS Code are distinct runtimes. The plugin file invokes the Copilot CLI codec (via the legacy `--provider=copilot` slug, which current hooks binaries map to `copilot-cli`), whose native camelCase input and flat responses remain unchanged. Managed installation materializes the manifest as one PascalCase `vscode-copilot` registration, whose snake_case input and nested responses are codec-owned. Do not materialize that file alongside another VS Code/CLI shared registration: both runtimes scan the same hook locations and overlapping files double-fire in Copilot CLI.
 
-**Hook chain ordering.** Copilot short-circuits the hook chain on the first deny, so a customer hook that denies before Gram's entry suppresses Gram's telemetry for that call.
+**Hook chain ordering.** Copilot short-circuits the hook chain on the first deny, so a customer hook that denies before Speakeasy's entry suppresses Speakeasy's telemetry for that call.
+
+### OpenClaw observability
+
+Directory: `<org-slug>-observability-openclaw/`
+
+OpenClaw has no marketplace track: the observability package is the only OpenClaw output a publish produces, and it is a native OpenClaw plugin rather than a hooks-config package. `openclaw.plugin.json` declares the plugin and `package.json` points OpenClaw at the module:
+
+```json
+{
+  "id": "speakeasy-observability",
+  "name": "Speakeasy Observability",
+  "description": "Speakeasy observability hooks for OpenClaw.",
+  "activation": { "onStartup": true, "onCapabilities": ["hook"] }
+}
+```
+
+`onStartup: true` loads the plugin when the Gateway starts.
+`onCapabilities: ["hook"]` declares its hook capability for OpenClaw 2026.9.3 and later.
+
+`index.js` is plain JavaScript, not TypeScript: OpenClaw package installs reject a build step. It subscribes the typed plugin hooks and proxies each frame to `agenthooks serve --provider=openclaw`, returning the reply verbatim as the hook handler's return value so `before_tool_call` denials reach OpenClaw intact.
+
+**Conversation-scope hooks require opt-in.** `before_agent_run`, `llm_input`, `llm_output` and `agent_end` only fire when the customer sets `plugins.entries.speakeasy-observability.hooks.allowConversationAccess: true`. Without it the package still reports tool calls and session lifecycle, so a half-configured install looks partly working.
+
+**The shim owns its own deadlines.** OpenClaw applies no default hook timeout, so the module enforces them: 10s for the blocking gates (`before_tool_call`, `before_agent_run`) and 30s for observe-only hooks. `--timeout=60s` bounds the serve process, not a handler.
+
+See the [OpenClaw install runbook](../runbooks/openclaw-install.md) for the customer-facing install and the model-auth modes that determine coverage.
+
+### Pi observability
+
+Directory: `<org-slug>-observability-pi/`
+
+Pi has no hook configuration dialect and no MCP client, so the package is a TypeScript extension at `extensions/speakeasy-observability/index.ts`. Pi discovers extensions under `<config>/extensions/<name>/index.ts`, so extracting the package into `~/.pi/agent/` (all projects) or a repository's `.pi/` (that project only) installs it; project-local extensions load only after the project is trusted.
+
+The extension spawns `speakeasy-hooks pi serve` through the package's bootstrap script on the first event and forwards Pi's events as NDJSON frames. `tool_call` and `input` are gates: the relay returns `{ block: true, reason }` when it blocks, and the extension turns a blocked prompt into Pi's `{ action: "handled" }` response. The extension bounds each request at 30s and replaces the relay if it misses that deadline. A frame too large to send whole is reduced to its identifying fields; oversized gate frames are blocked, while observe-only frames are still reported.
+
+MCP servers reach Pi only through third-party extensions, which register them as ordinary Pi tools. The relay reads the config those extensions share (`.pi/mcp.json`, then `~/.pi/agent/mcp.json`) to report inventory and attribute tool calls by name.
 
 ### Copilot marketplace manifest
 
@@ -429,7 +495,7 @@ Copilot will not install a plugin that is absent from the manifest, even if its 
 
 ### MCP servers and skills on Copilot
 
-MCP servers and skills reach Copilot through the platform-neutral Agent Plugins 1.0 package under `agent-plugins/<plugin-slug>/`, not through a Copilot-specific package. That package carries `plugin.json`, `mcp.json` and `skills/`, is credential-free, and installs with `copilot plugin install OWNER/REPO:agent-plugins/<plugin-slug>` or from an extracted ZIP via `copilot --plugin-dir`. Plugins that fail the portability gate (a server needing a Gram credential, environment-backed headers, or a non-HTTPS off-loopback URL) are omitted from that directory and are therefore not installable on Copilot.
+MCP servers and skills reach Copilot through the platform-neutral Agent Plugins 1.0 package under `agent-plugins/<plugin-slug>/`, not through a Copilot-specific package. That package carries `plugin.json`, `mcp.json` and `skills/`, is credential-free, and installs with `copilot plugin install OWNER/REPO:agent-plugins/<plugin-slug>` or from an extracted ZIP via `copilot --plugin-dir`. Plugins that fail the portability gate (a server needing a Speakeasy credential, environment-backed headers, or a non-HTTPS off-loopback URL) are omitted from that directory and are therefore not installable on Copilot.
 
 ## README
 
@@ -438,10 +504,10 @@ The auto-generated `README.md` contains:
 - Per-platform installation instructions (Claude, Cursor, Codex)
 - A table of all plugins with server counts and descriptions
 - A note that the observability plugin must be installed alongside MCP plugins
-- A notice that the repo is read-only and auto-managed by Gram
+- A notice that the repo is auto-managed by Speakeasy and that collaborators added through Speakeasy hold admin on it (collaborators added before admin became the default keep their original permission until they are re-added)
 
 ## Single-plugin ZIP download
 
 `downloadPluginPackage` returns a ZIP containing only the files for one plugin on one platform. Native ZIPs mirror their platform package layout. The `agent-plugin` platform returns a credential-free Agent Plugins 1.0 package rooted at `plugin.json`.
 
-`downloadObservabilityPlugin` returns the observability ZIP for a single platform — `claude`, `cursor`, `codex`, `opencode` or `copilot` — minting a fresh hooks-scoped API key each time. The ZIP is rooted at the package files themselves (no per-platform subdirectory), so `copilot --plugin-dir <extracted>` works directly.
+`downloadObservabilityPlugin` returns the observability ZIP for a single platform — `claude`, `cursor`, `codex`, `opencode`, `openclaw`, `pi` or `copilot` — minting a fresh hooks-scoped API key each time. The ZIP is rooted at the package files themselves (no per-platform subdirectory), so `copilot --plugin-dir <extracted>` works directly.

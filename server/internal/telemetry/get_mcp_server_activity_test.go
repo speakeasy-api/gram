@@ -7,7 +7,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,12 +59,6 @@ func TestGetMcpServerActivity_FlagsNeverAndStale(t *testing.T) {
 		userEmail:   "bob@example.com",
 		statusCode:  200,
 	})
-
-	// Flush the server-side async insert queue so the rows (and the
-	// trace_summaries MV rows they trigger) are visible, then assert directly
-	// rather than polling. This is deterministic and matches the telemetry
-	// README guidance for ClickHouse-backed tests.
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.GetMcpServerActivity(ctx, &gen.GetMcpServerActivityPayload{
 		RecentWindowDays: 14,

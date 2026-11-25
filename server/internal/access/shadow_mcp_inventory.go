@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -25,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	shadowmcprepo "github.com/speakeasy-api/gram/server/internal/shadowmcp/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -83,7 +86,7 @@ func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthConte
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	return ac, nil
@@ -119,6 +122,22 @@ func formatTimeValue(ts time.Time) string {
 	return ts.UTC().Format(time.RFC3339)
 }
 
+// ShadowMCPInventoryReadInput identifies a project-scoped inventory page for a trusted internal caller.
+type ShadowMCPInventoryReadInput struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Limit          int
+	Cursor         *string
+}
+
+// ShadowMCPInventoryTargetInput identifies one exact project-scoped inventory target for a trusted internal caller.
+type ShadowMCPInventoryTargetInput struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TargetKind     string
+	TargetKey      string
+}
+
 func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListShadowMCPInventoryPayload) (*gen.ListShadowMCPInventoryResult, error) {
 	ac, err := s.requireOrgAdmin(ctx)
 	if err != nil {
@@ -129,20 +148,37 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
-	if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, projectID); err != nil {
+
+	return s.ReadShadowMCPInventory(ctx, ShadowMCPInventoryReadInput{
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Limit:          payload.Limit,
+		Cursor:         payload.Cursor,
+	})
+}
+
+// ReadShadowMCPInventory composes an inventory page after validating its organization and project boundary.
+func (s *Service) ReadShadowMCPInventory(ctx context.Context, input ShadowMCPInventoryReadInput) (*gen.ListShadowMCPInventoryResult, error) {
+	if strings.TrimSpace(input.OrganizationID) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization id is required").LogError(ctx, s.logger)
+	}
+	if input.ProjectID == uuid.Nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "project id is required").LogError(ctx, s.logger)
+	}
+	if err := s.requireProjectInOrganization(ctx, input.OrganizationID, input.ProjectID); err != nil {
 		return nil, err
 	}
 
-	limit, err := shadowMCPInventoryLimit(payload.Limit)
+	limit, err := shadowMCPInventoryLimit(input.Limit)
 	if err != nil {
 		return nil, err
 	}
 
 	chRepo := telemetryrepo.New(s.chConn)
 	inventoryRows, err := chRepo.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
-		GramProjectID: projectID.String(),
+		GramProjectID: input.ProjectID.String(),
 		Limit:         limit + shadowMCPInventoryPageLookaheadSize,
-		Cursor:        pointerStringValue(payload.Cursor),
+		Cursor:        pointerStringValue(input.Cursor),
 	})
 	if err != nil {
 		if errors.Is(err, telemetryrepo.ErrInvalidShadowMCPInventoryURLCursor) {
@@ -164,11 +200,13 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 	usageByURL := map[string]telemetryrepo.ShadowMCPInventoryUsageRow{}
 	if len(inventoryRows) > 0 {
 		usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
-			GramProjectID:       projectID.String(),
+			GramProjectID:       input.ProjectID.String(),
 			CanonicalServerURLs: shadowMCPInventoryCanonicalURLs(inventoryRows),
 			Limit:               shadowMCPInventoryUsageTraceLimit,
 			OrganizationID:      "",
 			UserKeys:            nil,
+			From:                nil,
+			To:                  nil,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage").LogError(ctx, s.logger)
@@ -181,8 +219,8 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 	// that traffic has never shown appear once, on the first page, ahead of
 	// the cursor-paginated observed set. Later pages are purely observed.
 	var requestOnly []mcpapprovalrepo.ListApprovalRequestTargetsRow
-	if payload.Cursor == nil {
-		requestOnly, err = s.shadowMCPRequestOnlyTargets(ctx, chRepo, projectID)
+	if input.Cursor == nil {
+		requestOnly, err = s.shadowMCPRequestOnlyTargets(ctx, chRepo, input.ProjectID)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +235,7 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 		policyURLs = append(policyURLs, request.TargetKey)
 	}
 
-	policyState, err := s.shadowMCPInventoryPolicyState(ctx, ac.ActiveOrganizationID, projectID, policyURLs)
+	policyState, err := s.shadowMCPInventoryPolicyState(ctx, input.OrganizationID, input.ProjectID, policyURLs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
 	}
@@ -210,10 +248,81 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 		servers = append(servers, buildShadowMCPInventoryServer(row, usageByURL[row.CanonicalServerURL], policyState.forURL(row.CanonicalServerURL), shadowMCPTargetKindServerURL))
 	}
 
+	s.attachShadowMCPOfficialServers(ctx, input.OrganizationID, input.ProjectID, servers)
+
 	return &gen.ListShadowMCPInventoryResult{
 		Servers:    servers,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// attachShadowMCPOfficialServers marks the rows linked to an official
+// server, automatically or by an administrator's choice, and offers a
+// project server that proxies to the same URL to the rows an administrator
+// keeps in direct use. Access and AccessSummary stay the policy verdict; the
+// dashboard reads OfficialServer to show an active link as onboarded, since
+// the link blocks direct calls whatever the policy allows. A failed lookup
+// leaves the rows unmarked rather than failing the inventory: the page still
+// lists what was observed, and only the onboarded state is missing.
+func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizationID string, projectID uuid.UUID, servers []*gen.ShadowMCPInventoryServer) {
+	// Only the URLs on this page are resolved.
+	keys := map[string]bool{}
+	for _, server := range servers {
+		if server == nil || conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) != shadowMCPTargetKindServerURL {
+			continue
+		}
+		if key, ok := shadowmcp.OfficialServerKey(server.CanonicalServerURL); ok {
+			keys[key] = true
+		}
+	}
+	if len(keys) == 0 {
+		return
+	}
+
+	automatic := shadowmcp.AutoLinkEnabled(ctx, s.logger, riskrepo.New(s.db), s.features, organizationID, projectID)
+	links, err := shadowmcp.LoadOfficialServerLinks(ctx, s.db, organizationID, projectID, s.serverURL, keys, automatic)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve official servers for shadow mcp inventory",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID.String()),
+		)
+		return
+	}
+	for _, server := range servers {
+		if server == nil || conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) != shadowMCPTargetKindServerURL {
+			continue
+		}
+		match, ok := shadowmcp.OfficialServerFor(links.Linked, server.CanonicalServerURL)
+		if ok {
+			server.OfficialServer = &gen.ShadowMCPOfficialServer{
+				McpServerID: match.MCPServerID.String(),
+				Name:        match.Name,
+				Slug:        conv.PtrEmpty(match.Slug),
+				URL:         conv.PtrEmpty(match.URL),
+				GatewayName: conv.PtrEmpty(match.GatewayName),
+				Automatic:   &match.Automatic,
+				// Deprecated field, sent for older dashboards that require it.
+				DirectAccessAllowed: new(false),
+			}
+			continue
+		}
+		key, keyOK := shadowmcp.OfficialServerKey(server.CanonicalServerURL)
+		if !keyOK {
+			continue
+		}
+		if links.Automatic && links.Declined[key] {
+			declined := true
+			server.OfficialServerDeclined = &declined
+		}
+		if suggestion, found := links.Suggested[key]; found {
+			server.SuggestedOfficialServer = &gen.ShadowMCPSuggestedOfficialServer{
+				McpServerID: suggestion.MCPServerID.String(),
+				Name:        suggestion.Name,
+				Slug:        conv.PtrEmpty(suggestion.Slug),
+			}
+		}
+	}
 }
 
 // shadowMCPRequestOnlyTargets lists the reviews whose targets telemetry has
@@ -333,6 +442,7 @@ func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequest
 		FirstCalled:        nil,
 		LastCalled:         nil,
 		CallCount:          0,
+		BlockedCallCount:   0,
 		UserCount:          0,
 		TopUsers:           []string{},
 	}
@@ -353,35 +463,126 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 		return nil, err
 	}
 
-	chRepo := telemetryrepo.New(s.chConn)
-	inventoryRow, err := shadowMCPInventoryURLForSlug(ctx, chRepo, projectID.String(), payload.ServerSlug)
+	return s.readShadowMCPInventoryServer(ctx, ac.ActiveOrganizationID, projectID, payload.ServerSlug)
+}
+
+func (s *Service) readShadowMCPInventoryServer(ctx context.Context, organizationID string, projectID uuid.UUID, serverSlug string) (*gen.ShadowMCPInventoryServer, error) {
+	inventoryRow, err := shadowMCPInventoryURLForSlug(ctx, telemetryrepo.New(s.chConn), projectID.String(), serverSlug)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get shadow mcp inventory url by slug").LogError(ctx, s.logger)
 	}
 	if inventoryRow == nil {
 		// A server can be known only through its approval request — asked
 		// for, never observed in traffic — and its page must still resolve.
-		return s.shadowMCPServerFromApprovalRequest(ctx, ac.ActiveOrganizationID, projectID, payload.ServerSlug)
+		return s.shadowMCPServerFromApprovalRequest(ctx, organizationID, projectID, serverSlug)
 	}
 
-	usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
-		GramProjectID:       projectID.String(),
-		CanonicalServerURLs: []string{inventoryRow.CanonicalServerURL},
-		Limit:               shadowMCPInventoryUsageTraceLimit,
-		OrganizationID:      "",
-		UserKeys:            nil,
+	return s.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		TargetKind:     shadowMCPTargetKindServerURL,
+		TargetKey:      inventoryRow.CanonicalServerURL,
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage").LogError(ctx, s.logger)
-	}
-	usageByURL := shadowMCPInventoryUsageByURL(usageRows)
+}
 
-	policyState, err := s.shadowMCPInventoryPolicyState(ctx, ac.ActiveOrganizationID, projectID, []string{inventoryRow.CanonicalServerURL})
+// ReadShadowMCPInventoryTarget composes one exact observed or request-only inventory target.
+func (s *Service) ReadShadowMCPInventoryTarget(ctx context.Context, input ShadowMCPInventoryTargetInput) (*gen.ShadowMCPInventoryServer, error) {
+	server, err := s.readShadowMCPInventoryTarget(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	s.attachShadowMCPOfficialServers(ctx, input.OrganizationID, input.ProjectID, []*gen.ShadowMCPInventoryServer{server})
+	return server, nil
+}
+
+func (s *Service) readShadowMCPInventoryTarget(ctx context.Context, input ShadowMCPInventoryTargetInput) (*gen.ShadowMCPInventoryServer, error) {
+	if strings.TrimSpace(input.OrganizationID) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization id is required").LogError(ctx, s.logger)
+	}
+	if input.ProjectID == uuid.Nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "project id is required").LogError(ctx, s.logger)
+	}
+	if strings.TrimSpace(input.TargetKey) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "target key is required").LogError(ctx, s.logger)
+	}
+	if input.TargetKind != shadowMCPTargetKindServerURL && input.TargetKind != shadowMCPTargetKindStdioCommand {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported target kind").LogError(ctx, s.logger)
+	}
+	if err := s.requireProjectInOrganization(ctx, input.OrganizationID, input.ProjectID); err != nil {
+		return nil, err
+	}
+
+	if input.TargetKind == shadowMCPTargetKindServerURL {
+		chRepo := telemetryrepo.New(s.chConn)
+		inventoryRow, err := chRepo.GetShadowMCPInventoryURL(ctx, telemetryrepo.GetShadowMCPInventoryURLParams{
+			GramProjectID:      input.ProjectID.String(),
+			CanonicalServerURL: input.TargetKey,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "get shadow mcp inventory url").LogError(ctx, s.logger)
+		}
+		if inventoryRow != nil {
+			usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
+				GramProjectID:       input.ProjectID.String(),
+				CanonicalServerURLs: []string{input.TargetKey},
+				Limit:               shadowMCPInventoryUsageTraceLimit,
+				OrganizationID:      "",
+				UserKeys:            nil,
+				From:                nil,
+				To:                  nil,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage").LogError(ctx, s.logger)
+			}
+
+			policyState, err := s.shadowMCPInventoryPolicyState(ctx, input.OrganizationID, input.ProjectID, []string{input.TargetKey})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
+			}
+			usageByURL := shadowMCPInventoryUsageByURL(usageRows)
+			return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[input.TargetKey], policyState.forURL(input.TargetKey), shadowMCPTargetKindServerURL), nil
+		}
+	}
+
+	request, err := s.shadowMCPApprovalRequestTarget(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	policyState, err := s.shadowMCPInventoryPolicyState(ctx, input.OrganizationID, input.ProjectID, []string{input.TargetKey})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
 	}
+	return buildShadowMCPRequestOnlyServer(request, policyState), nil
+}
 
-	return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[inventoryRow.CanonicalServerURL], policyState.forURL(inventoryRow.CanonicalServerURL), shadowMCPTargetKindServerURL), nil
+func (s *Service) shadowMCPApprovalRequestTarget(ctx context.Context, input ShadowMCPInventoryTargetInput) (mcpapprovalrepo.ListApprovalRequestTargetsRow, error) {
+	request, err := mcpapprovalrepo.New(s.db).GetApprovalRequestTarget(ctx, mcpapprovalrepo.GetApprovalRequestTargetParams{
+		ProjectID:  input.ProjectID,
+		TargetKind: input.TargetKind,
+		TargetKey:  input.TargetKey,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory target not found").LogError(ctx, s.logger)
+	case err != nil:
+		return mcpapprovalrepo.ListApprovalRequestTargetsRow{}, oops.E(oops.CodeUnexpected, err, "get shadow mcp approval request target").LogError(ctx, s.logger)
+	default:
+		// Keep this explicit: the generated rows intentionally share a shape, but
+		// converting them positionally would let same-typed SQL columns be reordered
+		// without a compile error while silently changing the public projection.
+		result := mcpapprovalrepo.ListApprovalRequestTargetsRow{} //nolint:exhaustruct_v5 // Filled explicitly below to protect generated query field order.
+		result.ID = request.ID
+		result.TargetKind = request.TargetKind
+		result.TargetRaw = request.TargetRaw
+		result.TargetKey = request.TargetKey
+		result.Status = request.Status
+		result.EvidenceChangedAt = request.EvidenceChangedAt
+		result.CreatedAt = request.CreatedAt
+		result.UpdatedAt = request.UpdatedAt
+		result.LatestDecision = request.LatestDecision
+		result.RequesterCount = request.RequesterCount
+		return result, nil
+	}
 }
 
 // shadowMCPServerFromApprovalRequest resolves a server page slug against the
@@ -400,37 +601,12 @@ func (s *Service) shadowMCPServerFromApprovalRequest(ctx context.Context, organi
 			continue
 		}
 
-		policyState, err := s.shadowMCPInventoryPolicyState(ctx, organizationID, projectID, []string{request.TargetKey})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
-		}
-
-		inventoryURL, _ := shadowmcp.CanonicalizeInventoryURL(request.TargetKey)
-		row := telemetryrepo.ShadowMCPInventoryURLRow{
-			CanonicalServerURL: request.TargetKey,
-			URLHost:            inventoryURL.URLHost,
-			ServerName:         "",
-			ServerNameOverride: "",
-			// This branch is reached only when telemetry has never observed
-			// the server, so it has no first/last seen: the zero times render
-			// as the established never-observed sentinel rather than passing
-			// the request's own timeline off as observations. The request
-			// timeline lives on the approval request itself.
-			FirstSeen:          time.Time{},
-			LastSeen:           time.Time{},
-			LastCalledUnixNano: 0,
-			UpdatedAt:          request.UpdatedAt.Time,
-		}
-		usage := telemetryrepo.ShadowMCPInventoryUsageRow{
-			CanonicalServerURL: request.TargetKey,
-			ServerName:         "",
-			FirstCalled:        nil,
-			LastCalled:         nil,
-			CallCount:          0,
-			UserCount:          0,
-			TopUsers:           []string{},
-		}
-		return buildShadowMCPInventoryServer(row, usage, policyState.forURL(request.TargetKey), shadowMCPTargetKindServerURL), nil
+		return s.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+			OrganizationID: organizationID,
+			ProjectID:      projectID,
+			TargetKind:     shadowMCPTargetKindServerURL,
+			TargetKey:      request.TargetKey,
+		})
 	}
 
 	return nil, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory url not found").LogError(ctx, s.logger)
@@ -554,17 +730,24 @@ func (s *Service) ListShadowMCPInventoryServersForUser(ctx context.Context, payl
 		return nil, err
 	}
 
+	// The window is a filter, not a required frame: with neither bound this
+	// still answers over the whole history.
+	from, to, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
+	}
+
 	chRepo := telemetryrepo.New(s.chConn)
 	usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
-		// Gated, not the raw org id: the fold is behind a rollout flag, and
-		// this endpoint must fall under the same switch as every other folded
-		// read. With the fold off the email leg drops and matching falls back
-		// to the user id, which returns less rather than something wrong.
+		// With no fold org the email leg drops and matching falls back to the
+		// user id, which returns less rather than something wrong.
 		OrganizationID:      s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID),
 		GramProjectID:       projectID.String(),
 		CanonicalServerURLs: nil,
 		UserKeys:            userKeys,
 		Limit:               shadowMCPInventoryUsageTraceLimit,
+		From:                from,
+		To:                  to,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage for user").LogError(ctx, s.logger)
@@ -673,6 +856,9 @@ func (s *Service) ResolveShadowMCPInventoryRequest(ctx context.Context, payload 
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := shadowadmission.LockProject(ctx, dbtx, projectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock shadow mcp admission project for inventory request resolution").LogError(ctx, s.logger)
+	}
 	var policyAudiences map[string][]urn.Principal
 	if decision == shadowMCPInventoryDecisionAllow {
 		blockingPolicies, err := s.shadowMCPInventoryBlockingPolicies(ctx, dbtx, projectID)
@@ -1031,6 +1217,10 @@ func shadowMCPInventoryUsageByURL(rows []telemetryrepo.ShadowMCPInventoryUsageRo
 
 type shadowMCPInventoryPolicyState struct {
 	hasBlockingPolicy bool
+	// builtInBlocklist is set when the project has no blocking policy, so
+	// the built-in blocklist enforces standing decisions directly, with no
+	// grants in between.
+	builtInBlocklist bool
 	// hasBlockAllPolicy is set when any enabled blocking policy denies by
 	// default. When only allow_all blocking policies exist, rows are blocked
 	// solely by risk_policy:block grants (blockedPolicyIDs).
@@ -1050,6 +1240,11 @@ type shadowMCPInventoryPolicyState struct {
 	// every user blocks via a risk_policy:block grant. A URL blocked only by
 	// targeted allow_all policies is restricted, not blocked.
 	everyoneBlockedURLs map[string]struct{}
+
+	// someBlockedURLs holds the URLs the built-in blocklist blocks for some
+	// people only, so they read restricted: a denial narrowed to people or
+	// roles blocks them, and a narrowed approval blocks everyone else.
+	someBlockedURLs map[string]struct{}
 
 	// blockAllPolicyAudiences maps each deny-by-default policy to its
 	// audience principal URNs (the evaluate grants). A bypass grant only
@@ -1089,11 +1284,13 @@ type shadowMCPInventoryRequestState struct {
 func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizationID string, projectID uuid.UUID, canonicalURLs []string) (shadowMCPInventoryPolicyState, error) {
 	state := shadowMCPInventoryPolicyState{
 		hasBlockingPolicy:         false,
+		builtInBlocklist:          false,
 		hasBlockAllPolicy:         false,
 		hasEveryoneBlockAllPolicy: false,
 		allowedPolicyIDs:          map[string][]string{},
 		blockedPolicyIDs:          map[string][]string{},
 		everyoneBlockedURLs:       map[string]struct{}{},
+		someBlockedURLs:           map[string]struct{}{},
 		blockAllPolicyAudiences:   map[string][]string{},
 		bypassPrincipalsByURL:     map[string]map[string]map[string]struct{}{},
 		requestsByURL:             map[string]shadowMCPInventoryRequestState{},
@@ -1141,11 +1338,17 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 	}
 
 	blockingPolicyIDs := make(map[string]struct{}, len(policies))
+	// Whether a blocking policy covers every user. Without one, the people no
+	// policy covers are in the built-in blocklist, as the hooks enforce.
+	hasEveryoneBlockingPolicy := false
 	for _, policy := range policies {
 		if policy.Action != "block" {
 			continue
 		}
 		state.hasBlockingPolicy = true
+		if policy.AudienceType == shadowMCPInventoryAudienceEveryone {
+			hasEveryoneBlockingPolicy = true
+		}
 		policyID := policy.ID.String()
 		blockingPolicyIDs[policyID] = struct{}{}
 
@@ -1168,7 +1371,9 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 					continue
 				}
 				state.blockedPolicyIDs[serverURL] = append(state.blockedPolicyIDs[serverURL], policyID)
-				if everyoneAudience {
+				// A block rule for everyone under an everyone policy blocks
+				// everyone; one narrowed to people or roles blocks only them.
+				if everyoneAudience && grant.PrincipalUrn == authz.AllUsersPrincipal().String() {
 					state.everyoneBlockedURLs[serverURL] = struct{}{}
 				}
 			}
@@ -1227,7 +1432,36 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 			principals[grant.PrincipalUrn] = struct{}{}
 		}
 	}
+	if !hasEveryoneBlockingPolicy {
+		// The built-in blocklist covers everyone no blocking policy covers:
+		// every server connects for them except those a standing decision
+		// blocks. A denial for everyone blocks everyone, since a targeted
+		// policy blocks a denied server for its own audience too. A denial
+		// narrowed to people or roles blocks only them, and an approval
+		// narrowed to people or roles blocks everyone else.
+		decisions, err := shadowmcprepo.New(s.db).ListStandingShadowMCPDecisions(ctx, projectID)
+		if err != nil {
+			return state, fmt.Errorf("listing shadow mcp decisions: %w", err)
+		}
+		for _, decision := range decisions {
+			if _, ok := canonicalURLSet[decision.TargetKey]; !ok {
+				continue
+			}
+			forEveryone := len(decision.GrantedPrincipalUrns) == 0 || slices.Contains(decision.GrantedPrincipalUrns, authz.AllUsersPrincipal().String())
+			if decision.Decision == shadowMCPInventoryBypassStatusDenied && forEveryone {
+				state.everyoneBlockedURLs[decision.TargetKey] = struct{}{}
+				continue
+			}
+			if forEveryone {
+				continue
+			}
+			state.someBlockedURLs[decision.TargetKey] = struct{}{}
+		}
+	}
 	if len(blockingPolicyIDs) == 0 {
+		// No blocking policy: the project is in the built-in blocklist mode.
+		state.hasBlockingPolicy = true
+		state.builtInBlocklist = true
 		return state, nil
 	}
 
@@ -1286,7 +1520,8 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 func (s shadowMCPInventoryPolicyState) forURL(canonicalURL string) shadowMCPInventoryRowState {
 	requestState := s.requestsByURL[canonicalURL]
 	allowedPolicyIDs := s.allowedPolicyIDs[canonicalURL]
-	onBlockedList := len(s.blockedPolicyIDs[canonicalURL]) > 0
+	_, deniedForSome := s.someBlockedURLs[canonicalURL]
+	onBlockedList := len(s.blockedPolicyIDs[canonicalURL]) > 0 || deniedForSome
 	_, blockedForEveryoneList := s.everyoneBlockedURLs[canonicalURL]
 	// A block sourced from an everyone-audience policy stops every user; one
 	// sourced only from targeted policies stops a subset, which reads as
@@ -1388,7 +1623,7 @@ func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access
 	blockedFor := shadowMCPAccessReachNone
 	if _, everyone := s.everyoneBlockedURLs[canonicalURL]; everyone {
 		blockedFor = shadowMCPAccessReachEveryone
-	} else if len(s.blockedPolicyIDs[canonicalURL]) > 0 || (s.hasBlockAllPolicy && !s.hasEveryoneBlockAllPolicy) {
+	} else if _, some := s.someBlockedURLs[canonicalURL]; some || len(s.blockedPolicyIDs[canonicalURL]) > 0 || (s.hasBlockAllPolicy && !s.hasEveryoneBlockAllPolicy) {
 		blockedFor = shadowMCPAccessReachSome
 	}
 
@@ -1413,9 +1648,21 @@ func (s shadowMCPInventoryPolicyState) summaryForURL(canonicalURL string, access
 	// blast radius may be scoped — that is the decision as recorded, not a
 	// shortfall) unless an explicit block overrides them; a denial is fully
 	// carried only when the result is a project-wide block, and partially
-	// when only a targeted policy enforces it. With no blocking policy there
-	// is nothing to carry a decision at all.
-	if decision != nil && s.hasBlockingPolicy {
+	// when only a targeted policy enforces it. The built-in blocklist reads
+	// the standing decision itself, so the decision is carried as recorded
+	// unless the resulting access state contradicts it. This verdict covers
+	// policies, grants and decisions only. A link to an official server is
+	// reported beside it in the row's OfficialServer, and an active link
+	// blocks direct calls whatever this summary says.
+	if decision != nil && s.builtInBlocklist {
+		coverage = shadowMCPAccessCoverageFull
+		approvedButBlocked := *decision == shadowMCPInventoryBypassStatusApproved && state == shadowMCPAccessStateBlocked
+		deniedButAllowed := *decision == shadowMCPInventoryBypassStatusDenied && state == shadowMCPAccessStateAllowed
+		if approvedButBlocked || deniedButAllowed {
+			coverage = shadowMCPAccessCoveragePartial
+		}
+	}
+	if decision != nil && s.hasBlockingPolicy && !s.builtInBlocklist {
 		coverage = shadowMCPAccessCoveragePartial
 		switch *decision {
 		case shadowMCPInventoryBypassStatusApproved:
@@ -1471,24 +1718,28 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 	}
 
 	return &gen.ShadowMCPInventoryServer{
-		CanonicalServerURL: row.CanonicalServerURL,
-		ServerSlug:         shadowMCPInventoryServerSlug(row.CanonicalServerURL),
-		URLHost:            row.URLHost,
-		TargetKind:         conv.PtrEmpty(targetKind),
-		ServerName:         serverName,
-		FirstSeen:          formatTimeValue(row.FirstSeen),
-		LastSeen:           formatTimeValue(row.LastSeen),
-		LastCalled:         formatTimePtrValue(usage.LastCalled),
-		ObservedUseCount:   shadowMCPInventoryCount(usage.CallCount),
-		UserCount:          shadowMCPInventoryCount(usage.UserCount),
-		TopUsers:           topUsers,
-		Access:             rowState.Access,
-		AccessSummary:      rowState.Summary,
-		RequestCount:       rowState.RequestCount,
-		LatestRequest:      rowState.LatestRequest,
-		ApprovalRequest:    rowState.ApprovalRequest,
-		AllowedPolicyIds:   rowState.AllowedPolicyIDs,
-		BlockedPolicyIds:   rowState.BlockedPolicyIDs,
+		CanonicalServerURL:      row.CanonicalServerURL,
+		ServerSlug:              shadowMCPInventoryServerSlug(row.CanonicalServerURL),
+		URLHost:                 row.URLHost,
+		TargetKind:              conv.PtrEmpty(targetKind),
+		ServerName:              serverName,
+		FirstSeen:               formatTimeValue(row.FirstSeen),
+		LastSeen:                formatTimeValue(row.LastSeen),
+		LastCalled:              formatTimePtrValue(usage.LastCalled),
+		ObservedUseCount:        shadowMCPInventoryCount(usage.CallCount),
+		BlockedCallCount:        shadowMCPInventoryCount(usage.BlockedCallCount),
+		UserCount:               shadowMCPInventoryCount(usage.UserCount),
+		TopUsers:                topUsers,
+		Access:                  rowState.Access,
+		AccessSummary:           rowState.Summary,
+		RequestCount:            rowState.RequestCount,
+		LatestRequest:           rowState.LatestRequest,
+		ApprovalRequest:         rowState.ApprovalRequest,
+		AllowedPolicyIds:        rowState.AllowedPolicyIDs,
+		BlockedPolicyIds:        rowState.BlockedPolicyIDs,
+		OfficialServer:          nil,
+		SuggestedOfficialServer: nil,
+		OfficialServerDeclined:  nil,
 	}
 }
 

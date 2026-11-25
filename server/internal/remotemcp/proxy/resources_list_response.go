@@ -68,7 +68,7 @@ func resourcesListResponseFromRemoteMessage(request *ResourcesListRequest, msg *
 		return resp, true
 	}
 
-	result := &mcp.ListResourcesResult{
+	result := &mcp.ListResourcesResult{ //nolint:exhaustruct_v5 // ResultType is promoted from an unexported SDK struct, so no literal can set it.
 		Meta:       nil,
 		Cacheable:  mcp.Cacheable{TTLMs: 0, CacheScope: ""},
 		NextCursor: "",

@@ -54,6 +54,38 @@ func TestScopeVisibilityCoversKnownScopes(t *testing.T) {
 	}
 }
 
+func TestAgentManagementScopesAreIndependent(t *testing.T) {
+	t.Parallel()
+
+	managementScopes := []Scope{ScopeAgentRead, ScopeAgentWrite, ScopeAgentAuthorize, ScopeAgentTransfer}
+	for _, granted := range managementScopes {
+		grants := []Grant{NewGrant(granted, "agent_123")}
+		for _, checked := range managementScopes {
+			require.Equal(t, granted == checked, GrantsSatisfy(grants, Check{Scope: checked, ResourceID: "agent_123"}),
+				"grant %q checking %q", granted, checked)
+		}
+	}
+
+	for _, checked := range managementScopes {
+		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgAdmin, "agent_123")}, Check{Scope: checked, ResourceID: "agent_123"}))
+	}
+}
+
+// Org admins can delegate device-agent grants without a backfill, but the
+// grants themselves confer nothing beyond their own check.
+func TestDeviceAgentScopesAreSatisfiedByOrgAdminOnly(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []Scope{ScopeOrgDeviceAgentSync, ScopeOrgHooksIngest} {
+		check := Check{Scope: scope, ResourceID: "org_123"}
+		require.True(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgAdmin, "org_123")}, check), scope)
+		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgRead, "org_123")}, check), scope)
+		require.Equal(t, []Scope{scope}, ScopeImplicationClosure(scope))
+		require.False(t, GrantsSatisfy([]Grant{NewGrant(scope, "org_123")}, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}))
+	}
+	require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgDeviceAgentSync, "org_123")}, Check{Scope: ScopeOrgHooksIngest, ResourceID: "org_123"}))
+}
+
 func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 	t.Parallel()
 
@@ -72,6 +104,8 @@ func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 		{scope: ScopeEnvironmentWrite, expected: ScopeEnvironmentBlockedWrite},
 		{scope: ScopeSkillRead, expected: ScopeSkillBlockedRead},
 		{scope: ScopeSkillWrite, expected: ScopeSkillBlockedWrite},
+		{scope: ScopeAssistantRead, expected: ScopeAssistantBlockedRead},
+		{scope: ScopeAssistantWrite, expected: ScopeAssistantBlockedWrite},
 		{scope: ScopeRiskPolicyEvaluate, expected: ScopeRiskPolicyBypass},
 	}
 
@@ -90,10 +124,16 @@ func TestBlocklistScopeExpansions(t *testing.T) {
 
 	require.Equal(t, []Scope{ScopeOrgBlockedRead}, scopeExpansions[ScopeOrgBlockedAdmin])
 	require.Equal(t, []Scope{ScopeProjectBlockedRead}, scopeExpansions[ScopeProjectBlockedWrite])
-	require.Equal(t, []Scope{ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedRead])
-	require.Equal(t, []Scope{ScopeMCPBlockedRead, ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedWrite])
+	// MCP blocks follow Implies in reverse like every other kind: a check
+	// for mcp:blocked_write is satisfied by mcp:blocked_read, so blocking
+	// read takes write away. mcp:connect is implied by neither read nor
+	// write, so its block stays on its own.
+	require.Nil(t, scopeExpansions[ScopeMCPBlockedConnect])
+	require.Nil(t, scopeExpansions[ScopeMCPBlockedRead])
+	require.Equal(t, []Scope{ScopeMCPBlockedRead}, scopeExpansions[ScopeMCPBlockedWrite])
 	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
 	require.Equal(t, []Scope{ScopeSkillBlockedRead}, scopeExpansions[ScopeSkillBlockedWrite])
+	require.Equal(t, []Scope{ScopeAssistantBlockedRead}, scopeExpansions[ScopeAssistantBlockedWrite])
 }
 
 func TestCalculateSubScopesExcludesInternalBlocklistScopes(t *testing.T) {
@@ -129,6 +169,61 @@ func TestSystemRoleAdminExcludesChatRead(t *testing.T) {
 	for _, grant := range SystemRoleGrants[SystemRoleMember] {
 		require.NotEqual(t, string(ScopeChatRead), grant.Scope)
 	}
+}
+
+// log:read is not a default for any system role. Raw tool-call logs carry every
+// member's tool arguments, results, and prompts, so a project's logs must be
+// granted explicitly; neither project access nor org:admin implies it.
+func TestSystemRolesExcludeLogRead(t *testing.T) {
+	t.Parallel()
+
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		require.NotEqual(t, string(ScopeLogRead), grant.Scope)
+	}
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		require.NotEqual(t, string(ScopeLogRead), grant.Scope)
+	}
+}
+
+func TestLogReadNotImpliedByProjectOrOrgScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []Scope{ScopeProjectRead, ScopeProjectWrite, ScopeOrgRead, ScopeOrgAdmin} {
+		require.NotContains(t, ScopeImplicationClosure(scope), ScopeLogRead, scope)
+	}
+	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeLogRead))
+}
+
+// org:admin holds memory:read and memory:write by default; members do not.
+// Team memory summarizes every member's sessions, so a member needs an
+// explicit per-project grant.
+func TestSystemRoleAdminIncludesMemoryScopes(t *testing.T) {
+	t.Parallel()
+
+	admin := make([]string, 0, len(SystemRoleGrants[SystemRoleAdmin]))
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		admin = append(admin, grant.Scope)
+	}
+	require.Contains(t, admin, string(ScopeMemoryRead))
+	require.Contains(t, admin, string(ScopeMemoryWrite))
+
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		require.NotEqual(t, string(ScopeMemoryRead), grant.Scope)
+		require.NotEqual(t, string(ScopeMemoryWrite), grant.Scope)
+	}
+}
+
+func TestMemoryScopesProjectScopedAndNotImpliedByProjectOrOrgScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []Scope{ScopeProjectRead, ScopeProjectWrite, ScopeOrgRead, ScopeOrgAdmin, ScopeChatRead, ScopeChatWrite} {
+		require.NotContains(t, ScopeImplicationClosure(scope), ScopeMemoryRead, scope)
+		require.NotContains(t, ScopeImplicationClosure(scope), ScopeMemoryWrite, scope)
+	}
+	require.Contains(t, ScopeImplicationClosure(ScopeMemoryWrite), ScopeMemoryRead)
+	require.NotContains(t, ScopeImplicationClosure(ScopeMemoryRead), ScopeMemoryWrite)
+	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeMemoryRead))
+	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeMemoryWrite))
 }
 
 // environment:read is not a member default: environment values include secrets,
@@ -169,126 +264,22 @@ func TestSystemRolesIncludeSkillScopes(t *testing.T) {
 	require.NotContains(t, member, string(ScopeSkillWrite))
 }
 
-func TestCheckExpand_orgRead(t *testing.T) {
+func TestSystemRolesIncludeAssistantScopes(t *testing.T) {
 	t.Parallel()
 
-	checks := Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand()
+	admin := make([]string, 0, len(SystemRoleGrants[SystemRoleAdmin]))
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		admin = append(admin, grant.Scope)
+	}
+	require.Contains(t, admin, string(ScopeAssistantRead))
+	require.Contains(t, admin, string(ScopeAssistantWrite))
 
-	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: "org_123"})
-	require.Contains(t, checks, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"})
-	require.Contains(t, checks, Check{Scope: ScopeOrgRead, ResourceID: "org_123"})
-	// No wildcard resource variants — selector matching handles that natively.
-	require.NotContains(t, checks, Check{Scope: ScopeOrgAdmin, ResourceID: WildcardResource})
-}
-
-func TestCheckExpand_mcpConnect(t *testing.T) {
-	t.Parallel()
-
-	checks := Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()
-
-	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: "tool_a"})
-	require.Contains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"})
-	require.Contains(t, checks, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"})
-	require.Contains(t, checks, Check{Scope: ScopeMCPWrite, ResourceID: "tool_a"})
-	require.NotContains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: WildcardResource})
-}
-
-func TestGrantsHasAccess_orgAdminSatisfiesOrgRead(t *testing.T) {
-	t.Parallel()
-
-	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
-	grant, _ := matchingGrant(g, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand())
-	require.NotNil(t, grant)
-}
-
-func TestGrantsHasAccess_orgReadDoesNotSatisfyOrgAdmin(t *testing.T) {
-	t.Parallel()
-
-	g := []Grant{NewGrant(ScopeOrgRead, "org_123")}
-	grant, _ := matchingGrant(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"}.expand())
-	require.Nil(t, grant)
-}
-
-func TestGrantsHasAccess_buildWriteSatisfiesBuildRead(t *testing.T) {
-	t.Parallel()
-
-	g := []Grant{NewGrant(ScopeProjectWrite, "proj_123")}
-	grant, _ := matchingGrant(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand())
-	require.NotNil(t, grant)
-}
-
-func TestGrantsHasAccess_buildReadDoesNotSatisfyBuildWrite(t *testing.T) {
-	t.Parallel()
-
-	g := []Grant{NewGrant(ScopeProjectRead, "proj_123")}
-	grant, _ := matchingGrant(g, Check{Scope: ScopeProjectWrite, ResourceID: "proj_123"}.expand())
-	require.Nil(t, grant)
-}
-
-func TestGrantsHasAccess_orgAdminDoesNotSatisfyBuildRead(t *testing.T) {
-	t.Parallel()
-
-	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
-	grant, _ := matchingGrant(g, Check{Scope: ScopeProjectRead, ResourceID: "org_123"}.expand())
-	require.Nil(t, grant)
-}
-
-func TestGrantsHasAccess_mcpConnectDoesNotSatisfyMCPRead(t *testing.T) {
-	t.Parallel()
-
-	g := []Grant{NewGrant(ScopeMCPConnect, "tool_a")}
-	grant, _ := matchingGrant(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand())
-	require.Nil(t, grant)
-}
-
-func TestGrantsHasAccess_mcpReadSatisfiesMCPConnect(t *testing.T) {
-	t.Parallel()
-
-	g := []Grant{NewGrant(ScopeMCPRead, "tool_a")}
-	grant, _ := matchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
-}
-
-func TestGrantsHasAccess_mcpWriteSatisfiesMCPConnect(t *testing.T) {
-	t.Parallel()
-
-	g := []Grant{NewGrant(ScopeMCPWrite, "tool_a")}
-	grant, _ := matchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
-}
-
-func TestGrantsHasAccess_mcpWriteSatisfiesMCPRead(t *testing.T) {
-	t.Parallel()
-
-	g := []Grant{NewGrant(ScopeMCPWrite, "tool_a")}
-	grant, _ := matchingGrant(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
-}
-
-func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
-	t.Parallel()
-
-	g := []Grant{NewGrant(ScopeRoot, WildcardResource)}
-
-	grant, _ := matchingGrant(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand())
-	require.NotNil(t, grant)
-
-	grant, _ = matchingGrant(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_456"}.expand())
-	require.NotNil(t, grant)
-
-	grant, _ = matchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
-
-	grant, _ = matchingGrant(g, Check{Scope: ScopeEnvironmentRead, ResourceID: "env_a"}.expand())
-	require.NotNil(t, grant)
-}
-
-func TestGrantsHasAccess_wrongResourceNotSatisfied(t *testing.T) {
-	t.Parallel()
-
-	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
-	grant, _ := matchingGrant(g, Check{Scope: ScopeOrgRead, ResourceID: "org_999"}.expand())
-	require.Nil(t, grant)
+	member := make([]string, 0, len(SystemRoleGrants[SystemRoleMember]))
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		member = append(member, grant.Scope)
+	}
+	require.Contains(t, member, string(ScopeAssistantRead))
+	require.NotContains(t, member, string(ScopeAssistantWrite))
 }
 
 func TestMatchingGrant_riskPolicyBypassRequiresCheckDimensionsForScopedGrant(t *testing.T) {
@@ -409,8 +400,8 @@ func TestScopeExpansions_isDAG(t *testing.T) {
 	t.Parallel()
 
 	for start := range scopeExpansions {
-		inStack := map[Scope]bool{}
-		visited := map[Scope]bool{}
+		inStack := make(map[Scope]bool)
+		visited := make(map[Scope]bool)
 		var hasCycle func(s Scope) bool
 		hasCycle = func(s Scope) bool {
 			if inStack[s] {
@@ -438,10 +429,10 @@ func TestCalculateSubScopes(t *testing.T) {
 		scope string
 		want  []string
 	}{
-		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgRead)}},
+		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgDeviceAgentSync), string(ScopeOrgHooksIngest), string(ScopeOrgRead)}},
 		{scope: string(ScopeProjectWrite), want: []string{string(ScopeProjectRead)}},
-		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPConnect), string(ScopeMCPRead)}},
-		{scope: string(ScopeMCPRead), want: []string{string(ScopeMCPConnect)}},
+		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPRead)}},
+		{scope: string(ScopeMCPRead), want: []string{}},
 		{scope: string(ScopeOrgRead), want: []string{}},
 		{scope: string(ScopeProjectRead), want: []string{}},
 		{scope: string(ScopeRoot), want: []string{}},
@@ -450,6 +441,8 @@ func TestCalculateSubScopes(t *testing.T) {
 		{scope: string(ScopeEnvironmentWrite), want: []string{string(ScopeEnvironmentRead)}},
 		{scope: string(ScopeSkillRead), want: []string{}},
 		{scope: string(ScopeSkillWrite), want: []string{string(ScopeSkillRead)}},
+		{scope: string(ScopeAssistantRead), want: []string{}},
+		{scope: string(ScopeAssistantWrite), want: []string{string(ScopeAssistantRead)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.scope, func(t *testing.T) {
@@ -475,4 +468,96 @@ func TestCalculateSubScopes_inverseOfScopeExpansions(t *testing.T) {
 				"higher scope %q should imply lower scope %q", h, lower)
 		}
 	}
+}
+
+// The workload scope governs configuring an organization's trust policy: which
+// issuers it trusts, which subjects are admitted, and which agent each inherits
+// its policy from. Admitting a subject is itself the grant of machine access, so
+// these pin the shape rather than leaving it to the scope-count assertions in
+// the access package, which would pass for a scope wired up wrongly.
+func TestWorkloadScopeShape(t *testing.T) {
+	t.Parallel()
+
+	// write satisfies read, as in the mcp and skill families, so a holder of
+	// workload:write never needs workload:read granted alongside it.
+	require.Equal(t, []Scope{ScopeWorkloadWrite}, scopeExpansions[ScopeWorkloadRead])
+	require.Nil(t, scopeExpansions[ScopeWorkloadWrite])
+	require.Equal(t, []Scope{ScopeWorkloadBlockedRead}, scopeExpansions[ScopeWorkloadBlockedWrite])
+
+	// Each verb has a blocklist twin, so an exception can be carved out of a
+	// wildcard grant the same way it can for every other resource.
+	blockedRead, ok := ExclusionScopeFor(ScopeWorkloadRead)
+	require.True(t, ok)
+	require.Equal(t, ScopeWorkloadBlockedRead, blockedRead)
+	blockedWrite, ok := ExclusionScopeFor(ScopeWorkloadWrite)
+	require.True(t, ok)
+	require.Equal(t, ScopeWorkloadBlockedWrite, blockedWrite)
+
+	// The selector kind is its own, not org or project: a grant of
+	// workload:write is about the trust policy rather than the organization at
+	// large. It is deliberately the same string as urn.PrincipalTypeWorkload,
+	// which names the machine principal; the two never meet, because a
+	// selector's resource_kind is never compared against a principal type.
+	require.Equal(t, ResourceKindWorkload, ResourceKindForScope(ScopeWorkloadWrite))
+	require.Equal(t, ResourceKindWorkload, ResourceKindForScope(ScopeWorkloadRead))
+}
+
+func TestWorkloadScopeIsAdminAndMemberDefault(t *testing.T) {
+	t.Parallel()
+
+	// Administrators configure workload identity, beside agent:authorize: both
+	// hand a machine an agent's authority.
+	require.True(t, slices.Contains(systemRoleScopes[SystemRoleAdmin], ScopeWorkloadRead))
+	require.True(t, slices.Contains(systemRoleScopes[SystemRoleAdmin], ScopeWorkloadWrite))
+
+	// workload:read is a member default so that team members can view the Access
+	// Hub in preview deployments. workload:write remains admin-only since it
+	// allows granting machine access.
+	require.True(t, slices.Contains(systemRoleScopes[SystemRoleMember], ScopeWorkloadRead))
+	require.False(t, slices.Contains(systemRoleScopes[SystemRoleMember], ScopeWorkloadWrite))
+}
+
+func TestValidateGrantSource(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, ValidateGrantSource(GrantSourceRoles, []*RoleGrant{
+		{Scope: string(ScopeOrgAdmin)},
+		{Scope: string(ScopeProjectRead)},
+		{Scope: string(ScopeSkillWrite)},
+		{Scope: string(ScopeSkillBlockedRead)},
+		// Chat scopes are assignable only through custom roles, so roles have
+		// to be their source or non-owner session access could never be
+		// granted at all.
+		{Scope: string(ScopeChatRead)},
+		{Scope: string(ScopeChatWrite)},
+		{Scope: string(ScopeLogRead)},
+		{Scope: string(ScopeMemoryRead)},
+		{Scope: string(ScopeMemoryWrite)},
+		{Scope: string(ScopeAgentRead)},
+		{Scope: string(ScopeAgentWrite)},
+		{Scope: string(ScopeAgentAuthorize)},
+		{Scope: string(ScopeAgentTransfer)},
+		{Scope: string(ScopeAssistantRead)},
+		{Scope: string(ScopeAssistantBlockedRead)},
+		{Scope: string(ScopeAssistantWrite)},
+		{Scope: string(ScopeAssistantBlockedWrite)},
+	}))
+	require.NoError(t, ValidateGrantSource(GrantSourceRiskPolicy, []*RoleGrant{
+		{Scope: string(ScopeRiskPolicyEvaluate)},
+		{Scope: string(ScopeRiskPolicyBypass)},
+	}))
+
+	require.ErrorContains(t, ValidateGrantSource(GrantSourceRoles, []*RoleGrant{
+		{Scope: string(ScopeRiskPolicyEvaluate)},
+	}), `managed by "risk_policy" grants`)
+	require.ErrorContains(t, ValidateGrantSource(GrantSourceRiskPolicy, []*RoleGrant{
+		{Scope: string(ScopeProjectRead)},
+	}), `managed by "access" grants`)
+}
+
+func TestValidateGrantSourceRejectsUnknownScope(t *testing.T) {
+	t.Parallel()
+
+	err := ValidateGrantSource(GrantSourceRoles, []*RoleGrant{{Scope: "unknown:scope"}})
+	require.ErrorContains(t, err, `scope "unknown:scope" is not managed by a grant surface`)
 }

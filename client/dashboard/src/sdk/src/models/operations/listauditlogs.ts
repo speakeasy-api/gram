@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
   ListAuditLogsResult,
@@ -16,6 +17,30 @@ export type ListAuditLogsSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
+
+/**
+ * Category of entries to list: 'configuration' (the default) for changes to the platform's configuration, or 'security' for machine access and other security-relevant activity such as workloads admitting themselves.
+ */
+export const QueryParamCategory = {
+  Configuration: "configuration",
+  Security: "security",
+} as const;
+/**
+ * Category of entries to list: 'configuration' (the default) for changes to the platform's configuration, or 'security' for machine access and other security-relevant activity such as workloads admitting themselves.
+ */
+export type QueryParamCategory = ClosedEnum<typeof QueryParamCategory>;
+
+/**
+ * Who initiated the entries to list: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
+ */
+export const Origin = {
+  User: "user",
+  System: "system",
+} as const;
+/**
+ * Who initiated the entries to list: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
+ */
+export type Origin = ClosedEnum<typeof Origin>;
 
 export type ListAuditLogsRequest = {
   /**
@@ -50,6 +75,22 @@ export type ListAuditLogsRequest = {
    * Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
    */
   actingSurface?: string | undefined;
+  /**
+   * Inclusive start of the window to list changes from. Omit for the whole history.
+   */
+  from?: Date | undefined;
+  /**
+   * Exclusive end of the window to list changes from. Omit for the whole history.
+   */
+  to?: Date | undefined;
+  /**
+   * Category of entries to list: 'configuration' (the default) for changes to the platform's configuration, or 'security' for machine access and other security-relevant activity such as workloads admitting themselves.
+   */
+  category?: QueryParamCategory | undefined;
+  /**
+   * Who initiated the entries to list: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
+   */
+  origin?: Origin | undefined;
   /**
    * API Key header
    */
@@ -96,6 +137,16 @@ export function listAuditLogsSecurityToJSON(
 }
 
 /** @internal */
+export const QueryParamCategory$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamCategory
+> = z.enum(QueryParamCategory);
+
+/** @internal */
+export const Origin$outboundSchema: z.ZodMiniEnum<typeof Origin> = z.enum(
+  Origin,
+);
+
+/** @internal */
 export type ListAuditLogsRequest$Outbound = {
   cursor?: string | undefined;
   project_slug?: string | undefined;
@@ -105,6 +156,10 @@ export type ListAuditLogsRequest$Outbound = {
   subject_id?: string | undefined;
   subject_ids?: Array<string> | undefined;
   acting_surface?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
+  category: string;
+  origin?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -123,6 +178,10 @@ export const ListAuditLogsRequest$outboundSchema: z.ZodMiniType<
     subjectId: z.optional(z.string()),
     subjectIds: z.optional(z.array(z.string())),
     actingSurface: z.optional(z.string()),
+    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    category: z._default(QueryParamCategory$outboundSchema, "configuration"),
+    origin: z.optional(Origin$outboundSchema),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

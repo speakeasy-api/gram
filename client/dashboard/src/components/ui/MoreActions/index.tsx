@@ -3,12 +3,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
-import { IconName } from "@/components/ui/Icon/names";
-import { useState } from "react";
+import type { IconName } from "@/components/ui/Icon/names";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 
 export type Action = {
   icon?: IconName;
@@ -25,15 +27,21 @@ export type Action = {
 export function MoreActions({
   actions,
   triggerLabel,
+  triggerAriaLabel,
   triggerLoading,
+  triggerDisabled,
   triggerStyle,
+  triggerIcon = "ellipsis-vertical",
 }: {
   actions: Action[];
   triggerLabel?: string;
-  /** Shows a spinner in place of the trigger's kebab icon and disables it —
-   * for an async action (e.g. an AI suggestion) already in flight from a
-   * previous click. Only meaningful alongside `triggerLabel`. */
+  /** Accessible name for an icon-only trigger. */
+  triggerAriaLabel?: string;
+  /** Shows a spinner in place of the trigger icon, disables it, and restores
+   * trigger focus when the async action completes. */
   triggerLoading?: boolean;
+  /** Disables the trigger without presenting it as the active async action. */
+  triggerDisabled?: boolean;
   /** Inline style for the trigger button. Every `Button` carries a 200ms
    * `transition-all` (`button.tsx`'s `.trans`), which per the CSS
    * Transitions spec holds a `visible → hidden` element at `visible` for
@@ -43,8 +51,31 @@ export function MoreActions({
    * `{ transitionProperty: "none" }` when this trigger's own visibility is
    * driven by an ancestor's `visible`/`invisible` toggle. */
   triggerStyle?: React.CSSProperties;
+  /** The icon-only trigger's glyph. */
+  triggerIcon?: IconName;
 }): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const wasTriggerLoading = useRef(false);
+  const pendingFocusRestore = useRef(false);
+
+  useEffect(() => {
+    if (wasTriggerLoading.current && !triggerLoading) {
+      pendingFocusRestore.current = true;
+    }
+    wasTriggerLoading.current = triggerLoading === true;
+
+    const trigger = triggerRef.current;
+    if (
+      pendingFocusRestore.current &&
+      !triggerLoading &&
+      !triggerDisabled &&
+      trigger
+    ) {
+      trigger.focus();
+      pendingFocusRestore.current = false;
+    }
+  }, [triggerDisabled, triggerLoading]);
 
   const wrapOnClick =
     (onClick: () => void) => (e: React.MouseEvent<HTMLDivElement>) => {
@@ -59,59 +90,80 @@ export function MoreActions({
       <DropdownMenuTrigger asChild>
         {triggerLabel ? (
           <Button
+            ref={triggerRef}
             variant="tertiary"
             size="sm"
-            disabled={triggerLoading}
-            aria-busy={triggerLoading}
+            disabled={triggerLoading || triggerDisabled}
+            aria-busy={triggerLoading === true}
             style={triggerStyle}
           >
-            <Icon
-              name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}
-              className={cn("mr-1.5 size-4", triggerLoading && "animate-spin")}
-            />
+            {triggerLoading ? (
+              <Spinner className="mr-1.5 size-4" />
+            ) : (
+              <Icon name="ellipsis-vertical" className="mr-1.5 size-4" />
+            )}
             {triggerLabel}
           </Button>
         ) : (
           <Button
+            ref={triggerRef}
             variant="tertiary"
             size="sm"
             className="mx-[-4px] h-8 w-8 p-0"
+            disabled={triggerLoading || triggerDisabled}
+            aria-busy={triggerLoading === true}
             style={triggerStyle}
           >
-            <Icon name="ellipsis-vertical" className="size-4" />
-            <span className="sr-only">Open menu</span>
+            {triggerLoading ? (
+              <Spinner className="mr-0 size-4" />
+            ) : (
+              <Icon name={triggerIcon} className="size-4" />
+            )}
+            <Button.Text className="sr-only">
+              {triggerLoading
+                ? "Action in progress"
+                : (triggerAriaLabel ?? "Open menu")}
+            </Button.Text>
           </Button>
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
         onCloseAutoFocus={(e) => {
-          e.preventDefault();
+          if (triggerLoading) e.preventDefault();
         }}
       >
         {actions.map((action, index) => (
-          <DropdownMenuItem
-            key={index}
-            onClick={wrapOnClick(action.onClick)}
-            disabled={action.disabled}
-            className={cn(
-              "group flex cursor-pointer items-center justify-between",
-              action.destructive &&
-                "text-destructive hover:bg-destructive! hover:text-background! trans",
-            )}
-          >
-            {action.label}
-            {action.icon && (
-              <Icon
-                name={action.icon}
-                className={cn(
-                  "size-3 opacity-0 group-hover:opacity-100",
-                  action.destructive &&
-                    "text-destructive group-hover:text-background",
-                )}
-              />
-            )}
-          </DropdownMenuItem>
+          <Fragment key={index}>
+            {action.separatorBefore && <DropdownMenuSeparator />}
+            <DropdownMenuItem
+              onClick={wrapOnClick(action.onClick)}
+              disabled={action.disabled}
+              className={cn(
+                "group flex cursor-pointer items-center justify-between",
+                action.destructive &&
+                  "text-destructive hover:bg-accent focus:text-destructive",
+              )}
+            >
+              <div className="min-w-0">
+                <div>{action.label}</div>
+                {action.description ? (
+                  <div className="text-muted-foreground mt-0.5 text-xs font-normal">
+                    {action.description}
+                  </div>
+                ) : null}
+              </div>
+              {action.icon && (
+                <Icon
+                  name={action.icon}
+                  className={cn(
+                    "size-3 opacity-0 group-hover:opacity-100",
+                    action.destructive && "text-destructive",
+                  )}
+                />
+              )}
+            </DropdownMenuItem>
+          </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

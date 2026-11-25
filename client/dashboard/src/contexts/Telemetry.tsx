@@ -8,11 +8,12 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import type { User } from "./Auth";
-import type { TrialLifecycle } from "@/lib/trial-status";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
 export type Telemetry = Pick<
   PostHog,
   | "isFeatureEnabled"
+  | "getFeatureFlag"
   | "onFeatureFlags"
   | "capture"
   | "identify"
@@ -23,6 +24,7 @@ export type Telemetry = Pick<
 
 export const nullTelemetry: Telemetry = {
   isFeatureEnabled: () => false,
+  getFeatureFlag: () => undefined,
   onFeatureFlags: () => () => {},
   capture: () => ({ uuid: "", event: "", properties: {} }),
   identify: () => {},
@@ -31,9 +33,25 @@ export const nullTelemetry: Telemetry = {
   group: () => {},
 };
 
+// Variants the localhost provider reports for multivariate flags. Every
+// other flag reads as a plain enabled boolean (`isFeatureEnabled` is always
+// true, `getFeatureFlag` is undefined). The risk analyzer defaults to `shadow`
+// so the local dashboard shows the legacy policy editor. Change the entry
+// here to exercise another variant locally.
+const DEV_FEATURE_FLAG_VARIANTS: Partial<Record<string, string>> = {
+  [FEATURE_FLAGS.riskLlmAnalyzer]: "shadow",
+};
+
 export const devTelemetry: Telemetry = {
   ...nullTelemetry,
   isFeatureEnabled: () => true,
+  getFeatureFlag: (feature: string) => DEV_FEATURE_FLAG_VARIANTS[feature],
+};
+
+// Edit this map alongside `AM_TESTING_TELEMETRY` to exercise a multivariate
+// flag through the logging provider.
+const TEST_FEATURE_FLAG_VARIANTS: Partial<Record<string, string | boolean>> = {
+  [FEATURE_FLAGS.riskLlmAnalyzer]: "shadow",
 };
 
 export const testTelemetry: Telemetry = {
@@ -57,6 +75,11 @@ export const testTelemetry: Telemetry = {
   isFeatureEnabled: (feature: string) => {
     console.log("POSTHOG IS_FEATURE_ENABLED", feature);
     return true;
+  },
+  getFeatureFlag: (feature: string) => {
+    const variant = TEST_FEATURE_FLAG_VARIANTS[feature];
+    console.log("POSTHOG GET_FEATURE_FLAG", feature, variant);
+    return variant;
   },
   onFeatureFlags: () => () => {},
   reset: () => {
@@ -224,66 +247,6 @@ export function useCaptureEnterpriseGateViewed({
   }, [email, organizationId, organizationName, organizationSlug, telemetry]);
 }
 
-// Kept separate from `enterprise_gate_viewed` so that event keeps meaning "cold
-// org that never trialed" and the two funnels stay separable. The upgrade page
-// serves both ended and running trials, so the lifecycle rides along as a
-// property rather than splitting the event again — a walled org and one
-// upgrading early are the same funnel at different stages.
-export function useCaptureUpgradeGateViewed({
-  email,
-  organizationId,
-  organizationName,
-  organizationSlug,
-  trialLifecycle,
-}: {
-  email: string;
-  organizationId: string;
-  organizationName: string;
-  organizationSlug: string;
-  trialLifecycle: TrialLifecycle;
-}): void {
-  const telemetry = useTelemetry();
-
-  useEffect(() => {
-    if (!email) return;
-    if (!organizationId) return;
-    telemetry.capture("upgrade_gate_viewed", {
-      email,
-      organization_id: organizationId,
-      organization_name: organizationName,
-      organization_slug: organizationSlug,
-      trial_lifecycle: trialLifecycle,
-    });
-  }, [
-    email,
-    organizationId,
-    organizationName,
-    organizationSlug,
-    trialLifecycle,
-    telemetry,
-  ]);
-}
-
-export function useRegisterChatTelemetry({
-  chatId,
-  chatUrl,
-}: {
-  chatId: string;
-  chatUrl: string;
-}): void {
-  const telemetry = useTelemetry();
-
-  useEffect(() => {
-    if (!chatId) return;
-    if (!chatUrl) return;
-
-    telemetry.register({
-      chat_id: chatId,
-      chat_url: chatUrl,
-    });
-  }, [chatId, chatUrl, telemetry]);
-}
-
 export function useRegisterEnvironmentTelemetry({
   environmentSlug,
 }: {
@@ -297,21 +260,6 @@ export function useRegisterEnvironmentTelemetry({
       environment_slug: environmentSlug,
     });
   }, [environmentSlug, telemetry]);
-}
-
-export function useRegisterToolsetTelemetry({
-  toolsetSlug,
-}: {
-  toolsetSlug: string;
-}): void {
-  const telemetry = useTelemetry();
-
-  useEffect(() => {
-    if (!toolsetSlug) return;
-    telemetry.register({
-      toolset_slug: toolsetSlug,
-    });
-  }, [toolsetSlug, telemetry]);
 }
 
 /**
@@ -353,7 +301,7 @@ export function useRegisterProjectForTelemetry({
 
     // PostHog caps a project at 5 group types; "organization" and "slug" are the
     // only org/project slots that exist, so we register just those two. Other
-    // group types (project_id, project_slug, chat_id, toolset_slug, …) are
+    // group types (project_id, project_slug, environment_slug, …) are
     // dropped at ingestion; their values still ship as register() properties.
     telemetry.group("organization", organizationSlug, {});
     telemetry.group("slug", `${organizationSlug}/${projectSlug}`, {});

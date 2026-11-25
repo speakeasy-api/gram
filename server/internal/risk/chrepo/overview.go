@@ -18,15 +18,17 @@ type RiskOverviewWindowParams struct {
 	ProjectID      string
 	From           time.Time
 	To             time.Time
+	// MCPServerID narrows the read to one concrete MCP server. Empty means no
+	// narrowing.
+	MCPServerID string
 }
 
 // overviewFindings returns the base builder every overview read shares:
 // tenant + window scoped, live findings only.
 //
-// risk_findings is append-only: a manual dismiss/undo (enqueueFalsePositiveMirror)
-// appends a fresh row for an id that may already have one, rather than
-// updating in place, and Pub/Sub's at-least-once delivery can also redeliver
-// an identical row. Deduping to one row per id is therefore required for
+// risk_findings is append-only: a manual dismiss/undo appends a fresh row for
+// an id that may already have one, rather than updating in place, and Pub/Sub
+// at-least-once delivery can also redeliver an identical row. Deduping to one row per id is therefore required for
 // correctness, not just cheapness — collapsing straight to a count would
 // double-count an id with two rows and, worse, a stale first row would still
 // satisfy "false_positive_at IS NULL" even after a second row dismissed it.
@@ -34,15 +36,18 @@ type RiskOverviewWindowParams struct {
 // ORDER BY latestCopyOrderSQL — state-change copies outrank finding copies,
 // latest inserted within a rank); dead-letter sentinels and
 // exclusion/dismissal annotations are then filtered on that latest state.
+// The shadow marker is immutable across copies, so it is filtered with the
+// tenancy scope before the dedup.
 func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.SelectBuilder {
 	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn").
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
+		Where(notShadowCond).
 		Where("created_at >= ?", p.From).
 		Where("created_at < ?", p.To)
 
-	return sq.Select(columns...).
+	sb := sq.Select(columns...).
 		FromSelect(latest, "latest").
 		Where("rn = 1").
 		Where("dead_letter_reason = ''").
@@ -51,6 +56,7 @@ func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.Se
 		// false_positive_at-only rows written before the suppression
 		// convergence age out under the table's 90-day TTL.
 		Where("false_positive_at IS NULL")
+	return withMCPServerFilter(sb, p.MCPServerID)
 }
 
 // RiskOverviewFindingCounts are the window-wide headline stats.
@@ -60,9 +66,10 @@ type RiskOverviewFindingCounts struct {
 }
 
 // GetRiskOverviewFindingCounts returns the deduplicated finding count and the
-// number of distinct chats with at least one finding. Rows with an empty
-// chat_id (attribution unresolved at ingest) count as findings but not as
-// flagged sessions.
+// number of distinct attributed chats with at least one finding. Rows with an
+// empty chat_id count as findings but not as flagged sessions: a gateway
+// execution is not a synthetic session, while carried chat attribution remains
+// authoritative and participates normally.
 func (q *Queries) GetRiskOverviewFindingCounts(ctx context.Context, p RiskOverviewWindowParams) (RiskOverviewFindingCounts, error) {
 	var counts RiskOverviewFindingCounts
 

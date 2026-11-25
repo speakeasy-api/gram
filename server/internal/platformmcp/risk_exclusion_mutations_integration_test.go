@@ -56,7 +56,7 @@ func TestRiskExclusionMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) 
 	require.NoError(t, err)
 	reconciler := &recordingRiskExclusionReconciler{}
 	exclusions := risk.NewExclusionMutationCore(testenv.NewLogger(t), conn, audit.NewLogger(), reconciler, "risk-exclusion-test-key")
-	handlers, err := NewRiskMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil), exclusions)
+	handlers, err := NewRiskMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil), exclusions, nil)
 	require.NoError(t, err)
 	require.NotNil(t, handlers.CreateExclusion)
 	require.NotNil(t, handlers.UpdateExclusion)

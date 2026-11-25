@@ -1,7 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { FC } from "react";
+import type { FC } from "react";
+import type { TooltipContentProps, BarShapeProps } from "recharts";
 import {
   BarChart as RechartsBarChart,
   Bar,
@@ -12,8 +13,6 @@ import {
   Legend,
   Rectangle,
   ResponsiveContainer,
-  TooltipContentProps,
-  BarShapeProps,
 } from "recharts";
 
 const CustomTooltip = ({ active, payload }: TooltipContentProps) => {

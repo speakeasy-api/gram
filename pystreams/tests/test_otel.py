@@ -21,6 +21,7 @@ def _options(**overrides) -> otel.OTelOptions:
         "service_version": "1.2.3",
         "git_sha": "abc123",
         "environment": "test",
+        "partition": "eu",
         "enable_tracing": False,
         "enable_metrics": False,
     }
@@ -50,6 +51,7 @@ def test_build_resource_includes_git_and_service_attrs():
     assert resource.attributes[attr.SERVICE_NAME] == "gram-pystreams"
     assert resource.attributes[attr.SERVICE_VERSION] == "1.2.3"
     assert resource.attributes[attr.SERVICE_ENVIRONMENT] == "test"
+    assert resource.attributes[attr.PARTITION] == "eu"
     assert resource.attributes[attr.DATADOG_GIT_COMMIT_SHA] == "abc123"
     assert (
         resource.attributes[attr.DATADOG_GIT_REPOSITORY_URL]

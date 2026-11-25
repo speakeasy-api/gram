@@ -1,0 +1,33 @@
+# Claude Tag (Claude in Slack).
+#
+# Every Anthropic organization's tokens come from the same issuer, so the issuer
+# and its keys are constants and the organization ID in the subject is what pins
+# an access rule to one customer. The wildcard is sound because the segment it
+# covers is the agent ID, minted by Anthropic and never chosen by the caller,
+# and the stem ends at /agent/. The organization ID pattern refuses "/", which
+# would otherwise let a value extend the stem past the organization segment.
+key: claude-tag
+display_name: Claude Tag
+description: Let Claude in Slack call your MCP servers from any channel in your Anthropic organization.
+icon: /access-hub/claude-tag.svg
+enabled: true
+
+issuer:
+  value: https://identity.anthropic.com/agents
+  visibility: hidden
+jwks_uri:
+  value: https://identity.anthropic.com/agents/jwks.json
+  visibility: hidden
+
+variables:
+  - key: org_id
+    tier: rule
+    label: Anthropic organization ID
+    help: At the very bottom of Claude's organization settings, labeled Organization ID. The Claude Tag console shows the same value as Tenant ID for tokens.
+    placeholder: Your organization ID
+    pattern: "[A-Za-z0-9-]+"
+    pattern_message: An organization ID is letters, numbers and hyphens.
+
+subject:
+  template: wimse://identity.anthropic.com/org/{org_id}/agent/
+  wildcard: true

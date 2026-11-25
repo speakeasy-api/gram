@@ -8,25 +8,31 @@ import { pluginsDeletePlugin } from "../funcs/pluginsDeletePlugin.js";
 import { pluginsDownloadCodexInstallScript } from "../funcs/pluginsDownloadCodexInstallScript.js";
 import { pluginsDownloadObservabilityPlugin } from "../funcs/pluginsDownloadObservabilityPlugin.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
+import { pluginsGetDistributionPlugin } from "../funcs/pluginsGetDistributionPlugin.js";
 import { pluginsGetMarketplaceSettings } from "../funcs/pluginsGetMarketplaceSettings.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
 import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
 import { pluginsListAudiences } from "../funcs/pluginsListAudiences.js";
+import { pluginsListDistributionPlugins } from "../funcs/pluginsListDistributionPlugins.js";
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
 import { pluginsPublishPlugins } from "../funcs/pluginsPublishPlugins.js";
 import { pluginsRemovePluginServer } from "../funcs/pluginsRemovePluginServer.js";
+import { pluginsRotateObservabilityCredential } from "../funcs/pluginsRotateObservabilityCredential.js";
 import { pluginsSetPluginAssignments } from "../funcs/pluginsSetPluginAssignments.js";
 import { pluginsUpdateMarketplaceSettings } from "../funcs/pluginsUpdateMarketplaceSettings.js";
 import { pluginsUpdatePlugin } from "../funcs/pluginsUpdatePlugin.js";
 import { pluginsUpdatePluginServer } from "../funcs/pluginsUpdatePluginServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { DistributionPlugin } from "../models/components/distributionplugin.js";
 import { ListAudiencesResult } from "../models/components/listaudiencesresult.js";
+import { ListDistributionPluginsResult } from "../models/components/listdistributionpluginsresult.js";
 import { ListPluginsResult } from "../models/components/listpluginsresult.js";
 import { MarketplaceSettingsResult } from "../models/components/marketplacesettingsresult.js";
 import { Plugin } from "../models/components/plugin.js";
 import { PluginServer } from "../models/components/pluginserver.js";
 import { PublishPluginsResult } from "../models/components/publishpluginsresult.js";
 import { PublishStatusResult } from "../models/components/publishstatusresult.js";
+import { RotateObservabilityCredentialResult } from "../models/components/rotateobservabilitycredentialresult.js";
 import { SetPluginAssignmentsResponseBody } from "../models/components/setpluginassignmentsresponsebody.js";
 import { UpdateMarketplaceSettingsResult } from "../models/components/updatemarketplacesettingsresult.js";
 import {
@@ -57,6 +63,10 @@ import {
   DownloadPluginPackageSecurity,
 } from "../models/operations/downloadpluginpackage.js";
 import {
+  GetDistributionPluginRequest,
+  GetDistributionPluginSecurity,
+} from "../models/operations/getdistributionplugin.js";
+import {
   GetMarketplaceSettingsRequest,
   GetMarketplaceSettingsSecurity,
 } from "../models/operations/getmarketplacesettings.js";
@@ -73,6 +83,10 @@ import {
   ListAudiencesSecurity,
 } from "../models/operations/listaudiences.js";
 import {
+  ListDistributionPluginsRequest,
+  ListDistributionPluginsSecurity,
+} from "../models/operations/listdistributionplugins.js";
+import {
   ListPluginsRequest,
   ListPluginsSecurity,
 } from "../models/operations/listplugins.js";
@@ -84,6 +98,10 @@ import {
   RemovePluginServerRequest,
   RemovePluginServerSecurity,
 } from "../models/operations/removepluginserver.js";
+import {
+  RotateObservabilityCredentialRequest,
+  RotateObservabilityCredentialSecurity,
+} from "../models/operations/rotateobservabilitycredential.js";
 import {
   SetPluginAssignmentsRequest,
   SetPluginAssignmentsSecurity,
@@ -183,7 +201,7 @@ export class Plugins extends ClientSDK {
    * downloadObservabilityPlugin plugins
    *
    * @remarks
-   * Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+   * Download a ZIP of the per-org observability plugin (Speakeasy hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
    */
   async downloadObservabilityPlugin(
     request: DownloadObservabilityPluginRequest,
@@ -210,6 +228,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<DownloadPluginPackageResponse> {
     return unwrapAsync(pluginsDownloadPluginPackage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getDistributionPlugin plugins
+   *
+   * @remarks
+   * Get minimal distribution target metadata for a skill the caller can read. Requires skill:read, not org:read.
+   */
+  async getDistributionPlugin(
+    request: GetDistributionPluginRequest,
+    security?: GetDistributionPluginSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DistributionPlugin> {
+    return unwrapAsync(pluginsGetDistributionPlugin(
       this,
       request,
       security,
@@ -294,6 +331,25 @@ export class Plugins extends ClientSDK {
   }
 
   /**
+   * listDistributionPlugins plugins
+   *
+   * @remarks
+   * List minimal distribution targets for a skill the caller can read. Requires skill:read, not org:read.
+   */
+  async listDistributionPlugins(
+    request: ListDistributionPluginsRequest,
+    security?: ListDistributionPluginsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListDistributionPluginsResult> {
+    return unwrapAsync(pluginsListDistributionPlugins(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listPlugins plugins
    *
    * @remarks
@@ -343,6 +399,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(pluginsRemovePluginServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * rotateObservabilityCredential plugins
+   *
+   * @remarks
+   * Rotate the observability plugin's hooks-scoped ingest credential. Mints a replacement key, republishes the marketplace when possible so installs pick it up, and either revokes previous plugin hooks keys immediately or keeps them valid for a grace window.
+   */
+  async rotateObservabilityCredential(
+    request: RotateObservabilityCredentialRequest,
+    security?: RotateObservabilityCredentialSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RotateObservabilityCredentialResult> {
+    return unwrapAsync(pluginsRotateObservabilityCredential(
       this,
       request,
       security,

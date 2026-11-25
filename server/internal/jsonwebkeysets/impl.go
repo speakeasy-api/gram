@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -34,6 +35,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// keySetClientListingCap bounds the client_ids GetSetDeletePreflight lists. The
+// count it reports alongside is unbounded and authoritative, so a set with more
+// referencing clients than this reports a truncated list against a full count.
+const keySetClientListingCap = 50
 
 type Service struct {
 	tracer          trace.Tracer
@@ -90,7 +96,7 @@ func NewService(
 // behind the same entitlement as the external keys and credentials beneath
 // them — gating only the lower layers would leave the sets reachable by an
 // organization that was never sold the feature.
-func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireOrgAccess(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
@@ -98,7 +104,7 @@ func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*con
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, logger, err
 	}
 
@@ -128,7 +134,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) CreateSet(ctx context.Context, payload *gensvc.CreateSetPayload) (*gensvc.JSONWebKeySet, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -165,9 +171,10 @@ func (s *Service) CreateSet(ctx context.Context, payload *gensvc.CreateSetPayloa
 	}
 
 	set, err := q.CreateJsonWebKeySet(ctx, repo.CreateJsonWebKeySetParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ExternalKeyID:  externalKeyID,
-		Name:           name,
+		OrganizationID:               authCtx.ActiveOrganizationID,
+		ExternalKeyID:                externalKeyID,
+		Name:                         name,
+		IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating key set").LogError(ctx, logger)
@@ -189,13 +196,14 @@ func (s *Service) CreateSet(ctx context.Context, payload *gensvc.CreateSetPayloa
 	}
 
 	if err := s.audit.LogJsonWebKeySetCreate(ctx, dbtx, audit.LogJsonWebKeySetCreateEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        uuid.NullUUID{UUID: uuid.UUID{}, Valid: false},
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		SetURN:           urn.NewJsonWebKeySet(set.ID),
-		SetName:          set.Name,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ProjectID:             uuid.NullUUID{UUID: uuid.UUID{}, Valid: false},
+		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:      authCtx.Email,
+		ActorSlug:             nil,
+		SetURN:                urn.NewJsonWebKeySet(set.ID),
+		SetName:               set.Name,
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording key set creation").LogError(ctx, logger)
 	}
@@ -212,7 +220,7 @@ func (s *Service) CreateSet(ctx context.Context, payload *gensvc.CreateSetPayloa
 }
 
 func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayload) (*gensvc.JSONWebKeySet, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -253,6 +261,10 @@ func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayloa
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading key set").LogError(ctx, logger)
 	}
 
+	if err := idpmanagedresources.RequireUnmanaged(current.IdentityProviderConnectionID, "this key set"); err != nil {
+		return nil, err
+	}
+
 	if err := s.lockBackingKey(ctx, logger, q, authCtx.ActiveOrganizationID, externalKeyID); err != nil {
 		return nil, err
 	}
@@ -286,6 +298,7 @@ func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayloa
 			Name:          set.Name,
 			ExternalKeyID: set.ExternalKeyID.String(),
 		},
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording key set update").LogError(ctx, logger)
 	}
@@ -298,7 +311,7 @@ func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayloa
 }
 
 func (s *Service) ListSets(ctx context.Context, payload *gensvc.ListSetsPayload) (*gensvc.ListJSONWebKeySetsResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +327,7 @@ func (s *Service) ListSets(ctx context.Context, payload *gensvc.ListSetsPayload)
 }
 
 func (s *Service) GetSet(ctx context.Context, payload *gensvc.GetSetPayload) (*gensvc.JSONWebKeySet, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -338,11 +351,46 @@ func (s *Service) GetSet(ctx context.Context, payload *gensvc.GetSetPayload) (*g
 	return mv.BuildJsonWebKeySetView(set), nil
 }
 
+// GetSetDeletePreflight reports the remote_session_clients still referencing a
+// set, so the dashboard can tell an administrator what a delete would break
+// before they confirm it.
+//
+// Unlike the remote_session_client delete preflight, which is informational
+// because that delete cascades, this one predicts a real refusal: it counts
+// live references over the same predicate DeleteSet refuses on, so a non-zero
+// client_count here is exactly the condition that returns a conflict there. A missing set reports zero rather
+// than 404, matching DeleteSet's own idempotent treatment of an absent id.
+func (s *Service) GetSetDeletePreflight(ctx context.Context, payload *gensvc.GetSetDeletePreflightPayload) (*gensvc.JSONWebKeySetDeletePreflight, error) {
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid key set id").LogError(ctx, logger)
+	}
+
+	summary, err := repo.New(s.db).SummarizeRemoteSessionClientsForJsonWebKeySet(ctx, repo.SummarizeRemoteSessionClientsForJsonWebKeySetParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		JsonWebKeySetID: id,
+		LimitValue:      keySetClientListingCap,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading key set references").LogError(ctx, logger)
+	}
+
+	return &gensvc.JSONWebKeySetDeletePreflight{
+		ClientCount: int(summary.ClientCount),
+		ClientIds:   summary.ClientIds,
+	}, nil
+}
+
 // DeleteSet soft-deletes a set and every key still published in it in one
 // transaction, emitting one audit event per withdrawn key before the set's own
 // deletion event. A missing id is a no-op so deletes stay idempotent.
 func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayload) error {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -363,7 +411,7 @@ func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayloa
 	// The set lock is what makes the cascade sound: a concurrent publish also
 	// takes it, so a live key can never be inserted into the set between the
 	// cascade below and the set's own soft delete.
-	_, err = q.LockJsonWebKeySetForKeyWrite(ctx, repo.LockJsonWebKeySetForKeyWriteParams{
+	locked, err := q.LockJsonWebKeySetForKeyWrite(ctx, repo.LockJsonWebKeySetForKeyWriteParams{
 		ID:             id,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
@@ -372,6 +420,29 @@ func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayloa
 		return nil
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "error deleting key set").LogError(ctx, logger)
+	}
+
+	if err := idpmanagedresources.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this key set"); err != nil {
+		return err
+	}
+
+	// Refuse while a live remote_session_client still signs with this set.
+	// Deleting it would leave that client declaring an authentication method it
+	// can no longer perform, failing at the counterparty's token endpoint rather
+	// than here. The database will not catch it: the composite foreign key is
+	// NO ACTION and `deleted` is a generated column, so a soft delete never
+	// fires it. Runs under the set lock taken above, which the attach path
+	// counterpart-locks FOR SHARE, so the count cannot go stale between here and
+	// the commit.
+	referencing, err := q.CountRemoteSessionClientsForJsonWebKeySet(ctx, repo.CountRemoteSessionClientsForJsonWebKeySetParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		JsonWebKeySetID: id,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error checking key set references").LogError(ctx, logger)
+	}
+	if referencing > 0 {
+		return oops.E(oops.CodeConflict, nil, "key set is still in use by a remote session client; detach it there first")
 	}
 
 	withdrawn, err := q.CascadeSoftDeleteJsonWebKeys(ctx, repo.CascadeSoftDeleteJsonWebKeysParams{
@@ -419,7 +490,7 @@ func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayloa
 }
 
 func (s *Service) ListKeys(ctx context.Context, payload *gensvc.ListKeysPayload) (*gensvc.ListJSONWebKeysResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -477,6 +548,14 @@ func (s *Service) lockBackingKey(ctx context.Context, logger *slog.Logger, q *re
 
 	if key.Provider != externalKeyProviderGcpKms {
 		return oops.E(oops.CodeBadRequest, nil, "AWS KMS keys cannot back a JSON Web Key Set yet; choose a GCP KMS key").LogError(ctx, logger)
+	}
+
+	if key.EmaIssuerManaged {
+		return oops.E(oops.CodeForbidden, nil, "enterprise authorization issuer keys are managed by Speakeasy")
+	}
+
+	if err := idpmanagedresources.RequireUnmanaged(key.IdentityProviderConnectionID, "this external key"); err != nil {
+		return err
 	}
 
 	return nil

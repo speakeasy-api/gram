@@ -6,6 +6,7 @@ SELECT pg_advisory_xact_lock(hashtextextended('skill-observations:' || (@project
 
 -- name: CreateSkillFeedback :one
 INSERT INTO skill_feedback (
+  id,
   project_id,
   skill_id,
   skill_version_id,
@@ -17,6 +18,7 @@ INSERT INTO skill_feedback (
   user_id,
   user_email
 ) VALUES (
+  COALESCE(sqlc.narg(id)::uuid, generate_uuidv7()),
   @project_id,
   sqlc.narg(skill_id)::uuid,
   sqlc.narg(skill_version_id)::uuid,
@@ -28,6 +30,8 @@ INSERT INTO skill_feedback (
   sqlc.narg(user_id)::text,
   sqlc.narg(user_email)::text
 )
+ON CONFLICT (project_id, id) DO UPDATE
+SET id = EXCLUDED.id
 RETURNING *;
 
 -- name: GetActiveSkillByName :one
@@ -47,6 +51,7 @@ LIMIT GREATEST(@page_limit::int, 0);
 
 -- name: CountSkillFeedbackOutcomes :one
 SELECT
+  clock_timestamp()::timestamptz AS window_end,
   COUNT(*)::bigint AS total,
   COUNT(*) FILTER (WHERE outcome = 'helped')::bigint AS helped,
   COUNT(*) FILTER (WHERE outcome = 'partially_helped')::bigint AS partially_helped,
@@ -882,6 +887,12 @@ WHERE so.project_id = @project_id
   AND so.session_id IS NOT NULL
   AND so.skill_id IS NOT NULL
   AND so.skill_version_id IS NOT NULL
+  -- A read over a hosted MCP server arrives reconciled with the MCP session
+  -- id, which is neither a dev nor an assistant session: it belongs to no
+  -- surface the attribution join knows, so it never becomes a mapping.
+  -- Belt and braces: InsertMCPSkillObservation already stamps
+  -- metrics_synced_at, so such a row never reaches this predicate.
+  AND so.provider <> 'mcp'
 ORDER BY so.seen_at, so.id
 LIMIT @batch_size;
 
@@ -1278,6 +1289,14 @@ SELECT
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
   )::boolean AS has_valid_version,
   (
+    -- Same filter as GetSkillLastLoadedOverMCPAt.
+    SELECT MAX(so.seen_at)
+    FROM skill_observations so
+    WHERE so.project_id = s.project_id
+      AND so.skill_id = s.id
+      AND so.provider = 'mcp'
+  )::timestamptz AS last_loaded_over_mcp_at,
+  (
     SELECT COUNT(*)::bigint
     FROM skill_distributions sd
     JOIN assistants a
@@ -1379,6 +1398,12 @@ WHERE project_id = @project_id
   AND (
     COALESCE(cardinality(@tags::text[]), 0) = 0
     OR tags && @tags::text[]
+  )
+  -- Mirrors the ListSkills restriction so an empty page still counts the same
+  -- set: NULL means unrestricted, an empty array means none.
+  AND (
+    sqlc.narg(skill_ids)::uuid[] IS NULL
+    OR id = ANY(sqlc.narg(skill_ids)::uuid[])
   );
 
 -- name: ListDistinctSkillTags :many
@@ -1399,6 +1424,14 @@ SELECT
     SELECT 1 FROM skill_versions sv
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
   )::boolean AS has_valid_version,
+  (
+    -- Same filter as GetSkillLastLoadedOverMCPAt.
+    SELECT MAX(so.seen_at)
+    FROM skill_observations so
+    WHERE so.project_id = s.project_id
+      AND so.skill_id = s.id
+      AND so.provider = 'mcp'
+  )::timestamptz AS last_loaded_over_mcp_at,
   (
     SELECT COUNT(*)
     FROM skills counted
@@ -1421,6 +1454,14 @@ SELECT
       AND (
         COALESCE(cardinality(@tags::text[]), 0) = 0
         OR counted.tags && @tags::text[]
+      )
+      -- Restricts the page to an explicit id set (today: the skills one user is
+      -- authorized to reach, resolved by the access service so the RBAC rule
+      -- stays in one place). Callers that want no restriction pass NULL; an
+      -- EMPTY set is a real answer meaning "none", never "all".
+      AND (
+        sqlc.narg(skill_ids)::uuid[] IS NULL
+        OR counted.id = ANY(sqlc.narg(skill_ids)::uuid[])
       )
   )::bigint AS total_count
 FROM skills s
@@ -1455,6 +1496,10 @@ WHERE s.project_id = @project_id
   AND (
     COALESCE(cardinality(@tags::text[]), 0) = 0
     OR s.tags && @tags::text[]
+  )
+  AND (
+    sqlc.narg(skill_ids)::uuid[] IS NULL
+    OR s.id = ANY(sqlc.narg(skill_ids)::uuid[])
   )
   AND (
     (
@@ -1723,12 +1768,18 @@ WHERE sd.project_id = @project_id
 FOR UPDATE OF sd;
 
 -- name: ListActiveSkillDistributions :many
+-- last_loaded_over_mcp_at is the newest activation a Speakeasy-hosted MCP
+-- server recorded for the skill (provider 'mcp', the mcpskills resolver's
+-- ObservationProvider). Those rows arrive reconciled with skill_id set, so the
+-- provider filter alone tells MCP loads from hook-reported ones, and the
+-- partial index on (project_id, skill_id, seen_at DESC) serves the MAX.
 SELECT
   sqlc.embed(sd),
   s.name AS skill_name,
   s.display_name AS skill_display_name,
   pl.name AS plugin_name,
-  resolved.id AS resolved_version_id
+  resolved.id AS resolved_version_id,
+  mcp_loads.last_loaded_over_mcp_at
 FROM skill_distributions sd
 JOIN plugins pl
   ON pl.id = sd.plugin_id
@@ -1751,6 +1802,13 @@ JOIN LATERAL (
   ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
+LEFT JOIN LATERAL (
+  SELECT MAX(so.seen_at)::timestamptz AS last_loaded_over_mcp_at
+  FROM skill_observations so
+  WHERE so.project_id = sd.project_id
+    AND so.skill_id = sd.skill_id
+    AND so.provider = 'mcp'
+) mcp_loads ON TRUE
 WHERE sd.project_id = @project_id
   AND sd.channel = 'plugin'
   AND sd.plugin_id IS NOT NULL
@@ -1767,6 +1825,16 @@ WHERE sd.project_id = @project_id
   )
 ORDER BY sd.created_at ASC, sd.id ASC
 LIMIT @page_limit;
+
+-- name: GetSkillLastLoadedOverMCPAt :one
+-- The newest activation a Speakeasy-hosted MCP server recorded for one skill,
+-- NULL when agents never loaded it over MCP. Same filter as the mcp_loads
+-- lateral in ListActiveSkillDistributions.
+SELECT MAX(so.seen_at)::timestamptz AS last_loaded_over_mcp_at
+FROM skill_observations so
+WHERE so.project_id = @project_id
+  AND so.skill_id = @skill_id::uuid
+  AND so.provider = 'mcp';
 
 -- name: CreateSkillDistribution :one
 INSERT INTO skill_distributions (
@@ -1853,6 +1921,29 @@ WHERE prev.id = sd.id
   AND sd.revoked_at IS NULL
 RETURNING sqlc.embed(sd), prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id;
 
+-- name: HasPublishedPluginDistributionForSkills :one
+-- Reports whether a change to any of the skills can move a published
+-- marketplace package: the project has a marketplace connection and a live
+-- plugin carries one of the skills. latest_only narrows the check to
+-- distributions that follow the latest valid version, the only ones a new or
+-- restored version changes.
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM skill_distributions sd
+    JOIN plugins p ON p.id = sd.plugin_id AND p.project_id = sd.project_id AND p.deleted IS FALSE
+    WHERE sd.project_id = @project_id
+      AND sd.skill_id = ANY(@skill_ids::uuid[])
+      AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
+      AND sd.revoked_at IS NULL
+      AND (NOT @latest_only::bool OR sd.pinned_version_id IS NULL)
+  )
+  AND EXISTS (
+    SELECT 1 FROM plugin_github_connections c WHERE c.project_id = @project_id
+  )
+)::bool AS published;
+
 -- name: ListPendingSkillObservations :many
 -- One keyset page of activations still awaiting efficacy enqueue, ordered on
 -- the unique (seen_at, id) key so the caller can page through the whole pending
@@ -1893,6 +1984,11 @@ WHERE so.project_id = @project_id
   AND so.efficacy_enqueued_at IS NULL
   AND so.session_id IS NOT NULL
   AND so.skill_version_id IS NOT NULL
+  -- Reads over a hosted MCP server carry the MCP session id, which names no
+  -- chat transcript to score, so they are not efficacy candidates. Belt and
+  -- braces: InsertMCPSkillObservation already stamps efficacy_enqueued_at, so
+  -- such a row never reaches this predicate.
+  AND so.provider <> 'mcp'
   AND (
     sqlc.narg(after_seen_at)::timestamptz IS NULL
     OR (so.seen_at, so.id) > (sqlc.narg(after_seen_at)::timestamptz, sqlc.narg(after_id)::uuid)

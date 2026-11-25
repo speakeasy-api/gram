@@ -1,0 +1,802 @@
+package usersessions
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+)
+
+func (s *Service) requireOrganizationIssuerScope(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if authCtx.APIKeyID != "" {
+		return nil, oops.E(oops.CodeForbidden, nil, "organization user session issuer management requires a user session")
+	}
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
+		return nil, err
+	}
+
+	return authCtx, nil
+}
+
+var errTrustedRemoteSessionClientConfiguration = errors.New("invalid trusted remote session client configuration")
+
+var errTrustedRemoteSessionIssuerHasNoJWKS = errors.New("trusted remote session issuer has no jwks_uri")
+
+// lockTrustedRemoteSessionIssuer locks an inbound-only link's issuer; requireJWKS refuses one inbound EMA cannot verify.
+func lockTrustedRemoteSessionIssuer(ctx context.Context, q *remotesessionsrepo.Queries, issuerID uuid.UUID, organizationID string, requireJWKS bool) error {
+	getParams := remotesessionsrepo.GetTrustedRemoteSessionIssuerForOrganizationParams{
+		ID:             issuerID,
+		OrganizationID: organizationID,
+	}
+	if _, err := q.GetTrustedRemoteSessionIssuerForOrganization(ctx, getParams); err != nil {
+		return fmt.Errorf("get trusted remote session issuer before lock: %w", err)
+	}
+	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return fmt.Errorf("lock trusted remote session issuer: %w", err)
+	}
+	locked, err := q.LockTrustedRemoteSessionIssuerForOrganization(ctx, remotesessionsrepo.LockTrustedRemoteSessionIssuerForOrganizationParams{
+		ID:             issuerID,
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return fmt.Errorf("lock trusted remote session issuer row: %w", err)
+	}
+	if requireJWKS && !idjag.JWKSURIConfigured(locked.JwksUri) {
+		return errTrustedRemoteSessionIssuerHasNoJWKS
+	}
+	return nil
+}
+
+// lockTrustedRemoteSessionPair uses one eligibility predicate before and after
+// locking. The global order is an existing user-session issuer row first, then
+// the remote issuer advisory lock, then the remote issuer and client row locks.
+func lockTrustedRemoteSessionPair(ctx context.Context, q *remotesessionsrepo.Queries, issuerID, clientID uuid.UUID, organizationID string) error {
+	getParams := remotesessionsrepo.GetTrustedRemoteSessionClientForOrganizationParams{
+		ClientID:       clientID,
+		IssuerID:       issuerID,
+		OrganizationID: organizationID,
+	}
+	before, err := q.GetTrustedRemoteSessionClientForOrganization(ctx, getParams)
+	if err != nil {
+		return fmt.Errorf("get trusted remote session client before lock: %w", err)
+	}
+	if err := remotesessions.ValidateTrustedIdentityProviderClient(before.RemoteSessionClient, before.RemoteSessionIssuer); err != nil {
+		return fmt.Errorf("%w: %w", errTrustedRemoteSessionClientConfiguration, err)
+	}
+	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return fmt.Errorf("lock trusted remote session issuer: %w", err)
+	}
+	locked, err := q.LockTrustedRemoteSessionClientForOrganization(ctx, remotesessionsrepo.LockTrustedRemoteSessionClientForOrganizationParams{
+		ClientID:       clientID,
+		IssuerID:       issuerID,
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return fmt.Errorf("lock trusted remote session client: %w", err)
+	}
+	if err := remotesessions.ValidateTrustedIdentityProviderClient(locked.RemoteSessionClient, locked.RemoteSessionIssuer); err != nil {
+		return fmt.Errorf("%w: %w", errTrustedRemoteSessionClientConfiguration, err)
+	}
+
+	return nil
+}
+
+func parseTrustedRemoteSessionIssuerID(raw *string, allowClear bool) (uuid.NullUUID, error) {
+	if raw == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	value := strings.TrimSpace(*raw)
+	if value == "" {
+		if allowClear {
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+		}
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("trusted_remote_session_issuer_id cannot be empty")
+	}
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("invalid trusted_remote_session_issuer_id: %w", err)
+	}
+	return conv.ToNullUUID(id), nil
+}
+
+func parseTrustedRemoteSessionClientID(raw *string, allowClear bool) (uuid.NullUUID, error) {
+	if raw == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	value := strings.TrimSpace(*raw)
+	if value == "" {
+		if allowClear {
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+		}
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("trusted_remote_session_client_id cannot be empty")
+	}
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("invalid trusted_remote_session_client_id: %w", err)
+	}
+	return conv.ToNullUUID(id), nil
+}
+
+// CreateIssuer creates an organization-owned issuer inherited by every project
+// in the caller's organization.
+func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuerPayload) (*types.UserSessionIssuer, error) {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Admin)
+	if err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	if payload.Slug == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "slug is required").LogError(ctx, logger)
+	}
+	dur, err := sessionDurationFromHours(payload.SessionDurationHours)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid session_duration_hours: %v", err).LogError(ctx, logger)
+	}
+	trustedIssuerID, err := parseTrustedRemoteSessionIssuerID(payload.TrustedRemoteSessionIssuerID, false)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogError(ctx, logger)
+	}
+	trustedClientID, err := parseTrustedRemoteSessionClientID(payload.TrustedRemoteSessionClientID, false)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogError(ctx, logger)
+	}
+	if trustedClientID.Valid && !trustedIssuerID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "trusted_remote_session_client_id requires trusted_remote_session_issuer_id").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	// Whether the organization has one organization-level issuer decides
+	// whether its organization gateway fronts every server, so this change
+	// re-decides associations in every project. Their writer scope precedes
+	// every row lock.
+	reconcileScope, err := upstreamclients.LockOrganizationScope(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock organization upstream client writer scope").LogError(ctx, logger)
+	}
+
+	if trustedIssuerID.Valid {
+		var trustErr error
+		if trustedClientID.Valid {
+			trustErr = lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, trustedClientID.UUID, authCtx.ActiveOrganizationID)
+		} else {
+			trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, authCtx.ActiveOrganizationID, true)
+		}
+		if trustErr != nil {
+			if errors.Is(trustErr, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, trustErr, "trusted remote session issuer or issuer/client pair not found").LogError(ctx, logger)
+			}
+			if errors.Is(trustErr, errTrustedRemoteSessionIssuerHasNoJWKS) {
+				return nil, oops.E(oops.CodeBadRequest, trustErr, "This identity provider has no key set URL, so Speakeasy can't check what it signs. Add its JWKS URL first.").LogWarn(ctx, logger)
+			}
+			if errors.Is(trustErr, errTrustedRemoteSessionClientConfiguration) {
+				return nil, oops.E(oops.CodeBadRequest, trustErr, "trusted remote session client is not eligible for identity-provider login: %v", trustErr).LogError(ctx, logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, trustErr, "validate trusted remote session issuer or issuer/client pair").LogError(ctx, logger)
+		}
+	}
+
+	row, err := repo.New(dbtx).CreateOrganizationUserSessionIssuer(ctx, repo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                         payload.Slug,
+		AuthnChallengeMode:           payload.AuthnChallengeMode,
+		SessionDuration:              pgtype.Interval{Microseconds: dur.Microseconds(), Days: 0, Months: 0, Valid: true},
+		TrustedRemoteSessionIssuerID: trustedIssuerID,
+		TrustedRemoteSessionClientID: trustedClientID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create organization user session issuer").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogUserSessionIssuerCreate(ctx, dbtx, audit.LogUserSessionIssuerCreateEvent{
+		OrganizationID:                 authCtx.ActiveOrganizationID,
+		ProjectID:                      uuid.Nil,
+		Actor:                          urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:               authCtx.Email,
+		ActorSlug:                      nil,
+		UserSessionIssuerURN:           urn.NewUserSessionIssuer(row.ID),
+		Slug:                           row.Slug,
+		UserSessionIssuerSnapshotAfter: UserSessionIssuerView(row),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log organization user session issuer creation").LogError(ctx, logger)
+	}
+	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
+		if errors.Is(err, upstreamclients.ErrScopeChanged) {
+			return nil, err //nolint:wrapcheck // oops errors pass through.
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return s.issuerView(ctx, row), nil
+}
+
+// ListIssuers lists the issuers in the caller's organization, organization-owned
+// and project-specific. Only organization-owned issuers are managed through
+// this service; project-specific ones are listed for administration across
+// projects and managed through the project service.
+func (s *Service) ListIssuers(ctx context.Context, payload *orggen.ListIssuersPayload) (*orggen.ListOrganizationUserSessionIssuersResult, error) {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Read)
+	if err != nil {
+		return nil, err
+	}
+
+	limit := pageLimit(payload.Limit)
+	cursor, err := parseCursor(payload.Cursor)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogWarn(ctx, s.logger)
+	}
+
+	// Goa validates the enum; empty means every tier.
+	tier := conv.PtrValOr(payload.Tier, "")
+	rows, err := repo.New(s.db).ListOrganizationUserSessionIssuers(ctx, repo.ListOrganizationUserSessionIssuersParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		IncludeOrganizational:  tier == "" || tier == "organization",
+		IncludeProjectSpecific: tier == "" || tier == "project",
+		Cursor:                 cursor,
+		LimitValue:             limit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization user session issuers").LogError(ctx, s.logger)
+	}
+
+	items := make([]*types.UserSessionIssuer, len(rows))
+	for i, row := range rows {
+		items[i] = s.organizationIssuerView(ctx, row.UserSessionIssuer, row.ProjectName)
+	}
+	var nextCursor *string
+	if len(rows) >= int(limit) {
+		value := rows[len(rows)-1].UserSessionIssuer.ID.String()
+		nextCursor = &value
+	}
+
+	return &orggen.ListOrganizationUserSessionIssuersResult{Items: items, NextCursor: nextCursor}, nil
+}
+
+// GetIssuer resolves any issuer in the caller's organization by id,
+// organization-owned or project-specific.
+func (s *Service) GetIssuer(ctx context.Context, payload *orggen.GetIssuerPayload) (*types.UserSessionIssuer, error) {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Read)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogWarn(ctx, s.logger)
+	}
+	row, err := repo.New(s.db).GetOrganizationManagedUserSessionIssuerWithProjectByID(ctx, repo.GetOrganizationManagedUserSessionIssuerWithProjectByIDParams{
+		ID:             id,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogWarn(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, s.logger)
+	}
+	return s.organizationIssuerView(ctx, row.UserSessionIssuer, row.ProjectName), nil
+}
+
+// organizationIssuerView is issuerView for organization-level reads, which also
+// name a project-specific issuer's project.
+func (s *Service) organizationIssuerView(ctx context.Context, row repo.UserSessionIssuer, projectName string) *types.UserSessionIssuer {
+	view := s.issuerView(ctx, row)
+	if row.ProjectID.Valid {
+		view.ProjectName = &projectName
+	}
+	return view
+}
+
+// ListMcpServers lists the live MCP servers, toolsets, and meta MCP servers
+// attached to an issuer in the caller's organization.
+func (s *Service) ListMcpServers(ctx context.Context, payload *orggen.ListMcpServersPayload) (*orggen.ListUserSessionIssuerMcpServersResult, error) {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Read)
+	if err != nil {
+		return nil, err
+	}
+
+	issuerID, err := uuid.Parse(payload.UserSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogWarn(ctx, s.logger)
+	}
+	limit := pageLimit(payload.Limit)
+	cursor, err := parseCursor(payload.Cursor)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogWarn(ctx, s.logger)
+	}
+
+	q := repo.New(s.db)
+	if _, err := q.GetOrganizationManagedUserSessionIssuerByID(ctx, repo.GetOrganizationManagedUserSessionIssuerByIDParams{
+		ID:             issuerID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogWarn(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, s.logger)
+	}
+
+	rows, err := q.ListOrganizationManagedUserSessionIssuerMCPServers(ctx, repo.ListOrganizationManagedUserSessionIssuerMCPServersParams{
+		UserSessionIssuerID: issuerID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		Cursor:              cursor,
+		LimitValue:          limit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuer MCP servers").LogError(ctx, s.logger)
+	}
+
+	items := make([]*orggen.UserSessionIssuerMcpServer, len(rows))
+	for i, row := range rows {
+		items[i] = &orggen.UserSessionIssuerMcpServer{
+			Kind:        row.Kind,
+			ID:          row.ID.String(),
+			Name:        row.Name,
+			Slug:        conv.PtrEmpty(row.Slug),
+			ProjectID:   row.ProjectID.String(),
+			ProjectName: row.ProjectName,
+		}
+	}
+	var nextCursor *string
+	if len(rows) >= int(limit) {
+		value := rows[len(rows)-1].ID.String()
+		nextCursor = &value
+	}
+
+	return &orggen.ListUserSessionIssuerMcpServersResult{Items: items, NextCursor: nextCursor}, nil
+}
+
+// ListRemoteSessionClientBindings lists the remote session clients an issuer
+// in the caller's organization binds, and those its live MCP servers are
+// associated with.
+func (s *Service) ListRemoteSessionClientBindings(ctx context.Context, payload *orggen.ListRemoteSessionClientBindingsPayload) (*orggen.UserSessionIssuerRemoteSessionClientBindings, error) {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Read)
+	if err != nil {
+		return nil, err
+	}
+
+	issuerID, err := uuid.Parse(payload.UserSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogWarn(ctx, s.logger)
+	}
+
+	q := repo.New(s.db)
+	if _, err := q.GetOrganizationManagedUserSessionIssuerByID(ctx, repo.GetOrganizationManagedUserSessionIssuerByIDParams{
+		ID:             issuerID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogWarn(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, s.logger)
+	}
+
+	boundRows, err := q.ListUserSessionIssuerBoundRemoteSessionClients(ctx, repo.ListUserSessionIssuerBoundRemoteSessionClientsParams{
+		UserSessionIssuerID: issuerID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuer bound remote session clients").LogError(ctx, s.logger)
+	}
+	serverRows, err := q.ListUserSessionIssuerServerRemoteSessionClients(ctx, repo.ListUserSessionIssuerServerRemoteSessionClientsParams{
+		UserSessionIssuerID: issuerID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuer server remote session clients").LogError(ctx, s.logger)
+	}
+
+	bound := make([]*orggen.UserSessionIssuerRemoteSessionClient, len(boundRows))
+	for i, row := range boundRows {
+		bound[i] = &orggen.UserSessionIssuerRemoteSessionClient{
+			ID:                      row.ID.String(),
+			ClientID:                row.ClientID,
+			RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
+			RemoteSessionIssuerName: row.RemoteSessionIssuerName,
+			RemoteSessionIssuerURL:  row.RemoteSessionIssuerUrl,
+		}
+	}
+	servers := make([]*orggen.UserSessionIssuerServerRemoteSessionClient, len(serverRows))
+	for i, row := range serverRows {
+		servers[i] = &orggen.UserSessionIssuerServerRemoteSessionClient{
+			McpServerID:   row.McpServerID.String(),
+			McpServerName: row.McpServerName,
+			ProjectID:     row.ProjectID.String(),
+			ProjectName:   row.ProjectName,
+			RemoteSessionClient: &orggen.UserSessionIssuerRemoteSessionClient{
+				ID:                      row.ID.String(),
+				ClientID:                row.ClientID,
+				RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
+				RemoteSessionIssuerName: row.RemoteSessionIssuerName,
+				RemoteSessionIssuerURL:  row.RemoteSessionIssuerUrl,
+			},
+		}
+	}
+
+	return &orggen.UserSessionIssuerRemoteSessionClientBindings{BoundClients: bound, ServerClients: servers}, nil
+}
+
+// UpdateIssuer patches an organization-owned issuer.
+func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuerPayload) (*types.UserSessionIssuer, error) {
+	return s.updateIssuer(ctx, payload, nil)
+}
+
+// UpdateIssuerIfTrusting is UpdateIssuer that applies only while the issuer
+// still trusts expectedTrustedRemoteSessionIssuerID ("" for none), checked
+// under the issuer's lock; otherwise it fails with a conflict.
+func (s *Service) UpdateIssuerIfTrusting(ctx context.Context, payload *orggen.UpdateIssuerPayload, expectedTrustedRemoteSessionIssuerID string) (*types.UserSessionIssuer, error) {
+	return s.updateIssuer(ctx, payload, &expectedTrustedRemoteSessionIssuerID)
+}
+
+func (s *Service) updateIssuer(ctx context.Context, payload *orggen.UpdateIssuerPayload, expectedTrustedIssuerID *string) (*types.UserSessionIssuer, error) {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Admin)
+	if err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
+	}
+	if payload.Slug != nil && *payload.Slug == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "slug cannot be empty").LogError(ctx, logger)
+	}
+	var durPtr *time.Duration
+	if payload.SessionDurationHours != nil {
+		parsed, parseErr := sessionDurationFromHours(*payload.SessionDurationHours)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid session_duration_hours: %v", parseErr).LogError(ctx, logger)
+		}
+		durPtr = &parsed
+	}
+	if payload.ClientIDMetadataAdmissionMode != nil && !admission.IsValidMode(*payload.ClientIDMetadataAdmissionMode) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_id_metadata_admission_mode must be one of %v", admission.Modes()).LogError(ctx, logger)
+	}
+	trustedIssuerID, err := parseTrustedRemoteSessionIssuerID(payload.TrustedRemoteSessionIssuerID, true)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogError(ctx, logger)
+	}
+	trustedClientID, err := parseTrustedRemoteSessionClientID(payload.TrustedRemoteSessionClientID, true)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogError(ctx, logger)
+	}
+
+	// Establish ownership before taking the UUID-keyed advisory lock. Client
+	// attachment and issuer mutation both serialize on this lock, preventing a
+	// row-lock/advisory-lock cycle while keeping foreign ids from contending.
+	if _, err := repo.New(s.db).GetOrganizationUserSessionIssuerByID(ctx, repo.GetOrganizationUserSessionIssuerByIDParams{
+		ID:             id,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer before lock").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	txRepo := repo.New(dbtx)
+	if err := txRepo.LockUserSessionIssuerForOwnerBinding(ctx, id); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock organization user session issuer").LogError(ctx, logger)
+	}
+	existing, err := txRepo.LockOrganizationUserSessionIssuer(ctx, repo.LockOrganizationUserSessionIssuerParams{ID: id, OrganizationID: authCtx.ActiveOrganizationID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, logger)
+	}
+	if expectedTrustedIssuerID != nil {
+		currentTrusted := ""
+		if existing.TrustedRemoteSessionIssuerID.Valid {
+			currentTrusted = existing.TrustedRemoteSessionIssuerID.UUID.String()
+		}
+		if currentTrusted != *expectedTrustedIssuerID {
+			return nil, oops.E(oops.CodeConflict, nil, "this issuer's trusted identity provider changed since it was read").LogWarn(ctx, logger)
+		}
+	}
+	beforeView := UserSessionIssuerView(existing)
+
+	// Settings and trust changes leave identity-chaining bindings intact:
+	// chaining reads the trusted issuer/client pair live on every request, and
+	// credentials minted under a replaced pair stop matching it. Only deletion
+	// orphans bindings, so only DeleteIssuer guards them.
+
+	resultingTrustedIssuerID := existing.TrustedRemoteSessionIssuerID
+	if payload.TrustedRemoteSessionIssuerID != nil {
+		resultingTrustedIssuerID = trustedIssuerID
+	}
+	resultingTrustedClientID := existing.TrustedRemoteSessionClientID
+	if payload.TrustedRemoteSessionClientID != nil {
+		resultingTrustedClientID = trustedClientID
+	}
+
+	if resultingTrustedClientID.Valid && !resultingTrustedIssuerID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "trusted_remote_session_client_id requires trusted_remote_session_issuer_id").LogError(ctx, logger)
+	}
+	if resultingTrustedIssuerID.Valid {
+		var trustErr error
+		if resultingTrustedClientID.Valid {
+			trustErr = lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, resultingTrustedClientID.UUID, authCtx.ActiveOrganizationID)
+		} else {
+			// Only a change to the link is checked, so other edits keep working.
+			trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, authCtx.ActiveOrganizationID, payload.TrustedRemoteSessionIssuerID != nil || payload.TrustedRemoteSessionClientID != nil)
+		}
+		if trustErr != nil {
+			if errors.Is(trustErr, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, trustErr, "trusted remote session issuer or issuer/client pair not found").LogError(ctx, logger)
+			}
+			if errors.Is(trustErr, errTrustedRemoteSessionIssuerHasNoJWKS) {
+				return nil, oops.E(oops.CodeBadRequest, trustErr, "This identity provider has no key set URL, so Speakeasy can't check what it signs. Add its JWKS URL first.").LogWarn(ctx, logger)
+			}
+			if errors.Is(trustErr, errTrustedRemoteSessionClientConfiguration) {
+				return nil, oops.E(oops.CodeBadRequest, trustErr, "trusted remote session client is not eligible for identity-provider login: %v", trustErr).LogError(ctx, logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, trustErr, "validate trusted remote session issuer or issuer/client pair").LogError(ctx, logger)
+		}
+	}
+	var trustedIssuerIDParam pgtype.Text
+	if payload.TrustedRemoteSessionIssuerID != nil {
+		trustedIssuerIDParam = conv.ToPGText("")
+		if trustedIssuerID.Valid {
+			trustedIssuerIDParam = conv.ToPGText(trustedIssuerID.UUID.String())
+		}
+	}
+	var trustedClientIDParam pgtype.Text
+	if payload.TrustedRemoteSessionClientID != nil {
+		trustedClientIDParam = conv.ToPGText("")
+		if trustedClientID.Valid {
+			trustedClientIDParam = conv.ToPGText(trustedClientID.UUID.String())
+		}
+	}
+
+	updated, err := txRepo.UpdateOrganizationUserSessionIssuer(ctx, repo.UpdateOrganizationUserSessionIssuerParams{
+		Slug:                          conv.PtrToPGText(payload.Slug),
+		AuthnChallengeMode:            conv.PtrToPGText(payload.AuthnChallengeMode),
+		SessionDuration:               conv.PtrToPGInterval(durPtr),
+		ClientIDMetadataAdmissionMode: conv.PtrToPGText(payload.ClientIDMetadataAdmissionMode),
+		TrustedRemoteSessionIssuerID:  trustedIssuerIDParam,
+		TrustedRemoteSessionClientID:  trustedClientIDParam,
+		ID:                            id,
+		OrganizationID:                authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "update organization user session issuer").LogError(ctx, logger)
+	}
+	afterView := UserSessionIssuerView(updated)
+
+	if err := s.audit.LogUserSessionIssuerUpdate(ctx, dbtx, audit.LogUserSessionIssuerUpdateEvent{
+		OrganizationID:                  authCtx.ActiveOrganizationID,
+		ProjectID:                       uuid.Nil,
+		Actor:                           urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:                authCtx.Email,
+		ActorSlug:                       nil,
+		UserSessionIssuerURN:            urn.NewUserSessionIssuer(updated.ID),
+		Slug:                            updated.Slug,
+		UserSessionIssuerSnapshotBefore: beforeView,
+		UserSessionIssuerSnapshotAfter:  afterView,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log organization user session issuer update").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+	return s.issuerView(ctx, updated), nil
+}
+
+// GetIssuerDeletePreflight returns the same live owner set DeleteIssuer uses
+// as its blocking condition, plus informational client and session counts.
+func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orggen.GetIssuerDeletePreflightPayload) (*orggen.OrganizationUserSessionIssuerDeletePreflight, error) {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Read)
+	if err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, s.logger)
+	}
+
+	q := repo.New(s.db)
+	if _, err := q.GetOrganizationUserSessionIssuerByID(ctx, repo.GetOrganizationUserSessionIssuerByIDParams{ID: id, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, s.logger)
+	}
+
+	return organizationIssuerDeletePreflight(ctx, s.logger, q, remotesessionsrepo.New(s.db), s.db, id, authCtx.ActiveOrganizationID)
+}
+
+// DeleteIssuer soft-deletes an organization-owned issuer once no live MCP
+// server or toolset references it.
+func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuerPayload) error {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Admin)
+	if err != nil {
+		return err
+	}
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	// Whether the organization has one organization-level issuer decides
+	// whether its organization gateway fronts every server, so this change
+	// re-decides associations in every project. Their writer scope precedes
+	// every row lock.
+	reconcileScope, err := upstreamclients.LockOrganizationScope(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock organization upstream client writer scope").LogError(ctx, logger)
+	}
+	txRepo := repo.New(dbtx)
+	if err := guardUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
+		return err
+	}
+	if err := txRepo.LockUserSessionIssuerForOwnerBinding(ctx, id); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuer for owner binding").LogError(ctx, logger)
+	}
+	if _, err := txRepo.LockOrganizationUserSessionIssuer(ctx, repo.LockOrganizationUserSessionIssuerParams{ID: id, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock organization user session issuer").LogError(ctx, logger)
+	}
+
+	preflight, err := organizationIssuerDeletePreflight(ctx, logger, txRepo, remotesessionsrepo.New(dbtx), dbtx, id, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return err
+	}
+	if !preflight.CanDelete {
+		return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server or toolset")
+	}
+
+	deleted, err := txRepo.DeleteOrganizationUserSessionIssuer(ctx, repo.DeleteOrganizationUserSessionIssuerParams{ID: id, OrganizationID: authCtx.ActiveOrganizationID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeConflict, err, "user session issuer became referenced during deletion").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "delete organization user session issuer").LogError(ctx, logger)
+	}
+
+	orphanCreds, err := s.revoker.RetireDeletedUserSessionIssuer(ctx, dbtx, deleted.ID, uuid.Nil, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire grants for deleted organization user session issuer").LogError(ctx, logger)
+	}
+	if _, err := txRepo.SoftDeleteUserSessionsByIssuerID(ctx, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete child user sessions").LogError(ctx, logger)
+	}
+	if _, err := txRepo.SoftDeleteUserSessionConsentsByIssuerID(ctx, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete child user session consents").LogError(ctx, logger)
+	}
+	if err := s.audit.LogUserSessionIssuerDelete(ctx, dbtx, audit.LogUserSessionIssuerDeleteEvent{
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            uuid.Nil,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:     authCtx.Email,
+		ActorSlug:            nil,
+		UserSessionIssuerURN: urn.NewUserSessionIssuer(deleted.ID),
+		Slug:                 deleted.Slug,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log organization user session issuer deletion").LogError(ctx, logger)
+	}
+	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
+		if errors.Is(err, upstreamclients.ErrScopeChanged) {
+			return err //nolint:wrapcheck // oops errors pass through.
+		}
+		return oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+	s.revoker.RevokeAllDetached(ctx, orphanCreds)
+	return nil
+}
+
+type organizationIssuerPreflightQueries interface {
+	CountOrganizationUserSessionIssuerClients(context.Context, repo.CountOrganizationUserSessionIssuerClientsParams) (int32, error)
+	CountOrganizationUserSessionIssuerLiveSessions(context.Context, repo.CountOrganizationUserSessionIssuerLiveSessionsParams) (int32, error)
+	ListOrganizationUserSessionIssuerMCPServers(context.Context, repo.ListOrganizationUserSessionIssuerMCPServersParams) ([]repo.ListOrganizationUserSessionIssuerMCPServersRow, error)
+	ListOrganizationUserSessionIssuerToolsets(context.Context, repo.ListOrganizationUserSessionIssuerToolsetsParams) ([]repo.ListOrganizationUserSessionIssuerToolsetsRow, error)
+}
+
+// gatewayDB reads whether the organization gateway is served, so the
+// preflight reports withdrawing it only when deleting this issuer would.
+func organizationIssuerDeletePreflight(ctx context.Context, logger *slog.Logger, q organizationIssuerPreflightQueries, bindings *remotesessionsrepo.Queries, gatewayDB repo.DBTX, id uuid.UUID, organizationID string) (*orggen.OrganizationUserSessionIssuerDeletePreflight, error) {
+	count, err := bindings.CountActiveEMABindingsForUserIssuer(ctx, remotesessionsrepo.CountActiveEMABindingsForUserIssuerParams{IssuerID: id, OrganizationID: organizationID, ProjectID: uuid.Nil})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count identity-chaining bindings").LogError(ctx, logger)
+	}
+	clients, err := q.CountOrganizationUserSessionIssuerClients(ctx, repo.CountOrganizationUserSessionIssuerClientsParams{UserSessionIssuerID: id, OrganizationID: organizationID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count organization user session issuer clients").LogError(ctx, logger)
+	}
+	sessions, err := q.CountOrganizationUserSessionIssuerLiveSessions(ctx, repo.CountOrganizationUserSessionIssuerLiveSessionsParams{UserSessionIssuerID: id, OrganizationID: organizationID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count organization user session issuer live sessions").LogError(ctx, logger)
+	}
+	mcpRows, err := q.ListOrganizationUserSessionIssuerMCPServers(ctx, repo.ListOrganizationUserSessionIssuerMCPServersParams{UserSessionIssuerID: id, OrganizationID: organizationID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization user session issuer MCP servers").LogError(ctx, logger)
+	}
+	toolsetRows, err := q.ListOrganizationUserSessionIssuerToolsets(ctx, repo.ListOrganizationUserSessionIssuerToolsetsParams{UserSessionIssuerID: id, OrganizationID: organizationID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization user session issuer toolsets").LogError(ctx, logger)
+	}
+
+	mcpServers := make([]*orggen.OrganizationUserSessionIssuerReference, 0, len(mcpRows))
+	for _, row := range mcpRows {
+		mcpServers = append(mcpServers, &orggen.OrganizationUserSessionIssuerReference{ID: row.ID.String(), Name: row.Name, ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName})
+	}
+	toolsets := make([]*orggen.OrganizationUserSessionIssuerReference, 0, len(toolsetRows))
+	for _, row := range toolsetRows {
+		toolsets = append(toolsets, &orggen.OrganizationUserSessionIssuerReference{ID: row.ID.String(), Name: row.Name, ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName})
+	}
+	organization, err := orgrepo.New(gatewayDB).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load organization").LogError(ctx, logger)
+	}
+	gatewayIssuerID, _, err := orggateway.Availability(ctx, gatewayDB, organization)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization gateway issuer").LogError(ctx, logger)
+	}
+	return &orggen.OrganizationUserSessionIssuerDeletePreflight{
+		EmaBindingCount:              count,
+		ClientCount:                  int(clients),
+		LiveSessionCount:             int(sessions),
+		McpServers:                   mcpServers,
+		Toolsets:                     toolsets,
+		CanDelete:                    count == 0 && len(mcpServers) == 0 && len(toolsets) == 0,
+		WithdrawsOrganizationGateway: gatewayIssuerID == id,
+	}, nil
+}

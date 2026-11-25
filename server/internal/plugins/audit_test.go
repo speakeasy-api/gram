@@ -31,6 +31,32 @@ func TestPluginsService_CreatePlugin_RecordsAuditEvent(t *testing.T) {
 	require.Equal(t, "plugin", rec.SubjectType)
 	require.Equal(t, created.Name, rec.SubjectDisplay)
 	require.Equal(t, created.Slug, rec.SubjectSlug)
+
+	afterSnap, err := audittest.DecodeAuditData(rec.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, created.Name, afterSnap["name"])
+	require.Equal(t, created.Slug, afterSnap["slug"])
+	require.Equal(t, true, afterSnap["auto_sync_enabled"])
+}
+
+// A plugin created with auto sync off stays out of the marketplace until
+// someone syncs it, so its creation record must say so.
+func TestPluginsService_CreatePlugin_AuditRecordsAutoSyncOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Audit Create Paused", AutoSyncEnabled: new(false)})
+	require.NoError(t, err)
+
+	rec, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionPluginCreate, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, created.Slug, rec.SubjectSlug)
+	require.Empty(t, rec.BeforeSnapshot)
+
+	afterSnap, err := audittest.DecodeAuditData(rec.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, false, afterSnap["auto_sync_enabled"])
 }
 
 func TestPluginsService_UpdatePlugin_RecordsAuditEvent(t *testing.T) {
@@ -296,4 +322,51 @@ func TestPluginsService_PublishPlugins_RecordsAuditEvent(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, slugs, 1)
 	require.Equal(t, plugin.Slug, slugs[0])
+}
+
+func TestPluginsService_UpdateMarketplaceSettings_RecordsAuditEvent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginMarketplaceSettingsUpdate)
+	require.NoError(t, err)
+
+	name := "audit-marketplace"
+	_, err = ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		MarketplaceName: &name,
+	})
+	require.NoError(t, err)
+
+	disabled := false
+	_, err = ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		ObservabilityEnabled: &disabled,
+	})
+	require.NoError(t, err)
+
+	// Re-saving the value already stored changes nothing, so it records nothing.
+	_, err = ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		ObservabilityEnabled: &disabled,
+	})
+	require.NoError(t, err)
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginMarketplaceSettingsUpdate)
+	require.NoError(t, err)
+	require.Equal(t, before+2, after, "each settings change records one entry, a no-op re-save none")
+
+	rec, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionPluginMarketplaceSettingsUpdate)
+	require.NoError(t, err)
+	require.Equal(t, "project", rec.SubjectType)
+
+	// The toggle's snapshots must show observability flipping without losing the
+	// name override the previous update set.
+	beforeSnap, err := audittest.DecodeAuditData(rec.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, true, beforeSnap["observability_enabled"])
+	require.Equal(t, "audit-marketplace", beforeSnap["marketplace_name"])
+
+	afterSnap, err := audittest.DecodeAuditData(rec.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, false, afterSnap["observability_enabled"])
+	require.Equal(t, "audit-marketplace", afterSnap["marketplace_name"])
 }

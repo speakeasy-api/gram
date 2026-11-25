@@ -27,6 +27,7 @@ type Server struct {
 	SkillFeedback      http.Handler
 	Logs               http.Handler
 	Metrics            http.Handler
+	GetStatus          http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -64,6 +65,7 @@ func New(
 			{"SkillFeedback", "POST", "/rpc/hooks.skillFeedback"},
 			{"Logs", "POST", "/rpc/hooks.otel/v1/logs"},
 			{"Metrics", "POST", "/rpc/hooks.otel/v1/metrics"},
+			{"GetStatus", "GET", "/rpc/hooks.getStatus"},
 		},
 		Claude:             NewClaudeHandler(e.Claude, mux, decoder, encoder, errhandler, formatter),
 		Cursor:             NewCursorHandler(e.Cursor, mux, decoder, encoder, errhandler, formatter),
@@ -73,6 +75,7 @@ func New(
 		SkillFeedback:      NewSkillFeedbackHandler(e.SkillFeedback, mux, decoder, encoder, errhandler, formatter),
 		Logs:               NewLogsHandler(e.Logs, mux, decoder, encoder, errhandler, formatter),
 		Metrics:            NewMetricsHandler(e.Metrics, mux, decoder, encoder, errhandler, formatter),
+		GetStatus:          NewGetStatusHandler(e.GetStatus, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -89,6 +92,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SkillFeedback = m(s.SkillFeedback)
 	s.Logs = m(s.Logs)
 	s.Metrics = m(s.Metrics)
+	s.GetStatus = m(s.GetStatus)
 }
 
 // MethodNames returns the methods served.
@@ -104,6 +108,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSkillFeedbackHandler(mux, h.SkillFeedback)
 	MountLogsHandler(mux, h.Logs)
 	MountMetricsHandler(mux, h.Metrics)
+	MountGetStatusHandler(mux, h.GetStatus)
 }
 
 // Mount configures the mux to serve the hooks endpoints.
@@ -512,6 +517,59 @@ func NewMetricsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "metrics")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetStatusHandler configures the mux to serve the "hooks" service
+// "getStatus" endpoint.
+func MountGetStatusHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/hooks.getStatus", f)
+}
+
+// NewGetStatusHandler creates a HTTP handler which loads the HTTP request and
+// calls the "hooks" service "getStatus" endpoint.
+func NewGetStatusHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetStatusRequest(mux, decoder)
+		encodeResponse = EncodeGetStatusResponse(encoder)
+		encodeError    = EncodeGetStatusError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getStatus")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
 		payload, err := decodeRequest(r)
 		if err != nil {

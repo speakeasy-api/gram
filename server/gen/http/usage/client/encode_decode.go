@@ -249,6 +249,486 @@ func DecodeGetPeriodUsageResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildGetMeterUsageRequest instantiates a HTTP request object with method and
+// path set to call the "usage" service "getMeterUsage" endpoint
+func (c *Client) BuildGetMeterUsageRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMeterUsageUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getMeterUsage", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMeterUsageRequest returns an encoder for requests sent to the usage
+// getMeterUsage server.
+func EncodeGetMeterUsageRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetMeterUsagePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getMeterUsage", "*usage.GetMeterUsagePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("family", p.Family)
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		if p.Breakdown != nil {
+			values.Add("breakdown", *p.Breakdown)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetMeterUsageResponse returns a decoder for responses returned by the
+// usage getMeterUsage endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetMeterUsageResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMeterUsageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMeterUsageResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			res := NewGetMeterUsageMeterUsageResponseOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMeterUsageUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMeterUsageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMeterUsageBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMeterUsageNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMeterUsageConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMeterUsageUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMeterUsageInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMeterUsageInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+				}
+				err = ValidateGetMeterUsageInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+				}
+				return nil, NewGetMeterUsageInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMeterUsageUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+				}
+				err = ValidateGetMeterUsageUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+				}
+				return nil, NewGetMeterUsageUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getMeterUsage", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMeterUsageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getMeterUsage", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetSpendBreakdownRequest instantiates a HTTP request object with method
+// and path set to call the "usage" service "getSpendBreakdown" endpoint
+func (c *Client) BuildGetSpendBreakdownRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetSpendBreakdownUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getSpendBreakdown", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetSpendBreakdownRequest returns an encoder for requests sent to the
+// usage getSpendBreakdown server.
+func EncodeGetSpendBreakdownRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetSpendBreakdownPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getSpendBreakdown", "*usage.GetSpendBreakdownPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetSpendBreakdownResponse returns a decoder for responses returned by
+// the usage getSpendBreakdown endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetSpendBreakdownResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetSpendBreakdownResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetSpendBreakdownResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getSpendBreakdown", err)
+			}
+			err = ValidateGetSpendBreakdownResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getSpendBreakdown", err)
+			}
+			res := NewGetSpendBreakdownSpendBreakdownResponseOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetSpendBreakdownUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getSpendBreakdown", err)
+			}
+			err = ValidateGetSpendBreakdownUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getSpendBreakdown", err)
+			}
+			return nil, NewGetSpendBreakdownUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetSpendBreakdownForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getSpendBreakdown", err)
+			}
+			err = ValidateGetSpendBreakdownForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getSpendBreakdown", err)
+			}
+			return nil, NewGetSpendBreakdownForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetSpendBreakdownBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getSpendBreakdown", err)
+			}
+			err = ValidateGetSpendBreakdownBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getSpendBreakdown", err)
+			}
+			return nil, NewGetSpendBreakdownBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetSpendBreakdownNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getSpendBreakdown", err)
+			}
+			err = ValidateGetSpendBreakdownNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getSpendBreakdown", err)
+			}
+			return nil, NewGetSpendBreakdownNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetSpendBreakdownConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getSpendBreakdown", err)
+			}
+			err = ValidateGetSpendBreakdownConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getSpendBreakdown", err)
+			}
+			return nil, NewGetSpendBreakdownConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetSpendBreakdownUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getSpendBreakdown", err)
+			}
+			err = ValidateGetSpendBreakdownUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getSpendBreakdown", err)
+			}
+			return nil, NewGetSpendBreakdownUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetSpendBreakdownInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getSpendBreakdown", err)
+			}
+			err = ValidateGetSpendBreakdownInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getSpendBreakdown", err)
+			}
+			return nil, NewGetSpendBreakdownInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetSpendBreakdownInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getSpendBreakdown", err)
+				}
+				err = ValidateGetSpendBreakdownInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getSpendBreakdown", err)
+				}
+				return nil, NewGetSpendBreakdownInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetSpendBreakdownUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getSpendBreakdown", err)
+				}
+				err = ValidateGetSpendBreakdownUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getSpendBreakdown", err)
+				}
+				return nil, NewGetSpendBreakdownUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getSpendBreakdown", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetSpendBreakdownGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getSpendBreakdown", err)
+			}
+			err = ValidateGetSpendBreakdownGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getSpendBreakdown", err)
+			}
+			return nil, NewGetSpendBreakdownGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getSpendBreakdown", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetTokensUnderManagementRequest instantiates a HTTP request object with
 // method and path set to call the "usage" service "getTokensUnderManagement"
 // endpoint
@@ -2089,13 +2569,14 @@ func DecodeCreateCustomerSessionResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
-// BuildCreateCheckoutRequest instantiates a HTTP request object with method
-// and path set to call the "usage" service "createCheckout" endpoint
-func (c *Client) BuildCreateCheckoutRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateCheckoutUsagePath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
+// BuildGetStripeCheckoutStatusRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "getStripeCheckoutStatus"
+// endpoint
+func (c *Client) BuildGetStripeCheckoutStatusRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetStripeCheckoutStatusUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("usage", "createCheckout", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("usage", "getStripeCheckoutStatus", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -2104,26 +2585,29 @@ func (c *Client) BuildCreateCheckoutRequest(ctx context.Context, v any) (*http.R
 	return req, nil
 }
 
-// EncodeCreateCheckoutRequest returns an encoder for requests sent to the
-// usage createCheckout server.
-func EncodeCreateCheckoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeGetStripeCheckoutStatusRequest returns an encoder for requests sent to
+// the usage getStripeCheckoutStatus server.
+func EncodeGetStripeCheckoutStatusRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*usage.CreateCheckoutPayload)
+		p, ok := v.(*usage.GetStripeCheckoutStatusPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("usage", "createCheckout", "*usage.CreateCheckoutPayload", v)
+			return goahttp.ErrInvalidType("usage", "getStripeCheckoutStatus", "*usage.GetStripeCheckoutStatusPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		values.Add("session_id", p.SessionID)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
 
-// DecodeCreateCheckoutResponse returns a decoder for responses returned by the
-// usage createCheckout endpoint. restoreBody controls whether the response
-// body should be restored after having been read.
-// DecodeCreateCheckoutResponse may return the following errors:
+// DecodeGetStripeCheckoutStatusResponse returns a decoder for responses
+// returned by the usage getStripeCheckoutStatus endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetStripeCheckoutStatusResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -2135,7 +2619,7 @@ func EncodeCreateCheckoutRequest(encoder func(*http.Request) goahttp.Encoder) fu
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeCreateCheckoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeGetStripeCheckoutStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -2152,164 +2636,169 @@ func DecodeCreateCheckoutResponse(decoder func(*http.Response) goahttp.Decoder, 
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body string
+				body GetStripeCheckoutStatusResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
 			}
-			return body, nil
+			err = ValidateGetStripeCheckoutStatusResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
+			}
+			res := NewGetStripeCheckoutStatusResultOK(&body)
+			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body CreateCheckoutUnauthorizedResponseBody
+				body GetStripeCheckoutStatusUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
 			}
-			err = ValidateCreateCheckoutUnauthorizedResponseBody(&body)
+			err = ValidateGetStripeCheckoutStatusUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
 			}
-			return nil, NewCreateCheckoutUnauthorized(&body)
+			return nil, NewGetStripeCheckoutStatusUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body CreateCheckoutForbiddenResponseBody
+				body GetStripeCheckoutStatusForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
 			}
-			err = ValidateCreateCheckoutForbiddenResponseBody(&body)
+			err = ValidateGetStripeCheckoutStatusForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
 			}
-			return nil, NewCreateCheckoutForbidden(&body)
+			return nil, NewGetStripeCheckoutStatusForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body CreateCheckoutBadRequestResponseBody
+				body GetStripeCheckoutStatusBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
 			}
-			err = ValidateCreateCheckoutBadRequestResponseBody(&body)
+			err = ValidateGetStripeCheckoutStatusBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
 			}
-			return nil, NewCreateCheckoutBadRequest(&body)
+			return nil, NewGetStripeCheckoutStatusBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body CreateCheckoutNotFoundResponseBody
+				body GetStripeCheckoutStatusNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
 			}
-			err = ValidateCreateCheckoutNotFoundResponseBody(&body)
+			err = ValidateGetStripeCheckoutStatusNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
 			}
-			return nil, NewCreateCheckoutNotFound(&body)
+			return nil, NewGetStripeCheckoutStatusNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body CreateCheckoutConflictResponseBody
+				body GetStripeCheckoutStatusConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
 			}
-			err = ValidateCreateCheckoutConflictResponseBody(&body)
+			err = ValidateGetStripeCheckoutStatusConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
 			}
-			return nil, NewCreateCheckoutConflict(&body)
+			return nil, NewGetStripeCheckoutStatusConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body CreateCheckoutUnsupportedMediaResponseBody
+				body GetStripeCheckoutStatusUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
 			}
-			err = ValidateCreateCheckoutUnsupportedMediaResponseBody(&body)
+			err = ValidateGetStripeCheckoutStatusUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
 			}
-			return nil, NewCreateCheckoutUnsupportedMedia(&body)
+			return nil, NewGetStripeCheckoutStatusUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body CreateCheckoutInvalidResponseBody
+				body GetStripeCheckoutStatusInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
 			}
-			err = ValidateCreateCheckoutInvalidResponseBody(&body)
+			err = ValidateGetStripeCheckoutStatusInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
 			}
-			return nil, NewCreateCheckoutInvalid(&body)
+			return nil, NewGetStripeCheckoutStatusInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body CreateCheckoutInvariantViolationResponseBody
+					body GetStripeCheckoutStatusInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+					return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
 				}
-				err = ValidateCreateCheckoutInvariantViolationResponseBody(&body)
+				err = ValidateGetStripeCheckoutStatusInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+					return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
 				}
-				return nil, NewCreateCheckoutInvariantViolation(&body)
+				return nil, NewGetStripeCheckoutStatusInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body CreateCheckoutUnexpectedResponseBody
+					body GetStripeCheckoutStatusUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+					return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
 				}
-				err = ValidateCreateCheckoutUnexpectedResponseBody(&body)
+				err = ValidateGetStripeCheckoutStatusUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+					return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
 				}
-				return nil, NewCreateCheckoutUnexpected(&body)
+				return nil, NewGetStripeCheckoutStatusUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("usage", "createCheckout", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("usage", "getStripeCheckoutStatus", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body CreateCheckoutGatewayErrorResponseBody
+				body GetStripeCheckoutStatusGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				return nil, goahttp.ErrDecodingError("usage", "getStripeCheckoutStatus", err)
 			}
-			err = ValidateCreateCheckoutGatewayErrorResponseBody(&body)
+			err = ValidateGetStripeCheckoutStatusGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				return nil, goahttp.ErrValidationError("usage", "getStripeCheckoutStatus", err)
 			}
-			return nil, NewCreateCheckoutGatewayError(&body)
+			return nil, NewGetStripeCheckoutStatusGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("usage", "createCheckout", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("usage", "getStripeCheckoutStatus", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -2342,6 +2831,9 @@ func EncodeCreateStripeCheckoutRequest(encoder func(*http.Request) goahttp.Encod
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		values.Add("theme", p.Theme)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
@@ -2378,14 +2870,19 @@ func DecodeCreateStripeCheckoutResponse(decoder func(*http.Response) goahttp.Dec
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body string
+				body CreateStripeCheckoutResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
 				return nil, goahttp.ErrDecodingError("usage", "createStripeCheckout", err)
 			}
-			return body, nil
+			err = ValidateCreateStripeCheckoutResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createStripeCheckout", err)
+			}
+			res := NewCreateStripeCheckoutStripeEmbeddedCheckoutOK(&body)
+			return res, nil
 		case http.StatusUnauthorized:
 			var (
 				body CreateStripeCheckoutUnauthorizedResponseBody
@@ -3916,6 +4413,105 @@ func DecodeCreateTopUpCheckoutResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// unmarshalMeterUsageWindowResponseBodyToUsageMeterUsageWindow builds a value
+// of type *usage.MeterUsageWindow from a value of type
+// *MeterUsageWindowResponseBody.
+func unmarshalMeterUsageWindowResponseBodyToUsageMeterUsageWindow(v *MeterUsageWindowResponseBody) *usage.MeterUsageWindow {
+	res := &usage.MeterUsageWindow{
+		From: *v.From,
+		To:   *v.To,
+	}
+
+	return res
+}
+
+// unmarshalMeterUsageBucketResponseBodyToUsageMeterUsageBucket builds a value
+// of type *usage.MeterUsageBucket from a value of type
+// *MeterUsageBucketResponseBody.
+func unmarshalMeterUsageBucketResponseBodyToUsageMeterUsageBucket(v *MeterUsageBucketResponseBody) *usage.MeterUsageBucket {
+	res := &usage.MeterUsageBucket{
+		From:  *v.From,
+		To:    *v.To,
+		Total: *v.Total,
+	}
+
+	return res
+}
+
+// unmarshalMeterUsageBreakdownResponseBodyToUsageMeterUsageBreakdown builds a
+// value of type *usage.MeterUsageBreakdown from a value of type
+// *MeterUsageBreakdownResponseBody.
+func unmarshalMeterUsageBreakdownResponseBodyToUsageMeterUsageBreakdown(v *MeterUsageBreakdownResponseBody) *usage.MeterUsageBreakdown {
+	res := &usage.MeterUsageBreakdown{
+		Dimension: *v.Dimension,
+	}
+	res.Series = make([]*usage.MeterUsageSeries, len(v.Series))
+	for i, val := range v.Series {
+		if val == nil {
+			res.Series[i] = nil
+			continue
+		}
+		res.Series[i] = unmarshalMeterUsageSeriesResponseBodyToUsageMeterUsageSeries(val)
+	}
+
+	return res
+}
+
+// unmarshalMeterUsageSeriesResponseBodyToUsageMeterUsageSeries builds a value
+// of type *usage.MeterUsageSeries from a value of type
+// *MeterUsageSeriesResponseBody.
+func unmarshalMeterUsageSeriesResponseBodyToUsageMeterUsageSeries(v *MeterUsageSeriesResponseBody) *usage.MeterUsageSeries {
+	res := &usage.MeterUsageSeries{
+		Kind:  *v.Kind,
+		Key:   v.Key,
+		Label: *v.Label,
+		Total: *v.Total,
+	}
+	res.Values = make([]string, len(v.Values))
+	for i, val := range v.Values {
+		res.Values[i] = val
+	}
+
+	return res
+}
+
+// unmarshalSpendProductResponseBodyToUsageSpendProduct builds a value of type
+// *usage.SpendProduct from a value of type *SpendProductResponseBody.
+func unmarshalSpendProductResponseBodyToUsageSpendProduct(v *SpendProductResponseBody) *usage.SpendProduct {
+	res := &usage.SpendProduct{
+		ID:           *v.ID,
+		Label:        *v.Label,
+		Unit:         *v.Unit,
+		Quantity:     *v.Quantity,
+		RateQuantity: *v.RateQuantity,
+		RateUsd:      *v.RateUsd,
+		CostUsd:      *v.CostUsd,
+	}
+	res.Buckets = make([]*usage.SpendBucket, len(v.Buckets))
+	for i, val := range v.Buckets {
+		if val == nil {
+			res.Buckets[i] = nil
+			continue
+		}
+		res.Buckets[i] = unmarshalSpendBucketResponseBodyToUsageSpendBucket(val)
+	}
+
+	return res
+}
+
+// unmarshalSpendBucketResponseBodyToUsageSpendBucket builds a value of type
+// *usage.SpendBucket from a value of type *SpendBucketResponseBody.
+func unmarshalSpendBucketResponseBodyToUsageSpendBucket(v *SpendBucketResponseBody) *usage.SpendBucket {
+	res := &usage.SpendBucket{
+		From:     *v.From,
+		To:       *v.To,
+		Quantity: *v.Quantity,
+		CostUsd:  *v.CostUsd,
+	}
+
+	return res
+}
+
 // unmarshalTUMPeriodResponseBodyToUsageTUMPeriod builds a value of type
 // *usage.TUMPeriod from a value of type *TUMPeriodResponseBody.
 func unmarshalTUMPeriodResponseBodyToUsageTUMPeriod(v *TUMPeriodResponseBody) *usage.TUMPeriod {
@@ -3972,6 +4568,8 @@ func unmarshalTierLimitsResponseBodyToUsageTierLimits(v *TierLimitsResponseBody)
 		PricePerAdditionalToolCall: *v.PricePerAdditionalToolCall,
 		PricePerAdditionalServer:   *v.PricePerAdditionalServer,
 		TumPricePerMillionUsd:      v.TumPricePerMillionUsd,
+		RiskScanPricePerMillionUsd: v.RiskScanPricePerMillionUsd,
+		McpEgressPricePerGibUsd:    v.McpEgressPricePerGibUsd,
 	}
 	res.FeatureBullets = make([]string, len(v.FeatureBullets))
 	for i, val := range v.FeatureBullets {

@@ -16,8 +16,8 @@ const BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
 // server walks all rows in a single transaction.
 const RECORD_COMPACTION_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Lightweight client used by the runner to pull a per-thread bootstrap
-/// from the management API. The underlying client carries
+/// Lightweight client used by the runner to authenticate every invocation
+/// through per-thread bootstrap from the management API. The underlying client carries
 /// `RetryTransientMiddleware` so transient 5xx / network errors are
 /// retried with exponential backoff before the first turn for an
 /// assistant fails.
@@ -43,6 +43,28 @@ pub enum GramClientError {
 
     #[error("decode response: {0}")]
     Decode(#[from] serde_json::Error),
+}
+
+impl GramClientError {
+    /// Stable class name for logs and spans. Unlike the `Display` text, it
+    /// never carries a response body.
+    pub fn class(&self) -> &'static str {
+        match self {
+            Self::Send(_) => "send",
+            Self::Token => "token",
+            Self::Read(_) => "read",
+            Self::Status { .. } => "status",
+            Self::Decode(_) => "decode",
+        }
+    }
+
+    /// HTTP status of a non-2xx response, if that is what failed.
+    pub fn http_status(&self) -> Option<u16> {
+        match self {
+            Self::Status { status, .. } => Some(*status),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Serialize)]

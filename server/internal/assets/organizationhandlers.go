@@ -26,7 +26,7 @@ import (
 // organization.
 
 func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.UploadOrganizationImageForm, reader io.ReadCloser) (*orggen.UploadImageResult, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close organization image upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -35,18 +35,13 @@ func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.U
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -54,7 +49,7 @@ func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.U
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up organization image upload", func() error {
 		return result.cleanup()
 	})
 

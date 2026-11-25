@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	GetProject               goa.Endpoint
 	CreateProject            goa.Endpoint
+	UpdateProject            goa.Endpoint
 	ListProjects             goa.Endpoint
 	SetLogo                  goa.Endpoint
 	ListAllowedOrigins       goa.Endpoint
@@ -33,6 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		GetProject:               NewGetProjectEndpoint(s, a.APIKeyAuth),
 		CreateProject:            NewCreateProjectEndpoint(s, a.APIKeyAuth),
+		UpdateProject:            NewUpdateProjectEndpoint(s, a.APIKeyAuth),
 		ListProjects:             NewListProjectsEndpoint(s, a.APIKeyAuth),
 		SetLogo:                  NewSetLogoEndpoint(s, a.APIKeyAuth),
 		ListAllowedOrigins:       NewListAllowedOriginsEndpoint(s, a.APIKeyAuth),
@@ -46,6 +48,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetProject = m(e.GetProject)
 	e.CreateProject = m(e.CreateProject)
+	e.UpdateProject = m(e.UpdateProject)
 	e.ListProjects = m(e.ListProjects)
 	e.SetLogo = m(e.SetLogo)
 	e.ListAllowedOrigins = m(e.ListAllowedOrigins)
@@ -121,6 +124,41 @@ func NewCreateProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return s.CreateProject(ctx, p)
+	}
+}
+
+// NewUpdateProjectEndpoint returns an endpoint function that calls the method
+// "updateProject" of service "projects".
+func NewUpdateProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateProjectPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateProject(ctx, p)
 	}
 }
 

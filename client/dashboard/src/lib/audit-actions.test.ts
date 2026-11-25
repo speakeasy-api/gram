@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -41,6 +42,75 @@ function goAuditActions(): string[] {
 }
 
 describe("AUDIT_ACTIONS", () => {
+  it("describes assistant reasoning effort updates", () => {
+    expect(isAuditAction("assistant:update_reasoning_effort")).toBe(true);
+    expect(staticActionPhrase("assistant:update_reasoning_effort")).toBe(
+      "changed the reasoning effort of assistant",
+    );
+  });
+  it.each([
+    ["catalog-promotion:reject", "rejected catalog promotion candidate"],
+    ["catalog-promotion:archive", "archived catalog promotion candidate"],
+    ["catalog-promotion:restore", "restored catalog promotion candidate"],
+  ] as const)("describes candidate curation action %s", (action, phrase) => {
+    expect(isAuditAction(action)).toBe(true);
+    expect(staticActionPhrase(action)).toBe(phrase);
+  });
+  it.each([
+    [
+      "shadow_mcp_official_server:create",
+      "set the official server choice of Shadow MCP server",
+    ],
+    [
+      "shadow_mcp_official_server:update",
+      "changed the official server choice of Shadow MCP server",
+    ],
+    [
+      "shadow_mcp_official_server:delete",
+      "removed the official server choice of Shadow MCP server",
+    ],
+    [
+      "shadow_mcp_official_server:set",
+      "changed the official server choice of Shadow MCP server",
+    ],
+  ] as const)("describes official server action %s", (action, phrase) => {
+    expect(isAuditAction(action)).toBe(true);
+    expect(staticActionPhrase(action)).toBe(phrase);
+  });
+  it("describes catalogue publication and setup documentation retries", () => {
+    expect(isAuditAction("mcp-server:promote-catalogue")).toBe(true);
+    expect(isAuditAction("catalog-promotion:retry-docs")).toBe(true);
+    expect(staticActionPhrase("mcp-server:promote-catalogue")).toBe(
+      "published to the MCP catalog",
+    );
+    expect(staticActionPhrase("catalog-promotion:retry-docs")).toBe(
+      "retried setup documentation for",
+    );
+  });
+  it("describes organization access changes", () => {
+    expect(isAuditAction("organization:enabled")).toBe(true);
+    expect(isAuditAction("organization:disabled")).toBe(true);
+    expect(staticActionPhrase("organization:enabled")).toBe(
+      "enabled organization access for",
+    );
+    expect(staticActionPhrase("organization:disabled")).toBe(
+      "disabled organization access for",
+    );
+  });
+
+  it("distinguishes demo-access whitelisting from disabling an organisation", () => {
+    expect(isAuditAction("organization:whitelist_updated")).toBe(true);
+    expect(staticActionPhrase("organization:whitelist_updated")).toBe(
+      "changed demo-access whitelisting for",
+    );
+  });
+
+  it("describes changed trial end dates", () => {
+    expect(
+      staticActionPhrase("organization:enterprise_trial_end_changed"),
+    ).toBe("changed enterprise trial end date");
+  });
+
   // Guards the exhaustive switch in staticActionPhrase: it only proves every
   // action has a phrase if this list matches what the server can emit.
   it("matches the Action constants declared in server/internal/audit", () => {
@@ -53,6 +123,82 @@ describe("AUDIT_ACTIONS", () => {
       expect(phrase, action).not.toContain(":");
       expect(phrase, action).not.toBe("");
     }
+  });
+
+  it("describes starting a new enterprise trial separately from arming one", () => {
+    expect(staticActionPhrase("organization:enterprise_trial_started")).toBe(
+      "started a new enterprise trial",
+    );
+    expect(staticActionPhrase("organization:enterprise_trial_armed")).toBe(
+      "started enterprise trial",
+    );
+  });
+
+  it("describes binding changes against the audited principal", () => {
+    expect(staticActionPhrase("remote-session:attach")).toBe(
+      "attached a binding to",
+    );
+    expect(staticActionPhrase("remote-session:detach")).toBe(
+      "detached a binding from",
+    );
+  });
+
+  it("describes data export actions", () => {
+    expect(
+      (
+        [
+          "data_export_route:create",
+          "data_export_route:update",
+          "data_export_route:delete",
+          "data_export_route:pause",
+          "data_export_route:resume",
+          "data_export_route:test",
+          "otel_destination:create",
+          "otel_destination:update",
+          "otel_destination:delete",
+        ] as const
+      ).map((action) => staticActionPhrase(action)),
+    ).toEqual([
+      "created data export route",
+      "updated data export route",
+      "deleted data export route",
+      "paused data export route",
+      "resumed data export route",
+      "sent a test event for data export route",
+      "created OpenTelemetry destination",
+      "updated OpenTelemetry destination",
+      "deleted OpenTelemetry destination",
+    ]);
+  });
+
+  it("describes identity provider connection actions with the provider as subject", () => {
+    expect(
+      (
+        [
+          "identity-provider-connection:create",
+          "identity-provider-connection:submit-client-id",
+          "identity-provider-connection:replace-client-secret",
+          "identity-provider-connection:set-setup-method",
+          "identity-provider-connection:verify",
+          "identity-provider-connection:record-agent",
+          "identity-provider-connection:revoke",
+        ] as const
+      ).map((action) => `${staticActionPhrase(action)} okta`),
+    ).toEqual([
+      "connected identity provider okta",
+      "submitted client ID for identity provider okta",
+      "replaced client secret for identity provider okta",
+      "changed setup method for identity provider okta",
+      "verified identity provider connection to okta",
+      "recorded agent for identity provider okta",
+      "revoked identity provider connection to okta",
+    ]);
+  });
+
+  it("names the scope pin the way the dashboard does", () => {
+    expect(staticActionPhrase("mcp-server:update-scope-pin")).toBe(
+      "updated pinned scopes on MCP server",
+    );
   });
 
   it("rejects actions it doesn't know", () => {

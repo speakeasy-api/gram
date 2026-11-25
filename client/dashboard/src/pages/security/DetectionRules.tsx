@@ -17,14 +17,9 @@ import { TextArea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
-import {
-  ArrowLeft,
-  Check,
-  ChevronRight,
-  Loader2,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Sparkles, Trash2 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryState } from "nuqs";
 import { toast } from "sonner";
@@ -41,6 +36,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   BUILTIN_RULES_BY_CATEGORY,
   DETECTION_CEL_EXAMPLES,
+  detectionRulesTabCategories,
   SEVERITY_LEVELS,
   effectiveDetectionExpr,
   ruleSummary,
@@ -57,24 +53,6 @@ import { CelTrafficPreview } from "./cel-traffic-preview";
 import { useCelStatus } from "./use-cel-status";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getCategoryCodeForFinding } from "./risk-utils";
-
-/** Presidio-backed categories: kept in the same order the policy form uses
- *  so users see the two surfaces in the same shape. */
-const PRESIDIO_CATEGORIES: RuleCategory[] = [
-  "financial",
-  "pii",
-  "government_ids",
-  "healthcare",
-];
-
-const BUILTIN_CATEGORY_ORDER: RuleCategory[] = [
-  "secrets",
-  ...PRESIDIO_CATEGORIES,
-  "shadow_mcp",
-  "destructive_tool",
-  "account_identity",
-  "prompt_injection",
-];
 
 const CUSTOM_RULE_ID_PREFIX = "custom.";
 
@@ -182,9 +160,7 @@ function DetectionRulesContent({
     <>
       <div className="space-y-8">
         {customRulesLoading && (
-          <div className="text-muted-foreground text-sm">
-            Loading custom rules...
-          </div>
+          <Skeleton label="Loading custom rules" className="h-16 w-full" />
         )}
         {customRulesError && (
           <div className="text-destructive text-sm">
@@ -203,6 +179,7 @@ function DetectionRulesContent({
         )}
 
         <BuiltinRulesSection
+          categories={detectionRulesTabCategories()}
           expanded={expanded}
           onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
           onSelect={(rule) => setSelected({ kind: "builtin", rule })}
@@ -288,10 +265,12 @@ function CustomRulesSection({
 /* -------------------------------------------------------------------------- */
 
 function BuiltinRulesSection({
+  categories,
   expanded,
   onToggle,
   onSelect,
 }: {
+  categories: RuleCategory[];
   expanded: RuleCategory | "custom" | null;
   onToggle: (cat: RuleCategory) => void;
   onSelect: (rule: BuiltinRule) => void;
@@ -300,7 +279,7 @@ function BuiltinRulesSection({
     <div>
       <div className="text-eyebrow mb-3">Built-in</div>
       <div className="border-border divide-border divide-y border">
-        {BUILTIN_CATEGORY_ORDER.map((cat) => {
+        {categories.map((cat) => {
           const meta = RULE_CATEGORY_META[cat];
           const rules = BUILTIN_RULES_BY_CATEGORY[cat];
           const isExpanded = expanded === cat;
@@ -633,9 +612,7 @@ function CustomRuleDetail({
             }
             onClick={() => void handleSave()}
           >
-            {saveState === "saving" && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
+            {saveState === "saving" && <Spinner />}
             {saveState === "saved" && <Check className="mr-2 h-4 w-4" />}
             {saveLabel}
           </Button>
@@ -744,9 +721,7 @@ function SamplePlayground({
           disabled={sample.trim().length === 0 || mutation.isPending}
           onClick={handleRun}
         >
-          {mutation.isPending ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : null}
+          {mutation.isPending ? <Spinner /> : null}
           Run rule
         </Button>
       </div>
@@ -950,7 +925,7 @@ function ChatPlayground({
   if (chatsQuery.isLoading) {
     return (
       <div className="text-muted-foreground flex items-center gap-2 text-xs">
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <Spinner className="mr-0 h-3 w-3" />
         Loading chats…
       </div>
     );
@@ -1004,7 +979,7 @@ function ChatPlayground({
           disabled={!selectedChat || running}
           onClick={() => void handleRun()}
         >
-          {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {running ? <Spinner /> : null}
           Run on chat
         </Button>
         {overflowWarning && (
@@ -1095,9 +1070,7 @@ function ChatMessageRow({ item }: { item: ChatMessageResult }) {
           </span>
         </span>
         <span className="shrink-0">
-          {item.status === "pending" && (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          )}
+          {item.status === "pending" && <Spinner className="mr-0 h-3 w-3" />}
           {item.status === "error" && (
             <Badge variant="destructive">error</Badge>
           )}
@@ -1379,7 +1352,7 @@ function CreateCustomRuleSheet({
                 onClick={handleSuggest}
               >
                 {suggestMutation.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Spinner />
                 ) : (
                   <Sparkles className="mr-2 h-4 w-4" />
                 )}

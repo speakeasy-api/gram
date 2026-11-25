@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("integrations", func() {
-	Description("Explore third-party tools in Gram.")
+	Description("Explore third-party tools in Speakeasy.")
 	shared.DeclareErrorResponses()
 	Security(security.Session, security.ProjectSlug)
 

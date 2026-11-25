@@ -235,6 +235,37 @@ func PtrToPGInterval(d *time.Duration) pgtype.Interval {
 	return pgtype.Interval{Microseconds: d.Microseconds(), Days: 0, Months: 0, Valid: true}
 }
 
+// PGIntervalToDuration converts an interval, counting a day as 24 hours. It
+// reports false for NULL, a Months component (no fixed length), or overflow.
+func PGIntervalToDuration(iv pgtype.Interval) (time.Duration, bool) {
+	if !iv.Valid || iv.Months != 0 {
+		return 0, false
+	}
+	const dayNanos = int64(24 * time.Hour)
+	const microNanos = int64(time.Microsecond)
+	days, micros := int64(iv.Days), iv.Microseconds
+	if days > math.MaxInt64/dayNanos || days < math.MinInt64/dayNanos ||
+		micros > math.MaxInt64/microNanos || micros < math.MinInt64/microNanos {
+		return 0, false
+	}
+	dayPart, microPart := days*dayNanos, micros*microNanos
+	if (microPart > 0 && dayPart > math.MaxInt64-microPart) ||
+		(microPart < 0 && dayPart < math.MinInt64-microPart) {
+		return 0, false
+	}
+	return time.Duration(dayPart + microPart), true
+}
+
+// FromPGInt8 converts a pgtype.Int8 to an int64 pointer, nil when it is not
+// valid.
+func FromPGInt8(v pgtype.Int8) *int64 {
+	if !v.Valid {
+		return nil
+	}
+
+	return new(v.Int64)
+}
+
 // PtrToPGInt8 converts an int pointer to a pgtype.Int8. If the pointer is nil,
 // the result has Valid set to false.
 func PtrToPGInt8(v *int) pgtype.Int8 {
@@ -495,4 +526,62 @@ func SafeInt(v int64) int {
 		return int(minInt)
 	}
 	return int(v)
+}
+
+// TimeWindowError is a caller-facing complaint about the bounds a request
+// carried. Message names which bound was wrong in the words the client should
+// see, so a handler can pass it straight through rather than flattening every
+// cause into one message and leaving the caller to guess which parameter to
+// fix; the wrapped cause carries the parse detail and stays internal.
+type TimeWindowError struct {
+	Message string
+	cause   error
+}
+
+func (e *TimeWindowError) Error() string { return e.Message }
+
+func (e *TimeWindowError) Unwrap() error { return e.cause }
+
+// ParseOptionalTimeWindow reads the optional RFC 3339 bounds a caller sends to
+// scope a listing to a time range, and reports them as a half-open [from, to).
+//
+// A nil or blank bound is no bound rather than the zero time: the dashboard
+// clears a range by sending the parameter empty, and reading that as year zero
+// would silently filter every row out instead of widening back to everything.
+// Both bounds are normalized to UTC so the comparison a caller builds does not
+// depend on the offset the client happened to send.
+func ParseOptionalTimeWindow(rawFrom, rawTo *string) (from *time.Time, to *time.Time, err error) {
+	parse := func(raw *string, name string) (*time.Time, error) {
+		if raw == nil {
+			return nil, nil
+		}
+		trimmed := strings.TrimSpace(*raw)
+		if trimmed == "" {
+			return nil, nil
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, trimmed)
+		if err != nil {
+			return nil, &TimeWindowError{
+				Message: fmt.Sprintf("invalid %s", name),
+				cause:   fmt.Errorf("parse %s: %w", name, err),
+			}
+		}
+		utc := parsed.UTC()
+		return &utc, nil
+	}
+
+	from, err = parse(rawFrom, "from")
+	if err != nil {
+		return nil, nil, err
+	}
+	to, err = parse(rawTo, "to")
+	if err != nil {
+		return nil, nil, err
+	}
+	// An inverted or empty window is a caller error, not an empty result: it
+	// would otherwise read as "this identity did nothing in that period".
+	if from != nil && to != nil && !from.Before(*to) {
+		return nil, nil, &TimeWindowError{Message: "from must be before to", cause: nil}
+	}
+	return from, to, nil
 }

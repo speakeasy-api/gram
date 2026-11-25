@@ -9,11 +9,12 @@ import {
 } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { Markdown } from "@/elements/components/Markdown";
-import { useRBAC } from "@/hooks/useRBAC";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
@@ -24,6 +25,7 @@ import type { SkillInsightPoint } from "@gram/client/models/components/skillinsi
 import type { SkillVersionInsight } from "@gram/client/models/components/skillversioninsight.js";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
+import { ChatReadAccess } from "@/pages/security/finding-drawer-parts";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
 import { type Column, Table } from "@/components/ui/Table";
@@ -40,6 +42,7 @@ import {
 import { Line } from "react-chartjs-2";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
+import { agentSessionHref } from "@/pages/chatLogs/agentSessionLink";
 import skillEfficacyMethodology from "../../../../../docs/skills/measuring-skill-efficacy.md?raw";
 
 ChartJS.register(
@@ -109,16 +112,22 @@ export function SkillInsightsSection({
   versionLabels: Map<string, string>;
   versionsLoading: boolean;
   versionsError: Error | null;
-}): JSX.Element {
-  const { isLoading: isRBACLoading } = useRBAC();
+}): JSX.Element | null {
+  const project = useProject();
+  const { grants, isLoading: isRBACLoading } = useRBAC();
+  const canReadInsights =
+    !isRBACLoading &&
+    hasScopeInGrants(grants, "project:read", project.id, project.id) &&
+    hasScopeInGrants(grants, "skill:read", project.id, project.id);
   const query = useSkillEfficacyInsights(
     {
       skillIds: [data.skill.id],
       includeVersions: true,
     },
     undefined,
-    { throwOnError: false, enabled: !isRBACLoading },
+    { throwOnError: false, enabled: canReadInsights },
   );
+  if (!canReadInsights) return null;
   return (
     <SettingsSection>
       <SettingsSection.Header>
@@ -297,10 +306,13 @@ export function ScoredSessions({
             </div>
           )}
           {!canReadChats && (
-            <Text small muted>
-              The <code className="font-mono">chat:read</code> scope is required
-              to view session rationale and links.
-            </Text>
+            <div className="flex flex-col items-start gap-2">
+              <Text small muted>
+                The <code className="font-mono">chat:read</code> scope is
+                required to view session rationale and links.
+              </Text>
+              {!isRBACLoading && <ChatReadAccess />}
+            </div>
           )}
           {canReadChats && query.isPending && <SkeletonTable />}
           {canReadChats && query.error && (
@@ -605,7 +617,10 @@ function ScoredSessionsTable({
       render: (session) =>
         session.gramChatId ? (
           <Link
-            to={`${routes.agentSessions.href()}?${new URLSearchParams({ chatId: session.gramChatId })}`}
+            to={agentSessionHref(
+              routes.agentSessions.href(),
+              session.gramChatId,
+            )}
             className="text-primary text-sm underline underline-offset-2"
           >
             Open

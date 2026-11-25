@@ -40,8 +40,7 @@ func nullableText(value string) pgtype.Text {
 // while sharing validation with transport-neutral exclusion administration.
 func validateExclusionMatchValue(matchType, matchValue string) error {
 	if err := exclusioncore.ValidateMatchValue(matchType, matchValue); err != nil {
-		var validation *exclusioncore.ValidationError
-		if errors.As(err, &validation) {
+		if validation, ok := errors.AsType[*exclusioncore.ValidationError](err); ok {
 			return oops.E(oops.CodeInvalid, validation.Cause, "%s", validation.Message)
 		}
 		// Keep a valid Goa error if shared validation gains another typed error
@@ -56,7 +55,7 @@ func (s *Service) ListRiskExclusions(ctx context.Context, payload *gen.ListRiskE
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -80,7 +79,7 @@ func (s *Service) CreateRiskExclusion(ctx context.Context, payload *gen.CreateRi
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	policyID, err := parseExclusionPolicyID(payload.RiskPolicyID)
@@ -116,7 +115,7 @@ func (s *Service) UpdateRiskExclusion(ctx context.Context, payload *gen.UpdateRi
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.ID)
@@ -154,7 +153,7 @@ func (s *Service) DeleteRiskExclusion(ctx context.Context, payload *gen.DeleteRi
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 	id, err := uuid.Parse(payload.ID)

@@ -10,14 +10,13 @@ import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { useSdkClient } from "@/contexts/Sdk";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { CommandBar } from "@/pages/catalog/CommandBar";
 import {
-  type PulseMCPServer,
-  useIsCatalogServerInstalled,
+  type CatalogServer,
+  useCatalogInstallations,
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
+import { McpTabs } from "@/pages/mcp/McpTabs";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { SearchXIcon } from "lucide-react";
@@ -36,18 +35,23 @@ import {
 } from "./catalog-filter-schema";
 import { filterAndSortServers } from "./hooks/serverMetadata";
 import { useFilterState, type SortOption } from "./hooks/useFilterState";
-import { useSelectionState } from "./hooks/useSelectionState";
 import { ServerCard } from "./ServerCard";
 import { ServerTableRow } from "./ServerTableRow";
+import { useCatalogTeamUsage } from "./useCatalogTeamUsage";
 
 // Sort options shown in the toolbar (mirrors the legacy SortDropdown order).
 const CATALOG_SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: "popular", label: "Most Popular" },
   { value: "recent", label: "Recently Released" },
   { value: "updated", label: "Last Updated" },
   { value: "alphabetical", label: "A → Z" },
   { value: "alphabetical-desc", label: "Z → A" },
 ];
+
+// Offered to org admins only, the people who can see Shadow MCP usage.
+const TEAM_USAGE_SORT_OPTION: { value: SortOption; label: string } = {
+  value: "team-usage",
+  label: "Most used by your team",
+};
 
 export function CatalogRoot(): JSX.Element {
   return <Outlet />;
@@ -96,21 +100,20 @@ function CatalogInner() {
     if (attachFailures > 0) {
       toast.error(
         attachFailures === 1
-          ? "An installed server could not be added to the gateway. Add it from the gateway's Members tab."
-          : `${attachFailures} installed servers could not be added to the gateway. Add them from the gateway's Members tab.`,
+          ? "An installed server could not be added to the gateway. Add it from the gateway's overview."
+          : `${attachFailures} installed servers could not be added to the gateway. Add them from the gateway's overview.`,
       );
     }
     // Redirect only when everything worked; otherwise stay so the dialog's
     // per-server results (and the toast above) remain visible.
     if (result.status === "succeeded" && attachFailures === 0) {
-      void navigate(routes.mcp.gateway.members.href(attachToGatewayId));
+      void navigate(routes.mcp.gateway.overview.href(attachToGatewayId));
     }
   };
 
-  // Category + sort stay page state (no UI to change category today; sort is the
-  // SortDropdown). The five granular filters now run through the unified filter
-  // system, which reads/writes the same URL params, so existing links keep
-  // working. We bridge its value object back to the catalog's `FilterValues`
+  // Sort stays page state (the SortDropdown). The granular filters run through
+  // the unified filter system, which reads/writes the same URL params, so
+  // existing links keep working. We bridge its value object back to the catalog's `FilterValues`
   // shape so `filterAndSortServers` is reused unchanged.
   const pageState = useFilterState();
   const dimensionFilters = useDimensionFilters(CATALOG_FILTERS);
@@ -118,18 +121,8 @@ function CatalogInner() {
     () => toCatalogFilterValues(dimensionFilters.values),
     [dimensionFilters.values],
   );
-  const filterState = useMemo(
-    () => ({ category: pageState.category, sort: pageState.sort, filters }),
-    [pageState.category, pageState.sort, filters],
-  );
-
-  // Selection state from URL (persists across navigation)
-  const { selectedServers, toggleServerSelection, clearSelection } =
-    useSelectionState();
-
   const [viewMode, setViewMode] = useViewMode();
-  const [addingServers, setAddingServers] = useState<PulseMCPServer[]>([]);
-  const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
+  const [addingServers, setAddingServers] = useState<CatalogServer[]>([]);
 
   const {
     data,
@@ -137,23 +130,29 @@ function CatalogInner() {
     isFetching,
     refetch: refetchCatalog,
   } = useListMCPCatalog();
-  // Legacy installs live on the deployment's external MCP attachments; new
-  // installs are remote MCP servers matched by endpoint URL. Both mark a
-  // catalog entry as added.
-  const { data: deploymentResult } = useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
-  const externalMcps = deployment?.externalMcps ?? [];
-  const isInstalledByUrl = useIsCatalogServerInstalled();
-  const isServerAdded = (server: PulseMCPServer) =>
-    externalMcps.some(
-      (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
-    ) || isInstalledByUrl(server);
+  const { installState } = useCatalogInstallations();
 
   // The backend returns the full catalog in one response.
   const allServers = useMemo(
-    () => (data?.servers as PulseMCPServer[]) ?? [],
+    () => (data?.servers as CatalogServer[]) ?? [],
     [data],
   );
+
+  // The team's own use of each server, from Shadow MCP. It loads after the
+  // catalog and fills in on the cards; nothing waits for it.
+  const {
+    usage: teamUsage,
+    canSeeUsage,
+    refetch: refetchTeamUsage,
+  } = useCatalogTeamUsage(allServers, !isLoading && allServers.length > 0);
+
+  // Someone who cannot see usage may still open a link sorted by it; they
+  // get the default order and a toolbar that matches it.
+  const sort: SortOption =
+    pageState.sort === "team-usage" && !canSeeUsage
+      ? "alphabetical"
+      : pageState.sort;
+  const filterState = useMemo(() => ({ sort, filters }), [sort, filters]);
 
   // Search, sort, and filter the full catalog client-side.
   const filteredServers = useMemo(() => {
@@ -161,8 +160,9 @@ function CatalogInner() {
       allServers,
       filterState,
       searchQuery || undefined,
+      teamUsage,
     );
-  }, [allServers, filterState, searchQuery]);
+  }, [allServers, filterState, searchQuery, teamUsage]);
 
   // Check if any granular filters are active
   const hasActiveFilters = useMemo(
@@ -170,13 +170,11 @@ function CatalogInner() {
     [filters],
   );
 
-  const getSelectedServerObjects = () =>
-    filteredServers.filter((s) =>
-      selectedServers.has(`${s.registryId}-${s.registrySpecifier}`),
-    );
-
-  const handleAdd = () => {
-    setAddingServers(getSelectedServerObjects());
+  // One server at a time: the card's own Add button opens the install dialog
+  // for that server. The dialog still takes a list, so a future bulk path can
+  // reuse it unchanged.
+  const handleAdd = (server: CatalogServer) => {
+    setAddingServers([server]);
   };
 
   return (
@@ -185,8 +183,8 @@ function CatalogInner() {
         title="MCP Catalog"
         description={
           <>
-            Discover and import official third-party MCP servers to your
-            project. Powered by the official{" "}
+            Discover and import third-party MCP servers to your project. Powered
+            by the{" "}
             <a
               href="https://www.speakeasy.com/product/mcp-gateway/catalog"
               target="_blank"
@@ -198,6 +196,7 @@ function CatalogInner() {
             .
           </>
         }
+        belowHeader={<McpTabs active="catalog" />}
         search={{
           value: searchQuery,
           onChange: setSearchQuery,
@@ -215,12 +214,17 @@ function CatalogInner() {
           onClearAll: dimensionFilters.clearAll,
         }}
         sort={{
-          value: pageState.sort,
+          value: sort,
           onChange: (v) => pageState.setSort(v as SortOption),
-          options: CATALOG_SORT_OPTIONS,
+          options: canSeeUsage
+            ? [TEAM_USAGE_SORT_OPTION, ...CATALOG_SORT_OPTIONS]
+            : CATALOG_SORT_OPTIONS,
         }}
         viewToggle={{ value: viewMode, onChange: setViewMode }}
-        onRefresh={() => void refetchCatalog()}
+        onRefresh={() => {
+          void refetchCatalog();
+          refetchTeamUsage();
+        }}
         isRefreshing={isFetching}
       >
         {/* Server grid / table */}
@@ -231,35 +235,32 @@ function CatalogInner() {
             ))}
           </div>
         ) : viewMode === "grid" ? (
-          <div
-            ref={setGridElement}
-            className="grid grid-cols-1 gap-6 xl:grid-cols-2"
-          >
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             {filteredServers.map((server) => {
               const serverKey = `${server.registryId}-${server.registrySpecifier}`;
               return (
                 <ServerCard
                   key={serverKey}
                   server={server}
-                  detailHref={routes.catalog.detail.href(
+                  detailHref={routes.mcp.catalog.detail.href(
                     encodeURIComponent(server.registrySpecifier),
                   )}
-                  isAdded={isServerAdded(server)}
-                  isSelected={selectedServers.has(serverKey)}
-                  onToggleSelect={() => toggleServerSelection(serverKey)}
+                  installState={installState(server)}
+                  onAdd={() => handleAdd(server)}
+                  teamUsage={teamUsage.get(server.registrySpecifier)}
                 />
               );
             })}
           </div>
         ) : (
-          <div ref={setGridElement}>
+          <div>
             <DotTable
               headers={[
                 { label: "", className: "w-10" },
                 { label: "Name" },
                 { label: "Version" },
                 { label: "Description" },
-                { label: "Tools" },
+                ...(canSeeUsage ? [{ label: "Your team" }] : []),
                 { label: "" },
               ]}
             >
@@ -269,12 +270,13 @@ function CatalogInner() {
                   <ServerTableRow
                     key={serverKey}
                     server={server}
-                    detailHref={routes.catalog.detail.href(
+                    detailHref={routes.mcp.catalog.detail.href(
                       encodeURIComponent(server.registrySpecifier),
                     )}
-                    isAdded={isServerAdded(server)}
-                    isSelected={selectedServers.has(serverKey)}
-                    onToggleSelect={() => toggleServerSelection(serverKey)}
+                    installState={installState(server)}
+                    onAdd={() => handleAdd(server)}
+                    showTeamUsage={canSeeUsage}
+                    teamUsage={teamUsage.get(server.registrySpecifier)}
                   />
                 );
               })}
@@ -285,16 +287,11 @@ function CatalogInner() {
         {/* Empty state */}
         {!isLoading && filteredServers.length === 0 && (
           <EmptySearchResult
-            hasFilters={
-              hasActiveFilters ||
-              filterState.category !== "all" ||
-              searchQuery !== ""
-            }
+            hasFilters={hasActiveFilters || searchQuery !== ""}
             onClear={() => {
               setSearchQuery("");
-              // clearFilters resets category + sort + every filter param in
-              // a single URL update (the unified state re-reads from it),
-              // so a category-filtered empty state isn't left stuck.
+              // clearFilters resets sort + every filter param in a single
+              // URL update (the unified state re-reads from it).
               pageState.clearFilters();
             }}
           />
@@ -302,26 +299,19 @@ function CatalogInner() {
       </ResourceListPage>
 
       <AddServerDialog
+        openProviderSetup={!attachToGatewayId}
+        attachToGatewayId={attachToGatewayId ?? undefined}
         servers={addingServers}
         projectSlug={project.slug}
         open={addingServers.length > 0}
         onOpenChange={(open) => {
-          if (!open) {
-            setAddingServers([]);
-            clearSelection();
-          }
+          if (!open) setAddingServers([]);
         }}
         onInstallFinished={
           attachToGatewayId
             ? (result) => void attachInstalledToGateway(result)
             : undefined
         }
-      />
-      <CommandBar
-        selectedCount={selectedServers.size}
-        onAdd={handleAdd}
-        onClear={clearSelection}
-        containerElement={gridElement}
       />
     </>
   );

@@ -1,9 +1,6 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
-import {
-  computePanelState,
-  getSelectedCollectionCount,
-  type CollectionGroup,
-} from "./computePanelState";
+import { computePanelState, isProjectWideSelector } from "./computePanelState";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
 // --- Helpers ---
@@ -27,55 +24,34 @@ const disposition = (d: string): Selector => ({
 
 // --- Fixtures ---
 
-const collections: CollectionGroup[] = [
-  {
-    id: "col-1",
-    name: "Backend Tools",
-    servers: [
-      {
-        id: "srv-a",
-        tools: [{ name: "create-user" }, { name: "delete-user" }],
-      },
-      { id: "srv-b", tools: [{ name: "send-email" }] },
-    ],
-  },
-  {
-    id: "col-2",
-    name: "Frontend Tools",
-    servers: [
-      { id: "srv-c", tools: [{ name: "deploy" }, { name: "preview" }] },
-    ],
-  },
-];
-
 // --- Tests ---
 
 describe("computePanelState", () => {
   describe("all panel", () => {
     it("null selectors → all panel with correct label", () => {
-      const result = computePanelState(null, [], "mcp");
+      const result = computePanelState(null, "mcp");
       expect(result).toEqual({ activePanel: "all", label: "All servers" });
     });
 
     it("null selectors with project resourceType", () => {
-      const result = computePanelState(null, [], "project");
+      const result = computePanelState(null, "project");
       expect(result).toEqual({ activePanel: "all", label: "All projects" });
     });
 
     it("null selectors with skill resourceType", () => {
-      const result = computePanelState(null, [], "skill");
+      const result = computePanelState(null, "skill");
       expect(result).toEqual({ activePanel: "all", label: "All projects" });
     });
 
-    it("ignores collection data when null", () => {
-      const result = computePanelState(null, collections, "mcp");
-      expect(result.activePanel).toBe("all");
+    it("null selectors with assistant resourceType", () => {
+      const result = computePanelState(null, "assistant");
+      expect(result).toEqual({ activePanel: "all", label: "All assistants" });
     });
   });
 
   describe("servers panel", () => {
     it("empty selectors → servers with Select... label", () => {
-      const result = computePanelState([], [], "mcp");
+      const result = computePanelState([], "mcp");
       expect(result).toEqual({
         activePanel: "servers",
         selectedServerIds: [],
@@ -86,7 +62,6 @@ describe("computePanelState", () => {
     it("server-level selectors → servers panel with IDs", () => {
       const result = computePanelState(
         [server("srv-a"), server("srv-b")],
-        collections,
         "mcp",
       );
       expect(result).toEqual({
@@ -97,7 +72,7 @@ describe("computePanelState", () => {
     });
 
     it("single server → singular label", () => {
-      const result = computePanelState([server("srv-a")], [], "mcp");
+      const result = computePanelState([server("srv-a")], "mcp");
       expect(result).toEqual({
         activePanel: "servers",
         selectedServerIds: ["srv-a"],
@@ -108,7 +83,6 @@ describe("computePanelState", () => {
     it("project resource type uses 'project' noun", () => {
       const result = computePanelState(
         [server("proj-1"), server("proj-2")],
-        [],
         "project",
       );
       expect(result).toEqual({
@@ -124,12 +98,26 @@ describe("computePanelState", () => {
           { resourceKind: "skill", resourceId: "proj-1" },
           { resourceKind: "skill", resourceId: "proj-2" },
         ],
-        [],
         "skill",
       );
       expect(result).toEqual({
         activePanel: "servers",
         selectedServerIds: ["proj-1", "proj-2"],
+        label: "2 projects selected",
+      });
+    });
+
+    it("assistant resource type selects projects through projectId", () => {
+      const result = computePanelState(
+        [
+          { resourceKind: "assistant", resourceId: "*", projectId: "proj-1" },
+          { resourceKind: "assistant", resourceId: "*", projectId: "proj-2" },
+        ] as unknown as Selector[],
+        "assistant",
+      );
+      expect(result).toEqual({
+        activePanel: "projects",
+        selectedProjectIds: ["proj-1", "proj-2"],
         label: "2 projects selected",
       });
     });
@@ -141,7 +129,7 @@ describe("computePanelState", () => {
         { resourceKind: "mcp", resourceId: "*", projectId: "proj-1" },
         { resourceKind: "mcp", resourceId: "*", projectId: "proj-2" },
       ];
-      const result = computePanelState(selectors, [], "mcp");
+      const result = computePanelState(selectors, "mcp");
       expect(result).toEqual({
         activePanel: "projects",
         selectedProjectIds: ["proj-1", "proj-2"],
@@ -153,7 +141,7 @@ describe("computePanelState", () => {
       const selectors: Selector[] = [
         { resourceKind: "mcp", resourceId: "*", projectId: "proj-1" },
       ];
-      const result = computePanelState(selectors, [], "mcp");
+      const result = computePanelState(selectors, "mcp");
       expect(result).toEqual({
         activePanel: "projects",
         selectedProjectIds: ["proj-1"],
@@ -163,12 +151,8 @@ describe("computePanelState", () => {
   });
 
   describe("tools panel — select tab", () => {
-    it("tool selectors with no collection match → tools/select", () => {
-      const result = computePanelState(
-        [tool("srv-a", "create-user")], // partial — doesn't complete a collection
-        collections,
-        "mcp",
-      );
+    it("tool selectors → tools/select", () => {
+      const result = computePanelState([tool("srv-a", "create-user")], "mcp");
       expect(result).toEqual({
         activePanel: "tools",
         tab: "select",
@@ -177,39 +161,12 @@ describe("computePanelState", () => {
         label: "1 tool selected",
       });
     });
-
-    it("multiple tool selectors without collection match", () => {
-      const result = computePanelState(
-        [tool("srv-x", "foo"), tool("srv-x", "bar"), tool("srv-y", "baz")],
-        collections,
-        "mcp",
-      );
-      expect(result.activePanel).toBe("tools");
-      if (result.activePanel === "tools" && result.tab === "select") {
-        expect(result.selectedTools).toHaveLength(3);
-        expect(result.label).toBe("3 tools selected");
-      }
-    });
-
-    it("tool selectors with no collection data → tools", () => {
-      const result = computePanelState(
-        [
-          tool("srv-a", "create-user"),
-          tool("srv-a", "delete-user"),
-          tool("srv-b", "send-email"),
-        ],
-        [], // no collection data available
-        "mcp",
-      );
-      expect(result.activePanel).toBe("tools");
-    });
   });
 
   describe("tools panel — auto-groups tab", () => {
     it("disposition selectors → tools/auto-groups", () => {
       const result = computePanelState(
         [disposition("read_only"), disposition("idempotent")],
-        collections,
         "mcp",
       );
       expect(result).toEqual({
@@ -220,8 +177,21 @@ describe("computePanelState", () => {
       });
     });
 
+    it("counts an unannotated rule the panel has no annotation for", () => {
+      const result = computePanelState(
+        [disposition("read_only"), disposition("unannotated")],
+        "mcp",
+      );
+      expect(result).toEqual({
+        activePanel: "tools",
+        tab: "auto-groups",
+        annotations: ["readOnlyHint"],
+        label: "2 rules selected",
+      });
+    });
+
     it("single disposition → singular label", () => {
-      const result = computePanelState([disposition("destructive")], [], "mcp");
+      const result = computePanelState([disposition("destructive")], "mcp");
       expect(result).toEqual({
         activePanel: "tools",
         tab: "auto-groups",
@@ -231,108 +201,82 @@ describe("computePanelState", () => {
     });
   });
 
-  describe("collection panel", () => {
-    it("selectors matching one full collection → collection panel", () => {
-      const result = computePanelState(
+  describe("a named resource that carries its project", () => {
+    // An agent's server grants name the server and its project together.
+    it("is the resource's, shown on the servers panel", () => {
+      const state = computePanelState(
         [
-          tool("srv-a", "create-user"),
-          tool("srv-a", "delete-user"),
-          tool("srv-b", "send-email"),
+          { ...server("srv-1"), projectId: "proj-1" },
+          { ...server("srv-2"), projectId: "proj-1" },
         ],
-        collections,
         "mcp",
       );
-      expect(result).toEqual({
-        activePanel: "collection",
-        selectedCollectionCount: 1,
-        label: "1 collection selected",
+      expect(state).toMatchObject({
+        activePanel: "servers",
+        selectedServerIds: ["srv-1", "srv-2"],
       });
     });
 
-    it("selectors matching both collections → correct count", () => {
-      const result = computePanelState(
-        [
-          tool("srv-a", "create-user"),
-          tool("srv-a", "delete-user"),
-          tool("srv-b", "send-email"),
-          tool("srv-c", "deploy"),
-          tool("srv-c", "preview"),
-        ],
-        collections,
+    it("leaves a project-wide selector on the projects panel", () => {
+      const state = computePanelState(
+        [{ resourceKind: "mcp", resourceId: "*", projectId: "proj-1" }],
         "mcp",
       );
-      expect(result).toEqual({
-        activePanel: "collection",
-        selectedCollectionCount: 2,
-        label: "2 collections selected",
+      expect(state).toMatchObject({
+        activePanel: "projects",
+        selectedProjectIds: ["proj-1"],
       });
     });
 
-    it("selectors matching one collection plus extra tools → still collection", () => {
-      const result = computePanelState(
-        [
-          tool("srv-a", "create-user"),
-          tool("srv-a", "delete-user"),
-          tool("srv-b", "send-email"),
-          tool("srv-z", "unrelated"),
-        ],
-        collections,
-        "mcp",
+    it("counts a named assistant as an assistant", () => {
+      const state = computePanelState(
+        [{ resourceKind: "assistant", resourceId: "a-1", projectId: "proj-1" }],
+        "assistant",
       );
-      // At least one collection fully matched
-      expect(result.activePanel).toBe("collection");
-      if (result.activePanel === "collection") {
-        expect(result.selectedCollectionCount).toBe(1);
-      }
+      expect(state).toMatchObject({
+        activePanel: "servers",
+        selectedServerIds: ["a-1"],
+        label: "1 assistant selected",
+      });
     });
   });
 });
 
-describe("getSelectedCollectionCount", () => {
-  it("returns 0 for empty selectors", () => {
-    expect(getSelectedCollectionCount([], collections)).toBe(0);
+describe("isProjectWideSelector", () => {
+  it('treats a "*" tool as no constraint', () => {
+    expect(
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "p",
+        tool: "*",
+      }),
+    ).toBe(true);
+    expect(
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "p",
+        tool: "search",
+      }),
+    ).toBe(false);
   });
 
-  it("returns 0 for partial collection match", () => {
+  it("does not treat a disposition or a named resource as project-wide", () => {
     expect(
-      getSelectedCollectionCount([tool("srv-a", "create-user")], collections),
-    ).toBe(0);
-  });
-
-  it("returns 1 for one full collection", () => {
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "p",
+        disposition: "read_only",
+      }),
+    ).toBe(false);
     expect(
-      getSelectedCollectionCount(
-        [
-          tool("srv-a", "create-user"),
-          tool("srv-a", "delete-user"),
-          tool("srv-b", "send-email"),
-        ],
-        collections,
-      ),
-    ).toBe(1);
-  });
-
-  it("returns 2 for both collections", () => {
-    expect(
-      getSelectedCollectionCount(
-        [
-          tool("srv-a", "create-user"),
-          tool("srv-a", "delete-user"),
-          tool("srv-b", "send-email"),
-          tool("srv-c", "deploy"),
-          tool("srv-c", "preview"),
-        ],
-        collections,
-      ),
-    ).toBe(2);
-  });
-
-  it("skips collections with empty tool sets", () => {
-    const emptyCollection: CollectionGroup[] = [
-      { id: "empty", name: "Empty", servers: [{ id: "x", tools: [] }] },
-    ];
-    expect(
-      getSelectedCollectionCount([tool("x", "anything")], emptyCollection),
-    ).toBe(0);
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "server_one",
+        projectId: "p",
+      }),
+    ).toBe(false);
   });
 });

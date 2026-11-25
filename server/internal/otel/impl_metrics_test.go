@@ -66,7 +66,7 @@ func TestMetricsPublishesInboundWithoutEnrichment(t *testing.T) {
 
 	normalized, err := metricFromInbound(published)
 	require.NoError(t, err)
-	rebuilt, err := newMetricRelayExportRequest([]*otelv1.Metric{normalized})
+	rebuilt, err := newMetricRelayExportRequest([]*otelv1.Metric{normalized}, true)
 	require.NoError(t, err)
 	require.True(t, proto.Equal(request, rebuilt), "pipeline must preserve producer metric identity and attributes")
 }

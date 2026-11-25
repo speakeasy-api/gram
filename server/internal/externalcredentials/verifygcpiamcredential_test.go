@@ -48,7 +48,7 @@ func TestVerifyGcpIamCredential_Verified(t *testing.T) {
 }
 
 // A resolution failure is the expected signal that the customer has not granted
-// Gram impersonation rights, so it is a reportable outcome rather than an error.
+// Speakeasy impersonation rights, so it is a reportable outcome rather than an error.
 func TestVerifyGcpIamCredential_NotVerified(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -71,7 +71,7 @@ func TestVerifyGcpIamCredential_NotVerified(t *testing.T) {
 }
 
 // A credential written before this tier required impersonation names no target.
-// Probing it would resolve Gram's ambient identity and report success, which
+// Probing it would resolve Speakeasy's ambient identity and report success, which
 // would say nothing about the credential, so it reports unverified instead.
 func TestVerifyGcpIamCredential_LegacyCredentialWithoutTarget(t *testing.T) {
 	t.Parallel()
@@ -124,7 +124,7 @@ func TestVerifyGcpIamCredential_LegacyWifCredential(t *testing.T) {
 
 // The write-time screening arrived with this endpoint, so rows created earlier
 // were never screened. Verify has to re-apply it or it becomes an oracle for
-// which service accounts in Gram's own project Gram can impersonate.
+// which service accounts in Speakeasy's own project Speakeasy can impersonate.
 func TestVerifyGcpIamCredential_RescreensTargetInGramProject(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -233,14 +233,14 @@ func TestVerifyGcpIamCredential_ForbiddenWithoutEntitlementUnknownID(t *testing.
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-// A screening the server cannot evaluate is Gram's fault, not the customer's, so
+// A screening the server cannot evaluate is Speakeasy's fault, not the customer's, so
 // verify errors rather than reporting the credential unverified.
 func TestVerifyGcpIamCredential_ErrorsWhenScreeningUnevaluatable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
 	// Written through the repo rather than the API: creating through the API
-	// resolves Gram's principal successfully and memoizes it, after which the
+	// resolves Speakeasy's principal successfully and memoizes it, after which the
 	// scripted failure below would never be consulted.
 	created := createGCPCredentialDirect(t, ctx, ti, "gcp-verify-screening-broken", repo.CreateGcpIamCredentialParams{
 		ExternalCredentialID:      uuid.Nil,

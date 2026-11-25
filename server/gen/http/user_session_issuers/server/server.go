@@ -23,6 +23,7 @@ type Server struct {
 	UpdateUserSessionIssuer http.Handler
 	ListUserSessionIssuers  http.Handler
 	GetUserSessionIssuer    http.Handler
+	GetAttachImpact         http.Handler
 	DeleteUserSessionIssuer http.Handler
 }
 
@@ -57,12 +58,14 @@ func New(
 			{"UpdateUserSessionIssuer", "POST", "/rpc/userSessionIssuers.update"},
 			{"ListUserSessionIssuers", "GET", "/rpc/userSessionIssuers.list"},
 			{"GetUserSessionIssuer", "GET", "/rpc/userSessionIssuers.get"},
+			{"GetAttachImpact", "GET", "/rpc/userSessionIssuers.getAttachImpact"},
 			{"DeleteUserSessionIssuer", "DELETE", "/rpc/userSessionIssuers.delete"},
 		},
 		CreateUserSessionIssuer: NewCreateUserSessionIssuerHandler(e.CreateUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 		UpdateUserSessionIssuer: NewUpdateUserSessionIssuerHandler(e.UpdateUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 		ListUserSessionIssuers:  NewListUserSessionIssuersHandler(e.ListUserSessionIssuers, mux, decoder, encoder, errhandler, formatter),
 		GetUserSessionIssuer:    NewGetUserSessionIssuerHandler(e.GetUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		GetAttachImpact:         NewGetAttachImpactHandler(e.GetAttachImpact, mux, decoder, encoder, errhandler, formatter),
 		DeleteUserSessionIssuer: NewDeleteUserSessionIssuerHandler(e.DeleteUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -76,6 +79,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateUserSessionIssuer = m(s.UpdateUserSessionIssuer)
 	s.ListUserSessionIssuers = m(s.ListUserSessionIssuers)
 	s.GetUserSessionIssuer = m(s.GetUserSessionIssuer)
+	s.GetAttachImpact = m(s.GetAttachImpact)
 	s.DeleteUserSessionIssuer = m(s.DeleteUserSessionIssuer)
 }
 
@@ -88,6 +92,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateUserSessionIssuerHandler(mux, h.UpdateUserSessionIssuer)
 	MountListUserSessionIssuersHandler(mux, h.ListUserSessionIssuers)
 	MountGetUserSessionIssuerHandler(mux, h.GetUserSessionIssuer)
+	MountGetAttachImpactHandler(mux, h.GetAttachImpact)
 	MountDeleteUserSessionIssuerHandler(mux, h.DeleteUserSessionIssuer)
 }
 
@@ -289,6 +294,60 @@ func NewGetUserSessionIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getUserSessionIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetAttachImpactHandler configures the mux to serve the
+// "userSessionIssuers" service "getAttachImpact" endpoint.
+func MountGetAttachImpactHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/userSessionIssuers.getAttachImpact", f)
+}
+
+// NewGetAttachImpactHandler creates a HTTP handler which loads the HTTP
+// request and calls the "userSessionIssuers" service "getAttachImpact"
+// endpoint.
+func NewGetAttachImpactHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetAttachImpactRequest(mux, decoder)
+		encodeResponse = EncodeGetAttachImpactResponse(encoder)
+		encodeError    = EncodeGetAttachImpactError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getAttachImpact")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

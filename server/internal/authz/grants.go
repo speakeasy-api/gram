@@ -17,12 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-const (
-	SystemRoleAdmin  = "admin"
-	SystemRoleMember = "member"
-	WildcardResource = "*"
-)
-
 type RoleGrant struct {
 	Scope     string
 	Selectors []Selector
@@ -32,6 +26,10 @@ type Grant struct {
 	PrincipalUrn string
 	Scope        Scope
 	Selector     Selector
+	// Inferred marks a grant provisioned by the default auth permission
+	// backfill that no explicit write has taken over. It allows like any
+	// other grant but never outranks an inherited block.
+	Inferred bool
 }
 
 type ScopedGrant struct {
@@ -40,24 +38,69 @@ type ScopedGrant struct {
 	Selectors []Selector
 }
 
-// GrantsSatisfy reports whether the loaded grant set authorizes check.
+// GrantsSatisfy reports whether the loaded grant set has an allow grant matching
+// check. It intentionally does not evaluate exclusion scopes; callers answering
+// an effective authorization question should use GrantsAuthorize.
 func GrantsSatisfy(grants []Grant, check Check) bool {
 	if err := validateInput(check); err != nil {
+		return false
+	}
+	if personalCheckUnbound(check) {
 		return false
 	}
 	grant, _ := matchingGrant(grants, check.expand())
 	return grant != nil
 }
 
+// GrantsAuthorize evaluates one check against already-loaded grants with the
+// same scope expansion, selector matching, and exclusion semantics as Engine.
+// Read-only projections use this when they need to explain another principal's
+// effective access without replacing the request context's acting principal.
+func GrantsAuthorize(grants []Grant, check Check) (bool, error) {
+	if err := validateInput(check); err != nil {
+		return false, err
+	}
+	evaluation, err := evaluateGrantCheck(grants, check)
+	if err != nil {
+		return false, err
+	}
+	return evaluation.Grant != nil && !evaluation.Denied, nil
+}
+
 // SystemRoleGrants defines the canonical grant sets for the built-in system
 // roles. These are seeded when an organization is provisioned. Existing grants
 // for a built-in role are preserved, and custom roles are never touched.
 var SystemRoleGrants = map[string][]*RoleGrant{
-	SystemRoleAdmin:  roleGrantsForScopes(adminScopes),
-	SystemRoleMember: roleGrantsForScopes(memberScopes),
+	SystemRoleAdmin:  roleGrantsForScopes(systemRoleScopes[SystemRoleAdmin]),
+	SystemRoleMember: roleGrantsForScopes(systemRoleScopes[SystemRoleMember]),
 }
 
-// SeedSystemRoleGrants bootstraps the fixed grant sets for system roles once.
+// SystemRoleAssistantGrants returns the assistant-kind grants from a built-in
+// role's canonical grant set, or nil for any other role slug.
+func SystemRoleAssistantGrants(roleSlug string) []*RoleGrant {
+	var grants []*RoleGrant
+	for _, grant := range SystemRoleGrants[roleSlug] {
+		if ResourceKindForScope(Scope(grant.Scope)) == ResourceKindAssistant {
+			grants = append(grants, &RoleGrant{Scope: grant.Scope, Selectors: nil})
+		}
+	}
+	return grants
+}
+
+// LockRolePrincipalGrants holds the per-role grant write lock until dbtx's
+// transaction ends. PatchRoleGrantsTx takes it, so callers that read a role's
+// grants and then decide what to write can take it first to make that read
+// consistent with every concurrent role edit.
+func LockRolePrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID, principalURN string) error {
+	if err := repo.New(dbtx).LockRolePrincipalGrants(ctx, repo.LockRolePrincipalGrantsParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   principalURN,
+	}); err != nil {
+		return fmt.Errorf("lock grants for %s: %w", principalURN, err)
+	}
+	return nil
+}
+
 func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID string) error {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -76,11 +119,8 @@ func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID 
 	return nil
 }
 
-// SeedSystemRoleGrantsTx seeds the fixed grant sets for system roles using the
-// caller's transaction. Use this when seeding must be atomic with other writes
-// in an existing transaction (e.g. provisioning an org from a WorkOS webhook).
-// Callers that only have a pool should use SeedSystemRoleGrants. Idempotent:
-// roles that already hold grants are skipped.
+// SeedSystemRoleGrantsTx is idempotent: roles that already hold grants are
+// skipped.
 func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
 	q := repo.New(dbtx)
 	for roleSlug, grants := range SystemRoleGrants {
@@ -122,14 +162,16 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 		if err != nil {
 			return fmt.Errorf("resolve %s role principal: %w", roleSlug, err)
 		}
-		existingGrants, err := q.GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
+		// Only permanent grants count as provisioned: a temporary grant given
+		// to the role must not stop its defaults from being written.
+		hasGrants, err := q.HasPermanentPrincipalGrants(ctx, repo.HasPermanentPrincipalGrantsParams{
 			OrganizationID: organizationID,
-			PrincipalUrns:  []string{principal.String()},
+			PrincipalUrn:   principal,
 		})
 		if err != nil {
 			return fmt.Errorf("list %s grants: %w", roleSlug, err)
 		}
-		if len(existingGrants) > 0 {
+		if hasGrants {
 			continue
 		}
 
@@ -150,6 +192,9 @@ func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSl
 	if orgID == "" {
 		return nil, fmt.Errorf("organization id is required")
 	}
+	if err := RequireUpstreamSelectorWritesForGrants(ctx, orgID, addGrants); err != nil {
+		return nil, err
+	}
 
 	principal, err := loadRolePrincipal(ctx, dbtx, orgID, roleSlug, rolePrincipalURN)
 	if err != nil {
@@ -157,7 +202,30 @@ func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSl
 	}
 
 	q := repo.New(dbtx)
-	removeRows, err := flattenRoleGrants(removeGrants)
+	if err := LockRolePrincipalGrants(ctx, dbtx, orgID, principal.String()); err != nil {
+		return nil, err
+	}
+	// An unrestricted removal deletes every wildcard row for the scope, not
+	// only the one this release would write: the editor shows any of them as
+	// "all", so removing "all" has to remove whichever one is stored.
+	var exactRemovals []*RoleGrant
+	for _, grant := range removeGrants {
+		if grant == nil {
+			continue
+		}
+		if grant.Selectors != nil {
+			exactRemovals = append(exactRemovals, grant)
+			continue
+		}
+		if _, err := q.DeletePrincipalWildcardGrants(ctx, repo.DeletePrincipalWildcardGrantsParams{
+			OrganizationID: orgID,
+			PrincipalUrn:   principal,
+			Scope:          grant.Scope,
+		}); err != nil {
+			return nil, fmt.Errorf("delete wildcard grant %q for %s: %w", grant.Scope, principal.Label(), err)
+		}
+	}
+	removeRows, err := flattenRoleGrants(exactRemovals)
 	if err != nil {
 		return nil, err
 	}
@@ -258,6 +326,63 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 	return scoped, nil
 }
 
+// ScopeCoverage says how widely a principal holds one scope: on every
+// resource of its kind, or only on the ones its grants name.
+type ScopeCoverage struct {
+	Scope        Scope
+	Unrestricted bool
+	// Resources keys the selectors of the grants that name some resources
+	// (Selector.Key), so two holdings of the scope compare resource by
+	// resource. Empty when every grant is unrestricted.
+	Resources []string
+}
+
+// ScopeCoverageTx reads, in one query, which scopes each principal holds
+// grants for, whether any of those grants names every resource, and which
+// resources the others name. It reads inside the caller's transaction so a
+// membership change can be compared with the state it replaces. Principals
+// without grants have no entry.
+func ScopeCoverageTx(ctx context.Context, dbtx repo.DBTX, orgID string, principalURNs []string) (map[string][]ScopeCoverage, error) {
+	if len(principalURNs) == 0 {
+		return nil, nil
+	}
+	rows, err := repo.New(dbtx).GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
+		OrganizationID: orgID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list grants for principals: %w", err)
+	}
+	type key struct {
+		principal string
+		scope     Scope
+	}
+	index := make(map[key]int, len(rows))
+	coverage := make(map[string][]ScopeCoverage)
+	for _, row := range rows {
+		selector, err := SelectorFromRow(row.Selectors)
+		if err != nil {
+			return nil, err
+		}
+		principal := row.PrincipalUrn.String()
+		scope := Scope(row.Scope)
+		held := coverage[principal]
+		at, ok := index[key{principal, scope}]
+		if !ok {
+			at = len(held)
+			index[key{principal, scope}] = at
+			held = append(held, ScopeCoverage{Scope: scope, Unrestricted: false, Resources: nil})
+		}
+		if selector.CoversEveryResource() {
+			held[at].Unrestricted = true
+		} else {
+			held[at].Resources = append(held[at].Resources, selector.Key())
+		}
+		coverage[principal] = held
+	}
+	return coverage, nil
+}
+
 func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGrant, error) {
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
@@ -270,6 +395,7 @@ func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGran
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        scope,
 			Selector:     selectors,
+			Inferred:     false,
 		})
 	}
 
@@ -281,7 +407,6 @@ type scopeAgg struct {
 	selectors    []Selector
 }
 
-// GrantsToScopedGrants groups raw grants by scope, collapsing wildcards.
 func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 	grouped := groupGrantsByScope(rows)
 	collapsed := collapseUnrestrictedSelectors(grouped)
@@ -317,7 +442,6 @@ func collapseUnrestrictedSelectors(grouped map[string][]Selector) map[string]sco
 	return collapsed
 }
 
-// sortedScopeKeys gives GrantsToScopedGrants stable output across map iteration.
 func sortedScopeKeys(grouped map[string]scopeAgg) []string {
 	keys := make([]string, 0, len(grouped))
 	for key := range grouped {
@@ -327,8 +451,6 @@ func sortedScopeKeys(grouped map[string]scopeAgg) []string {
 	return keys
 }
 
-// buildScopedGrants converts grouped selectors into the API shape and attaches
-// the transitive sub-scopes for each scope.
 func buildScopedGrants(keys []string, grouped map[string]scopeAgg) []*ScopedGrant {
 	grants := make([]*ScopedGrant, 0, len(keys))
 	for _, key := range keys {
@@ -352,6 +474,9 @@ type grantCheckEvaluation struct {
 }
 
 func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, error) {
+	if personalCheckUnbound(check) {
+		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
+	}
 	grant, matchedCheck := matchingGrant(grants, check.expand())
 	if grant == nil {
 		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
@@ -367,7 +492,17 @@ func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, erro
 		return grantCheckEvaluation{}, fmt.Errorf("evaluate exclusion expression: %w", err)
 	}
 	if !result.Satisfied {
-		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: result.Reason == GrantExpressionReasonExclusionMatched}, nil
+		if result.Reason != GrantExpressionReasonExclusionMatched {
+			return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
+		}
+		overrideGrant, overrideCheck, err := directOverride(grants, check)
+		if err != nil {
+			return grantCheckEvaluation{}, fmt.Errorf("evaluate direct grant override: %w", err)
+		}
+		if overrideGrant != nil {
+			return grantCheckEvaluation{Grant: overrideGrant, Check: overrideCheck, Denied: false}, nil
+		}
+		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: true}, nil
 	}
 
 	return grantCheckEvaluation{Grant: grant, Check: matchedCheck, Denied: false}, nil
@@ -376,20 +511,34 @@ func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, erro
 func matchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 	for i := range grants {
 		grant := &grants[i]
-		for j := range checks {
-			check := &checks[j]
-			if grant.Scope != check.Scope {
-				continue
-			}
-
-			if !check.matchesAllowSelector(grant.Selector) {
-				continue
-			}
+		if check := grantMatchingCheck(grant, checks); check != nil {
 			return grant, check
 		}
 	}
 
 	return nil, nil
+}
+
+func grantMatchingCheck(grant *Grant, checks []Check) *Check {
+	for j := range checks {
+		check := &checks[j]
+		if grant.Scope != check.Scope {
+			continue
+		}
+
+		var matched bool
+		if isAPIKeyGrant(grant) {
+			matched = apiKeyGrantMatches(grant, check)
+		} else {
+			matched = check.matchesAllowSelector(grant.Selector)
+		}
+		if !matched {
+			continue
+		}
+		return check
+	}
+
+	return nil
 }
 
 // allScopeGrants returns wildcard grants for every user-visible scope. Used to
@@ -398,7 +547,8 @@ func matchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 func allScopeGrants() []Grant {
 	grants := make([]Grant, 0, len(scopeVisibilityByScope))
 	for s, visibility := range scopeVisibilityByScope {
-		if visibility != scopeVisibilityUserVisible {
+		// Administering an organization implies no use of its auth clients.
+		if visibility != scopeVisibilityUserVisible || s == ScopeMCPAuth {
 			continue
 		}
 		grants = append(grants, NewGrant(s, WildcardResource))

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"go.opentelemetry.io/otel/metric"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -18,11 +17,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // RiskFindingInserter writes a batch of findings to ClickHouse. *chrepo.Queries
@@ -50,32 +51,32 @@ type RiskFindingInserter interface {
 // read time: rows share their deterministic id and the read paths resolve
 // each id to one winning copy.
 type FindingCHWriter struct {
-	logger        *slog.Logger
-	metrics       *metrics
-	inserter      RiskFindingInserter
-	fingerprinter Fingerprinter
+	logger         *slog.Logger
+	metrics        *metrics
+	inserter       RiskFindingInserter
+	fingerprinter  Fingerprinter
+	builtinPresets *presetlib.Library
+	webhooks       RiskFindingCreatedEmitter
 
-	exclusionsCache *expirable.LRU[string, risk_analysis.ExclusionSet]
+	exclusions    *FindingExclusionResolver
+	policyFilters *findingPolicyFilterResolver
 
-	// db backs the per-batch Postgres reads: exclusion sets and chat message
-	// attribution. A read replica is fine — both are best-effort enrichment.
+	// db backs the per-batch chat-message attribution read.
 	db repo.DBTX
 }
 
-const (
-	exclusionsSetCacheSize = 1000
-	exclusionsSetCacheTTL  = time.Minute
-)
-
-func NewFindingCHWriter(logger *slog.Logger, db repo.DBTX, meterProvider metric.MeterProvider, inserter RiskFindingInserter, fingerprinter Fingerprinter) *FindingCHWriter {
+func NewFindingCHWriter(logger *slog.Logger, db repo.DBTX, meterProvider metric.MeterProvider, inserter RiskFindingInserter, fingerprinter Fingerprinter, builtinPresets *presetlib.Library, webhooks RiskFindingCreatedEmitter) *FindingCHWriter {
 	logger = logger.With(attr.SlogComponent("finding-ch-writer"))
 	return &FindingCHWriter{
-		logger:          logger,
-		metrics:         newMetrics(meterProvider, logger),
-		inserter:        inserter,
-		fingerprinter:   fingerprinter,
-		db:              db,
-		exclusionsCache: expirable.NewLRU[string, risk_analysis.ExclusionSet](exclusionsSetCacheSize, nil, exclusionsSetCacheTTL),
+		logger:         logger,
+		metrics:        newMetrics(meterProvider, logger),
+		inserter:       inserter,
+		fingerprinter:  fingerprinter,
+		builtinPresets: builtinPresets,
+		webhooks:       webhooks,
+		exclusions:     NewFindingExclusionResolver(db),
+		policyFilters:  newFindingPolicyFilterResolver(db),
+		db:             db,
 	}
 }
 
@@ -107,18 +108,18 @@ func (w *FindingCHWriter) HandleBatchWithResult(ctx context.Context, batch []gcp
 func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.Finding) ([]error, error) {
 	logger := w.logger
 	failed := make([]error, len(messages))
+	missingPolicies := make(map[findingPolicyFilterKey]struct{})
 
 	// Cache per-tenant derived keys for the lifetime of this batch so repeated
 	// findings from the same org don't each re-run HKDF.
 	tenantKeyCache := make(map[string][]byte)
 
-	// Batch-resolve the denormalized attribution (chat id, user ids) for every
-	// finding that carries a well-formed anchor — one Postgres query per anchor
-	// kind. Both reads are bounded to the projects present in the batch;
-	// findings whose project id is unparseable contribute nothing, so an
-	// anchor they carry simply resolves no attribution. A query error fails
-	// the batch: attribution is stamped once at ingest, so proceeding through
-	// a transient Postgres blip would persist permanently unattributed rows.
+	// Batch-resolve attribution only for findings without carried attribution
+	// that have a well-formed anchor — one Postgres query per anchor kind.
+	// Both reads are bounded to the projects present in the batch. A query
+	// error fails the batch: fallback attribution is stamped once at ingest,
+	// so a transient Postgres blip must not persist permanently unattributed
+	// legacy rows.
 	projectIDs := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
 		return message.GetProjectId()
 	})
@@ -130,8 +131,14 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 	if err != nil {
 		return nil, err
 	}
+	carriedChatProjects, err := w.carriedChatProjects(ctx, messages)
+	if err != nil {
+		return nil, err
+	}
 
 	rows := make([]chrepo.RiskFindingRow, 0, len(messages))
+	webhookEvents := make([]RiskFindingCreatedEvent, 0, len(messages))
+	webhookFindingIDs := make(map[uuid.UUID]struct{}, len(messages))
 	for msgIdx, message := range messages {
 		orgID := strings.TrimSpace(message.GetOrganizationId())
 		match := message.GetMatch()
@@ -177,6 +184,22 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			}
 		}
 
+		// Suppression state events must land even when the original finding is now filtered.
+		if !deadLetter && eventKind == chrepo.EventKindFinding {
+			filters, err := w.policyFilters.filtersFor(ctx, message, missingPolicies)
+			if err != nil {
+				return nil, fmt.Errorf("resolve finding policy filters: %w", err)
+			}
+			switch {
+			case filters.disabledRules.Contains(message.GetRuleId()):
+				w.metrics.RecordFindingCHFiltered(ctx, "disabled_rule")
+				continue
+			case filters.builtinPresetsEnabled && risk_analysis.IsBuiltinFalsePositive(w.builtinPresets, message.GetSource(), message.GetRuleId(), match):
+				w.metrics.RecordFindingCHFiltered(ctx, "builtin_preset")
+				continue
+			}
+		}
+
 		// Suppression annotation. A message-carried excluded_at (set only on
 		// republished findings recording a manual suppression state change, see
 		// Finding.excluded_at) wins verbatim, reason and detail included. A
@@ -208,7 +231,12 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			excludedReason = message.GetExcludedReason()
 			excludedDetail = message.GetExcludedDetail()
 		} else if !deadLetter {
-			if exID, ok := w.matchedExclusion(ctx, message); ok {
+			exID, excluded, err := w.exclusions.ExcludedBy(ctx, message)
+			if err != nil {
+				// ClickHouse storage remains fail-open: exclusions are
+				// best-effort enrichment on this internal analytics path.
+				logger.ErrorContext(ctx, "evaluate finding exclusions", attr.SlogError(err))
+			} else if excluded {
 				now := time.Now().UTC()
 				excludedAt = &now
 				exclusionID = &exID
@@ -272,13 +300,41 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 		// pre-column rows.
 		var chatID, userID, externalUserID, assistantID, chatSource, team, userEmail string
 		messageCreatedAt := createdAt.UTC()
-		// Only attribute an anchor that belongs to the finding's own project,
-		// so a wrong or forged anchor id cannot pull another tenant's chat and
-		// user ids into this row. A NULL row project_id (project deleted) or
-		// unparseable finding project id is unverifiable and so gets no
-		// attribution.
+		// Presence is authoritative: a producer may intentionally carry empty
+		// values for a gateway-only finding. Only an absent Attribution falls
+		// back to project-bounded lookup from a durable chat anchor.
 		findingProjectID, findingProjectErr := uuid.Parse(message.GetProjectId())
-		if msgID, err := uuid.Parse(chatMessageID); err == nil {
+		if a := message.GetAttribution(); a != nil {
+			chatID = a.GetChatId()
+			userID = a.GetUserId()
+			externalUserID = a.GetExternalUserId()
+			assistantID = a.GetAssistantId()
+			chatSource = chat.CanonicalSource(a.GetChatSource())
+			team = a.GetTeam()
+			userEmail = a.GetUserEmail()
+			// A carried chat is trusted only when it belongs to the finding's
+			// own project, the same rule the anchor lookups apply. Otherwise
+			// every chat-derived field is dropped: the finding still lands,
+			// unattributed, rather than carrying another tenant's user.
+			if chatID != "" {
+				carriedChatID, parseErr := uuid.Parse(chatID)
+				if parseErr != nil || findingProjectErr != nil || carriedChatProjects[carriedChatID] != findingProjectID {
+					logger.WarnContext(ctx, "finding carried a chat outside its project; dropping attribution", attr.SlogProjectID(message.GetProjectId()))
+					w.metrics.RecordFindingCHUnverifiedAttribution(ctx)
+					chatID, userID, externalUserID, assistantID, chatSource, team, userEmail = "", "", "", "", "", "", ""
+				}
+			}
+			if raw := a.GetMessageCreatedAt(); raw != "" {
+				t, err := time.Parse(time.RFC3339, raw)
+				if err != nil {
+					logger.ErrorContext(ctx, "finding has invalid attribution timestamp", attr.SlogError(err))
+					w.metrics.RecordFindingCHSkipped(ctx, "invalid_message_created_at")
+					failed[msgIdx] = fmt.Errorf("parse finding attribution message_created_at: %w", err)
+					continue
+				}
+				messageCreatedAt = t.UTC()
+			}
+		} else if msgID, err := uuid.Parse(chatMessageID); err == nil {
 			if a, ok := messageAttribution[msgID]; ok && findingProjectErr == nil && a.ProjectID.Valid && a.ProjectID.UUID == findingProjectID {
 				chatID = a.ChatID.String()
 				userID = a.UserID
@@ -294,8 +350,6 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 				}
 			}
 		} else if partID, err := uuid.Parse(contentPartID); err == nil {
-			// The part attribution query carries no assistant link or message
-			// timestamp, so both keep the fallbacks above.
 			if a, ok := contentPartAttribution[partID]; ok && findingProjectErr == nil && a.ProjectID.Valid && a.ProjectID.UUID == findingProjectID {
 				chatID = a.ChatID.String()
 				userID = a.UserID
@@ -313,14 +367,13 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			category = string(categories.Classify(message.GetSource(), message.GetRuleId()))
 		}
 
-		// Set only on messages republished by risk.markResultsFalsePositive /
-		// risk.unmarkResultsFalsePositive to append a state-change row for an
-		// already-persisted finding (see enqueueFalsePositiveMirror). Empty
-		// on every finding a scanner produces. A parse failure must skip the
-		// message rather than fall through with falsePositiveAt left nil: this
-		// row would still be appended with a fresh (and so dedup-winning)
-		// inserted_at, silently un-dismissing a finding whose true state this
-		// message never actually conveyed.
+		// Set only on messages that republish an already-persisted finding's
+		// state (the offline risk_results backfill, legacy producers); empty on
+		// every finding a scanner produces. A parse failure must skip the message
+		// rather than fall through with falsePositiveAt left nil: this row would
+		// still be appended with a fresh (and so dedup-winning) inserted_at,
+		// silently un-dismissing a finding whose true state this message never
+		// actually conveyed.
 		var falsePositiveAt *time.Time
 		if raw := message.GetFalsePositiveAt(); raw != "" {
 			t, err := time.Parse(time.RFC3339, raw)
@@ -334,7 +387,7 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			falsePositiveAt = &utc
 		}
 
-		rows = append(rows, chrepo.RiskFindingRow{
+		row := chrepo.RiskFindingRow{
 			ID:                       id,
 			CreatedAt:                createdAt.UTC(),
 			OrganizationID:           message.GetOrganizationId(),
@@ -376,7 +429,34 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			Path:                     message.GetPath(),
 			ToolCallID:               message.GetToolCallId(),
 			EventKind:                eventKind,
-		})
+			Shadow:                   message.GetShadow(),
+			ExecutionID:              message.GetExecution().GetExecutionId(),
+			MCPServerID:              message.GetExecution().GetMcpServerId(),
+			MetaMCPServerID:          message.GetExecution().GetMetaMcpServerId(),
+			ToolsetID:                message.GetExecution().GetToolsetId(),
+			ToolName:                 message.GetExecution().GetToolName(),
+			Phase:                    message.GetExecution().GetPhase(),
+			MediationSurface:         message.GetExecution().GetMediationSurface(),
+			MCPMethod:                message.GetExecution().GetMethod(),
+			PrincipalKind:            message.GetExecution().GetPrincipalKind(),
+			IdentityStamped:          message.GetExecution().GetIdentityStamped(),
+			EnforcementOutcome:       findingEnforcementOutcome(message.GetEnforcementOutcome()),
+		}
+		if w.webhooks != nil {
+			// A bad webhook identity skips only the webhook; the finding is still stored.
+			event, err := riskFindingCreatedWebhook(row)
+			if err != nil {
+				logger.ErrorContext(ctx, "finding has invalid webhook identity, skipping its webhook", attr.SlogError(err))
+				w.metrics.RecordFindingCHWebhookDropped(ctx, "invalid_webhook_identity")
+			}
+			if event != nil {
+				if _, duplicate := webhookFindingIDs[row.ID]; !duplicate {
+					webhookFindingIDs[row.ID] = struct{}{}
+					webhookEvents = append(webhookEvents, *event)
+				}
+			}
+		}
+		rows = append(rows, row)
 	}
 
 	if len(rows) == 0 {
@@ -393,7 +473,53 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 		return nil, fmt.Errorf("insert risk findings batch: %w", err)
 	}
 
+	if w.webhooks != nil {
+		if err := w.webhooks.Emit(ctx, webhookEvents); err != nil {
+			return nil, fmt.Errorf("emit risk finding created webhooks: %w", err)
+		}
+	}
+
 	return failed, nil
+}
+
+func riskFindingCreatedWebhook(row chrepo.RiskFindingRow) (*RiskFindingCreatedEvent, error) {
+	if row.EventKind != chrepo.EventKindFinding || row.Shadow || row.DeadLetterReason != "" || row.ChatMessageID == "" {
+		return nil, nil
+	}
+	if strings.TrimSpace(row.OrganizationID) == "" {
+		return nil, fmt.Errorf("finding %s has no organization id", row.ID)
+	}
+	projectID, err := uuid.Parse(row.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("parse finding %s project id: %w", row.ID, err)
+	}
+	riskPolicyID, err := uuid.Parse(row.RiskPolicyID)
+	if err != nil {
+		return nil, fmt.Errorf("parse finding %s risk policy id: %w", row.ID, err)
+	}
+	chatMessageID, err := uuid.Parse(row.ChatMessageID)
+	if err != nil {
+		return nil, fmt.Errorf("parse finding %s chat message id: %w", row.ID, err)
+	}
+	return &RiskFindingCreatedEvent{
+		OrganizationID: row.OrganizationID,
+		Event: outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1]{
+			ID: events.RiskFindingCreatedEventID(row.ID),
+			Payload: events.RiskFindingCreatedPayloadV1{
+				ID:                row.ID,
+				ProjectID:         projectID,
+				OrganizationID:    row.OrganizationID,
+				RiskPolicyID:      riskPolicyID,
+				RiskPolicyVersion: row.RiskPolicyVersion,
+				ChatMessageID:     chatMessageID,
+				RuleID:            row.RuleID,
+				Description:       row.Description,
+				Confidence:        row.Confidence,
+				Tags:              row.Tags,
+				CreatedAt:         row.CreatedAt,
+			},
+		},
+	}, nil
 }
 
 // chatMessageAttribution batch-fetches the denormalized attribution stamped
@@ -402,6 +528,54 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 // simply get no attribution, but a query error fails the batch for
 // redelivery: attribution is stamped once at ingest and a transient Postgres
 // blip must not persist permanently unattributed rows.
+// carriedChatProjects resolves the project of every chat named by carried
+// attribution in the batch, bounded to the batch's project ids. Without a
+// database nothing can be verified, so every carried chat is unverifiable.
+func (w *FindingCHWriter) carriedChatProjects(ctx context.Context, messages []*riskv1.Finding) (map[uuid.UUID]uuid.UUID, error) {
+	if w.db == nil {
+		return nil, nil
+	}
+	var chatIDs, projectIDs []uuid.UUID
+	seenChats := make(map[uuid.UUID]struct{})
+	seenProjects := make(map[uuid.UUID]struct{})
+	for _, message := range messages {
+		if !message.HasAttribution() {
+			continue
+		}
+		chatID, err := uuid.Parse(message.GetAttribution().GetChatId())
+		if err != nil {
+			continue
+		}
+		projectID, err := uuid.Parse(message.GetProjectId())
+		if err != nil {
+			continue
+		}
+		if _, ok := seenChats[chatID]; !ok {
+			seenChats[chatID] = struct{}{}
+			chatIDs = append(chatIDs, chatID)
+		}
+		if _, ok := seenProjects[projectID]; !ok {
+			seenProjects[projectID] = struct{}{}
+			projectIDs = append(projectIDs, projectID)
+		}
+	}
+	if len(chatIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := repo.New(w.db).ListChatProjectsByIDs(ctx, repo.ListChatProjectsByIDsParams{
+		Ids:        chatIDs,
+		ProjectIds: projectIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("verify carried chat attribution: %w", err)
+	}
+	out := make(map[uuid.UUID]uuid.UUID, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row.ProjectID
+	}
+	return out, nil
+}
+
 func (w *FindingCHWriter) chatMessageAttribution(ctx context.Context, messages []*riskv1.Finding, projectIDs []uuid.UUID) (map[uuid.UUID]repo.GetChatMessageAttributionRow, error) {
 	ids := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
 		return message.GetChatMessageId()
@@ -456,6 +630,9 @@ func findingAnchorIDs(messages []*riskv1.Finding, getRawID func(*riskv1.Finding)
 	ids := make([]uuid.UUID, 0, len(messages))
 	seen := make(map[uuid.UUID]struct{}, len(messages))
 	for _, message := range messages {
+		if message.HasAttribution() {
+			continue
+		}
 		id, err := uuid.Parse(getRawID(message))
 		if err != nil {
 			continue
@@ -472,72 +649,23 @@ func findingAnchorIDs(messages []*riskv1.Finding, getRawID func(*riskv1.Finding)
 	return ids
 }
 
-// matchedExclusion returns the id of the going-forward exclusion that
-// suppresses the finding, and whether one matched, reusing the same matching
-// logic (ExclusionSet) as the Postgres scan path.
-func (w *FindingCHWriter) matchedExclusion(ctx context.Context, message *riskv1.Finding) (uuid.UUID, bool) {
-	set := w.exclusionSetFor(ctx, message.GetProjectId(), message.GetRiskPolicyId())
-	if set.Empty() {
-		return uuid.UUID{}, false
+func findingEnforcementOutcome(outcome riskv1.Finding_EnforcementOutcome) string {
+	switch outcome {
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED:
+		return "logged"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED:
+		return "denied"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD:
+		return "withheld"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_WARNED_PENDING:
+		return "warned_pending"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_WARNED_ACKNOWLEDGED:
+		return "warned_acknowledged"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_WARNED_ABANDONED:
+		return "warned_abandoned"
+	case riskv1.Finding_ENFORCEMENT_OUTCOME_QUARANTINED:
+		return "quarantined"
+	default:
+		return ""
 	}
-	// ExclusionSet.ExcludedBy matches on RuleID, Source and Match only; the
-	// remaining fields are set for completeness (exhaustruct) but unused.
-	return set.ExcludedBy(scanners.Finding{
-		RuleID:              message.GetRuleId(),
-		Description:         message.GetDescription(),
-		Match:               message.GetMatch(),
-		StartPos:            int(message.GetStartPos()),
-		EndPos:              int(message.GetEndPos()),
-		Tags:                message.GetTags(),
-		Source:              message.GetSource(),
-		Confidence:          message.GetConfidence(),
-		DeadLetterReason:    message.GetDeadLetterReason(),
-		McpLookupToolCallID: "",
-		SpanGroupKey:        "",
-		Field:               "",
-		Path:                "",
-	})
-}
-
-// exclusionSetFor resolves the enabled exclusions (the policy's own plus every
-// global one) that apply to a finding's policy, cached per (project, policy)
-// with a TTL so exclusion edits take effect within exclusionsSetCacheTTL
-// without a Postgres read per batch.
-//
-// Fail-open: an empty/unparseable project or policy id, or a lookup error,
-// returns an empty set (nothing excluded) rather than dropping findings. On a
-// lookup error the result is not cached, so the next batch retries.
-func (w *FindingCHWriter) exclusionSetFor(ctx context.Context, projectID, policyID string) risk_analysis.ExclusionSet {
-	if projectID == "" || policyID == "" {
-		return risk_analysis.ExclusionSet{}
-	}
-
-	key := projectID + "#" + policyID
-	if set, ok := w.exclusionsCache.Get(key); ok {
-		return set
-	}
-
-	projectUUID, err := uuid.Parse(projectID)
-	if err != nil {
-		w.logger.ErrorContext(ctx, "finding has invalid project id", attr.SlogError(err), attr.SlogValueString(projectID))
-		return risk_analysis.ExclusionSet{}
-	}
-	policyUUID, err := uuid.Parse(policyID)
-	if err != nil {
-		w.logger.ErrorContext(ctx, "finding has invalid risk policy id", attr.SlogError(err), attr.SlogValueString(policyID))
-		return risk_analysis.ExclusionSet{}
-	}
-
-	exclusions, err := repo.New(w.db).ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
-		ProjectID:    projectUUID,
-		RiskPolicyID: uuid.NullUUID{UUID: policyUUID, Valid: true},
-	})
-	if err != nil {
-		w.logger.ErrorContext(ctx, "list exclusions for policy", attr.SlogError(err), attr.SlogValueString(policyID))
-		return risk_analysis.ExclusionSet{}
-	}
-
-	set := risk_analysis.NewExclusionSet(exclusions)
-	w.exclusionsCache.Add(key, set)
-	return set
 }

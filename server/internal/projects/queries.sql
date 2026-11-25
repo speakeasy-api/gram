@@ -10,12 +10,29 @@ INSERT INTO projects (
 )
 RETURNING *;
 
+-- name: UpdateProject :one
+UPDATE projects
+SET name = @name,
+    updated_at = clock_timestamp()
+WHERE id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: ListProjectsByOrganization :many
 SELECT *
 FROM projects
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY id ASC;
+
+-- name: ListProjectNamesIncludingDeleted :many
+-- Every project of an organization, deleted ones included, for labelling
+-- records written while they existed. The deleted flag says whether the
+-- project still has a page to link to.
+SELECT id, name, slug, deleted
+FROM projects
+WHERE organization_id = @organization_id
+ORDER BY deleted ASC, created_at DESC;
 
 -- name: ListProjectsByOrganizationLimited :many
 SELECT *
@@ -24,6 +41,15 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY id ASC
 LIMIT @limit_value;
+
+-- name: ListProjectsByOrganizationPage :many
+SELECT *
+FROM projects
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND id > @after_id
+ORDER BY id ASC
+LIMIT LEAST(GREATEST(@limit_value::integer, 1), 100);
 
 -- GetFirstProject returns any non-deleted project. Used by the hooks
 -- local-dev session-cache fallback to pick a target project without
@@ -48,12 +74,27 @@ FROM projects
 WHERE id = @id
   AND deleted IS FALSE;
 
+-- name: GetProjectByIDForUpdate :one
+SELECT *
+FROM projects
+WHERE id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetProjectByIDAndOrganizationID :one
 SELECT *
 FROM projects
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: GetProjectByIDAndOrganizationIDForUpdate :one
+SELECT *
+FROM projects
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+FOR UPDATE;
 
 -- name: GetProjectWithOrganizationMetadata :one
 SELECT 
@@ -121,3 +162,23 @@ UPDATE organization_metadata
 SET whitelisted = @whitelisted,
     updated_at = clock_timestamp()
 WHERE id = @organization_id;
+
+-- name: LockProjectForEMADeletion :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE FOR UPDATE;
+
+-- name: CountActiveProjectEMABindings :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = @project_id AND organization_id = @organization_id AND state IS DISTINCT FROM 'unlinked';
+
+-- name: DeleteProjectEMATombstones :exec
+DELETE FROM remote_session_ema_bindings WHERE project_id = @project_id AND organization_id = @organization_id AND state = 'unlinked';
+
+-- name: LockOtherActiveProject :one
+-- FOR SHARE waits for an in-flight project delete, then rechecks the row, so a
+-- concurrently deleted project is not reported as still active.
+SELECT id
+FROM projects
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND id <> @project_id
+LIMIT 1
+FOR SHARE;

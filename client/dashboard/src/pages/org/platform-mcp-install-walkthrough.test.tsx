@@ -82,10 +82,12 @@ describe("PlatformMCPInstallWalkthrough", () => {
       />,
     );
 
-    expect(screen.getByText(/Open \/mcp in Claude Code/)).toBeTruthy();
     expect(
-      screen.getByText(/Restarting Claude Code alone may not/),
+      screen.getByText(
+        /Open \/mcp, select Platform MCP, and choose Authenticate/,
+      ),
     ).toBeTruthy();
+    expect(screen.getByText(/Restarting alone may not/)).toBeTruthy();
   });
 
   it("makes restart conditional for an unknown agent", () => {
@@ -104,6 +106,8 @@ describe("PlatformMCPInstallWalkthrough", () => {
       />,
     );
 
+    const text = document.body.textContent!.replace(/\s+/g, " ");
+    // The quick commands come first.
     expect(
       screen.getByText(
         "/plugin marketplace add https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git",
@@ -112,6 +116,16 @@ describe("PlatformMCPInstallWalkthrough", () => {
     expect(
       screen.getByText("/plugin install speakeasy@speakeasy"),
     ).toBeTruthy();
+    // Auto-update follows: the /plugin toggle for one user, settings for an org.
+    expect(text).toContain("choose Enable auto-update");
+    expect(text).toContain(
+      '"url": "https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git"',
+    );
+    expect(text).toContain('"speakeasy": { "autoUpdate": true,');
+    expect(text).toContain('"enabledPlugins": { "speakeasy@speakeasy": true }');
+    expect(text.indexOf("/plugin install")).toBeLessThan(
+      text.indexOf('"autoUpdate": true'),
+    );
   });
 
   it("clones the OpenCode package into the directory used by the copy step", () => {

@@ -8,8 +8,14 @@
 package types
 
 type ExternalOAuthServerForm struct {
-	// The slug of the external OAuth server
-	Slug Slug
-	// The metadata for the external OAuth server
+	// Optional external OAuth server slug retained for compatibility. Speakeasy
+	// generates one from the toolset slug when omitted.
+	Slug *Slug
+	// JSON object metadata for Speakeasy-hosted compatibility mode. Supply exactly
+	// one of metadata and authorization_server_issuer.
 	Metadata any
+	// Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Speakeasy fetches
+	// and strictly verifies this issuer before persistence. Supply exactly one of
+	// authorization_server_issuer and metadata.
+	AuthorizationServerIssuer *string
 }

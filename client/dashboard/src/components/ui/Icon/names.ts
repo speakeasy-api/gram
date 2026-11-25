@@ -1,9 +1,5 @@
-import dynamicIconImports from "lucide-react/dynamicIconImports";
+import type dynamicIconImports from "lucide-react/dynamicIconImports";
 
-const lucideIconNames = Object.keys(
-  dynamicIconImports,
-) as (keyof typeof dynamicIconImports)[];
-
-export const iconNames = lucideIconNames;
-
-export type IconName = (typeof iconNames)[number];
+// Type-only: importing the map at runtime makes Vite pre-bundle every icon as
+// its own file in dev. See ./index.tsx.
+export type IconName = keyof typeof dynamicIconImports;

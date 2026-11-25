@@ -1,4 +1,5 @@
-import { FC, useCallback, useEffect, useRef, useState } from "react";
+import type { FC } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Wrench } from "lucide-react";
 import * as m from "motion/react-m";
 
@@ -7,8 +8,8 @@ import { useComposerMenuOpen } from "@/elements/hooks/useComposerMenuOpen";
 import { useDensity } from "@/elements/hooks/useDensity";
 import { useRadius } from "@/elements/hooks/useRadius";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
+import type { MentionableTool } from "@/elements/lib/tool-mentions";
 import {
-  MentionableTool,
   detectMentionContext,
   filterToolsByQuery,
   insertToolMention,

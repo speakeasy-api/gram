@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -83,7 +84,7 @@ func seedSharedGrantAcrossIssuers(t *testing.T) (context.Context, sharedGrantFix
 	}
 }
 
-func newTestUpstreamRevoker(t *testing.T, ti *testInstance) *remotesessions.UpstreamRevoker {
+func newTestUpstreamRevoker(t *testing.T, ti *testInstance, signers ...remotesessions.TokenEndpointAssertionSigner) *remotesessions.UpstreamRevoker {
 	t.Helper()
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
@@ -93,8 +94,10 @@ func newTestUpstreamRevoker(t *testing.T, ti *testInstance) *remotesessions.Upst
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
-		testenv.NewEncryptionClient(t),
+		testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), nil,
 		policy,
+		nil,
+		signers...,
 	)
 }
 
@@ -157,7 +160,7 @@ func TestRemoteSessionStatuses_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
 
-func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testing.T) {
+func TestSetAuthClientRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
@@ -168,6 +171,10 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testin
 	requireBoundClient(t, bound, fx.clientID)
 
 	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, true)
+	require.NoError(t, err)
+	require.Zero(t, n, "a compatibility link must not authorize a cross-issuer preference change")
+
+	n, err = fx.mgr.SetAuthClientRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -180,7 +187,7 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testin
 	require.Equal(t, fx.issuerA, active.UserSessionIssuerID)
 }
 
-func TestDisconnectRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
+func TestDisconnectAuthClientRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
@@ -190,26 +197,11 @@ func TestDisconnectRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T)
 
 	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), n)
+	require.Zero(t, n, "a compatibility link must not authorize a cross-issuer disconnect")
 
-	_, err = repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
-		SubjectUrn:            fx.subject,
-		RemoteSessionClientID: fx.clientID,
-	})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-}
-
-func TestSoftDeleteSubjectSessions_FindsGrantMintedByDifferentIssuer(t *testing.T) {
-	t.Parallel()
-
-	ctx, fx := seedSharedGrantAcrossIssuers(t)
-
-	require.Equal(t, fx.issuerA, fx.session.UserSessionIssuerID)
-
-	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.issuerB, fx.projectID, fx.organizationID)
+	n, err = fx.mgr.DisconnectAuthClientRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID)
 	require.NoError(t, err)
-	require.Len(t, creds, 1)
-	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
+	require.Equal(t, int64(1), n)
 
 	_, err = repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            fx.subject,
@@ -285,7 +277,7 @@ func TestSoftDeleteSubjectSessions_DoesNotCrossProjects(t *testing.T) {
 	}))
 	insertRemoteSession(t, ctx, fx.ti.conn, fx.subject, otherUserIssuer.String(), otherClient.ID.String())
 
-	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.session.UserSessionIssuerID, fx.projectID, fx.organizationID)
+	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.session.UserSessionIssuerID, fx.projectID, fx.organizationID, uuid.Nil)
 	require.NoError(t, err)
 	require.Len(t, creds, 1)
 	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
@@ -322,7 +314,7 @@ func TestRemoteSessionStatuses_FindsGrantAfterMintingIssuerSoftDeleted(t *testin
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
 
-func TestSetRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+func TestSetAuthClientRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
@@ -330,7 +322,7 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, true)
+	n, err := fx.mgr.SetAuthClientRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -342,7 +334,7 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *
 	require.True(t, active.AutoRefresh)
 }
 
-func TestDisconnectRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+func TestDisconnectAuthClientRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
@@ -350,7 +342,7 @@ func TestDisconnectRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *test
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	n, err := fx.mgr.DisconnectAuthClientRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -361,23 +353,22 @@ func TestDisconnectRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *test
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-func TestSoftDeleteSubjectSessions_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+func TestSoftDeleteSubjectSessions_DoesNotInferChoiceAfterMintingIssuerSoftDeleted(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
 
 	// The revoke runs through the live sibling issuer: the minting issuer is
-	// gone, so it is never the one a Gram session revoke arrives on.
-	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.issuerB, fx.projectID, fx.organizationID)
+	// gone. Neither the old parent nor the different source proves a choice.
+	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.issuerB, fx.projectID, fx.organizationID, uuid.Nil)
 	require.NoError(t, err)
-	require.Len(t, creds, 1)
-	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
+	require.Empty(t, creds)
 
 	_, err = repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            fx.subject,
 		RemoteSessionClientID: fx.clientID,
 	})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.NoError(t, err)
 }
 
 func TestSoftDeleteSubjectSessions_RevokesGrantOnDetachedClient(t *testing.T) {
@@ -389,7 +380,7 @@ func TestSoftDeleteSubjectSessions_RevokesGrantOnDetachedClient(t *testing.T) {
 	// cascade fires and the upstream tokens stay alive. A revoke arriving on
 	// the detached issuer must still destroy the grant it minted, or it
 	// reports success while the upstream credential survives.
-	detached, err := repo.New(fx.ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+	detached, err := testrepo.New(fx.ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, testrepo.DetachRemoteSessionClientFromUserSessionIssuerParams{
 		RemoteSessionClientID: fx.clientID,
 		UserSessionIssuerID:   fx.issuerA,
 	})
@@ -397,7 +388,7 @@ func TestSoftDeleteSubjectSessions_RevokesGrantOnDetachedClient(t *testing.T) {
 	require.Equal(t, int64(1), detached)
 	requireUnboundClient(t, listBoundClientIDs(t, ctx, fx, fx.issuerA), fx.clientID)
 
-	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.issuerA, fx.projectID, fx.organizationID)
+	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.issuerA, fx.projectID, fx.organizationID, uuid.Nil)
 	require.NoError(t, err)
 	require.Len(t, creds, 1)
 	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
@@ -450,7 +441,7 @@ func TestListClients_ResolvesSharedClientThroughSecondIssuer(t *testing.T) {
 
 	// ListClients is the allowlist ServeConsentAction re-resolves posted
 	// client_id against. A UUID from another project is not returned, so a
-	// crafted form posting it never reaches SetRemoteSessionAutoRefresh.
+	// crafted form posting it never reaches the typed preference write.
 
 	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB)
 	require.NoError(t, err)
@@ -459,7 +450,7 @@ func TestListClients_ResolvesSharedClientThroughSecondIssuer(t *testing.T) {
 	require.False(t, leaked)
 
 	for _, clientID := range bound {
-		n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, clientID, true)
+		n, err := fx.mgr.SetAuthClientRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, clientID, true)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), n)
 	}
@@ -568,6 +559,7 @@ func seedRefreshableSharedGrant(t *testing.T, slug string, handler http.HandlerF
 		ti.conn,
 		enc,
 		policy,
+		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)
@@ -607,7 +599,7 @@ func seedRefreshableSharedGrant(t *testing.T, slug string, handler http.HandlerF
 	require.NoError(t, err)
 	refreshEncStr := refreshEnc
 	subject := urn.NewUserSubject(slug + "-subject")
-	session, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             subject,
 		UserSessionIssuerID:    issuerA,
 		RemoteSessionClientID:  clientID,
@@ -647,11 +639,11 @@ func TestRefreshRemoteSession_DerivesPerClientFallbackResource(t *testing.T) {
 	// The client's sole attached MCP server pins its derived resource.
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-refresh-res", "https://upstream-refresh.example.com/")
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	result, err := fx.mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, int64(1), refreshCount.Load())
-	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://upstream-refresh.example.com"}, captured.Load())
+	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://upstream-refresh.example.com/"}, captured.Load())
 }
 
 // The lazy request-time path must also derive per client, never an
@@ -667,11 +659,11 @@ func TestResolveAccessTokens_DerivesPerClientFallbackResource(t *testing.T) {
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-lazy-res", "https://upstream-lazy.example.com/")
 	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
 
-	tokens, err := fx.mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
+	tokens, err := fx.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 1)
 	require.Equal(t, int64(1), refreshCount.Load())
-	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://upstream-lazy.example.com"}, captured.Load())
+	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://upstream-lazy.example.com/"}, captured.Load())
 }
 
 // tokenPostCapture is the resource param of the last refresh POST; presence
@@ -697,11 +689,11 @@ func newResourceCapturingRefreshHandler(refreshCount *atomic.Int64, captured *at
 // fixture's session via the same upsert the code-exchange callback uses.
 func setStoredSessionResource(t *testing.T, ctx context.Context, fx sharedGrantFixture, resource string) {
 	t.Helper()
-	_, err := repo.New(fx.ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err := repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             fx.subject,
 		UserSessionIssuerID:    fx.session.UserSessionIssuerID,
 		RemoteSessionClientID:  fx.clientID,
-		AccessTokenEncrypted:   fx.session.AccessTokenEncrypted,
+		AccessTokenEncrypted:   fx.session.AccessTokenEncrypted.String,
 		AccessExpiresAt:        fx.session.AccessExpiresAt,
 		RefreshTokenEncrypted:  fx.session.RefreshTokenEncrypted,
 		AuthorizationExpiresAt: fx.session.AuthorizationExpiresAt,
@@ -725,7 +717,7 @@ func TestRefreshRemoteSession_StoredResourceWinsOverDerivation(t *testing.T) {
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-stored-res", "https://derived-loser.example.com/")
 	setStoredSessionResource(t, ctx, fx, "https://stored-winner.example.com")
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	result, err := fx.mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://stored-winner.example.com"}, captured.Load())
@@ -743,7 +735,7 @@ func TestRefreshRemoteSession_AmbiguousDerivationSendsNoResource(t *testing.T) {
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-amb-refresh-1", "https://amb-one.example.com")
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerB, "age-3328-amb-refresh-2", "https://amb-two.example.com")
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	result, err := fx.mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, tokenPostCapture{HasResource: false, Resource: ""}, captured.Load())
@@ -762,7 +754,7 @@ func TestResolveAccessTokens_StoredResourceWinsOverDerivation(t *testing.T) {
 	setStoredSessionResource(t, ctx, fx, "https://stored-lazy.example.com")
 	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
 
-	tokens, err := fx.mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
+	tokens, err := fx.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 1)
 	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://stored-lazy.example.com"}, captured.Load())
@@ -784,7 +776,7 @@ func TestResolveAccessTokens_AmbiguousDerivationSendsNoResource(t *testing.T) {
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerB, "age-3328-lazy-amb-2", "https://amb-two.example.com")
 	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
 
-	tokens, err := fx.mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
+	tokens, err := fx.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 1)
 	require.Equal(t, tokenPostCapture{HasResource: false, Resource: ""}, captured.Load())
@@ -802,7 +794,7 @@ func TestResolveAccessToken_ExplicitFallbackSkipsDerivation(t *testing.T) {
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-explicit-fb", "https://derived-unused.example.com/")
 	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
 
-	token, err := fx.mgr.ResolveAccessToken(ctx, fx.clientID, fx.subject, "https://caller-fallback.example.com")
+	token, err := fx.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, fx.clientID, fx.subject, "https://caller-fallback.example.com")
 	require.NoError(t, err)
 	require.Equal(t, "rotated-explicit-fb", token)
 	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://caller-fallback.example.com"}, captured.Load())
@@ -817,7 +809,7 @@ func TestRefreshRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	result, err := fx.mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-access", result.AccessToken)
@@ -839,7 +831,7 @@ func TestRefreshRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	result, err := fx.mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-after-delete", result.AccessToken)

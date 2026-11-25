@@ -1,8 +1,5 @@
-// challenge_scope_e2e_test.go drives ListClients → BuildAuthorizationUrl
-// against a real ChallengeManager + database to assert that the upstream
-// `scope` query parameter is sourced from the remote_session_client's
-// stored scope when present and otherwise falls back to the remote
-// issuer's scopes_supported.
+// End-to-end coverage of the upstream scope parameter: the client scope as
+// set, else the issuer's scopes_supported.
 
 package remotesessions_test
 
@@ -36,10 +33,16 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 		expectedScope string
 	}{
 		{
-			name:          "client scope override wins over issuer scopes_supported",
+			name:          "client scope is sent as set though the issuer advertises standard scopes",
 			clientScope:   []string{"read:tools", "write:tools"},
 			issuerScopes:  []string{"openid", "profile", "email"},
 			expectedScope: "read:tools write:tools",
+		},
+		{
+			name:          "client scope stays narrow when the issuer advertises no standard scope",
+			clientScope:   []string{"read:tools"},
+			issuerScopes:  []string{"read:tools", "write:tools", "admin"},
+			expectedScope: "read:tools",
 		},
 		{
 			name:          "absent client scope falls back to issuer scopes_supported",
@@ -70,6 +73,7 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 				ti.conn,
 				enc,
 				policy,
+				nil,
 				cache.NoopCache,
 				mustURL(t, "http://localhost"),
 			)
@@ -95,7 +99,7 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 
 			userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-scope-"+slugSuffix)
 
-			client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+			client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 				OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 				RemoteSessionIssuerID:   issuer.ID,
@@ -166,6 +170,7 @@ func TestBuildAuthorizationUrl_OrgLevelIssuer(t *testing.T) {
 		ti.conn,
 		enc,
 		policy,
+		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)

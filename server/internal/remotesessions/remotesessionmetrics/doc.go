@@ -1,7 +1,7 @@
 // Package remotesessionmetrics holds the metric instruments for the remote
-// sessions subsystem — the outbound OAuth legs where Gram acts as an OAuth
+// sessions subsystem — the outbound OAuth legs where Speakeasy acts as an OAuth
 // client against a customer's upstream identity provider. The inbound leg,
-// where MCP clients authorize against Gram itself, is instrumented separately
+// where MCP clients authorize against Speakeasy itself, is instrumented separately
 // in internal/mcp/mcpmetrics.
 //
 // Every instrument here is an unsampled counter rather than a span attribute:

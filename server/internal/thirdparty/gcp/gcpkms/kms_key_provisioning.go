@@ -1,0 +1,327 @@
+package gcpkms
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"cloud.google.com/go/iam"
+	kms "cloud.google.com/go/kms/apiv1"
+	kmspb "cloud.google.com/go/kms/apiv1/kmspb"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+)
+
+// keyGenerationPollInterval is how often a freshly created version is
+// re-read while GCP generates its material. Asymmetric versions start in
+// PENDING_GENERATION and typically enable within a few seconds.
+const keyGenerationPollInterval = time.Second
+
+// keyGenerationTimeout bounds the wait for a version to enable. A version
+// still pending after this is a provider problem, reported rather than waited
+// out on a request-shaped budget.
+const keyGenerationTimeout = 2 * time.Minute
+
+// keyCleanupTimeout bounds reconciliation independently of the failed request.
+const keyCleanupTimeout = 10 * time.Second
+
+// CreateSigningKey creates the key and waits for its first version to leave
+// PENDING_GENERATION. The version name returned is what Speakeasy records; the key
+// name is what IAM bindings attach to.
+func (c *kmsSigningClient) CreateSigningKey(ctx context.Context, params CreateSigningKeyParams) (*CreatedSigningKey, error) {
+	if err := validateCreateSigningKeyParams(params); err != nil {
+		return nil, err
+	}
+
+	kmsAlg, err := kmsAlgorithmForJOSE(params.Algorithm)
+	if err != nil {
+		return nil, err
+	}
+
+	key, err := c.kms.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
+		Parent:      params.KeyRing,
+		CryptoKeyId: params.KeyID,
+		CryptoKey: &kmspb.CryptoKey{
+			Name:             "",
+			Primary:          nil,
+			Purpose:          kmspb.CryptoKey_ASYMMETRIC_SIGN,
+			CreateTime:       nil,
+			NextRotationTime: nil,
+			RotationSchedule: nil,
+			VersionTemplate: &kmspb.CryptoKeyVersionTemplate{
+				ProtectionLevel: kmspb.ProtectionLevel_SOFTWARE,
+				Algorithm:       kmsAlg,
+			},
+			Labels:                        nil,
+			ImportOnly:                    false,
+			DestroyScheduledDuration:      nil,
+			CryptoKeyBackend:              "",
+			KeyAccessJustificationsPolicy: nil,
+		},
+		SkipInitialVersionCreation: false,
+	})
+	if err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			return nil, fmt.Errorf("%w: %s in %s", ErrKeyExists, params.KeyID, params.KeyRing)
+		}
+		if isTransientKMSError(err) || ctx.Err() != nil {
+			// GCP may have persisted the key even though the response was lost;
+			// the name is deterministic, so reconcile the version we would own.
+			keyName := params.KeyRing + "/cryptoKeys/" + params.KeyID
+			versionName := firstKeyVersionName(keyName)
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
+			defer cancel()
+			if cleanupErr := c.reconcileUncertainCreate(cleanupCtx, versionName); cleanupErr != nil {
+				return nil, fmt.Errorf("gcp kms key %s may exist, version %s requires reconciliation (%w): %w", keyName, versionName, cleanupErr, err)
+			}
+			return nil, fmt.Errorf("gcp kms key %s may exist, version %s was disabled if present: %w", keyName, versionName, err)
+		}
+		return nil, fmt.Errorf("create gcp kms crypto key: %w", err)
+	}
+
+	keyName := key.GetName()
+	if keyName == "" {
+		return nil, errors.New("create gcp kms crypto key: response omitted the key name")
+	}
+	versionName := firstKeyVersionName(keyName)
+
+	if err := c.awaitVersionEnabled(ctx, versionName); err != nil {
+		// The key already exists even though provisioning failed. Do not use the
+		// request's cancellation/deadline for the compensating operation.
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
+		defer cancel()
+		if cleanupErr := c.reconcileFailedKeyGeneration(cleanupCtx, versionName); cleanupErr != nil {
+			// Preserve both resource names for manual reconciliation. Wrapping the
+			// original error keeps cancellation and gRPC status checks working.
+			return nil, fmt.Errorf("created gcp kms key %s, version %s requires reconciliation (%w): %w", keyName, versionName, cleanupErr, err)
+		}
+		return nil, fmt.Errorf("created gcp kms key %s, version %s is unusable after failed provisioning: %w", keyName, versionName, err)
+	}
+
+	return &CreatedSigningKey{KeyName: keyName, KeyVersionName: versionName}, nil
+}
+
+// reconcileUncertainCreate disables the version of a key whose create response
+// was lost. NotFound means the create never landed and nothing needs doing.
+func (c *kmsSigningClient) reconcileUncertainCreate(ctx context.Context, versionName string) error {
+	_, err := c.kms.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: versionName})
+	switch {
+	case status.Code(err) == codes.NotFound:
+		return nil
+	case err != nil && !isTransientKMSError(err):
+		return fmt.Errorf("read gcp kms version after uncertain create: %w", err)
+	}
+	return c.reconcileFailedKeyGeneration(ctx, versionName)
+}
+
+// reconcileFailedKeyGeneration makes the new version unusable. CryptoKey
+// containers cannot be deleted. GCP forbids disabling/destroying a version in
+// PENDING_GENERATION, so wait for generation before attempting a state update.
+// The caller must supply a bounded context independent of the failed request.
+func (c *kmsSigningClient) reconcileFailedKeyGeneration(ctx context.Context, versionName string) error {
+	for {
+		version, err := c.kms.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: versionName})
+		switch {
+		case ctx.Err() != nil:
+			return fmt.Errorf("reconcile gcp kms version: %w", ctx.Err())
+		case err == nil:
+			switch state := version.GetState(); state {
+			case kmspb.CryptoKeyVersion_ENABLED:
+				return disableKeyVersion(ctx, c.kms, versionName)
+			case kmspb.CryptoKeyVersion_DISABLED, kmspb.CryptoKeyVersion_DESTROY_SCHEDULED,
+				kmspb.CryptoKeyVersion_DESTROYED, kmspb.CryptoKeyVersion_GENERATION_FAILED:
+				return nil
+			case kmspb.CryptoKeyVersion_PENDING_GENERATION:
+			default:
+				return fmt.Errorf("cannot reconcile gcp kms version in state %s", state)
+			}
+		case isTransientKMSError(err):
+		default:
+			return fmt.Errorf("read gcp kms version for reconciliation: %w", err)
+		}
+
+		timer := time.NewTimer(c.keyGenerationPoll)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("reconcile gcp kms version: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+}
+
+// awaitVersionEnabled polls a version until GCP reports it ENABLED. Any other
+// terminal state is an error: a version that was disabled or destroyed out
+// from under a create can never sign. Transient read failures are retried
+// within the same timeout budget.
+func (c *kmsSigningClient) awaitVersionEnabled(ctx context.Context, versionName string) error {
+	ctx, cancel := context.WithTimeout(ctx, keyGenerationTimeout)
+	defer cancel()
+
+	for {
+		version, err := c.kms.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: versionName})
+		switch {
+		case err == nil:
+			switch state := version.GetState(); state {
+			case kmspb.CryptoKeyVersion_ENABLED:
+				return nil
+			case kmspb.CryptoKeyVersion_PENDING_GENERATION:
+			default:
+				return fmt.Errorf("gcp kms crypto key version %s is %s, expected ENABLED", versionName, state)
+			}
+		case ctx.Err() != nil:
+			return fmt.Errorf("wait for gcp kms crypto key version %s to enable: %w", versionName, ctx.Err())
+		case isTransientKMSError(err):
+		default:
+			return fmt.Errorf("get gcp kms crypto key version %s: %w", versionName, err)
+		}
+
+		timer := time.NewTimer(c.keyGenerationPoll)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("wait for gcp kms crypto key version %s to enable: %w", versionName, ctx.Err())
+		case <-timer.C:
+		}
+	}
+}
+
+// isTransientKMSError reports the gRPC codes worth retrying a poll on.
+func isTransientKMSError(err error) bool {
+	switch status.Code(err) {
+	case codes.Unavailable, codes.DeadlineExceeded, codes.ResourceExhausted:
+		return true
+	default:
+		return false
+	}
+}
+
+// DisableKeyVersion moves a version to DISABLED. A version already disabled,
+// scheduled for destruction or destroyed can't sign either, so it counts as
+// done.
+func (c *kmsSigningClient) DisableKeyVersion(ctx context.Context, versionName string) error {
+	return disableKeyVersion(ctx, c.kms, versionName)
+}
+
+// disableKeyVersion moves a version to DISABLED. A version already disabled,
+// scheduled for destruction or destroyed is unusable either way, so it counts
+// as done.
+func disableKeyVersion(ctx context.Context, client *kms.KeyManagementClient, versionName string) error {
+	if err := ValidateKeyVersionName(versionName); err != nil {
+		return err
+	}
+
+	_, err := client.UpdateCryptoKeyVersion(ctx, &kmspb.UpdateCryptoKeyVersionRequest{
+		CryptoKeyVersion: &kmspb.CryptoKeyVersion{
+			Name:                             versionName,
+			State:                            kmspb.CryptoKeyVersion_DISABLED,
+			ProtectionLevel:                  kmspb.ProtectionLevel_PROTECTION_LEVEL_UNSPECIFIED,
+			Algorithm:                        kmspb.CryptoKeyVersion_CRYPTO_KEY_VERSION_ALGORITHM_UNSPECIFIED,
+			Attestation:                      nil,
+			CreateTime:                       nil,
+			GenerateTime:                     nil,
+			DestroyTime:                      nil,
+			DestroyEventTime:                 nil,
+			ImportJob:                        "",
+			ImportTime:                       nil,
+			ImportFailureReason:              "",
+			GenerationFailureReason:          "",
+			ExternalDestructionFailureReason: "",
+			ExternalProtectionLevelOptions:   nil,
+			ReimportEligible:                 false,
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}},
+	})
+	if status.Code(err) == codes.FailedPrecondition {
+		version, getErr := client.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: versionName})
+		if getErr == nil && cannotUseVersion(version.GetState()) {
+			return nil
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("disable gcp kms crypto key version %s: %w", versionName, err)
+	}
+
+	return nil
+}
+
+// cannotUseVersion reports whether a version in state can no longer sign,
+// encrypt or decrypt.
+func cannotUseVersion(state kmspb.CryptoKeyVersion_CryptoKeyVersionState) bool {
+	return state == kmspb.CryptoKeyVersion_DISABLED || state == kmspb.CryptoKeyVersion_DESTROY_SCHEDULED || state == kmspb.CryptoKeyVersion_DESTROYED
+}
+
+// GrantSignerVerifier adds the service account to the key's IAM policy under
+// SignerVerifierRole. Re-granting an existing binding is a no-op, so a retried
+// provisioning run does not churn the policy's etag.
+func (c *kmsSigningClient) GrantSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
+	return grantKeyRole(ctx, c.kms, keyName, serviceAccountEmail, SignerVerifierRole)
+}
+
+// RevokeSignerVerifier removes the SignerVerifierRole binding for the service
+// account on one crypto key. A missing binding is a no-op.
+func (c *kmsSigningClient) RevokeSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
+	return revokeKeyRole(ctx, c.kms, keyName, serviceAccountEmail, SignerVerifierRole)
+}
+
+// grantKeyRole adds the service account to one crypto key's IAM policy under
+// role, never to the ring. Re-granting an existing binding is a no-op, so a
+// retried provisioning run does not churn the policy's etag.
+func grantKeyRole(ctx context.Context, client *kms.KeyManagementClient, keyName, serviceAccountEmail string, role iam.RoleName) error {
+	if err := ValidateKeyName(keyName); err != nil {
+		return err
+	}
+	if serviceAccountEmail == "" {
+		return fmt.Errorf("grant gcp kms %s: service account email is required", role)
+	}
+
+	handle := client.ResourceIAM(keyName)
+	policy, err := handle.Policy(ctx)
+	if err != nil {
+		return fmt.Errorf("read gcp kms key iam policy: %w", err)
+	}
+
+	member := "serviceAccount:" + strings.ToLower(serviceAccountEmail)
+	if policy.HasRole(member, role) {
+		return nil
+	}
+
+	policy.Add(member, role)
+	if err := handle.SetPolicy(ctx, policy); err != nil {
+		return fmt.Errorf("set gcp kms key iam policy: %w", err)
+	}
+
+	return nil
+}
+
+// revokeKeyRole removes the service account's role binding on one crypto key.
+// A missing binding is a no-op.
+func revokeKeyRole(ctx context.Context, client *kms.KeyManagementClient, keyName, serviceAccountEmail string, role iam.RoleName) error {
+	if err := ValidateKeyName(keyName); err != nil {
+		return err
+	}
+	if serviceAccountEmail == "" {
+		return fmt.Errorf("revoke gcp kms %s: service account email is required", role)
+	}
+
+	handle := client.ResourceIAM(keyName)
+	policy, err := handle.Policy(ctx)
+	if err != nil {
+		return fmt.Errorf("read gcp kms key iam policy: %w", err)
+	}
+
+	member := "serviceAccount:" + strings.ToLower(serviceAccountEmail)
+	if !policy.HasRole(member, role) {
+		return nil
+	}
+
+	policy.Remove(member, role)
+	if err := handle.SetPolicy(ctx, policy); err != nil {
+		return fmt.Errorf("set gcp kms key iam policy: %w", err)
+	}
+
+	return nil
+}

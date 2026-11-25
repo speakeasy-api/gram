@@ -77,6 +77,7 @@ func splitCodexLogsPayload(payload *gen.LogsPayload) (codex, claude *gen.LogsPay
 	if len(codexLogs) > 0 {
 		codex = &gen.LogsPayload{
 			ResourceLogs:     codexLogs,
+			DeviceAgentToken: payload.DeviceAgentToken,
 			ApikeyToken:      payload.ApikeyToken,
 			ProjectSlugInput: payload.ProjectSlugInput,
 		}
@@ -84,6 +85,7 @@ func splitCodexLogsPayload(payload *gen.LogsPayload) (codex, claude *gen.LogsPay
 	if len(claudeLogs) > 0 {
 		claude = &gen.LogsPayload{
 			ResourceLogs:     claudeLogs,
+			DeviceAgentToken: payload.DeviceAgentToken,
 			ApikeyToken:      payload.ApikeyToken,
 			ProjectSlugInput: payload.ProjectSlugInput,
 		}
@@ -110,6 +112,7 @@ func splitCodexMetricsPayload(payload *gen.MetricsPayload) (codex, claude *gen.M
 	if len(codexMetrics) > 0 {
 		codex = &gen.MetricsPayload{
 			ResourceMetrics:  codexMetrics,
+			DeviceAgentToken: payload.DeviceAgentToken,
 			ApikeyToken:      payload.ApikeyToken,
 			ProjectSlugInput: payload.ProjectSlugInput,
 		}
@@ -117,6 +120,7 @@ func splitCodexMetricsPayload(payload *gen.MetricsPayload) (codex, claude *gen.M
 	if len(claudeMetrics) > 0 {
 		claude = &gen.MetricsPayload{
 			ResourceMetrics:  claudeMetrics,
+			DeviceAgentToken: payload.DeviceAgentToken,
 			ApikeyToken:      payload.ApikeyToken,
 			ProjectSlugInput: payload.ProjectSlugInput,
 		}
@@ -173,6 +177,7 @@ func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *g
 		}
 
 		resourceAttrs := resourceAttributesMap(resourceLog.Resource)
+		sanitizeResourceAttrs(ctx, resourceAttrs)
 		resourceServiceName := stringAttr(resourceAttrs, attr.ServiceNameKey)
 
 		for _, scopeLog := range resourceLog.ScopeLogs {
@@ -233,7 +238,7 @@ func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *g
 					Timestamp:  timestamp,
 					ToolInfo:   toolInfo,
 					UserInfo:   userInfo,
-					Attributes: logAttrs,
+					Attributes: withAgentActor(ctx, logAttrs),
 				}, observedTimestamp, resourceAttrs))
 			}
 		}
@@ -281,6 +286,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 		}
 
 		resourceAttrs := resourceAttributesMap(resourceMetric.Resource)
+		sanitizeResourceAttrs(ctx, resourceAttrs)
 
 		for _, scopeMetric := range resourceMetric.ScopeMetrics {
 			if scopeMetric == nil {
@@ -297,6 +303,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 
 					attrs := logAttributesMap(dataPoint.Attributes)
 					normalizeCodexLogAttributes(attrs)
+					scopeSessionAttrs(ctx, attrs)
 
 					attrs[attr.EventSourceKey] = string(telemetry.EventSourceHook)
 					attrs[attr.LogBodyKey] = *metric.Name
@@ -343,7 +350,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 						Timestamp:  timestamp,
 						ToolInfo:   toolInfo,
 						UserInfo:   userInfo,
-						Attributes: attrs,
+						Attributes: withAgentActor(ctx, attrs),
 					}, timestamp, resourceAttrs))
 				}
 			}
@@ -368,11 +375,15 @@ func normalizeCodexLogAttributes(attrs map[attr.Key]any) {
 	}
 }
 
-// codexOTELUserInfo attributes a row to the Gram user resolved from the
+// codexOTELUserInfo attributes a row to the Speakeasy user resolved from the
 // record's user.email, memoizing lookups in emailToUserID across the payload.
 // The resolved email and user id are returned alongside the UserInfo so the
 // session-attribution path can reuse them without a second resolution.
 func (s *Service) codexOTELUserInfo(ctx context.Context, attrs map[attr.Key]any, emailToUserID map[string]string, orgID string) (telemetry.UserInfo, string, string) {
+	// withAgentActor strips the payload identity from agent rows at the sink.
+	if isAgentActor(ctx) {
+		return telemetry.UserInfoByEmail(""), "", ""
+	}
 	email := strings.TrimSpace(stringAttr(attrs, attr.UserEmailKey))
 	if email == "" {
 		return telemetry.UserInfoByEmail(""), "", ""
@@ -423,6 +434,19 @@ func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[stri
 	var none SessionMetadata
 	if id.SessionID == "" {
 		return none
+	}
+	// An agent keeps only safe surface fields: no classification or writeback.
+	if isAgentActor(ctx) {
+		if meta, ok := memo[id.SessionID]; ok {
+			return meta
+		}
+		view := none
+		var cached SessionMetadata
+		if err := s.cache.Get(ctx, sessionCacheKey(id.SessionID), &cached); err == nil && cached.ServiceName == "Codex" {
+			view = agentSessionView(cached, id.OrgID, id.ProjectID)
+		}
+		memo[id.SessionID] = view
+		return view
 	}
 	if meta, ok := memo[id.SessionID]; ok && sameCodexIdentity(meta.UserEmail, id.Email) {
 		return meta
@@ -482,7 +506,7 @@ func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[stri
 	memo[id.SessionID] = meta
 	// A failed attribution is cached with empty AccountType — the fast path
 	// above rejects it, so the next payload retries.
-	if err := s.cache.Set(ctx, sessionCacheKey(id.SessionID), meta, 24*time.Hour); err != nil {
+	if err := s.cacheSessionMetadata(ctx, meta); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(id.SessionID),

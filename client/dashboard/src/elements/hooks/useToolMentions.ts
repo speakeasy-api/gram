@@ -1,9 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useAui, useAuiState } from "@assistant-ui/react";
-import {
-  MentionableTool,
-  toolSetToMentionableTools,
-} from "@/elements/lib/tool-mentions";
+import type { MentionableTool } from "@/elements/lib/tool-mentions";
+import { toolSetToMentionableTools } from "@/elements/lib/tool-mentions";
 
 export interface UseToolMentionsOptions {
   tools: Record<string, unknown> | undefined;

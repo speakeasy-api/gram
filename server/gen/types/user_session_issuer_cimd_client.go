@@ -12,8 +12,10 @@ package types
 type UserSessionIssuerCimdClient struct {
 	// The user_session_issuer_cimd_client id.
 	ID string
-	// The owning project id.
+	// The owning project id; empty for organization-owned entries.
 	ProjectID string
+	// The owning organization id.
+	OrganizationID string
 	// The user_session_issuer this URL is allowed on.
 	UserSessionIssuerID string
 	// The exact https URL admitted as a client_id.

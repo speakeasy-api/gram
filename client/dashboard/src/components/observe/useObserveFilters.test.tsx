@@ -9,6 +9,11 @@ import { Operator } from "@gram/client/models/components/logfilter.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { DEFAULT_HOOK_TYPES } from "./observeFilterConstants";
+import {
+  scopedToolUsageDefaultTypes,
+  TOOL_USAGE_DEFAULT_TYPES,
+  TOOL_USAGE_VALID_TYPES,
+} from "./observeTargetFilters";
 import { useObserveFilters } from "./useObserveFilters";
 
 vi.mock("@gram/client/react-query/members.js", () => ({
@@ -43,6 +48,7 @@ describe("useObserveFilters", () => {
       email: "alice@example.com",
       name: "Alice",
       roleIds: ["role-admin"],
+      directoryRoleIds: [],
       joinedAt: new Date(),
       photoUrl: undefined,
     },
@@ -52,6 +58,7 @@ describe("useObserveFilters", () => {
       email: "bob@example.com",
       name: "Bob",
       roleIds: ["role-member"],
+      directoryRoleIds: [],
       joinedAt: new Date(),
       photoUrl: undefined,
     },
@@ -224,6 +231,50 @@ describe("useObserveFilters", () => {
     );
   });
 
+  it("selects local tools by default when every type is the default", () => {
+    // The identity page embeds Tool logs with every type as its default, so
+    // an agent that only makes local tool calls through hooks still shows up.
+    const { result } = renderHook(
+      () =>
+        useObserveFilters({
+          defaultTypes: TOOL_USAGE_VALID_TYPES,
+          validTypes: TOOL_USAGE_VALID_TYPES,
+        }),
+      { wrapper: makeWrapper("/") },
+    );
+
+    expect(result.current.selectedHookTypes).toEqual(TOOL_USAGE_VALID_TYPES);
+    expect(result.current.selectedHookTypes).toContain("local_tool");
+  });
+
+  it("lets a Type selection in the URL win over the identity page's default", () => {
+    // With local tools hidden on the identity page, a user who picks them in
+    // the Type facet still sees them.
+    const { result } = renderHook(
+      () =>
+        useObserveFilters({
+          defaultTypes: scopedToolUsageDefaultTypes(false),
+          validTypes: TOOL_USAGE_VALID_TYPES,
+        }),
+      { wrapper: makeWrapper("/?hookTypes=local_tool") },
+    );
+
+    expect(result.current.selectedHookTypes).toEqual(["local_tool"]);
+  });
+
+  it("leaves local tools out of the page-wide tool usage default", () => {
+    const { result } = renderHook(
+      () =>
+        useObserveFilters({
+          defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
+          validTypes: TOOL_USAGE_VALID_TYPES,
+        }),
+      { wrapper: makeWrapper("/") },
+    );
+
+    expect(result.current.selectedHookTypes).not.toContain("local_tool");
+  });
+
   it("parses role URL param and exposes selectedRoleIds", () => {
     const { result } = renderHook(() => useObserveFilters(), {
       wrapper: makeWrapper("/?role=role-admin"),
@@ -288,6 +339,54 @@ describe("useObserveFilters", () => {
         values: ["claude-code", "codex"],
       },
     ]);
+  });
+
+  it("runs a calendar range through the whole of its final day", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 23, 11, 52));
+    try {
+      const { result } = renderHook(() => useObserveFilters(), {
+        wrapper: makeWrapper("/"),
+      });
+      act(() =>
+        result.current.setCalendarRangeParam(
+          new Date(2026, 10, 16),
+          new Date(2026, 10, 17),
+        ),
+      );
+      expect(result.current.customRange).toEqual({
+        from: new Date(2026, 10, 16),
+        to: new Date(2026, 10, 17, 23, 59, 59, 999),
+      });
+      expect(result.current.to).toEqual(
+        new Date(2026, 10, 17, 23, 59, 59, 999),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ends a calendar range that includes today at now", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const now = new Date(2026, 10, 23, 11, 52);
+    vi.setSystemTime(now);
+    try {
+      const { result } = renderHook(() => useObserveFilters(), {
+        wrapper: makeWrapper("/"),
+      });
+      act(() =>
+        result.current.setCalendarRangeParam(
+          new Date(2026, 10, 22),
+          new Date(2026, 10, 23),
+        ),
+      );
+      expect(result.current.customRange).toEqual({
+        from: new Date(2026, 10, 22),
+        to: now,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("handleHookSourceSelectionChange sets and clears the source URL param", () => {

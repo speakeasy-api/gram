@@ -1,70 +1,266 @@
+import { Spinner } from "@/components/ui/Spinner";
+import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
+import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { FormPage } from "@/components/page-templates";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
-import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
+import {
+  deriveRemoteSessionIssuerNameFromUrl,
+  readableServiceNameFromUrl,
+  mcpServerRouteParam,
+  validateMcpServerUrl,
+} from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Stack } from "@/components/ui/Stack";
-import { AlertCircle, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useIsSpeakeasyStaff, useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
+import { AlertCircle, Plug } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
+import { SHADOW_MCP_SETUP_PARAMS } from "@/components/shadow-mcp/shadowMCPOfficialServer";
+import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
+import { VerifyRemoteMcpUrlAlert } from "./VerifyRemoteMcpUrlButton";
+import { UserSessionIssuerSelect } from "@/components/user-session-issuer-select";
 import {
-  VerifyRemoteMcpUrlAlert,
-  VerifyRemoteMcpUrlButton,
-} from "./VerifyRemoteMcpUrlButton";
+  PROJECT_SPECIFIC_ISSUER_VALUE,
+  defaultCreationUserSessionIssuerValue,
+} from "@/components/user-session-issuer-select.utils";
+import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
+import type { RemoteMcpCreationIdentity } from "./configureCreatedIdentity";
+import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
+import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
+import { useAgentCredentialFields } from "@/lib/remote-identity";
+import { NewServerGuardrailSection } from "@/pages/security/server-guardrails/NewServerGuardrailSection";
+import {
+  guardrailFailureMessage,
+  useNewServerGuardrail,
+} from "@/pages/security/server-guardrails/useNewServerGuardrail";
+
+// Both backends are, to the administrator, the same thing: a server that lives
+// at a URL somewhere else. The only difference is whether Speakeasy sits in the
+// request path, so that is the one question the form asks — and only of staff,
+// since unproxied servers are staff-only today.
+type ProxyMode = "proxied" | "unproxied";
 
 export default function CreateRemoteMcp(): JSX.Element {
   return <CreateRemoteMcpForm />;
 }
 
 function CreateRemoteMcpForm() {
+  const flow = useGatewayCreation();
+  const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();
-  const createSource = useCreateRemoteMcpSource();
+  const navigate = useNavigate();
+  const isSpeakeasyStaff = useIsSpeakeasyStaff();
+  const project = useProject();
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canCreateIdentity =
+    !rbacLoading && hasScope("project:write", project.id);
+  const createRemote = useCreateRemoteMcpSource();
+  const createUnproxied = useCreateUnproxiedMcpSource();
+  const issuerQuery = useEffectiveUserSessionIssuers();
+  const newGuardrail = useNewServerGuardrail();
 
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  // A link can open the form with the server's URL and name already filled
+  // in; the admin still verifies and saves.
+  const [searchParams] = useSearchParams();
+  const [name, setName] = useState(
+    () => searchParams.get(SHADOW_MCP_SETUP_PARAMS.name)?.trim() ?? "",
+  );
+  const [url, setUrl] = useState(
+    () => searchParams.get(SHADOW_MCP_SETUP_PARAMS.url)?.trim() ?? "",
+  );
+  // Opened from a Shadow MCP server's "Set it up myself": saving goes back to
+  // its page to link the new server.
+  const shadowServerSlug =
+    searchParams.get(SHADOW_MCP_SETUP_PARAMS.shadowServer)?.trim() || null;
+  const shadowServerName =
+    searchParams.get(SHADOW_MCP_SETUP_PARAMS.name)?.trim() ||
+    "this Shadow MCP server";
+  // Whether a name was given, typed or by the link. Until one is, each
+  // successful check fills it in; once it is, it is kept.
+  const [nameEdited, setNameEdited] = useState(() => name !== "");
+  const [mode, setMode] = useState<ProxyMode>("proxied");
+  const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
+  const [identityMode, setIdentityMode] =
+    useState<RemoteMcpCreationIdentity>("none");
+  const [identityChoiceTouched, setIdentityChoiceTouched] = useState(false);
+  const agentCredential = useAgentCredentialFields();
   // Track whether the field has been touched so we don't surface "URL is
   // required" the moment the page renders.
   const [touched, setTouched] = useState(false);
 
   const verify = useVerifyRemoteMcpUrl(url);
 
+  // The identity copy names the service in sentence-initial position, so an
+  // unnamed server falls back to its host rather than to a bare "this server".
+  const upstreamName =
+    name.trim() || deriveRemoteSessionIssuerNameFromUrl(url) || "This server";
+
+  // Covers the whole submit, including the guardrail created after the server:
+  // the server mutations settle first, and a second click in that gap would
+  // create a duplicate server.
+  const [submitting, setSubmitting] = useState(false);
+  const isPending =
+    createRemote.isPending || createUnproxied.isPending || submitting;
+  // Read from the mutation the current mode would run, so switching Connection
+  // after a failure doesn't leave the other backend's error standing.
+  const activeCreate = mode === "unproxied" ? createUnproxied : createRemote;
+  const createError = activeCreate.error;
+  const isCreateError = activeCreate.isError;
+
   const validationError = touched ? validateMcpServerUrl(url) : null;
-  const submitDisabled =
-    createSource.isPending || !url.trim() || validateMcpServerUrl(url) !== null;
-  const verifyDisabled =
-    createSource.isPending || !url.trim() || validateMcpServerUrl(url) !== null;
+  const urlUsable = !!url.trim() && validateMcpServerUrl(url) === null;
+  // The verify result is cleared whenever the URL changes (see
+  // useVerifyRemoteMcpUrl), so this can only be true for the URL on screen.
+  const isVerified = verify.result?.verified === true;
+  // Unproxied servers are often only reachable from the customer's network,
+  // so our infrastructure failing to reach one says nothing about whether it
+  // works. Verification only gates saving when we sit in the request path.
+  // Gateway members and official versions of Shadow MCP servers are always
+  // proxied, whatever the Connection choice says: Speakeasy must sit in the
+  // request path for either to work.
+  const proxyRequired = !!flow.gatewayId || !!shadowServerSlug;
+  const requiresVerification = mode === "proxied" || proxyRequired;
+  const readyToSave = isVerified || !requiresVerification;
+  const defaultIssuerSelection = defaultCreationUserSessionIssuerValue(
+    issuerQuery.organizationIssuers,
+  );
+  const selectedIssuer = issuerSelection ?? defaultIssuerSelection;
+  const issuerSelectionBlocked =
+    mode === "proxied" &&
+    (issuerQuery.isLoading || issuerQuery.isError || selectedIssuer === "");
+
+  useEffect(() => {
+    if (!verify.result) {
+      setIdentityChoiceTouched(false);
+      setIdentityMode("none");
+      return;
+    }
+    if (!identityChoiceTouched && verify.result.verified) {
+      // Only preselect User Identity when the challenge actually advertised
+      // OAuth. A bare 401 from a Basic or API-key upstream reports the same
+      // outcome, and defaulting it to User walks the operator into an OAuth
+      // setup that cannot complete, leaving the server disabled.
+      setIdentityMode(
+        verify.result.outcome === "authentication_required" &&
+          !!verify.result.protectedResourceMetadataUrl
+          ? "user"
+          : "none",
+      );
+    }
+  }, [identityChoiceTouched, verify.result]);
+
+  // Once the URL checks out, the name is filled in: with the name the
+  // server reports for itself, or else one read from the address that was
+  // checked.
+  useEffect(() => {
+    if (nameEdited || !verify.result?.verified) return;
+    const suggestion =
+      verify.result.serverName?.trim() ||
+      (verify.result.url && readableServiceNameFromUrl(verify.result.url)) ||
+      "";
+    if (suggestion) setName(suggestion);
+  }, [nameEdited, verify.result]);
+
+  const handleVerify = () => {
+    setTouched(true);
+    if (!urlUsable) return;
+    void verify.trigger();
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (creationLocked) return;
     setTouched(true);
-    if (validateMcpServerUrl(url) !== null) {
+    if (!urlUsable) return;
+    // Connectivity is part of saving rather than a side errand: an unverified
+    // URL falls through to a verify instead of creating a server nobody can
+    // reach.
+    if (!readyToSave) {
+      void verify.trigger();
       return;
     }
+    if (issuerSelectionBlocked) return;
+    if (mode === "proxied" && isVerified && !newGuardrail.validation.ok) return;
+    if (submitting) return;
+
+    const trimmedName = name.trim();
+    setSubmitting(true);
     try {
-      const trimmedName = name.trim();
-      const { authAutoConfig, mcpServer } = await createSource.mutateAsync({
-        name: trimmedName === "" ? undefined : trimmedName,
-        url: url.trim(),
-      });
-      if (authAutoConfig.status === "configured") {
-        toast.success("Remote MCP server added and authentication configured");
-      } else {
-        toast.success("Remote MCP server added");
-        if (authAutoConfig.warn) {
-          toast.warning(authAutoConfig.message);
-        }
+      if (mode === "unproxied" && !proxyRequired) {
+        const { mcpServer } = await createUnproxied.mutateAsync({
+          name: trimmedName === "" ? undefined : trimmedName,
+          url: url.trim(),
+        });
+        toast.success("MCP server added");
+        routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
+        return;
       }
-      routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+
+      const { identityConfiguration, mcpServer } =
+        await createRemote.mutateAsync({
+          name: trimmedName === "" ? undefined : trimmedName,
+          url: url.trim(),
+          userSessionIssuerId:
+            selectedIssuer === PROJECT_SPECIFIC_ISSUER_VALUE
+              ? undefined
+              : selectedIssuer,
+          identityMode,
+          agentAuthorization:
+            identityMode === "agent"
+              ? agentCredential.authorizationValue.trim()
+              : undefined,
+        });
+      // The guardrail is attempted only now that the server exists. If it
+      // fails the server stays, the failure is reported, and the user lands on
+      // the server's Guardrails tab, where the guardrail can be added again.
+      const guardrailOutcome = await newGuardrail.createFor(mcpServer);
+      const guardrailFailed = guardrailOutcome.status === "failed";
+      if (guardrailOutcome.status === "failed") {
+        toast.error(guardrailFailureMessage(guardrailOutcome), {
+          duration: 12000,
+        });
+      } else if (guardrailOutcome.status === "created") {
+        toast.success(`Guardrail "${guardrailOutcome.name}" created`);
+      }
+      if (identityConfiguration.status === "setup-required") {
+        toast.warning(
+          shadowServerSlug
+            ? `MCP server added but kept disabled. ${identityConfiguration.message} Turn it on, then make it official from its Shadow MCP page.`
+            : `MCP server added but kept disabled. ${identityConfiguration.message}`,
+        );
+        void navigate(
+          `${routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer))}#${MCP_AUTHENTICATION_SECTION_ID}`,
+        );
+        return;
+      }
+      toast.success(
+        identityMode === "none"
+          ? "MCP server added"
+          : "MCP server added and identity configured",
+      );
+      if (flow.gatewayId) {
+        await flow.complete(mcpServer.id);
+      } else if (guardrailFailed) {
+        routes.mcp.details.guardrails.goTo(mcpServerRouteParam(mcpServer));
+      } else if (shadowServerSlug) {
+        routes.shadowAI.mcps.detail.goTo(shadowServerSlug);
+      } else {
+        routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
+      }
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to add remote MCP server";
+        error instanceof Error ? error.message : "Failed to add MCP server";
       toast.error(message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -72,7 +268,7 @@ function CreateRemoteMcpForm() {
     <FormPage
       scope="mcp:write"
       title="New remote MCP server"
-      description="Register an existing remote MCP server by URL. We'll proxy requests to it using streamable-http transport."
+      description="Register a server that already runs somewhere else by its URL."
     >
       <form
         onSubmit={(e) => {
@@ -81,92 +277,250 @@ function CreateRemoteMcpForm() {
         noValidate
       >
         <Stack gap={4}>
-          <Stack gap={1}>
-            <label
-              htmlFor="remote-mcp-name"
-              className="text-sm leading-none font-medium"
-            >
-              Display name (optional)
-            </label>
-            <Input
-              id="remote-mcp-name"
-              autoFocus
-              placeholder="My MCP server"
-              value={name}
-              onChange={setName}
-            />
-          </Stack>
-
-          <Stack gap={1}>
-            <label
-              htmlFor="remote-mcp-url"
-              className="text-sm leading-none font-medium"
-            >
-              Remote MCP server URL
-            </label>
-            <Input
-              id="remote-mcp-url"
-              placeholder="https://example.com/mcp"
-              value={url}
-              onChange={(value) => {
-                setUrl(value);
-                if (!touched) setTouched(true);
-              }}
-              onBlur={() => setTouched(true)}
-              aria-invalid={validationError ? true : undefined}
-              aria-describedby={
-                validationError ? "remote-mcp-url-error" : undefined
-              }
-            />
-            {validationError && (
-              <div
-                id="remote-mcp-url-error"
-                role="alert"
-                className="text-destructive mt-2 flex items-center gap-1.5 text-xs"
+          {shadowServerSlug ? (
+            <Alert variant="info" dismissible={false}>
+              This server becomes the official version of {shadowServerName}.
+              After you save it, you go back to its Shadow MCP page to make it
+              official.
+            </Alert>
+          ) : null}
+          <fieldset disabled={creationLocked} className="contents">
+            <Stack gap={1}>
+              <label
+                htmlFor="remote-mcp-name"
+                className="text-sm leading-none font-medium"
               >
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                <span>{validationError}</span>
-              </div>
+                Display name (optional)
+              </label>
+              <Input
+                id="remote-mcp-name"
+                autoFocus
+                placeholder="My MCP server"
+                value={name}
+                onChange={(value) => {
+                  setNameEdited(true);
+                  setName(value);
+                }}
+              />
+            </Stack>
+
+            <Stack gap={1}>
+              <label
+                htmlFor="remote-mcp-url"
+                className="text-sm leading-none font-medium"
+              >
+                MCP server URL
+              </label>
+              <Input
+                id="remote-mcp-url"
+                placeholder="https://example.com/mcp"
+                value={url}
+                onChange={(value) => {
+                  setUrl(value);
+                  if (!touched) setTouched(true);
+                }}
+                onBlur={() => setTouched(true)}
+                aria-invalid={validationError ? true : undefined}
+                aria-describedby={
+                  validationError ? "remote-mcp-url-error" : undefined
+                }
+              />
+              {validationError && (
+                <div
+                  id="remote-mcp-url-error"
+                  role="alert"
+                  className="text-destructive mt-2 flex items-center gap-1.5 text-xs"
+                >
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>{validationError}</span>
+                </div>
+              )}
+              <VerifyRemoteMcpUrlAlert state={verify} />
+            </Stack>
+
+            {isSpeakeasyStaff && (
+              <Stack gap={2}>
+                <label className="text-sm leading-none font-medium">
+                  Connection
+                </label>
+                <RadioGroup
+                  value={mode}
+                  onValueChange={(value) => setMode(value as ProxyMode)}
+                >
+                  <label className="flex items-start gap-2.5">
+                    <RadioGroupItem value="proxied" className="mt-0.5" />
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-sm">Proxy through Speakeasy</span>
+                      <Text muted small>
+                        Requests route through us over streamable-http, so we
+                        can manage authentication and see the traffic.
+                      </Text>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2.5">
+                    <RadioGroupItem
+                      value="unproxied"
+                      className="mt-0.5"
+                      disabled={proxyRequired}
+                    />
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-sm">
+                        Clients connect directly{" "}
+                        <span className="text-muted-foreground">
+                          (Speakeasy staff only)
+                        </span>
+                      </span>
+                      <Text muted small>
+                        We list the server but never sit in the request path, so
+                        the vendor&apos;s own OAuth applies. Use this to
+                        sidestep per-vendor callback allowlisting.
+                      </Text>
+                    </span>
+                  </label>
+                </RadioGroup>
+                {flow.gatewayId && (
+                  <Text muted small>
+                    Gateway members must proxy through Speakeasy; direct
+                    connections are not supported.
+                  </Text>
+                )}
+                {!flow.gatewayId && shadowServerSlug && (
+                  <Text muted small>
+                    An official server must proxy through Speakeasy; direct
+                    connections are not supported.
+                  </Text>
+                )}
+              </Stack>
             )}
-            <VerifyRemoteMcpUrlAlert state={verify} />
-          </Stack>
 
-          <Stack gap={1}>
-            <label className="text-sm leading-none font-medium">
-              Transport
-            </label>
-            <Text muted small>
-              streamable-http
-            </Text>
-          </Stack>
+            {mode === "proxied" ? (
+              <Stack gap={1}>
+                <label className="text-sm leading-none font-medium">
+                  MCP sign-in
+                </label>
+                <UserSessionIssuerSelect
+                  issuers={issuerQuery.organizationIssuers}
+                  value={selectedIssuer}
+                  onValueChange={setIssuerSelection}
+                  includeProjectSpecific
+                  disabled={issuerQuery.isLoading || issuerQuery.isError}
+                />
+                <Text muted small>
+                  Use an organization-wide MCP sign-in if one is available, or
+                  create one for this project.
+                </Text>
+                {issuerQuery.isError ? (
+                  <Alert variant="error" dismissible={false}>
+                    Couldn&apos;t load your organization&apos;s MCP sign-ins.
+                    Refresh the page to try again.
+                  </Alert>
+                ) : null}
+              </Stack>
+            ) : null}
+          </fieldset>
+          <GatewayAttachmentStatus flow={flow} />
+          {mode === "proxied" && isVerified ? (
+            <CreationIdentityChoice
+              value={identityMode}
+              onChange={(next) => {
+                setIdentityChoiceTouched(true);
+                setIdentityMode(next);
+              }}
+              credential={agentCredential}
+              upstreamName={upstreamName}
+              advertisesOAuth={
+                verify.result?.outcome === "authentication_required"
+              }
+              authenticationRequired={
+                verify.result?.outcome === "authentication_required"
+              }
+              canCreateIdentity={canCreateIdentity}
+              rbacLoading={rbacLoading}
+            />
+          ) : null}
 
-          {createSource.isError && (
+          {mode === "proxied" && isVerified ? (
+            <NewServerGuardrailSection
+              guardrail={newGuardrail}
+              serverName={upstreamName}
+              disabled={creationLocked || isPending}
+            />
+          ) : null}
+
+          {isCreateError && createError && (
             <Alert variant="error" dismissible={false}>
-              {createSource.error.message}
+              {createError.message}
             </Alert>
           )}
 
           <Stack direction="horizontal" gap={2}>
-            <VerifyRemoteMcpUrlButton
-              state={verify}
-              url={url}
-              disabled={verifyDisabled}
-            />
-            <Button type="submit" variant="primary" disabled={submitDisabled}>
-              {createSource.isPending ? (
+            {/* One primary action that advances through the flow: verify, then
+                add. A server that cannot be reached is never worth saving, so
+                the two steps are the same button rather than a check the user
+                can skip. */}
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={
+                creationLocked ||
+                !urlUsable ||
+                verify.isPending ||
+                isPending ||
+                (mode === "proxied" &&
+                  isVerified &&
+                  identityMode === "agent" &&
+                  agentCredential.authorizationValue.trim() === "") ||
+                (mode === "proxied" &&
+                  isVerified &&
+                  identityMode === "user" &&
+                  !canCreateIdentity) ||
+                (mode === "proxied" &&
+                  isVerified &&
+                  !newGuardrail.validation.ok) ||
+                issuerSelectionBlocked
+              }
+            >
+              {verify.isPending || isPending ? (
                 <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
+                </Button.LeftIcon>
+              ) : !readyToSave ? (
+                <Button.LeftIcon>
+                  <Plug className="size-4" />
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>
-                {createSource.isPending ? "Adding" : "Add server"}
+                {verify.isPending
+                  ? "Verifying"
+                  : isPending
+                    ? "Saving"
+                    : readyToSave
+                      ? "Save"
+                      : "Verify connectivity"}
               </Button.Text>
             </Button>
+            {isVerified && requiresVerification && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={creationLocked || verify.isPending || isPending}
+                onClick={handleVerify}
+              >
+                <Button.Text>Re-verify</Button.Text>
+              </Button>
+            )}
             <Button
               type="button"
               variant="secondary"
-              disabled={createSource.isPending}
-              onClick={() => routes.sources.goTo()}
+              disabled={isPending || flow.isAttaching}
+              onClick={() => {
+                if (flow.cancel()) return;
+                if (shadowServerSlug) {
+                  routes.shadowAI.mcps.detail.goTo(shadowServerSlug);
+                  return;
+                }
+                routes.mcp.add.goTo();
+              }}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>

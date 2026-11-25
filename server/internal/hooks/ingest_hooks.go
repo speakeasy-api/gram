@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -15,14 +16,20 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/claudetag"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -39,6 +46,18 @@ type authenticatedIngestOptionsKey struct{}
 
 // AuthenticatedIngestOptions controls trusted in-process ingestion behavior.
 type AuthenticatedIngestOptions struct {
+	// contentBoundary applies the quarantine gate and boundaryScans instead of
+	// the policies for the event type. It applies also when boundaryScans is empty.
+	contentBoundary bool
+	boundaryScans   []ahpBoundaryScan
+	// promptPolicyText overrides prompt evidence without changing transcript capture.
+	promptPolicyText *string
+	// promptCorrelationID is a trusted adapter-provided logical message identity.
+	// It affects transcript persistence only, never event/policy deduplication.
+	promptCorrelationID string
+	// ObserveOnly records the event without evaluating enforcement, for
+	// events the sender cannot block.
+	ObserveOnly                  bool
 	AllowWarnAcknowledgement     bool
 	AllowSessionIdentityFallback bool
 	SourceAttributes             map[attr.Key]any
@@ -61,6 +80,11 @@ type AuthenticatedIngestResult struct {
 
 func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
+		contentBoundary:              false,
+		boundaryScans:                nil,
+		promptPolicyText:             nil,
+		promptCorrelationID:          "",
+		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
 		SourceAttributes:             nil,
@@ -86,6 +110,30 @@ const (
 // activations (Codex heuristics) arrive as ordinary events carrying data.skill
 // instead, and are distinguished by isExplicitSkillActivation.
 const eventTypeSkillActivated = "skill.activated"
+
+// toolResultFinishReasonError marks the chat row of a tool.failed result, so
+// a transcript reader can tell a failed call from one that returned output.
+const toolResultFinishReasonError = "error"
+
+// toolFailedWithoutErrorContent is the result recorded for a tool.failed
+// event that carries no error text.
+const toolFailedWithoutErrorContent = "The tool call failed without an error message."
+
+// toolCompletedWithoutOutputContent is the result stored for a completed tool
+// call that reported no output, so the call reads as complete rather than as
+// still running.
+const toolCompletedWithoutOutputContent = "The tool call returned no output."
+
+// isEmptyJSONValue reports whether content is missing or a JSON value that
+// carries nothing: an empty string, object or array, or null.
+func isEmptyJSONValue(content string) bool {
+	switch strings.TrimSpace(content) {
+	case "", `""`, "{}", "[]", "null":
+		return true
+	default:
+		return false
+	}
+}
 
 func isExplicitSkillActivation(payload *gen.IngestPayload) bool {
 	return strings.TrimSpace(payload.Event.Type) == eventTypeSkillActivated
@@ -125,6 +173,7 @@ func (s *Service) IngestAuthenticatedDetailed(ctx context.Context, authCtx *cont
 	authCopy.ProjectID = &projectID
 	payloadCopy := *payload
 	payloadCopy.ApikeyToken = nil
+	payloadCopy.DeviceAgentToken = nil
 	payloadCopy.ProjectSlugInput = nil
 	options.SourceAttributes = maps.Clone(options.SourceAttributes)
 	options.OutputToolCalls = append([]any(nil), options.OutputToolCalls...)
@@ -135,7 +184,7 @@ func (s *Service) IngestAuthenticatedDetailed(ctx context.Context, authCtx *cont
 }
 
 // Ingest is the feature-first hook endpoint; this path only accepts the
-// canonical Gram contract. Auth is optional so hook senders stay non-blocking
+// canonical Speakeasy contract. Auth is optional so hook senders stay non-blocking
 // for machines that never signed in: a keyless request is acknowledged without
 // processing (there is nothing to attribute it to), while a presented key that
 // fails validation is a hard 401 — the sender explicitly tried to
@@ -150,7 +199,7 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	if err != nil {
 		return nil, err
 	}
-	return detailed.Result, nil
+	return s.withVersionStatus(ctx, detailed.Result), nil
 }
 
 func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *AuthenticatedIngestResult, err error) {
@@ -169,7 +218,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		if res != nil && res.Result != nil {
 			decision = res.Result.Decision
 		}
-		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
 	if err := validateCanonicalIngestPayload(payload); err != nil {
@@ -177,10 +226,20 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 	source = strings.TrimSpace(payload.Source.Adapter)
 	eventType = strings.TrimSpace(payload.Event.Type)
-	if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
+	if token := pluginDeviceAgentToken(payload.DeviceAgentToken); token != "" {
+		authedCtx, err := s.authorizeWorkloadPluginRequest(ctx, token, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
+		if err != nil {
+			outcome = hookMetricOutcomeUnauthorized
+			return nil, workloadHookAuthError(err)
+		}
+		ctx = authedCtx
+	} else if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
 		authedCtx, err := s.authorizePluginRequest(ctx, apikey, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
 		if err != nil {
 			outcome = hookMetricOutcomeUnauthorized
+			if errors.Is(err, errAgentHooksDenied) {
+				return nil, oops.E(oops.CodeForbidden, err, "forbidden")
+			}
 			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized")
 		}
 		ctx = authedCtx
@@ -199,6 +258,24 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		}, nil
 	}
 	orgSlug = authCtx.OrganizationSlug
+	if isInstallCheck(payload) {
+		// The install script's self-test has already proved what it checks:
+		// the plugin ran and the key may send hooks. It is not agent activity,
+		// so no policy runs and nothing is recorded.
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor{UserID: "", Email: ""},
+		}, nil
+	}
+	if payload.Session != nil {
+		if sessionID, changed := scopedSessionPtr(ctx, payload.Session.ID); changed {
+			session := *payload.Session
+			session.ID = sessionID
+			scoped := *payload
+			scoped.Session = &session
+			payload = &scoped
+		}
+	}
 	actor := s.resolveCanonicalActor(ctx, payload, authCtx)
 
 	sessionID := canonicalSessionID(payload)
@@ -221,7 +298,37 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		ctx = withHookDuplicate(ctx)
 	}
 
+	if isDeliveryFailureReport(payload) {
+		// A sender's report on its own delivery is not agent activity: no
+		// enforcement, skill, MCP, or transcript state is touched. The org
+		// settings still ride on the response so a reconnecting sender's
+		// cached copy refreshes on this exchange like any other.
+		if !s.isHookDuplicate(ctx) {
+			s.recordDeliveryFailure(context.WithoutCancel(ctx), payload, authCtx, actor, replayed)
+		}
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
+
+	if isInstallFailureReport(payload) {
+		if !s.isHookDuplicate(ctx) {
+			s.recordInstallFailure(context.WithoutCancel(ctx), payload, authCtx, actor)
+		}
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
+
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
+	// A tool call that ran after Cowork's permission prompt was allowed by the
+	// person, which confirms the warning that asked for it. A call that ran
+	// and then failed was allowed too.
+	if fromCowork(payload) && toolRan(payload) && !s.isHookDuplicate(ctx) {
+		s.confirmCoworkToolAsk(context.WithoutCancel(ctx), payload, canonicalHookEvent(payload, authCtx, actor, timestamp))
+	}
 	skillCapture, observed, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
 	if observationErr != nil {
 		logger.WarnContext(ctx, "failed to record skill activation",
@@ -258,7 +365,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// skipping retries would leave a session whose first delivery claimed the
 	// idempotency key but failed its cache write with no inventory for its
 	// whole life — under block_all every later meta-tool call would then deny,
-	// including Gram-hosted targets, with no path to recover.
+	// including Speakeasy-hosted targets, with no path to recover.
 	s.cacheCanonicalMCPList(
 		context.WithoutCancel(ctx),
 		canonicalSessionID(payload),
@@ -272,6 +379,12 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// cache write failed transiently (the retry arrives already marked
 	// duplicate).
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
+	if blockReason != "" && blockEffects.ask {
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAskResult(userReason), skillCapture),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
 	if blockReason != "" {
 		return &AuthenticatedIngestResult{
 			Result: withBlockEffect(blockEffects, s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture)),
@@ -294,6 +407,9 @@ type skillCaptureSignal struct {
 // from a nil capture signal, which only says the payload carried no usable raw
 // hash — so callers can tell a durable write apart from a no-op or a failure.
 func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, seenAt time.Time, blockReason string) (*skillCaptureSignal, bool, error) {
+	ctx, span := s.tracer.Start(ctx, "hooks.recordSkillActivation")
+	defer span.End()
+
 	if payload.Data == nil || payload.Data.Skill == nil {
 		return nil, false, nil
 	}
@@ -366,6 +482,9 @@ func normalizeRawSHA256(value string) string {
 // Best-effort: on lookup failure the effects are omitted and senders keep
 // their last-seen value.
 func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.IngestHookResult, capture *skillCaptureSignal) *gen.IngestHookResult {
+	ctx, span := s.tracer.Start(ctx, "hooks.withOrgSettings")
+	defer span.End()
+
 	if s.productFeatures == nil {
 		return res
 	}
@@ -442,6 +561,13 @@ type canonicalActor struct {
 // used as a fallback: an event from such a key with no self-reported email
 // stays unattributed rather than crediting every machine to the publisher.
 func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) canonicalActor {
+	ctx, span := s.tracer.Start(ctx, "hooks.resolveCanonicalActor")
+	defer span.End()
+
+	// An agent key is the actor itself; it has no human identity to resolve.
+	if isAgentActor(ctx) {
+		return canonicalActor{UserID: "", Email: ""}
+	}
 	tokenEmail := ""
 	if authCtx.Email != nil {
 		tokenEmail = strings.TrimSpace(*authCtx.Email)
@@ -461,7 +587,7 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 		Email:  selfReported,
 	}
 	if actor.UserID == "" {
-		// A self-reported email that matches no Gram user cannot key
+		// A self-reported email that matches no Speakeasy user cannot key
 		// user-scoped policies; recover a complete identity instead of
 		// running unattributed. For shared plugin keys the session metadata
 		// cache may already link this session to a user (an earlier canonical
@@ -517,11 +643,17 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if adapter == "" {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is required")
 	}
-	// The assistant surface is derived from the observation provider, and only
-	// server-side assistant runs may claim it. Reserve those values so a client
-	// hook cannot forge assistant-attributed skill activity.
-	if isReservedAssistantAdapter(adapter) {
+	// The assistant and MCP surfaces are derived from the observation provider,
+	// and only server-side assistant runs and hosted MCP reads may claim them.
+	// Reserve those values so a client hook cannot forge assistant-attributed
+	// skill activity or an MCP load.
+	if isReservedServerAdapter(adapter) {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is reserved")
+	}
+	// Hosted MCP reads dedupe on keys with this prefix. A hook claiming one
+	// first would make the real read a silent duplicate.
+	if strings.HasPrefix(strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, "")), mcpskills.IdempotencyKeyPrefix) {
+		return oops.E(oops.CodeInvalid, nil, "idempotency_key prefix is reserved")
 	}
 	if strings.TrimSpace(payload.Event.Type) == "" {
 		return oops.E(oops.CodeInvalid, nil, "event.type is required")
@@ -529,12 +661,15 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if strings.TrimSpace(payload.SchemaVersion) != hookIngestSchemaV1 {
 		return oops.E(oops.CodeInvalid, nil, "unsupported hook schema_version")
 	}
-	return nil
+	if err := validateDeliveryFailurePayload(payload); err != nil {
+		return err
+	}
+	return validateInstallFailurePayload(payload)
 }
 
-func isReservedAssistantAdapter(adapter string) bool {
+func isReservedServerAdapter(adapter string) bool {
 	switch strings.ToLower(strings.Join(strings.Fields(adapter), "")) {
-	case "assistant", "assistants":
+	case "assistant", "assistants", mcpskills.ObservationProvider:
 		return true
 	default:
 		return false
@@ -542,10 +677,17 @@ func isReservedAssistantAdapter(adapter string) bool {
 }
 
 func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) (string, string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalHook")
+	defer span.End()
+
+	opts := authenticatedIngestOptions(ctx)
+	if opts.ObserveOnly {
+		return "", ""
+	}
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
-	if eventType == "prompt.submitted" || eventType == "tool.requested" {
+	if eventType == "prompt.submitted" || eventType == "tool.requested" || opts.contentBoundary {
 		if quarantine := s.checkQuarantineGate(ctx, event); quarantine != nil {
 			reason := sessionquarantine.DenyReason(quarantine)
 			return reason, reason
@@ -580,10 +722,16 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 		}
 	}
 
+	// AHP content boundaries scan their content directly. They do not create
+	// transcript messages from the model context.
+	if opts.contentBoundary {
+		return s.evaluateAHPBoundary(ctx, event, opts.boundaryScans)
+	}
+
 	switch eventType {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
-			Prompt: canonicalPromptText(payload),
+			Prompt: conv.PtrValOr(opts.promptPolicyText, canonicalPromptText(payload)),
 		})
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			if scanResult.Action == "quarantine" {
@@ -591,17 +739,33 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
 				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
 			}
-			if scanResult.Action == "warn" && authenticatedIngestOptions(ctx).AllowWarnAcknowledgement {
+			if scanResult.IsWarnChallenge() && opts.AllowWarnAcknowledgement {
+				if fromCowork(payload) && scanResult.CallFingerprint != "" {
+					// Cowork names the minute a message was sent in the prompt,
+					// so a retry a minute later must still match its challenge.
+					scanResult.CallFingerprint = risk.CoworkPromptCallFingerprint(ev.Prompt)
+				}
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}
-				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
-					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-					return auditReason, userReason
+				// Cowork cuts the acknowledgement link off and shows it as plain
+				// text, so there the warning leads with a short link.
+				if fromCowork(payload) {
+					if ackURL := s.coworkWarnAckURL(ctx, ev.Event, scanResult); ackURL != "" {
+						s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, "", scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
+						auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						return auditReason, coworkWarnUserReason(scanResult, ackURL)
+					}
+				}
+				if !fromCowork(payload) {
+					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
+						auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						return auditReason, userReason
+					}
 				}
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
+			return auditReason, renderUserBlockReason(scanResult, auditReason)
 		}
 	case "tool.requested":
 		toolName := canonicalToolName(payload)
@@ -618,20 +782,20 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			// So exclude acknowledged warns from the block condition rather than
 			// returning early on them.
 			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
-				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, toolName)) {
+				(!scanResult.IsWarnChallenge() || !s.warnAcknowledged(ctx, ev.Event, scanResult, toolName)) {
 				if scanResult.Action == "quarantine" {
 					auditReason := quarantineAuditReason("permission request", scanResult)
 					s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
 					return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
 				}
-				if scanResult.Action == "warn" {
+				if scanResult.IsWarnChallenge() {
 					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 						auditReason := fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 						return auditReason, userReason
 					}
 				}
 				auditReason := fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+				userReason := renderUserBlockReason(scanResult, auditReason)
 				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
 			}
 		}
@@ -646,9 +810,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 					s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
 					return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
 				}
-				if scanResult.Action == "warn" {
+				if scanResult.IsWarnChallenge() {
 					if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 						return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
+					}
+					if fromCowork(payload) {
+						if auditReason, userReason, ok := s.askCoworkToolWarn(ctx, payload, ev.Event, scanResult, toolName); ok {
+							return auditReason, userReason
+						}
 					}
 					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 						auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
@@ -656,7 +825,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 					}
 				}
 				auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+				userReason := renderUserBlockReason(scanResult, auditReason)
 				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
 			}
 			return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
@@ -671,9 +840,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
 				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
 			}
-			if scanResult.Action == "warn" {
+			if scanResult.IsWarnChallenge() {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 					return "", ""
+				}
+				if fromCowork(payload) {
+					if auditReason, userReason, ok := s.askCoworkToolWarn(ctx, payload, ev.Event, scanResult, toolName); ok {
+						return auditReason, userReason
+					}
 				}
 				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 					auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
@@ -681,7 +855,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				}
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			userReason := renderUserBlockReason(scanResult, auditReason)
 			return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
 		}
 	}
@@ -693,6 +867,9 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 // legacy per-provider handlers. Retried deliveries keep the deny but must not
 // mint a second row.
 func (s *Service) appendCanonicalBlockURL(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, auditReason, toolName, policyID, userReason string) string {
+	ctx, span := s.tracer.Start(ctx, "hooks.appendCanonicalBlockURL")
+	defer span.End()
+
 	if s.isHookDuplicate(ctx) {
 		return userReason
 	}
@@ -775,6 +952,9 @@ func canonicalRiskEventType(payload *gen.IngestPayload) hookevents.EventType {
 }
 
 func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, rawToolName string, toolInput any) (string, string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalShadowMCP")
+	defer span.End()
+
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID)
 	if policy == nil {
 		return "", ""
@@ -784,8 +964,8 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	evidence := canonicalShadowMCPEvidence(payload, rawToolName)
 	// A Codex meta-tool names its target in tool_input.server, so nothing above
 	// can derive an identity from the tool name. Resolving that name against the
-	// session's inventory is what lets a Gram-hosted target be allowed at all —
-	// without a URL the guard can only reach its generic "not Gram-hosted" deny,
+	// session's inventory is what lets a Speakeasy-hosted target be allowed at all —
+	// without a URL the guard can only reach its generic "not Speakeasy-hosted" deny,
 	// which would block legitimate reads the legacy endpoint permits. A name we
 	// cannot resolve still denies: unproven is not absent.
 	if evidence.ServerIdentity == "" && evidence.FullURL == "" {
@@ -797,16 +977,17 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
-			OrganizationID:  authCtx.ActiveOrganizationID,
-			ProjectID:       authCtx.ProjectID.String(),
-			RequesterUserID: actor.UserID,
-			UserMessage:     policy.UserMessage,
-			AuditReason:     auditReason,
-			Evidence:        evidence,
-			ToolName:        toolName,
-			ToolInput:       toolInput,
-			RiskPolicyID:    policy.ID,
-			PolicyName:      policy.Name,
+			OrganizationID:    authCtx.ActiveOrganizationID,
+			ProjectID:         authCtx.ProjectID.String(),
+			RequesterUserID:   actor.UserID,
+			UserMessage:       policy.UserMessage,
+			AuditReason:       auditReason,
+			Evidence:          evidence,
+			ToolName:          toolName,
+			ToolInput:         toolInput,
+			RiskPolicyID:      policy.ID,
+			SessionMCPServers: s.sessionMCPServers(ctx, canonicalSessionID(payload)),
+			PolicyName:        policy.Name,
 		})
 		// Retried deliveries still get the deny decision, but must not mint
 		// another block row (and a second block URL) for the same call.
@@ -858,15 +1039,19 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
 func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) {
-	if sessionID == "" {
+	ctx, span := s.tracer.Start(ctx, "hooks.cacheCanonicalMCPList")
+	defer span.End()
+
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if sessionID == "" || projectID == "" {
 		return
 	}
 
 	// Extend both keys on every event, as the legacy endpoints do for the
 	// snapshot: a session outliving its TTL loses the inventory, and losing the
 	// read status silently disables the guard for the rest of that session.
-	s.refreshMCPListTTL(ctx, sessionID)
-	if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(sessionID), sessionMCPInventoryReadTTL); err != nil {
+	s.refreshMCPListTTL(ctx, projectID, sessionID)
+	if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), sessionMCPInventoryReadTTL); err != nil {
 		s.logger.DebugContext(ctx, "failed to extend MCP inventory read status",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),
@@ -881,10 +1066,10 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 	// it while the entries write failed would leave the session claiming a read
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
-	if !inventoryRead {
+	if !inventoryRead || !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
 		return
 	}
-	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(projectID, sessionID), entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
@@ -895,7 +1080,7 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 
 	// Meta-tool calls arrive later carrying no inventory status, so the
 	// authoritative read status has to be held per session.
-	if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), true, sessionMCPInventoryReadTTL); err != nil {
+	if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), true, sessionMCPInventoryReadTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP inventory read status",
 			attr.SlogEvent("hook_mcp_list_read_cache_set_failed"),
 			attr.SlogError(err),
@@ -942,19 +1127,23 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 //
 // Absent also covers every relay released before the flag existed. Those send
 // no inventory at all, and enforcing on them would deny every meta-tool call
-// including reads of Gram-hosted servers that work today — so they keep their
+// including reads of Speakeasy-hosted servers that work today — so they keep their
 // current behavior until they upgrade, rather than enforcement depending on a
 // server deploy and a hooks release landing in the right order.
 func (s *Service) canonicalClientReportsMCPInventory(ctx context.Context, payload *gen.IngestPayload) bool {
+	ctx, span := s.tracer.Start(ctx, "hooks.canonicalClientReportsMCPInventory")
+	defer span.End()
+
 	if canonicalMCPInventoryRead(payload) {
 		return true
 	}
 	sessionID := canonicalSessionID(payload)
-	if sessionID == "" {
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if sessionID == "" || projectID == "" {
 		return false
 	}
 	var read bool
-	if err := s.cache.Get(ctx, sessionMCPInventoryReadCacheKey(sessionID), &read); err != nil {
+	if err := s.cache.Get(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), &read); err != nil {
 		return false
 	}
 	return read
@@ -993,10 +1182,16 @@ func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) 
 }
 
 func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time, blockReason string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.recordCanonicalHook")
+	defer span.End()
+
 	// Resolve the session identity once, before the telemetry write, so the
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
+	if claudeServiceNameSpecificity(metadata.ServiceName) > 0 && claudetag.Parse(canonicalPromptText(payload)).Detected {
+		metadata.ServiceName = "claude-tag"
+	}
 	// Resolve the product surface once per event: the OTEL-cached service.name
 	// wins ("cowork" vs "claude-code"), the SessionStart variant fills in for
 	// sessions whose OTEL stream hasn't arrived, and non-Claude adapters pass
@@ -1007,10 +1202,10 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// org-scoped key and no self-reported email carries nothing else, and the
 	// OTEL path needs the cached hostname to stamp Claude cost rows so the
 	// user breakdown can fall back to the device.
-	if strings.TrimSpace(payload.Event.Type) == "session.started" &&
-		metadata.SessionID != "" && (metadata.UserID != "" || metadata.UserEmail != "" || metadata.Hostname != "") {
+	if (strings.TrimSpace(payload.Event.Type) == "session.started" || metadata.ServiceName == "claude-tag") &&
+		metadata.SessionID != "" && !isAgentActor(ctx) && (metadata.ServiceName == "claude-tag" || metadata.UserID != "" || metadata.UserEmail != "" || metadata.Hostname != "") {
 		cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
-		err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+		err := s.cacheSessionMetadata(cacheCtx, metadata)
 		cancel()
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to cache canonical hook session identity",
@@ -1022,11 +1217,33 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 			)
 		}
 	}
-	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
+	rows := s.canonicalTelemetryRows(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
+	// The tee gets its own copies before the writer scrubs what it stores.
+	teeRows := cloneHookTelemetryRows(rows)
+	if s.telemetryLogger != nil {
+		for _, row := range rows {
+			s.logHookTelemetry(ctx, authCtx, &metadata, payload, row.timestamp, row.toolName, row.attrs)
+		}
+	}
+	s.teeCanonicalHookToEventFeed(ctx, payload, authCtx, &metadata, hookSource, blockReason, teeRows)
+	// Cowork also ships the session transcript, so its rows are keyed by the
+	// ids the transcript shares and the two paths store each prompt and tool
+	// call once. See claude_cowork_rows.go.
+	if fromCowork(payload) {
+		s.persistCoworkEventRow(ctx, payload, authCtx, &metadata, hookSource, timestamp)
+		s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, hookSource, timestamp)
+		return
+	}
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",
-			attr.SlogEvent("hooks_ingest_chat_persist_failed"),
+		event := "hooks_ingest_chat_persist_failed"
+		msg := "failed to persist canonical hook conversation event"
+		if errors.Is(err, errChatProjectMismatch) {
+			event = "hooks_ingest_chat_project_mismatch"
+			msg = "refusing to persist hook conversation event for a session bound to another project"
+		}
+		s.logger.WarnContext(ctx, msg,
+			attr.SlogEvent(event),
 			attr.SlogError(err),
 			attr.SlogHookSource(payload.Source.Adapter),
 			attr.SlogHookEvent(payload.Event.Type),
@@ -1036,9 +1253,21 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	} else if promptCaptured && usesNativeTranscriptFallback(payload.Source.Adapter) {
 		s.markNativePromptSession(ctx, authCtx.ProjectID.String(), canonicalSessionID(payload), payload.Source.Adapter)
 	}
-	if err := s.persistPromptAttachments(ctx, payload, authCtx, &metadata, timestamp); err != nil {
-		s.logger.WarnContext(ctx, "failed to persist prompt attachments",
-			attr.SlogEvent("hooks_ingest_prompt_attachment_persist_failed"),
+	s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, hookSource, timestamp)
+}
+
+// persistPromptAttachmentsLogged stores the event's prompt attachments and
+// logs, rather than returns, a failure: attachment capture is best effort.
+func (s *Service) persistPromptAttachmentsLogged(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time) {
+	if err := s.persistPromptAttachments(ctx, payload, authCtx, metadata, hookSource, timestamp); err != nil {
+		event := "hooks_ingest_prompt_attachment_persist_failed"
+		msg := "failed to persist prompt attachments"
+		if errors.Is(err, errChatProjectMismatch) {
+			event = "hooks_ingest_chat_project_mismatch"
+			msg = "refusing to persist prompt attachments for a session bound to another project"
+		}
+		s.logger.WarnContext(ctx, msg,
+			attr.SlogEvent(event),
 			attr.SlogError(err),
 			attr.SlogHookSource(payload.Source.Adapter),
 			attr.SlogHookEvent(payload.Event.Type),
@@ -1080,16 +1309,27 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		GramOrgID:           authCtx.ActiveOrganizationID,
 		ProjectID:           authCtx.ProjectID.String(),
 	}
+	// A Cowork event names its surface itself. The relay skips SessionStart
+	// inside the Cowork VM and sends the generic "claude" adapter slug, so
+	// without this the session reads as Claude Code until Claude's OTEL
+	// stream reaches the server, while its transcript rows say cowork.
+	if fromCowork(payload) {
+		metadata.ServiceName = agentVariantCowork
+	}
 	if metadata.SessionID == "" {
 		return metadata
 	}
 
 	if cached, err := s.getSessionMetadata(ctx, metadata.SessionID); err == nil &&
 		cached.GramOrgID == metadata.GramOrgID && cached.ProjectID == metadata.ProjectID {
+		if isAgentActor(ctx) {
+			cached = agentSessionView(cached, metadata.GramOrgID, metadata.ProjectID)
+		}
 		// Surface-specificity merge: the OTEL path caches "cowork" from the
 		// resource service.name, which must survive this event's re-cache —
-		// cowork ships the same "claude-code-desktop" adapter slug as Claude
-		// Code Desktop, so the adapter alone can never downgrade it. See
+		// Cowork events from the desktop hook client carry no session.surface
+		// and ship the same "claude-code-desktop" adapter slug as Claude Code
+		// Desktop, so the adapter alone can never downgrade it. See
 		// claudeServiceNameSpecificity for the full ranking.
 		metadata.ServiceName = preferClaudeServiceName(metadata.ServiceName, cached.ServiceName)
 		metadata.Provider = cached.Provider
@@ -1109,7 +1349,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		// ingest keys with no self-reported email): the device bridge may have
 		// attributed the owning employee. A resolved identity is never
 		// overwritten.
-		if authenticatedIngestOptions(ctx).AllowSessionIdentityFallback {
+		if authenticatedIngestOptions(ctx).AllowSessionIdentityFallback && !isAgentActor(ctx) {
 			if metadata.UserEmail == "" {
 				metadata.UserEmail = cached.UserEmail
 			}
@@ -1129,6 +1369,10 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 	// to the OTEL path, which carries the account identity this payload lacks.
 	if strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "codex") {
 		metadata.Provider = providerOpenAI
+		// Account attribution links sessions to employees; an agent actor has none.
+		if isAgentActor(ctx) {
+			return metadata
+		}
 		identityChanged := !sameCodexIdentity(metadata.ObservedUserEmail, metadata.UserEmail)
 		if metadata.AccountType == "" || identityChanged {
 			if identityChanged {
@@ -1165,7 +1409,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 				// event; this write-back exists for sessions whose started
 				// event was never seen.
 				cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
-				err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+				err := s.cacheSessionMetadata(cacheCtx, metadata)
 				cancel()
 				if err != nil {
 					s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
@@ -1179,16 +1423,20 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 	return metadata
 }
 
-func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time, blockReason string) {
-	if s.telemetryLogger == nil {
-		return
-	}
+// canonicalTelemetryRows builds the rows recorded for one hook event, in the
+// order they are written: the event's own row and, when a skill was
+// inferred on it, the derived activation row. The telemetry writer stores
+// them and the event feed tee republishes them, so both see the same
+// attributes.
+func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time, blockReason string) []hookTelemetryRow {
+	rows := make([]hookTelemetryRow, 0, 2)
 
 	hookEventName := telemetryHookEventName(payload)
+	// Only tool events carry a tool name. Prompt, lifecycle, and other
+	// non-tool rows keep gram.tool.name empty (gram.hook.event still names
+	// the event), because tool-call analytics count hook rows by a non-empty
+	// tool name.
 	toolName := canonicalTelemetryToolName(payload)
-	if toolName == "" {
-		toolName = hookEventName
-	}
 
 	attrs := hookTelemetryBaseAttrs(payload, authCtx, hookEventName, hookSource)
 	if blockReason != "" {
@@ -1232,12 +1480,10 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 			attrs[attr.GenAIUsageCostKey] = *usage.Cost
 		}
 	}
+	if server := canonicalTelemetryToolSource(payload); server != "" {
+		attrs[attr.ToolCallSourceKey] = server
+	}
 	if mcp := canonicalMCPData(payload); mcp != nil {
-		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		} else if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		}
 		if url := strings.TrimSpace(conv.PtrValOr(mcp.URL, "")); url != "" {
 			attrs[attr.MCPServerURLKey] = url
 			attrs[attr.MCPMatchKey] = url
@@ -1256,7 +1502,7 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 	// split by personal vs team account, matching the legacy per-provider paths.
 	stampAccountAttribution(attrs, *metadata)
 
-	s.logHookTelemetry(ctx, authCtx, metadata, timestamp, toolName, attrs)
+	rows = append(rows, hookTelemetryRow{timestamp: timestamp, toolName: toolName, attrs: attrs})
 
 	// A skill name on an ordinary tool/prompt event is an inferred activation
 	// (Codex has no dedicated Skill tool): the underlying event was recorded
@@ -1277,8 +1523,9 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
 		mergeSourceAttributes(attrs, authenticatedIngestOptions(ctx).SourceAttributes)
 		stampAccountAttribution(attrs, *metadata)
-		s.logHookTelemetry(ctx, authCtx, metadata, timestamp, "Skill", attrs)
+		rows = append(rows, hookTelemetryRow{timestamp: timestamp, toolName: "Skill", attrs: attrs})
 	}
+	return rows
 }
 
 func mergeSourceAttributes(base, source map[attr.Key]any) {
@@ -1330,7 +1577,17 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 	return attrs
 }
 
-func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
+func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, payload *gen.IngestPayload, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
+	// Device details the speakeasy-hooks binary reported, so rows can be
+	// counted per client version. A spool replay's headers describe the binary
+	// draining the spool, which after an upgrade is not the one that captured
+	// the event, so replayed rows don't take them.
+	if replayed, _ := attrs[attr.HookReplayedKey].(bool); !replayed {
+		for key, value := range middleware.HookDeviceAttributes(ctx) {
+			attrs[key] = value
+		}
+	}
+	stampIngestClientVersion(ctx, payload, attrs)
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: timestamp,
 		ToolInfo: telemetry.ToolInfo{
@@ -1343,7 +1600,7 @@ func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.A
 			FunctionID:     nil,
 		},
 		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-		Attributes: attrs,
+		Attributes: withAgentActor(ctx, attrs),
 	})
 }
 
@@ -1356,7 +1613,7 @@ func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.A
 // a fixed canonical fallback for senders that omit one, so unified-ingest rows
 // keep counting without a ClickHouse migration.
 func telemetryHookEventName(payload *gen.IngestPayload) string {
-	// Skill activations are a Gram-specific classification layered onto an
+	// Skill activations are a Speakeasy-specific classification layered onto an
 	// ordinary provider tool event; resolving via the raw name would erase it.
 	if isExplicitSkillActivation(payload) {
 		return eventTypeSkillActivated
@@ -1468,6 +1725,9 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	var titleContent string
 	uncorrelatedPrompt := false
 	nativePrompt := false
+	// Title generation is scheduled on assistant turns only, as the
+	// per-platform hook endpoints do; tool traffic says nothing about the topic.
+	assistantTurn := false
 	switch strings.TrimSpace(payload.Event.Type) {
 	case "prompt.submitted":
 		content := canonicalPromptText(payload)
@@ -1475,7 +1735,11 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			return false, nil
 		}
 		msg = baseMsg("user", content)
-		if correlationID := agentPromptCorrelationID(payload); correlationID != "" {
+		correlationID := authenticatedIngestOptions(ctx).promptCorrelationID
+		if correlationID == "" {
+			correlationID = agentPromptCorrelationID(payload)
+		}
+		if correlationID != "" {
 			msg.MessageID = conv.ToPGText(correlationID)
 		} else {
 			uncorrelatedPrompt = proxiedTranscriptSource(hookSource) || usesNativeTranscriptFallback(payload.Source.Adapter)
@@ -1502,6 +1766,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 				return false, nil
 			}
 		}
+		assistantTurn = true
 		msg = baseMsg("assistant", content)
 		if len(outputToolCalls) > 0 {
 			toolCallsJSON, err := json.Marshal(outputToolCalls)
@@ -1532,25 +1797,80 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		msg = baseMsg("assistant", "")
 		msg.FinishReason = conv.ToPGText("tool_calls")
 		msg.ToolCalls = toolCallsJSON
-		titleContent = toolName
+		// A tool name is not message content, so a chat it opened could never be
+		// recognized as a stand-in; seed the surface placeholder instead.
+		titleContent = canonicalPlaceholderTitle(hookSource)
 	case "tool.completed", "tool.failed":
+		failed := strings.TrimSpace(payload.Event.Type) == "tool.failed"
 		content := canonicalToolResultContent(payload)
+		// A result is an outcome even without text: without a result row the
+		// call would read as still running. An error that is present but
+		// empty ("", {}, [] or null) says no more than a missing one.
+		if failed && isEmptyJSONValue(content) {
+			content = marshalToJSON(toolFailedWithoutErrorContent)
+		}
 		if strings.TrimSpace(content) == "" {
-			return false, nil
+			content = marshalToJSON(toolCompletedWithoutOutputContent)
 		}
 		msg = baseMsg("tool", content)
 		msg.ToolCallID = conv.ToPGTextEmpty(canonicalChatToolCallID(payload))
-		titleContent = content
+		if failed {
+			// The result content is the error, which reads like any output;
+			// the finish reason is what tells a reader the call failed.
+			msg.FinishReason = conv.ToPGText(toolResultFinishReasonError)
+		}
+		// A tool's output says little about the session's topic and can run to
+		// megabytes, too much to scan for harness envelopes on every event;
+		// seed the surface placeholder for title generation to replace.
+		titleContent = canonicalPlaceholderTitle(hookSource)
 	default:
 		return false, nil
 	}
 
-	title := canonicalChatTitle(payload, titleContent)
+	title := canonicalChatTitle(payload, titleContent, hookSource)
+	var stored bool
+	var err error
 	if uncorrelatedPrompt {
-		return s.insertUncorrelatedAgentPrompt(ctx, metadata, msg, title, nativePrompt)
+		stored, err = s.insertUncorrelatedAgentPrompt(ctx, metadata, msg, title, nativePrompt)
+	} else {
+		stored, err = s.insertMessageWithFallbackUpsertResult(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, title)
 	}
-	stored, err := s.insertMessageWithFallbackUpsertResult(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, title)
-	return stored && msg.Role == "user", err
+	if err != nil {
+		return false, err
+	}
+	if channelTitle, isWake := claudeTagTitle(titleContent); stored && hookSource == "claude-tag" && msg.Role == "user" && isWake {
+		if err := s.repo.SetClaudeTagChatTitle(ctx, repo.SetClaudeTagChatTitleParams{
+			ID: msg.ChatID, ProjectID: msg.ProjectID, Title: conv.ToPGText(channelTitle),
+		}); err != nil {
+			return false, fmt.Errorf("set Claude Tag chat title: %w", err)
+		}
+	}
+	if stored && assistantTurn {
+		s.scheduleCanonicalChatTitle(ctx, authCtx, msg.ChatID, hookSource)
+	}
+	return stored && msg.Role == "user", nil
+}
+
+// scheduleCanonicalChatTitle asks the title generator to replace the stand-in
+// a unified-ingest session was seeded with. Claude Tag sessions are skipped:
+// their title is the channel, rewritten on every wake.
+func (s *Service) scheduleCanonicalChatTitle(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID, hookSource string) {
+	if s.chatTitleGenerator == nil || hookSource == "claude-tag" {
+		return
+	}
+	// WithoutCancel so a client that hangs up as soon as the hook is
+	// acknowledged still gets its session named.
+	if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
+		context.WithoutCancel(ctx),
+		chatID.String(),
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+	); err != nil {
+		s.logger.WarnContext(ctx, "failed to schedule chat title generation",
+			attr.SlogError(err),
+			attr.SlogChatID(chatID.String()),
+		)
+	}
 }
 
 func (s *Service) markChatLiteLLMProxied(ctx context.Context, chatID, projectID uuid.UUID) {
@@ -1569,7 +1889,7 @@ func (s *Service) markChatLiteLLMProxied(ctx context.Context, chatID, projectID 
 
 func usesNativeTranscriptFallback(adapter string) bool {
 	switch strings.ToLower(strings.TrimSpace(adapter)) {
-	case "claude", "claude-code", "claude-code-desktop", "cowork", "cursor":
+	case "claude", "claude-code", "claude-tag", "claude-code-desktop", "cowork", "cursor":
 		return true
 	default:
 		return false
@@ -1594,7 +1914,7 @@ func proxiedTranscriptSource(source string) bool {
 // would leave turns with no assistant text at all.
 func nativeAssistantTurnSource(source string) bool {
 	switch strings.ToLower(strings.TrimSpace(source)) {
-	case "claude", "claude-code", "claude-code-desktop", "cowork":
+	case "claude", "claude-code", "claude-tag", "claude-code-desktop", "cowork":
 		return true
 	default:
 		return false
@@ -1630,7 +1950,9 @@ func canonicalAgentTurnID(payload *gen.IngestPayload) string {
 		return ""
 	}
 	adapter := strings.ToLower(strings.TrimSpace(payload.Source.Adapter))
-	if adapter != "codex" && adapter != "opencode" && adapter != "litellm" {
+	// openclaw carries OpenClaw's own ctx.runId, which the spike proved stable
+	// across before_agent_run, before_tool_call, llm_output and agent_end.
+	if adapter != "codex" && adapter != "opencode" && adapter != "openclaw" && adapter != "litellm" {
 		return ""
 	}
 	if payload.Session != nil && payload.Session.TurnID != nil {
@@ -1638,7 +1960,7 @@ func canonicalAgentTurnID(payload *gen.IngestPayload) string {
 		if encoded, ok := strings.CutPrefix(turnID, agentTurnPrefix); ok {
 			encodedProvider, nativeTurnID, found := strings.Cut(encoded, ":")
 			encodedProvider = strings.ToLower(strings.TrimSpace(encodedProvider))
-			stableProvider := encodedProvider == "codex" || encodedProvider == "opencode"
+			stableProvider := encodedProvider == "codex" || encodedProvider == "opencode" || encodedProvider == "openclaw"
 			if found && stableProvider && (adapter == "litellm" || adapter == encodedProvider) && strings.TrimSpace(nativeTurnID) != "" {
 				return encodedProvider + ":" + strings.TrimSpace(nativeTurnID)
 			}
@@ -1679,7 +2001,7 @@ func canonicalAgentTurnID(payload *gen.IngestPayload) string {
 	return "opencode:" + messageID
 }
 
-func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, occurredAt time.Time) error {
+func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) error {
 	if payload.Data == nil || len(payload.Data.PromptAttachments) == 0 || authCtx.ProjectID == nil {
 		return nil
 	}
@@ -1708,10 +2030,50 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	chatID := sessionIDToUUID(sessionID)
 	projectID := *authCtx.ProjectID
 	queries := chatRepo.New(s.db)
+	commit := func() error { return nil }
+	logicalAttachments := authenticatedIngestOptions(ctx).promptCorrelationID != ""
+	if logicalAttachments {
+		// Attachment-only events have no prompt row to create their chat. Do
+		// this before starting a transaction that cannot recover from an FK error.
+		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", hookSource)); err != nil {
+			return err
+		}
+		// Content parts have no external-ID uniqueness constraint. Serialize
+		// logical AHP attachment writes with the existing project/chat lock.
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin logical prompt attachment transaction: %w", err)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		queries = chatRepo.New(tx)
+		if err := queries.AcquireChatPromptCorrelationLock(ctx, chatRepo.AcquireChatPromptCorrelationLockParams{ProjectID: projectID, ChatID: chatID}); err != nil {
+			return fmt.Errorf("lock logical prompt attachments: %w", err)
+		}
+		commit = func() error {
+			if err := tx.Commit(ctx); err != nil {
+				return fmt.Errorf("commit logical prompt attachments: %w", err)
+			}
+			return nil
+		}
+	}
 
 	parentResolver, err := newPromptAttachmentParentResolver(ctx, queries, chatID, projectID)
 	if err != nil {
 		return err
+	}
+	seen := make(map[string]struct{})
+	if logicalAttachments {
+		existing, err := queries.ListChatContentPartsByChatID(ctx, chatRepo.ListChatContentPartsByChatIDParams{
+			ChatID: chatID, ProjectID: projectID, ParentChatMessageIds: parentResolver.parents, RiskContentPartIds: nil,
+		})
+		if err != nil {
+			return fmt.Errorf("list logical prompt attachments: %w", err)
+		}
+		for _, part := range existing {
+			if part.ExternalID.Valid {
+				seen[part.ExternalID.String] = struct{}{}
+			}
+		}
 	}
 
 	type pendingPromptAttachment struct {
@@ -1726,6 +2088,13 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		if attachment == nil || strings.TrimSpace(attachment.EntryUUID) == "" || strings.TrimSpace(attachment.Content) == "" {
 			continue
 		}
+		if logicalAttachments {
+			id := strings.TrimSpace(attachment.EntryUUID)
+			if _, exists := seen[id]; exists {
+				continue
+			}
+			seen[id] = struct{}{}
+		}
 		promptSHA256 := strings.ToLower(strings.TrimSpace(conv.PtrValOr(attachment.PromptSha256, "")))
 		createdAt := occurredAt
 		if ts := strings.TrimSpace(conv.PtrValOr(attachment.Timestamp, "")); ts != "" {
@@ -1737,7 +2106,12 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		if err != nil {
 			return fmt.Errorf("marshal prompt attachment metadata: %w", err)
 		}
-		parentID := parentResolver.resolve(promptSHA256)
+		parentID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		// AHP attachment-only messages have no prompt parent. The latest user
+		// row belongs to an earlier event, unlike transcript attachment fallback.
+		if promptSHA256 != "" || !strings.HasPrefix(attachment.EntryUUID, "ahp-attachment:") {
+			parentID = parentResolver.resolve(promptSHA256)
+		}
 		pending = append(pending, pendingPromptAttachment{
 			attachment: attachment,
 			content:    []byte(attachment.Content),
@@ -1748,6 +2122,12 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	}
 	if len(pending) == 0 {
 		return nil
+	}
+
+	if !logicalAttachments {
+		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", hookSource)); err != nil {
+			return err
+		}
 	}
 
 	contents := make([][]byte, len(pending))
@@ -1776,32 +2156,25 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		})
 	}
 	if _, err := queries.CreateChatContentPart(ctx, rows); err == nil {
-		return nil
-	} else if !isForeignKeyViolation(err) {
+		return commit()
+	} else if logicalAttachments || !isForeignKeyViolation(err) {
+		// A failed statement aborts the logical-attachment transaction.
+		// Only autocommit writes can use the missing-chat retry below.
 		return fmt.Errorf("insert prompt attachment content parts: %w", err)
 	}
-	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-		ID:             chatID,
-		ProjectID:      projectID,
-		OrganizationID: metadata.GramOrgID,
-		UserID:         conv.ToPGTextEmpty(metadata.UserID),
-		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
-		Title:          conv.ToPGText(canonicalChatTitle(payload, "")),
-		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
-	})
-	if upsertErr != nil {
-		return fmt.Errorf("upsert claude code session for prompt attachments: %w", upsertErr)
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", hookSource)); err != nil {
+		return fmt.Errorf("upsert claude code session for prompt attachments: %w", err)
 	}
 	if _, err := queries.CreateChatContentPart(ctx, rows); err != nil {
 		return fmt.Errorf("insert prompt attachment content parts after creating chat: %w", err)
 	}
-	return nil
+	return commit()
 }
 
 type promptAttachmentParentResolver struct {
-	latest uuid.NullUUID
-	byHash map[string]uuid.NullUUID
+	parents []uuid.UUID
+	latest  uuid.NullUUID
+	byHash  map[string]uuid.NullUUID
 }
 
 func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Queries, chatID uuid.UUID, projectID uuid.UUID) (*promptAttachmentParentResolver, error) {
@@ -1813,10 +2186,12 @@ func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Qu
 		return nil, fmt.Errorf("list prompt attachment parent candidates: %w", err)
 	}
 	resolver := &promptAttachmentParentResolver{
-		latest: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		byHash: make(map[string]uuid.NullUUID, len(candidates)),
+		parents: make([]uuid.UUID, 0, len(candidates)),
+		latest:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		byHash:  make(map[string]uuid.NullUUID, len(candidates)),
 	}
 	for i, candidate := range candidates {
+		resolver.parents = append(resolver.parents, candidate.ID)
 		id := uuid.NullUUID{UUID: candidate.ID, Valid: true}
 		if i == 0 {
 			resolver.latest = id
@@ -1934,6 +2309,16 @@ func canonicalAllowResult() *gen.IngestHookResult {
 	}
 }
 
+func canonicalAskResult(message string) *gen.IngestHookResult {
+	reason := "policy_warn_ask"
+	return &gen.IngestHookResult{
+		Decision: "ask",
+		Reason:   &reason,
+		Message:  &message,
+		Effects:  nil,
+	}
+}
+
 func canonicalDenyResult(message string) *gen.IngestHookResult {
 	if strings.TrimSpace(message) == "" {
 		message = "Request denied by Speakeasy policy."
@@ -1960,21 +2345,31 @@ const maxEventBackdate = 14 * 24 * time.Hour
 // enforcement evaluation) agrees on one time for one event; a skewed device
 // clock must never make the stores diverge.
 func canonicalEventTime(payload *gen.IngestPayload) time.Time {
-	now := time.Now()
+	raw := ""
 	if payload != nil && payload.Event != nil {
-		if raw := strings.TrimSpace(conv.PtrValOr(payload.Event.OccurredAt, "")); raw != "" {
-			if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-				if t.After(now) {
-					return now
-				}
-				if floor := now.Add(-maxEventBackdate); t.Before(floor) {
-					return floor
-				}
-				return t
-			}
-		}
+		raw = conv.PtrValOr(payload.Event.OccurredAt, "")
 	}
-	return now
+	return clampEventTime(raw, time.Now())
+}
+
+// clampEventTime parses a sender-supplied RFC3339 time and clamps it to
+// [now-maxEventBackdate, now]; an empty or unparseable value is now.
+func clampEventTime(raw string, now time.Time) time.Time {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return now
+	}
+	t, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return now
+	}
+	if t.After(now) {
+		return now
+	}
+	if floor := now.Add(-maxEventBackdate); t.Before(floor) {
+		return floor
+	}
+	return t
 }
 
 func canonicalSessionID(payload *gen.IngestPayload) string {
@@ -2013,6 +2408,85 @@ func canonicalTelemetryToolName(payload *gen.IngestPayload) string {
 		return "Skill"
 	}
 	return canonicalToolName(payload)
+}
+
+// canonicalTelemetryToolSource resolves the MCP server a hook tool event is
+// attributed to, stored as gram.tool_call.source. Tool-usage analytics
+// classify a hook trace with a source as a shadow MCP call and one without as
+// a local tool call.
+func canonicalTelemetryToolSource(payload *gen.IngestPayload) string {
+	if mcp := canonicalMCPData(payload); mcp != nil {
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
+			return server
+		}
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
+			return server
+		}
+	}
+	return openClawResultMCPServer(payload)
+}
+
+// openClawResultMCPServer reads the server name OpenClaw stamps as
+// details.mcpServer on every MCP tool result. Native tool results never carry
+// it. OpenClaw names MCP tools <server>__<tool>, which no relay decodes into
+// data.mcp, and relays that predate reading this marker send OpenClaw MCP
+// results without data.mcp, so ingest reads the marker from the result too.
+// Only post-call events carry a result: the pre-call row of the same call
+// stays unattributed and shares the call's trace.
+func openClawResultMCPServer(payload *gen.IngestPayload) string {
+	if payload == nil || payload.Source == nil || payload.Event == nil {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "openclaw") {
+		return ""
+	}
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "tool.completed", "tool.failed":
+	default:
+		return ""
+	}
+	tool := canonicalToolCallData(payload)
+	if tool == nil {
+		return ""
+	}
+	for _, result := range []any{tool.Output, tool.Error} {
+		if server := toolResultDetailsMCPServer(result); server != "" {
+			return server
+		}
+	}
+	return ""
+}
+
+// toolResultDetailsMCPServer returns details.mcpServer from a decoded tool
+// result, which arrives either as a JSON value or as JSON-encoded text.
+func toolResultDetailsMCPServer(result any) string {
+	var raw []byte
+	switch r := result.(type) {
+	case nil:
+		return ""
+	case map[string]any:
+		// Already decoded: read the marker without re-encoding the result.
+		details, _ := r["details"].(map[string]any)
+		server, _ := details["mcpServer"].(string)
+		return strings.TrimSpace(server)
+	case string:
+		raw = []byte(r)
+	default:
+		encoded, err := json.Marshal(r)
+		if err != nil {
+			return ""
+		}
+		raw = encoded
+	}
+	var decoded struct {
+		Details struct {
+			MCPServer string `json:"mcpServer"`
+		} `json:"details"`
+	}
+	if json.Unmarshal(raw, &decoded) != nil {
+		return ""
+	}
+	return strings.TrimSpace(decoded.Details.MCPServer)
 }
 
 func canonicalToolCallID(payload *gen.IngestPayload) string {
@@ -2103,17 +2577,55 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 	return name
 }
 
-func canonicalChatTitle(payload *gen.IngestPayload, fallback string) string {
+// canonicalChatTitle returns the display title for a new or updated chat.
+// source is the resolved hook source (e.g. "claude-code", "claude-tag"); pass
+// an empty string when the source is unknown. The claude-tag wake-envelope
+// rewrite is only applied to Claude-family sources to prevent non-Claude
+// adapters from being labelled as channel sessions.
+// Apart from a channel label or a cron job name the result is a stand-in that
+// title generation later replaces.
+func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) string {
 	title := canonicalPromptText(payload)
 	if title == "" {
 		title = fallback
 	}
-	title = strings.TrimSpace(title)
-	runes := []rune(title)
-	if len(runes) <= 80 {
-		return title
+	if claudeServiceNameSpecificity(source) > 0 {
+		if tagTitle, ok := claudeTagTitle(title); ok {
+			title = tagTitle
+		} else if delivery := claudetag.Parse(title); delivery.Detected {
+			if delivery.Sender != "" {
+				title = delivery.Text
+			} else {
+				title = "Claude Tag coordination"
+			}
+		}
 	}
-	return string(runes[:80])
+	if cronTitle, ok := chat.CronJobTitle(title); ok {
+		return cronTitle
+	}
+	if derived := chat.DerivedTitle(title); derived != "" {
+		return derived
+	}
+	return canonicalPlaceholderTitle(source)
+}
+
+// canonicalPlaceholderTitle is the stand-in for a chat opened by an event that
+// carries no text to derive a title from.
+func canonicalPlaceholderTitle(hookSource string) string {
+	switch hookSource {
+	case agentVariantCowork:
+		return chat.DefaultCoworkChatTitle
+	case agentVariantClaudeCode, surfaceClaudeCodeDesktop:
+		return chat.DefaultClaudeChatTitle
+	case "claude", "claude-tag":
+		return chat.DefaultClaudeAmbiguous
+	case "cursor":
+		return chat.DefaultCursorChatTitle
+	case "codex":
+		return chat.DefaultCodexChatTitle
+	default:
+		return chat.DefaultChatTitle
+	}
 }
 
 func canonicalToolCallData(payload *gen.IngestPayload) *gen.HookToolCallData {
@@ -2146,7 +2658,7 @@ func canonicalMCPInventoryEntries(payload *gen.IngestPayload) []MCPServerEntry {
 		// configured name, and the prefix is the only thing the cached-entry
 		// fallback matches on. Leaving it empty makes a hyphenated server
 		// ("platform-logs", addressed as "platform_logs") unresolvable here
-		// while the legacy endpoint resolves it — a Gram-hosted target would
+		// while the legacy endpoint resolves it — a Speakeasy-hosted target would
 		// be denied. Mirrors ParseCodexMCPList.
 		toolPrefix := ""
 		if isCodex {
@@ -2193,5 +2705,60 @@ func jsonString(v any) string {
 			return fmt.Sprint(t)
 		}
 		return string(b)
+	}
+}
+
+// surfaceCowork is session.surface on events sent from inside Claude Cowork.
+// It is the same name the server stores for Cowork sessions.
+const surfaceCowork = agentVariantCowork
+
+// fromCowork reports whether the event came from inside Claude Cowork. Two
+// things differ there. The Stop hook also ships the session transcript, so
+// event rows use the keys the transcript shares (claude_cowork_rows.go).
+// Cowork cannot show the acknowledgement link, so a warned prompt is
+// confirmed by sending it again (cowork_warn_confirm.go).
+func fromCowork(payload *gen.IngestPayload) bool {
+	return payload != nil && payload.Session != nil &&
+		strings.EqualFold(strings.TrimSpace(conv.PtrValOr(payload.Session.Surface, "")), surfaceCowork)
+}
+
+// persistCoworkEventRow stores a Cowork event under the
+// key its transcript entry shares, or a reply sent from a session without a
+// transcript under its own key (claudeReplyKey). Other events without a
+// shared id are left to the transcript.
+func (s *Service) persistCoworkEventRow(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) {
+	sessionID := canonicalSessionID(payload)
+	if sessionID == "" || authCtx.ProjectID == nil {
+		return
+	}
+	row, ok := coworkEventRow(payload, occurredAt)
+	if !ok {
+		return
+	}
+	enabled, err := s.sessionCaptureEnabled(ctx, metadata, *authCtx.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not resolve session capture for a cowork hook event, skipping its row",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+		)
+		return
+	}
+	if !enabled {
+		return
+	}
+	rows := []claudeTranscriptRow{row}
+	if _, err := s.writeClaudeRows(ctx, authCtx, metadata, sessionIDToUUID(sessionID), rows, hookSource, "", claudeTranscriptTitle(rows, hookSource)); err != nil {
+		event := "hooks_ingest_chat_persist_failed"
+		if errors.Is(err, errChatProjectMismatch) {
+			event = "hooks_ingest_chat_project_mismatch"
+		}
+		s.logger.WarnContext(ctx, "failed to persist cowork hook conversation event",
+			attr.SlogEvent(event),
+			attr.SlogError(err),
+			attr.SlogHookSource(payload.Source.Adapter),
+			attr.SlogHookEvent(payload.Event.Type),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogProjectID(authCtx.ProjectID.String()),
+		)
 	}
 }

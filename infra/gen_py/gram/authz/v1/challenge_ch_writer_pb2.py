@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\'gram/authz/v1/challenge_ch_writer.proto\x12\rgram.authz.v1\x1a\x1bgcp/pubsub/v1/options.proto\"M\n\x11\x43hallengeCHWriter:8\x92\xb5\x18\x34\x12\x04\x08\x80\xf5$\x18\x01\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\nR\x17gram.authz.v1.ChallengeB?Z=github.com/speakeasy-api/gram/infra/gen/gram/authz/v1;authzv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\'gram/authz/v1/challenge_ch_writer.proto\x12\rgram.authz.v1\x1a\x1bgcp/pubsub/v1/options.proto\"I\n\x11\x43hallengeCHWriter:4\x92\xb5\x18\x30\x12\x04\x08\x80\xf5$\x18\x01\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04R\x17gram.authz.v1.ChallengeB?Z=github.com/speakeasy-api/gram/infra/gen/gram/authz/v1;authzv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z=github.com/speakeasy-api/gram/infra/gen/gram/authz/v1;authzv1'
   _globals['_CHALLENGECHWRITER']._loaded_options = None
-  _globals['_CHALLENGECHWRITER']._serialized_options = b'\222\265\0304\022\004\010\200\365$\030\001\"\002\010<2\t\n\002\010\n\022\003\010\330\004J\002\020\nR\027gram.authz.v1.Challenge'
+  _globals['_CHALLENGECHWRITER']._serialized_options = b'\222\265\0300\022\004\010\200\365$\030\001\"\002\010<2\t\n\002\010\n\022\003\010\330\004R\027gram.authz.v1.Challenge'
   _globals['_CHALLENGECHWRITER']._serialized_start=87
-  _globals['_CHALLENGECHWRITER']._serialized_end=164
+  _globals['_CHALLENGECHWRITER']._serialized_end=160
 # @@protoc_insertion_point(module_scope)

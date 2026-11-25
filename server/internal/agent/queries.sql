@@ -2,20 +2,23 @@
 -- Returns the device agent's full plugin set for an org, marketplace-first.
 --
 -- The base is the org's *published* marketplaces (plugin_github_connections rows
--- with a marketplace_token), scoped so the device agent isn't flooded with every
+-- with a marketplace token: its hash, or until the marketplace token backfill
+-- moves it, the plaintext column), scoped so the device agent isn't flooded with every
 -- project: the org's default project always appears (marketplace + its
--- always-required observability plugin, synthesized in the view layer) as the
--- org-wide baseline, while a non-default project appears only when the caller has
--- a matching assignment there. Plugins whose assignment principal_urn matches the
+-- observability plugin when the project has not disabled it, synthesized in the
+-- view layer) as the org-wide baseline, while a non-default project appears only
+-- when the caller has a matching assignment there. Plugins whose assignment principal_urn matches the
 -- caller's resolved principal set (email, user:<id>, user:all, role:<...>, or the
 -- org wildcard) are LEFT JOINed on top; the default project still yields one row
 -- with null plugin columns when the caller has no assignment there.
 --
 -- Each project resolves to a marketplace name the way the publish path does:
 -- the per-project override (project_marketplace_settings.marketplace_name) when
--- set, else the org-derived default (computed in the view). Projects with
--- distinct names surface as distinct marketplaces; projects that share a name
--- (e.g. several on the org default) still collapse to one in the view.
+-- set, else the name it last published under (recorded in
+-- published_hooks_config), else the org-derived default (computed in the view).
+-- Projects with distinct names surface as distinct marketplaces; projects that
+-- share a name (e.g. several on the org default) still collapse to one in the
+-- view.
 --
 -- Rows put the org's default project first, then use creation order and id for
 -- deterministic grouping. When projects share a name and the view collapses
@@ -26,13 +29,25 @@ SELECT
   pr.slug AS project_slug,
   om.slug AS organization_slug,
   om.name AS organization_name,
+  -- The marketplace token as the connection stores it. Package
+  -- marketplacetokens opens it into the install URL.
+  pgc.organization_id AS connection_organization_id,
   pgc.marketplace_token,
+  pgc.marketplace_token_hash,
+  pgc.marketplace_token_encrypted,
+  pgc.marketplace_token_org_encrypted,
   pgc.updated_at AS marketplace_updated_at,
   -- The hooks subtree may be pinned by the rollout gate under a pre-rename org
   -- name; the view derives the observability slug from this snapshot so devices
-  -- install the plugin that actually exists in the published repo.
+  -- install the plugin that actually exists in the published repo. The snapshot
+  -- also records the marketplace name the repo was published under, which the
+  -- view emits so the name stays frozen.
   pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
+  -- NULL (no settings row, or the column unset) means enabled: observability
+  -- has always shipped with a published marketplace unless a project turns it
+  -- off. The view layer skips synthesizing the plugin when this is false.
+  COALESCE(pms.observability_enabled, TRUE) AS observability_enabled,
   -- The org's default project (oldest by created_at, then id, over ALL
   -- non-deleted projects, not just published ones) keeps the bare org-derived
   -- marketplace name; others
@@ -52,7 +67,25 @@ SELECT
   )) AS is_default_project,
   p.id AS plugin_id,
   p.slug AS plugin_slug,
-  p.updated_at AS plugin_updated_at
+  p.name AS plugin_name,
+  p.description AS plugin_description,
+  p.updated_at AS plugin_updated_at,
+  -- When several of the caller's assignments match one plugin, the strictest
+  -- install mode wins: required, then default, then available. An unrecognized
+  -- stored value ranks as default. Empty when no plugin matched.
+  COALESCE((
+    SELECT (ARRAY['required', 'default', 'available'])[MIN(
+      CASE pa.install_mode
+        WHEN 'required' THEN 1
+        WHEN 'available' THEN 3
+        ELSE 2
+      END
+    )]
+    FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = @organization_id
+      AND pa.principal_urn = ANY(@principal_urns::text[])
+  ), '')::text AS plugin_install_mode
 FROM plugin_github_connections pgc
 JOIN projects pr
   ON pr.id = pgc.project_id
@@ -71,11 +104,11 @@ LEFT JOIN plugins p
       AND pa.principal_urn = ANY(@principal_urns::text[])
   )
 WHERE pr.organization_id = @organization_id
-  AND pgc.marketplace_token IS NOT NULL
+  AND (pgc.marketplace_token_hash IS NOT NULL OR pgc.marketplace_token IS NOT NULL)
   AND (
     -- The org's default project (oldest by created_at, then id) is the org-wide baseline:
-    -- always surface its marketplace + observability, even when the caller has no
-    -- assignment there. Pinned to @organization_id (uncorrelated) so Postgres
+    -- always surface its marketplace + observability (when enabled), even when
+    -- the caller has no assignment there. Pinned to @organization_id (uncorrelated) so Postgres
     -- evaluates it once; the same subquery backs the is_default_project column.
     pr.id = (
       SELECT p2.id
@@ -92,6 +125,48 @@ WHERE pr.organization_id = @organization_id
   )
 ORDER BY is_default_project DESC, pr.created_at, pr.id, p.slug;
 
+-- name: ListAgentPluginServers :many
+-- Lists the live MCP servers inside the given plugins for the device agent's
+-- menu bar, in each plugin's display order. A membership whose backend is
+-- deleted or turned off is skipped, since the plugin no longer delivers it.
+-- Exactly one of mcp_server_id and gateway_id is non-null per row; the handler builds the
+-- dashboard link and the mcp:read check from whichever it is.
+SELECT
+  ps.plugin_id,
+  ps.display_name,
+  om.slug AS organization_slug,
+  om.default_host AS organization_default_host,
+  pr.id AS project_id,
+  pr.slug AS project_slug,
+  m.id AS mcp_server_id,
+  m.slug AS mcp_server_slug,
+  m.toolset_id AS mcp_server_toolset_id,
+  g.id AS gateway_id
+FROM plugin_servers ps
+JOIN plugins p
+  ON p.id = ps.plugin_id
+  AND p.deleted IS FALSE
+JOIN projects pr
+  ON pr.id = p.project_id
+  AND pr.deleted IS FALSE
+JOIN organization_metadata om
+  ON om.id = p.organization_id
+LEFT JOIN mcp_servers m
+  ON m.id = ps.mcp_server_id
+  AND m.project_id = p.project_id
+  AND m.deleted IS FALSE
+  AND m.visibility <> 'disabled'
+LEFT JOIN meta_mcp_servers g
+  ON g.id = ps.meta_mcp_server_id
+  AND g.project_id = p.project_id
+  AND g.deleted IS FALSE
+  AND g.visibility <> 'disabled'
+WHERE p.organization_id = @organization_id
+  AND ps.plugin_id = ANY(@plugin_ids::uuid[])
+  AND ps.deleted IS FALSE
+  AND (m.id IS NOT NULL OR g.id IS NOT NULL)
+ORDER BY ps.plugin_id, ps.sort_order ASC, ps.created_at ASC, ps.id ASC;
+
 -- name: UpsertDeviceAgentSync :exec
 -- Best-effort record that the device agent for @email in @organization_id polled.
 -- The ON CONFLICT WHERE guard caps writes to at most once per minute per
@@ -103,6 +178,129 @@ ON CONFLICT (organization_id, email) DO UPDATE
 SET last_seen_at = clock_timestamp()
   , updated_at   = clock_timestamp()
 WHERE device_agent_syncs.last_seen_at < clock_timestamp() - interval '1 minute';
+
+-- name: RecordDeviceAgentServedEtag :exec
+-- Records the getPlugins etag just served to @email, which device
+-- attestation compares an agent's reported applied etag against. Separate
+-- from UpsertDeviceAgentSync because the etag is only known once the plugin
+-- set resolves, and that heartbeat must land even when resolving fails.
+-- Writes only on change, so the steady-state poll costs no write.
+UPDATE device_agent_syncs
+SET served_etag            = @served_etag
+  , served_etag_changed_at = clock_timestamp()
+  , updated_at             = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND email = @email
+  AND served_etag IS DISTINCT FROM @served_etag;
+
+-- name: DeviceAgentStateReportExists :one
+-- Whether a report from this user on this machine is already stored, matching
+-- the upsert's dedup key, so only a report that would add a row is charged to
+-- the organization's new-device budget.
+SELECT EXISTS (
+  SELECT 1
+  FROM device_agent_state_reports
+  WHERE organization_id = @organization_id
+    AND LOWER(email) = LOWER(@email)
+    AND (
+      (sqlc.narg('serial_number')::text IS NULL AND serial_number IS NULL)
+      OR LOWER(serial_number) = LOWER(sqlc.narg('serial_number')::text)
+    )
+)::boolean AS found;
+
+-- name: UpsertDeviceAgentStateReport :one
+-- Replaces the latest state report for one enrolled user on one machine
+-- (serial NULL when the machine cannot read one). Infers
+-- device_agent_state_reports_org_lower_serial_lower_email_key.
+INSERT INTO device_agent_state_reports (
+    organization_id
+  , email
+  , serial_number
+  , hostname
+  , schema_version
+  , generated_at
+  , applied_etag
+  , applied_at
+  , enforcement_halted
+  , remote_config_etag
+  , remote_config_failed
+  , withheld_plugins
+  , tools
+  , degraded_tool_count
+  , drift_counting_since
+  , speakeasyd_version
+  , speakeasy_version
+  , speakeasy_ui_version
+  , os
+  , arch
+  , auto_update
+  , update_channel
+  , pinned_target
+  , current_blocked
+  , last_rollback_at
+  , last_rollback_from
+  , last_rollback_to
+)
+VALUES (
+    @organization_id
+  , @email
+  , sqlc.narg('serial_number')
+  , sqlc.narg('hostname')
+  , @schema_version
+  , @generated_at
+  , sqlc.narg('applied_etag')
+  , sqlc.narg('applied_at')
+  , @enforcement_halted
+  , sqlc.narg('remote_config_etag')
+  , @remote_config_failed
+  , @withheld_plugins
+  , @tools
+  , @degraded_tool_count
+  , sqlc.narg('drift_counting_since')
+  , sqlc.narg('speakeasyd_version')
+  , sqlc.narg('speakeasy_version')
+  , sqlc.narg('speakeasy_ui_version')
+  , sqlc.narg('os')
+  , sqlc.narg('arch')
+  , sqlc.narg('auto_update')
+  , sqlc.narg('update_channel')
+  , sqlc.narg('pinned_target')
+  , @current_blocked
+  , sqlc.narg('last_rollback_at')
+  , sqlc.narg('last_rollback_from')
+  , sqlc.narg('last_rollback_to')
+)
+ON CONFLICT (organization_id, LOWER(serial_number), LOWER(email)) DO UPDATE
+SET email                = EXCLUDED.email
+  , serial_number        = EXCLUDED.serial_number
+    -- A report without a hostname must not blank a known one.
+  , hostname             = COALESCE(EXCLUDED.hostname, device_agent_state_reports.hostname)
+  , schema_version       = EXCLUDED.schema_version
+  , generated_at         = EXCLUDED.generated_at
+  , reported_at          = clock_timestamp()
+  , applied_etag         = EXCLUDED.applied_etag
+  , applied_at           = EXCLUDED.applied_at
+  , enforcement_halted   = EXCLUDED.enforcement_halted
+  , remote_config_etag   = EXCLUDED.remote_config_etag
+  , remote_config_failed = EXCLUDED.remote_config_failed
+  , withheld_plugins     = EXCLUDED.withheld_plugins
+  , tools                = EXCLUDED.tools
+  , degraded_tool_count  = EXCLUDED.degraded_tool_count
+  , drift_counting_since = EXCLUDED.drift_counting_since
+  , speakeasyd_version   = EXCLUDED.speakeasyd_version
+  , speakeasy_version    = EXCLUDED.speakeasy_version
+  , speakeasy_ui_version = EXCLUDED.speakeasy_ui_version
+  , os                   = EXCLUDED.os
+  , arch                 = EXCLUDED.arch
+  , auto_update          = EXCLUDED.auto_update
+  , update_channel       = EXCLUDED.update_channel
+  , pinned_target        = EXCLUDED.pinned_target
+  , current_blocked      = EXCLUDED.current_blocked
+  , last_rollback_at     = EXCLUDED.last_rollback_at
+  , last_rollback_from   = EXCLUDED.last_rollback_from
+  , last_rollback_to     = EXCLUDED.last_rollback_to
+  , updated_at           = clock_timestamp()
+RETURNING applied_etag, reported_at;
 
 -- name: UpsertDeviceAgentDeviceSync :exec
 -- Best-effort record that the agent on the machine bearing @serial_number
@@ -129,6 +327,34 @@ SET last_seen_at = clock_timestamp()
 WHERE device_agent_device_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
    OR device_agent_device_syncs.email IS DISTINCT FROM EXCLUDED.email
    OR (EXCLUDED.hostname IS NOT NULL AND device_agent_device_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname);
+
+-- name: UpsertDeviceAgentEnvironmentSync :exec
+-- Best-effort record that an agent polled from a box that is not somebody's
+-- laptop — a cloud sandbox, a container, a shared server. Sibling of
+-- UpsertDeviceAgentSync, and deliberately a different table: coverage matches
+-- an MDM device's assigned-user email against THAT one, so a cloud session
+-- polling under a real person's address would otherwise mark their laptop
+-- covered whether or not the laptop runs the agent.
+--
+-- Only called when the agent declared a non-laptop environment. A laptop, and
+-- every agent predating the header, still writes the sibling.
+--
+-- The guard mirrors the device sibling's rather than the plain heartbeat
+-- throttle, because hostname is mutable and a ~60s poll cadence keeps
+-- last_seen_at almost always fresh — a changed hostname could otherwise go
+-- unrecorded for a whole session.
+INSERT INTO device_agent_environment_syncs (organization_id, email, environment, hostname)
+VALUES (@organization_id, @email, @environment, sqlc.narg('hostname'))
+-- Infers device_agent_environment_syncs_org_lower_email_env_key, the unique
+-- expression index that is this table's dedup key. Matching the readers'
+-- LOWER() comparison is what stops one identity from holding two rows.
+ON CONFLICT (organization_id, LOWER(email), environment) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+    -- An agent that stopped reporting a hostname must not blank a known one.
+  , hostname     = COALESCE(EXCLUDED.hostname, device_agent_environment_syncs.hostname)
+WHERE device_agent_environment_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_environment_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname);
 
 -- name: ListDeviceAgentSyncs :many
 -- Lists every distinct email seen polling the device agent for an org, most
@@ -275,3 +501,139 @@ INSERT INTO chat_session_links (
   @actor_email, @device_serial, @device_hostname
 )
 ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;
+
+-- An organization's Shadow AI scan targets: its own additions and its
+-- overrides of the Speakeasy defaults compiled into the server. The served
+-- list is built in code by overlaying these rows on the defaults.
+
+-- name: ListAIScanTargets :many
+SELECT *
+FROM ai_scan_targets
+WHERE organization_id = @organization_id
+ORDER BY id;
+
+-- name: GetAIScanTargetForUpdate :one
+SELECT *
+FROM ai_scan_targets
+WHERE organization_id = @organization_id
+  AND id = @id
+FOR UPDATE;
+
+-- The definition and the organization's status are written by different
+-- endpoints, so neither upsert touches the other's columns: adding a target
+-- must not silently clear a standing block, and blocking one must not wipe
+-- the signatures agents scan for.
+
+-- name: UpsertAIScanTarget :one
+INSERT INTO ai_scan_targets (
+  organization_id,
+  id,
+  display_name,
+  category,
+  bundle_ids,
+  binaries,
+  config_dirs,
+  process_names,
+  version_plist_key,
+  cimd_vendor_keys,
+  oauth_client_ids,
+  client_info_names
+)
+VALUES (
+  @organization_id,
+  @id,
+  sqlc.narg('display_name'),
+  sqlc.narg('category'),
+  @bundle_ids::text[],
+  @binaries::text[],
+  @config_dirs::text[],
+  @process_names::text[],
+  sqlc.narg('version_plist_key'),
+  @cimd_vendor_keys::text[],
+  @oauth_client_ids::text[],
+  @client_info_names::text[]
+)
+ON CONFLICT (organization_id, id) DO UPDATE
+-- A definition makes the row the organization's own, so drop any product link.
+SET ai_product_id = NULL
+  , display_name = EXCLUDED.display_name
+  , category = EXCLUDED.category
+  , bundle_ids = EXCLUDED.bundle_ids
+  , binaries = EXCLUDED.binaries
+  , config_dirs = EXCLUDED.config_dirs
+  , process_names = EXCLUDED.process_names
+  , version_plist_key = EXCLUDED.version_plist_key
+  , cimd_vendor_keys = EXCLUDED.cimd_vendor_keys
+  , oauth_client_ids = EXCLUDED.oauth_client_ids
+  , client_info_names = EXCLUDED.client_info_names
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: SetAIScanTargetStatus :one
+INSERT INTO ai_scan_targets (organization_id, id, ai_product_id, status, rationale)
+VALUES (@organization_id, @id, sqlc.narg('ai_product_id'), @status, sqlc.narg('rationale'))
+ON CONFLICT (organization_id, id) DO UPDATE
+SET ai_product_id = COALESCE(ai_scan_targets.ai_product_id, EXCLUDED.ai_product_id)
+  , status = EXCLUDED.status
+  , rationale = EXCLUDED.rationale
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: DeleteAIScanTarget :one
+DELETE FROM ai_scan_targets
+WHERE organization_id = @organization_id
+  AND id = @id
+RETURNING *;
+
+-- The gateway hot path asks only "does this organization block anything?".
+-- Nearly every organization answers with an empty set, and that answer costs
+-- one indexed lookup rather than loading the whole scan-target catalog.
+--
+-- Status is the only predicate, and that is the point. There is no second
+-- column for the gateway to disagree with mid-write: a target is in the
+-- organization's inventory or it is not, and its decision is this one value.
+--
+-- The matchers are deliberately not filtered here. A built-in stores its
+-- decision only: its definition columns, gateway matchers included, are empty
+-- by design because the matchers are compiled in. Requiring a non-empty
+-- matcher column would silently drop every blocked built-in, which is most of
+-- the catalog. No filter is needed for the other case either, but note that
+-- the guarantee is not this statement's: UpsertAIScanTarget never touches
+-- status. It is a transaction-level invariant kept by the upsert service,
+-- which follows the definition write with a status reset (SetAIScanTargetStatus)
+-- whenever the target it just wrote can no longer be recognized at the
+-- gateway, before committing. Callers of the repository queries directly do
+-- not get it for free. Held that way, a committed row with status = 'blocked'
+-- always names a target the gateway can still recognize.
+
+-- name: ListBlockedAITargetIDs :many
+SELECT id
+FROM ai_scan_targets
+WHERE organization_id = @organization_id
+  AND status = 'blocked'
+ORDER BY id;
+
+-- Serializes an organization's scan target writes, definition and status
+-- alike. Transaction-scoped, and taken before the reads that validate a write
+-- so a concurrent edit cannot invalidate them between check and commit.
+-- FOR UPDATE cannot stand in for it: a target with no row yet has nothing to
+-- lock, so two writers would both read absence and both act on it.
+
+-- name: AcquireAIScanTargetsLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organization_id::text, 0));
+
+-- Only decision-only rows may take a catalog link; an ID match is not enough.
+-- name: GetAIScanTargetCatalogState :one
+SELECT
+  EXISTS (SELECT 1 FROM ai_products p WHERE p.id = @id AND p.deleted IS FALSE) AS product_exists,
+  EXISTS (
+    SELECT 1 FROM ai_scan_targets t
+    WHERE t.organization_id = @organization_id AND t.id = @id
+      AND NOT (
+        t.display_name IS NULL AND t.category IS NULL AND t.version_plist_key IS NULL
+        AND cardinality(t.bundle_ids) = 0 AND cardinality(t.binaries) = 0
+        AND cardinality(t.config_dirs) = 0 AND cardinality(t.process_names) = 0
+        AND cardinality(t.cimd_vendor_keys) = 0 AND cardinality(t.oauth_client_ids) = 0
+        AND cardinality(t.client_info_names) = 0
+      )
+  ) AS has_definition;

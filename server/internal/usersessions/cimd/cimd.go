@@ -20,7 +20,7 @@
 // verbatim. The opacity rule extends to the result taxonomy — a parse failure
 // is distinguished from a fetch failure only in metrics and logs, never in the
 // returned error shape, so an unauthenticated caller cannot use the wire
-// response as an oracle for probing external hosts through Gram.
+// response as an oracle for probing external hosts through Speakeasy.
 //
 // Inspect is the management path. It serves an AUTHENTICATED, project-scoped
 // surface where the caller is an operator configuring their own issuer, and
@@ -30,7 +30,7 @@
 // point of asking. It therefore returns the full outcome taxonomy plus an
 // operator-facing explanation.
 //
-// Inspect still does NOT leak Gram's internals. Its Detail is composed from
+// Inspect still does NOT leak Speakeasy's internals. Its Detail is composed from
 // the outcome, never from the raw transport error, so guardian SSRF denials,
 // DNS failures, and internal hostnames stay in the logs where they belong.
 // Both entry points run exactly the same fetch and validation logic and emit
@@ -53,8 +53,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const (
@@ -222,6 +222,12 @@ type Resolver struct {
 // guardian.WithTLSRootCAs — since httptest certificates are self-signed.
 func NewResolver(policy *guardian.Policy, meterProvider metric.MeterProvider, logger *slog.Logger) *Resolver {
 	return newResolver(newFetchClientFrom(policy.Client()), meterProvider, logger)
+}
+
+// NewResolverFromClient builds a resolver over a caller's HTTP client, for
+// tests in other packages that serve a document at a fixed URL locally.
+func NewResolverFromClient(client *guardian.HTTPClient, meterProvider metric.MeterProvider, logger *slog.Logger) *Resolver {
+	return newResolver(newFetchClientFrom(client), meterProvider, logger)
 }
 
 // newResolver is the injection seam for tests that need a fetch client built
@@ -443,7 +449,7 @@ func (r *Resolver) inspect(ctx context.Context, clientID string, cache CacheStat
 	// failure (plain wrapped error, generic wire response) rather than as a
 	// distinct OAuth error: a distinguishable "reachable but not JSON"
 	// response would give unauthenticated callers an oracle for probing
-	// external hosts through Gram. The distinction lives in telemetry and on
+	// external hosts through Speakeasy. The distinction lives in telemetry and on
 	// the authenticated Inspect path only.
 	var doc Document
 	if err := json.Unmarshal(body, &doc); err != nil {

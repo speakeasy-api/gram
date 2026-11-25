@@ -20,6 +20,9 @@ import (
 )
 
 func (s *Service) checkQuarantineGate(ctx context.Context, ev hookevents.Event) *sessionquarantine.Quarantine {
+	ctx, span := s.tracer.Start(ctx, "hooks.checkQuarantineGate")
+	defer span.End()
+
 	if s.cache == nil || ev.ConversationID == "" {
 		return nil
 	}
@@ -71,6 +74,9 @@ func (s *Service) sessionQuarantineFailClosed(ctx context.Context, organizationI
 }
 
 func (s *Service) openSessionQuarantine(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, auditReason string) *sessionquarantine.Quarantine {
+	ctx, span := s.tracer.Start(ctx, "hooks.openSessionQuarantine")
+	defer span.End()
+
 	if scanResult == nil || ev.ConversationID == "" || ev.Context.OrganizationID == "" || ev.Context.ProjectID == uuid.Nil {
 		return nil
 	}
@@ -153,6 +159,9 @@ func (s *Service) openSessionQuarantine(ctx context.Context, ev hookevents.Event
 func quarantineTriggerUserReason(scanResult *risk.ScanResult, fallback string) string {
 	if scanResult == nil {
 		return fallback
+	}
+	if scanResult.AnalysisUnavailable() {
+		return analysisUnavailableReason(scanResult) + " This session has been quarantined; contact your org admin to release it."
 	}
 	if scanResult.UserMessage != nil && strings.TrimSpace(*scanResult.UserMessage) != "" {
 		return renderWarnBody(scanResult)

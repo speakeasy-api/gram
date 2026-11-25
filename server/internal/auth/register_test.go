@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
@@ -67,6 +68,13 @@ func TestService_Register(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, storedSession.ActiveOrganizationID)
 		require.Empty(t, instance.trialNotifier.trialStarted)
+
+		// Recorded for admin operators, who otherwise cannot tell a self-serve
+		// organization from one a platform admin created for a prospect.
+		org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, storedSession.ActiveOrganizationID)
+		require.NoError(t, err)
+		require.True(t, org.CreationSource.Valid)
+		require.Equal(t, orgprovision.SourceSignup, org.CreationSource.String)
 	})
 
 	t.Run("register fails when user already has active organization", func(t *testing.T) {

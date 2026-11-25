@@ -1,7 +1,7 @@
 // servepublic_oauth_integration_test.go drives the /mcp/{slug} runtime
 // against a live dev-idp instance acting as the upstream OAuth server,
-// covering external/passthrough mode for both OAuth 2.1 and OAuth 2.0
-// (including the OAuth 2.0 refresh-no-rotation invariant).
+// covering external/passthrough mode against upstreams that do and do not
+// rotate refresh tokens.
 package mcp_test
 
 import (
@@ -28,8 +28,8 @@ const integrationRedirectURI = "http://localhost:8080/callback"
 
 // TestServePublic_ExternalOAuth21_PassthroughAcceptsUpstreamToken drives
 // a full DCR + auth-code flow against dev-idp/oauth2-1, then sends the
-// resulting access token to /mcp/{slug} on a Gram external-mode toolset
-// wired to dev-idp's metadata. Gram passes the bearer through without
+// resulting access token to /mcp/{slug} on a Speakeasy external-mode toolset
+// wired to dev-idp's metadata. Speakeasy passes the bearer through without
 // validating it, so the request must not 401.
 func TestServePublic_ExternalOAuth21_PassthroughAcceptsUpstreamToken(t *testing.T) {
 	t.Parallel()
@@ -46,15 +46,15 @@ func TestServePublic_ExternalOAuth21_PassthroughAcceptsUpstreamToken(t *testing.
 		IsPublic: true,
 		Metadata: idp.OAuth21Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.McpSlug
 
-	upstream := newUpstreamFlow(t, idp.OAuth21URL, true /* PKCE required */)
+	upstream := newUpstreamFlow(t, idp.OAuth21URL, true /* upstream rotates refresh */)
 	access := upstream.runFullFlow(t)
 
 	w, err := servePublicHTTP(t, t.Context(), ti, mcpSlug, makeInitializeBody(), access, nil)
 	require.NoError(t, err)
 	require.Empty(t, w.Header().Get("WWW-Authenticate"),
-		"upstream-issued access token should pass Gram's external-mode bearer check")
+		"upstream-issued access token should pass Speakeasy's external-mode bearer check")
 }
 
 // TestServePublic_ExternalOAuth21_RefreshRotatesUpstreamPair verifies
@@ -76,7 +76,7 @@ func TestServePublic_ExternalOAuth21_RefreshRotatesUpstreamPair(t *testing.T) {
 		IsPublic: true,
 		Metadata: idp.OAuth21Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.McpSlug
 
 	upstream := newUpstreamFlow(t, idp.OAuth21URL, true)
 	upstream.runFullFlow(t)
@@ -99,12 +99,12 @@ func TestServePublic_ExternalOAuth21_RefreshRotatesUpstreamPair(t *testing.T) {
 		"old refresh token must be invalidated after rotation")
 }
 
-// TestServePublic_ExternalOAuth20_RefreshDoesNotRotateUpstreamPair
-// verifies the OAuth 2.0 refresh-no-rotation invariant end-to-end:
-// dev-idp/oauth2 issues a new access token on refresh but reuses the
-// same refresh token (see the package header on
-// dev-idp/internal/modes/oauth2/handler.go).
-func TestServePublic_ExternalOAuth20_RefreshDoesNotRotateUpstreamPair(t *testing.T) {
+// TestServePublic_ExternalOAuth_RefreshDoesNotRotateUpstreamPair verifies
+// Speakeasy tolerates an upstream that does not rotate refresh tokens — real
+// authorization servers vary here, and OAuth 2.1 only recommends rotation.
+// The client registers with rotate_refresh_tokens=false, so dev-idp issues
+// a new access token on refresh but hands back the same refresh token.
+func TestServePublic_ExternalOAuth_RefreshDoesNotRotateUpstreamPair(t *testing.T) {
 	t.Parallel()
 
 	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
@@ -114,21 +114,21 @@ func TestServePublic_ExternalOAuth20_RefreshDoesNotRotateUpstreamPair(t *testing
 	require.True(t, ok)
 
 	result := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
-		Slug:     "ext-oauth20-refresh",
+		Slug:     "ext-oauth-norotate-refresh",
 		IsPublic: true,
-		Metadata: idp.OAuth20Metadata(t),
+		Metadata: idp.OAuth21Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.McpSlug
 
-	upstream := newUpstreamFlow(t, idp.OAuth20URL, false /* no PKCE */)
+	upstream := newUpstreamFlow(t, idp.OAuth21URL, false /* upstream reuses refresh */)
 	upstream.runFullFlow(t)
 	originalAccess := upstream.accessToken
 	originalRefresh := upstream.refreshToken
 
 	rotated := upstream.refresh(t)
-	require.NotEqual(t, originalAccess, rotated.access, "even oauth2 still rotates access")
+	require.NotEqual(t, originalAccess, rotated.access, "access token must still rotate")
 	require.Equal(t, originalRefresh, rotated.refresh,
-		"oauth2 must NOT rotate refresh — see dev-idp/oauth2/handler.go header comment")
+		"a client registered with rotate_refresh_tokens=false keeps its refresh token")
 
 	w, err := servePublicHTTP(t, t.Context(), ti, mcpSlug, makeInitializeBody(), rotated.access, nil)
 	require.NoError(t, err)
@@ -136,9 +136,9 @@ func TestServePublic_ExternalOAuth20_RefreshDoesNotRotateUpstreamPair(t *testing
 }
 
 // TestServePublic_ExternalOAuth21_PostRefreshTokenForwards simulates the
-// "client's upstream-token expired, refresh, retry" loop. Gram doesn't
+// "client's upstream-token expired, refresh, retry" loop. Speakeasy doesn't
 // track upstream token lifetimes in passthrough mode, so the test value
-// is that the rotated token works end-to-end with no Gram-side
+// is that the rotated token works end-to-end with no Speakeasy-side
 // cooperation needed.
 //
 // Distinct from TestServePublic_ExternalOAuth21_RefreshRotatesUpstreamPair:
@@ -146,7 +146,7 @@ func TestServePublic_ExternalOAuth20_RefreshDoesNotRotateUpstreamPair(t *testing
 // (rotated pair != original AND original refresh is rejected post-rotation).
 // This test focuses on the client-side retry shape — a token obtained via
 // refresh (not the initial issuance) must be accepted by /mcp/{slug}
-// without any prior Gram-side handshake.
+// without any prior Speakeasy-side handshake.
 func TestServePublic_ExternalOAuth21_PostRefreshTokenForwards(t *testing.T) {
 	t.Parallel()
 
@@ -161,7 +161,7 @@ func TestServePublic_ExternalOAuth21_PostRefreshTokenForwards(t *testing.T) {
 		IsPublic: true,
 		Metadata: idp.OAuth21Metadata(t),
 	})
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.McpSlug
 
 	upstream := newUpstreamFlow(t, idp.OAuth21URL, true)
 	upstream.runFullFlow(t)
@@ -179,13 +179,15 @@ func TestServePublic_ExternalOAuth21_PostRefreshTokenForwards(t *testing.T) {
 // ===========================================================================
 
 // upstreamFlow holds the state of a test client driving an OAuth flow
-// against a single dev-idp mode (oauth21 OR oauth2). It encapsulates the
-// mechanical bits — DCR (where supported), PKCE construction, the
-// /authorize redirect-then-extract-code dance, and the /token exchange —
-// so test bodies stay focused on the assertion under test.
+// against the dev-idp's authorization server. It encapsulates the
+// mechanical bits — DCR, PKCE construction, the /authorize
+// redirect-then-extract-code dance, and the /token exchange — so test
+// bodies stay focused on the assertion under test.
 type upstreamFlow struct {
-	modeURL      string
-	pkceRequired bool
+	modeURL string
+	// rotateRefreshTokens is registered with the client. False emulates an
+	// upstream that hands the same refresh token back on every /token call.
+	rotateRefreshTokens bool
 
 	clientID     string
 	clientSecret string
@@ -194,28 +196,26 @@ type upstreamFlow struct {
 	refreshToken string
 }
 
-func newUpstreamFlow(t *testing.T, modeURL string, pkceRequired bool) *upstreamFlow {
+func newUpstreamFlow(t *testing.T, modeURL string, rotateRefreshTokens bool) *upstreamFlow {
 	t.Helper()
 	return &upstreamFlow{
-		modeURL:      modeURL,
-		pkceRequired: pkceRequired,
-		// dev-idp/oauth2 has no /register; use the package-wide default
-		// client_id. oauth2-1 callers overwrite this in
-		// dynamicallyRegisterClient.
-		clientID: devidptest.DefaultClientID,
+		modeURL:             modeURL,
+		rotateRefreshTokens: rotateRefreshTokens,
+		clientID:            "",
+		clientSecret:        "",
+		accessToken:         "",
+		refreshToken:        "",
 	}
 }
 
-// runFullFlow registers a client (oauth2-1 only), then drives /authorize
-// and /token to obtain an initial access+refresh pair. The fields
-// accessToken and refreshToken are populated on success and the access
-// token is also returned for callers that want to use it inline.
+// runFullFlow registers a client, then drives /authorize and /token to
+// obtain an initial access+refresh pair. The fields accessToken and
+// refreshToken are populated on success and the access token is also
+// returned for callers that want to use it inline.
 func (u *upstreamFlow) runFullFlow(t *testing.T) string {
 	t.Helper()
 
-	if u.pkceRequired {
-		u.dynamicallyRegisterClient(t)
-	}
+	u.dynamicallyRegisterClient(t)
 
 	verifier := pkceVerifier(t)
 	challenge := pkceChallenge(verifier)
@@ -226,10 +226,8 @@ func (u *upstreamFlow) runFullFlow(t *testing.T) string {
 	authQ.Set("redirect_uri", integrationRedirectURI)
 	authQ.Set("state", "integration-state")
 	authQ.Set("scope", "openid")
-	if u.pkceRequired {
-		authQ.Set("code_challenge", challenge)
-		authQ.Set("code_challenge_method", "S256")
-	}
+	authQ.Set("code_challenge", challenge)
+	authQ.Set("code_challenge_method", "S256")
 
 	resp := httpGetNoFollow(t, u.modeURL+"/authorize?"+authQ.Encode())
 	defer func() { _ = resp.Body.Close() }()
@@ -245,9 +243,7 @@ func (u *upstreamFlow) runFullFlow(t *testing.T) string {
 	tokForm.Set("code", code)
 	tokForm.Set("client_id", u.clientID)
 	tokForm.Set("redirect_uri", integrationRedirectURI)
-	if u.pkceRequired {
-		tokForm.Set("code_verifier", verifier)
-	}
+	tokForm.Set("code_verifier", verifier)
 	if u.clientSecret != "" {
 		tokForm.Set("client_secret", u.clientSecret)
 	}
@@ -301,8 +297,8 @@ func (u *upstreamFlow) refreshRaw(t *testing.T, refreshToken string) *http.Respo
 }
 
 // dynamicallyRegisterClient runs DCR (RFC 7591) against /register to
-// obtain a client_id/client_secret pair. Only oauth2-1 supports DCR;
-// oauth2 callers leave clientID at its fixed test-client value.
+// obtain a client_id/client_secret pair. rotate_refresh_tokens is a
+// dev-idp extension to the DCR body, not a real RFC 7591 field.
 func (u *upstreamFlow) dynamicallyRegisterClient(t *testing.T) {
 	t.Helper()
 
@@ -312,6 +308,7 @@ func (u *upstreamFlow) dynamicallyRegisterClient(t *testing.T) {
 		"grant_types":                []string{"authorization_code", "refresh_token"},
 		"response_types":             []string{"code"},
 		"client_name":                "integration-test-client",
+		"rotate_refresh_tokens":      u.rotateRefreshTokens,
 	}
 	bs, err := json.Marshal(body)
 	require.NoError(t, err)
@@ -400,7 +397,7 @@ func pkceChallenge(verifier string) string {
 // TestServePublic_ExternalOAuth21_ExpiredUpstreamJWTStillForwarded pins
 // down the strongest form of the external-mode non-validation contract:
 // even a properly-formed JWT signed by dev-idp's actual key but with an
-// `exp` claim in the past is accepted at /mcp/{slug} without Gram doing
+// `exp` claim in the past is accepted at /mcp/{slug} without Speakeasy doing
 // any validation of its own.
 //
 // TestServePublic_ExternalOAuth21_PassthroughAcceptsUpstreamToken proves
@@ -410,7 +407,7 @@ func pkceChallenge(verifier string) string {
 // the remaining gap: a token that LOOKS valid (real signature, real
 // issuer claim) but is semantically expired must still flow through
 // untouched, because external-mode is non-validating by contract. If
-// Gram ever starts parsing JWT claims here, this test must be updated
+// Speakeasy ever starts parsing JWT claims here, this test must be updated
 // in the same change.
 func TestServePublic_ExternalOAuth21_ExpiredUpstreamJWTStillForwarded(t *testing.T) {
 	t.Parallel()
@@ -442,7 +439,7 @@ func TestServePublic_ExternalOAuth21_ExpiredUpstreamJWTStillForwarded(t *testing
 	expiredJWT, err := token.SignedString(idp.SigningKey())
 	require.NoError(t, err)
 
-	w, err := servePublicHTTP(t, t.Context(), ti, result.Toolset.McpSlug.String, makeInitializeBody(), expiredJWT, nil)
+	w, err := servePublicHTTP(t, t.Context(), ti, result.McpSlug, makeInitializeBody(), expiredJWT, nil)
 	require.NoError(t, err, "external/passthrough mode must NOT validate JWT claims; expired upstream JWT should be forwarded")
 	require.Empty(t, w.Header().Get("WWW-Authenticate"),
 		"WWW-Authenticate must NOT be set in passthrough mode regardless of bearer freshness")

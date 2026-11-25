@@ -63,9 +63,8 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 	require.NotContains(t, files, ".codex-plugin/plugin.json")
 	require.NotContains(t, files, ".mcp.json")
 	require.Contains(t, files, "skills/review/SKILL.md")
-	require.Contains(t, files, "hooks/bootstrap.sh")
-	require.Contains(t, files, "speakeasy.json")
-	require.NotContains(t, string(files["speakeasy.json"]), "hooks-secret")
+	require.NotContains(t, files, "hooks/bootstrap.sh")
+	require.NotContains(t, files, "speakeasy.json")
 
 	var mcp agentMCPConfig
 	require.NoError(t, json.Unmarshal(files["mcp.json"], &mcp))
@@ -74,14 +73,12 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 	for _, forbidden := range []string{"consumer-secret", "hooks-secret", "Authorization", "${env:", "bearer_token_env_var", "env_http_headers"} {
 		require.NotContains(t, string(files["mcp.json"]), forbidden)
 	}
-	feedback := mcp.MCPServers[skillFeedbackMCPServerName]
-	require.Equal(t, "bash", feedback.Command)
-	require.Contains(t, feedback.Args[1], `${PLUGIN_ROOT:-${CURSOR_PLUGIN_ROOT}}`)
+	require.NotContains(t, mcp.MCPServers, "speakeasy-skill-feedback")
 
 	published, err := compileAgentPlugin(plugin, cfg, agentPluginCredentialsPackage)
 	require.NoError(t, err)
 	require.Contains(t, published, ".cursor-plugin/plugin.json")
-	require.Contains(t, published, ".codex-plugin/plugin.json")
+	require.NotContains(t, published, ".codex-plugin/plugin.json")
 	require.Contains(t, published, ".mcp.json")
 	for path, content := range published {
 		require.NotContains(t, string(content), cfg.APIKey, path)
@@ -127,9 +124,9 @@ func TestAgentPluginMarketplaceKeepsNativeSources(t *testing.T) {
 	require.Equal(t, "./agent-plugins/tools", sharedCopilot.Plugins[0].Source)
 	require.Empty(t, legacyCopilot.Plugins)
 
-	sharedFingerprint, err := MCPFingerprints([]PluginInfo{compatible}, cfg)
+	sharedFingerprint, err := publishMCPFingerprints([]PluginInfo{compatible}, nil, cfg, true)
 	require.NoError(t, err)
-	legacyFingerprint, err := MCPFingerprints([]PluginInfo{incompatible}, cfg)
+	legacyFingerprint, err := publishMCPFingerprints([]PluginInfo{incompatible}, nil, cfg, true)
 	require.NoError(t, err)
 	require.NotEqual(t, sharedFingerprint["tools"], legacyFingerprint["tools"])
 	// The shared fingerprint follows the Copilot manifest, so flipping a plugin's

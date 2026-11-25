@@ -1,0 +1,359 @@
+import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
+import {
+  ObservabilityDisabledState,
+  ObservabilitySummaryTiles,
+} from "@/components/observe/ObservabilitySummaryTiles";
+import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { encodeGatewayServerFilter } from "@/components/observe/observeTargetFilters";
+import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
+import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
+import { Page } from "@/components/page-layout";
+import { useRoutes } from "@/routes";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
+import { Text } from "@/components/ui/Text";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
+import { telemetryGetMetaMcpServerUsage } from "@gram/client/funcs/telemetryGetMetaMcpServerUsage";
+import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
+import { telemetryGetProjectGatewayOverview } from "@gram/client/funcs/telemetryGetProjectGatewayOverview";
+import { telemetryGetProjectGatewayUsage } from "@gram/client/funcs/telemetryGetProjectGatewayUsage";
+import type { GetMetaMcpServerUsageResult } from "@gram/client/models/components/getmetamcpserverusageresult.js";
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import { useGramContext } from "@gram/client/react-query/_context";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
+import {
+  memberUsageRows,
+  discoveredWithoutExecuting,
+  metaToolUsageItems,
+  type MemberUsageRow,
+} from "./gatewayActivity";
+import type { MemberRow } from "./memberRows";
+import { MetaToolUsageChart } from "./MetaToolUsageChart";
+
+const noMembers: MemberRow[] = [];
+
+const memberColumns = (header: string): Column<MemberUsageRow>[] => [
+  {
+    key: "label",
+    header,
+    width: "2fr",
+    render: (row) => <Text className="truncate">{row.label}</Text>,
+  },
+  {
+    key: "toolCalls",
+    header: "Calls",
+    width: "72px",
+    render: (row) => <Text>{row.toolCalls}</Text>,
+  },
+  {
+    key: "errorCount",
+    header: "Errors",
+    width: "72px",
+    render: (row) => <Text>{row.errorCount}</Text>,
+  },
+  {
+    key: "errorRate",
+    header: "Error rate",
+    width: "96px",
+    render: (row) => <Text>{row.errorRate.toFixed(1)}%</Text>,
+  },
+  {
+    key: "lastCalledAt",
+    header: "Last call",
+    // Sized to content: a localized timestamp has no fixed width.
+    width: "auto",
+    render: (row) => {
+      const label = row.lastCalledAt
+        ? row.lastCalledAt.toLocaleString([], {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : "—";
+      return (
+        <Text
+          muted
+          className="block truncate whitespace-nowrap"
+          title={row.lastCalledAt?.toLocaleString()}
+        >
+          {label}
+        </Text>
+      );
+    },
+  },
+];
+
+function LoadError({ what }: { what: string }): JSX.Element {
+  return (
+    <div className="flex flex-col items-center justify-center border p-8 text-center">
+      <Text muted className="mb-1 block">
+        Could not load {what}
+      </Text>
+      <Text muted small>
+        Try refreshing the page or changing the time range.
+      </Text>
+    </div>
+  );
+}
+
+// A stored gateway, or the selected project's Project Gateway: the
+// Organization Gateway limited to that project's servers. Both are read in
+// the selected project.
+export type GatewayActivityScope =
+  | {
+      kind: "gateway";
+      metaMcpServerId: string;
+      memberRows: MemberRow[];
+      isLoadingMembers?: boolean;
+    }
+  | { kind: "project"; projectId: string };
+
+// Gateway-attributed usage for the selected range: the shared overview
+// metrics scoped to calls dispatched through this gateway, the discovery
+// funnel, and the per-member breakdown. The two queries fail independently so
+// one failing never hides what the other loaded.
+export function GatewayActivitySection({
+  scope,
+}: {
+  scope: GatewayActivityScope;
+}): JSX.Element {
+  const isProjectGateway = scope.kind === "project";
+  const metaMcpServerId =
+    scope.kind === "gateway" ? scope.metaMcpServerId : undefined;
+  const memberRows = scope.kind === "gateway" ? scope.memberRows : noMembers;
+  const isLoadingMembers =
+    scope.kind === "gateway" && (scope.isLoadingMembers ?? false);
+  const client = useGramContext();
+  const routes = useRoutes();
+  const [searchParams] = useSearchParams();
+  const [expandedChart, setExpandedChart] = useState<string | null>(null);
+
+  const {
+    dateRange,
+    customRange,
+    customRangeLabel,
+    from,
+    to,
+    setDateRangeParam,
+    setCustomRangeParam,
+    clearCustomRange,
+  } = useDateRangeFilter();
+  const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
+  const rangeKey = [
+    scope.kind === "gateway" ? scope.metaMcpServerId : scope.projectId,
+    from.toISOString(),
+    to.toISOString(),
+  ];
+  // Logs and insights read the same range params, so links carry the range
+  // shown here. They filter by a stored gateway, so the Project Gateway, which
+  // has none, gets no links.
+  const gatewayScopedSearch = useMemo(() => {
+    if (!metaMcpServerId) return undefined;
+    const params = new URLSearchParams();
+    params.set("server", encodeGatewayServerFilter(metaMcpServerId));
+    for (const key of ["range", "from", "to", "label"]) {
+      const value = searchParams.get(key);
+      if (value) params.set(key, value);
+    }
+    return `?${params.toString()}`;
+  }, [metaMcpServerId, searchParams]);
+  // Tool Logs admits project readers; an MCP-only member gets no link to a
+  // page that would turn them away.
+  const { canOpen: canOpenToolLogs } = useToolLogsAccess();
+  const logsHref =
+    canOpenToolLogs && gatewayScopedSearch
+      ? routes.logs.href() + gatewayScopedSearch
+      : undefined;
+  const insightsHref = gatewayScopedSearch
+    ? routes.insights.href() + gatewayScopedSearch
+    : undefined;
+  const handleRangeSelect = useCallback(
+    (rangeFrom: Date, rangeTo: Date) =>
+      setCustomRangeParam(
+        rangeFrom,
+        rangeTo,
+        formatChartZoomRangeLabel(rangeFrom, rangeTo),
+      ),
+    [setCustomRangeParam],
+  );
+
+  const overview = useLogsEnabledErrorCheck(
+    useQuery<GetObservabilityOverviewResult>({
+      queryKey: ["gateway-overview", ...rangeKey],
+      queryFn: () =>
+        unwrapAsync(
+          metaMcpServerId
+            ? telemetryGetObservabilityOverview(client, {
+                getObservabilityOverviewPayload: {
+                  from,
+                  to,
+                  metaMcpServerId,
+                  includeTimeSeries: true,
+                },
+              })
+            : telemetryGetProjectGatewayOverview(client, {
+                getProjectGatewayActivityPayload: { from, to },
+              }),
+        ),
+      placeholderData: keepPreviousData,
+      throwOnError: false,
+    }),
+  );
+  const usage = useLogsEnabledErrorCheck(
+    useQuery<GetMetaMcpServerUsageResult>({
+      queryKey: ["gateway-usage", ...rangeKey],
+      queryFn: () =>
+        unwrapAsync(
+          metaMcpServerId
+            ? telemetryGetMetaMcpServerUsage(client, {
+                getMetaMcpServerUsagePayload: { metaMcpServerId, from, to },
+              })
+            : telemetryGetProjectGatewayUsage(client, {
+                getProjectGatewayActivityPayload: { from, to },
+              }),
+        ),
+      placeholderData: keepPreviousData,
+      throwOnError: false,
+    }),
+  );
+
+  const isLogsDisabled = overview.isLogsDisabled || usage.isLogsDisabled;
+  // With keepPreviousData a failed refetch still has stale data to show, so
+  // each block falls back to its error state only with nothing to render.
+  const overviewFailed = overview.isError && !overview.data;
+  const usageFailed = usage.isError && !usage.data;
+
+  const summary = overview.data?.summary;
+  const comparison = overview.data?.comparison;
+  const timeSeries = useMemo(
+    () => overview.data?.timeSeries ?? [],
+    [overview.data],
+  );
+  const metaTools = useMemo(
+    () => (usage.data ? metaToolUsageItems(usage.data.funnel) : []),
+    [usage.data],
+  );
+  const members = useMemo(
+    () => memberUsageRows(usage.data?.members ?? [], memberRows),
+    [usage.data, memberRows],
+  );
+  // The stat tiles, time series and member table count execute_tool
+  // dispatches only; the funnel chart also counts discovery. Say so when the
+  // two disagree, or an empty chart above a busy funnel reads as a bug. Both
+  // queries keep previous data across a range change, so only trust the
+  // funnel once neither side is still showing the previous range.
+  const stoppedAtDiscovery =
+    !usage.isPlaceholderData &&
+    !overview.isPlaceholderData &&
+    discoveredWithoutExecuting(usage.data?.funnel);
+  const noDispatchMessage = stoppedAtDiscovery
+    ? "Agents looked up tools in this range but did not call any. Gateway tool usage below shows the lookups."
+    : "No dispatched calls for the selected time range";
+  const noMemberCallsMessage = stoppedAtDiscovery
+    ? "Agents looked up tools in the selected range but did not call any."
+    : isProjectGateway
+      ? "No server calls in the selected range."
+      : "No server calls in the selected range.";
+
+  return (
+    <Page.Section>
+      {/* Section heading under the Overview page title: no eyebrow, smaller
+          serif, matching the Members section above. */}
+      <Page.Section.Title area="" className="text-display-xs">
+        Activity
+      </Page.Section.Title>
+      <Page.Section.Description>
+        {isProjectGateway
+          ? "Tool calls agents made through the gateway, how they found the tools, and which servers handled them."
+          : "Tool calls agents made through this gateway, how they found the tools, and which servers handled them."}
+      </Page.Section.Description>
+      <Page.Section.CTA>
+        <TimeRangePicker
+          preset={customRange ? null : dateRange}
+          customRange={customRange}
+          customRangeLabel={customRangeLabel}
+          onPresetChange={setDateRangeParam}
+          onCustomRangeChange={setCustomRangeParam}
+          onClearCustomRange={clearCustomRange}
+        />
+      </Page.Section.CTA>
+      <Page.Section.Body>
+        {isLogsDisabled ? (
+          <ObservabilityDisabledState subject="this gateway" />
+        ) : (
+          <div className="@container flex flex-col gap-6">
+            {overviewFailed ? (
+              <LoadError what="usage metrics" />
+            ) : (
+              <>
+                <ObservabilitySummaryTiles
+                  summary={summary}
+                  comparison={comparison}
+                  isLoading={overview.isLoading}
+                  callsTitle="Dispatched calls"
+                />
+
+                <ToolCallsTimeSeriesChart
+                  title="Dispatched calls over time"
+                  titleHref={logsHref}
+                  chartId="gateway-overview-tool-calls"
+                  emptyMessage={noDispatchMessage}
+                  timeSeries={timeSeries}
+                  timeRangeMs={timeRangeMs}
+                  expandedChart={expandedChart}
+                  onExpand={setExpandedChart}
+                  onRangeSelect={handleRangeSelect}
+                  isZoomed={customRange !== null}
+                  onResetZoom={() => clearCustomRange()}
+                />
+              </>
+            )}
+
+            {usageFailed ? (
+              <LoadError what="the discovery funnel and member breakdown" />
+            ) : (
+              // Side by side only with real room: the member table needs
+              // five columns and the chart wants width for its bars.
+              <div className="grid grid-cols-1 gap-6 @6xl:grid-cols-2">
+                <MetaToolUsageChart
+                  items={metaTools}
+                  chartId="gateway-overview-meta-tools"
+                  titleHref={insightsHref}
+                  expandedChart={expandedChart}
+                  onExpand={setExpandedChart}
+                  loading={usage.isLoading && !usage.data}
+                />
+                <div className="border p-5">
+                  <h3 className="text-eyebrow mb-3">
+                    {isProjectGateway ? "Calls by server" : "Calls by member"}
+                  </h3>
+                  {(usage.isLoading && !usage.data) || isLoadingMembers ? (
+                    <SkeletonTable />
+                  ) : (
+                    <Table
+                      columns={memberColumns(
+                        isProjectGateway ? "Server" : "Member",
+                      )}
+                      data={members}
+                      rowKey={(row) => row.mcpServerId}
+                      noResultsMessage={
+                        <WidgetEmptyState message={noMemberCallsMessage} />
+                      }
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Page.Section.Body>
+    </Page.Section>
+  );
+}

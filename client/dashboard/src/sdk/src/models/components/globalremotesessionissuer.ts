@@ -13,21 +13,29 @@ import {
 } from "./remotesessionissuer.js";
 
 /**
- * A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.
+ * A platform-administrator view of a global remote_session_issuer: the issuer plus the reference counts that can block deletion.
  */
 export type GlobalRemoteSessionIssuer = {
+  /**
+   * Number of active identity-chaining bindings that block deletion and must be explicitly unlinked by their owning organizations. Included in the detail response; omitted from listings.
+   */
+  emaBindingCount?: number | undefined;
   /**
    * Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.
    */
   globalClientCount: number;
   /**
-   * A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
+   * A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.
    */
   issuer: RemoteSessionIssuer;
   /**
    * Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.
    */
   tenantClientCount: number;
+  /**
+   * Number of active tenant-owned user_session_issuers that trust this issuer. These block deletion and must be unlinked by their owning organizations.
+   */
+  trustedUserSessionIssuerCount: number;
 };
 
 /** @internal */
@@ -36,14 +44,18 @@ export const GlobalRemoteSessionIssuer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    ema_binding_count: z.optional(z.int()),
     global_client_count: z.int(),
     issuer: RemoteSessionIssuer$inboundSchema,
     tenant_client_count: z.int(),
+    trusted_user_session_issuer_count: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "ema_binding_count": "emaBindingCount",
       "global_client_count": "globalClientCount",
       "tenant_client_count": "tenantClientCount",
+      "trusted_user_session_issuer_count": "trustedUserSessionIssuerCount",
     });
   }),
 );

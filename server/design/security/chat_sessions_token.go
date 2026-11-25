@@ -9,7 +9,7 @@ import (
 
 // ChatSessionsToken defines the security scheme for chat sessions token-based authentication
 var ChatSessionsToken = JWTSecurity(constants.ChatSessionsTokenSecurityScheme, func() {
-	Description("Gram Chat Sessions token based auth.")
+	Description("Speakeasy Chat Sessions token based auth.")
 })
 
 var ChatSessionsTokenPayload = func() {

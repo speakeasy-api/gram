@@ -28,7 +28,7 @@ func (s *Service) ListUserSessionConsents(ctx context.Context, payload *gen.List
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -49,6 +49,7 @@ func (s *Service) ListUserSessionConsents(ctx context.Context, payload *gen.List
 
 	rows, err := repo.New(s.db).ListUserSessionConsentsByProjectID(ctx, repo.ListUserSessionConsentsByProjectIDParams{
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		SubjectUrn:          conv.PtrToPGTextEmpty(payload.SubjectUrn),
 		UserSessionClientID: clientFilter,
 		UserSessionIssuerID: issuerFilter,
@@ -88,8 +89,8 @@ func (s *Service) ListUserSessionConsents(ctx context.Context, payload *gen.List
 	}, nil
 }
 
-// Withdraws consent. Subsequent authorization requests for matching
-// (subject, client) pairs re-prompt.
+// Withdraws all remembered approvals for the selected consent’s subject and
+// client under its issuer. Existing sessions and authorization codes survive.
 func (s *Service) RevokeUserSessionConsent(ctx context.Context, payload *gen.RevokeUserSessionConsentPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -101,7 +102,7 @@ func (s *Service) RevokeUserSessionConsent(ctx context.Context, payload *gen.Rev
 		return oops.E(oops.CodeBadRequest, err, "invalid consent id").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -115,27 +116,51 @@ func (s *Service) RevokeUserSessionConsent(ctx context.Context, payload *gen.Rev
 
 	txRepo := repo.New(dbtx)
 
-	revoked, err := txRepo.RevokeUserSessionConsent(ctx, repo.RevokeUserSessionConsentParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+	selected, err := txRepo.GetUserSessionConsentByID(ctx, repo.GetUserSessionConsentByIDParams{
+		ID: id, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "user session consent not found").LogError(ctx, logger)
+			return oops.E(oops.CodeNotFound, err, "user session consent not found").LogWarn(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "revoke user session consent").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "load consent for withdrawal").LogError(ctx, logger)
 	}
-
-	if err := s.audit.LogUserSessionConsentRevoke(ctx, dbtx, audit.LogUserSessionConsentRevokeEvent{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ProjectID:             *authCtx.ProjectID,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
-		ActorSlug:             nil,
-		UserSessionConsentURN: urn.NewUserSessionConsent(revoked.ID),
-		Principal:             revoked.SubjectUrn,
+	if _, err := txRepo.LockUserSessionConsentClient(ctx, repo.LockUserSessionConsentClientParams{
+		UserSessionClientID: selected.UserSessionClientID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log user session consent revocation").LogError(ctx, logger)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user session consent not found").LogWarn(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock consent for withdrawal").LogError(ctx, logger)
+	}
+	// Re-read after waiting: a concurrent withdrawal must remain not-found.
+	if _, err := txRepo.GetUserSessionConsentByID(ctx, repo.GetUserSessionConsentByIDParams{
+		ID: id, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user session consent not found").LogWarn(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "recheck consent for withdrawal").LogError(ctx, logger)
+	}
+	revoked, err := txRepo.RevokeUserSessionConsentGroup(ctx, repo.RevokeUserSessionConsentGroupParams{
+		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+		UserSessionClientID: selected.UserSessionClientID, SubjectUrn: selected.SubjectUrn,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "withdraw client consents").LogError(ctx, logger)
+	}
+	for _, consent := range revoked {
+		if err := s.audit.LogUserSessionConsentRevoke(ctx, dbtx, audit.LogUserSessionConsentRevokeEvent{
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			ProjectID:             *authCtx.ProjectID,
+			Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:      authCtx.Email,
+			ActorSlug:             nil,
+			UserSessionConsentURN: urn.NewUserSessionConsent(consent.ID),
+			Principal:             selected.SubjectUrn,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log user session consent revocation").LogError(ctx, logger)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

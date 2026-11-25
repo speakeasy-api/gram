@@ -32,7 +32,7 @@ func (s *Service) GetPaygBillingSummary(ctx context.Context, _ *gen.GetPaygBilli
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 	summary, err := s.GetPaygBillingSummaryForOrganization(ctx, authCtx.ActiveOrganizationID)
@@ -121,10 +121,6 @@ func isUTCMidnight(value time.Time) bool {
 }
 
 func (s *Service) getTokensUnderManagementForPeriod(ctx context.Context, organizationID string, periodStart, periodEnd time.Time) (int64, error) {
-	if s.telemetryRepo == nil {
-		return 0, oops.E(oops.CodeUnavailable, nil, "billing usage telemetry is temporarily unavailable").LogWarn(ctx, s.logger)
-	}
-
 	projectIDs, err := s.repo.ListBillingProjectIDsByOrganization(ctx, organizationID)
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "list organization projects for billing summary").LogError(ctx, s.logger)

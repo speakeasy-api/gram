@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/remotesessionprovider"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -124,18 +125,19 @@ func (c *ClientConfigurator) ensureIssuer(ctx context.Context) (remotesessionsre
 		}
 	case errors.Is(err, pgx.ErrNoRows):
 		issuer, err = queries.CreateLocalFixtureGlobalRemoteSessionIssuer(ctx, remotesessionsrepo.CreateLocalFixtureGlobalRemoteSessionIssuerParams{
-			ID:                                c.config.RemoteSessionIssuerID(),
-			Slug:                              fixtureIssuerSlug,
-			Issuer:                            c.config.OAuthIssuerURL(),
-			Name:                              conv.ToPGText(fixtureServerName),
-			AuthorizationEndpoint:             conv.ToPGText(c.config.OAuthAuthorizationURL()),
-			TokenEndpoint:                     conv.ToPGText(c.config.OAuthTokenURL()),
-			RevocationEndpoint:                conv.ToPGText(c.config.OAuthRevocationURL()),
-			RegistrationEndpoint:              conv.ToPGText(c.config.OAuthRegistrationURL()),
-			ScopesSupported:                   []string{"tools:read"},
-			GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
-			ResponseTypesSupported:            []string{"code"},
-			TokenEndpointAuthMethodsSupported: []string{"none"},
+			ID:                                  c.config.RemoteSessionIssuerID(),
+			Slug:                                fixtureIssuerSlug,
+			Issuer:                              c.config.OAuthIssuerURL(),
+			Name:                                conv.ToPGText(fixtureServerName),
+			AuthorizationEndpoint:               conv.ToPGText(c.config.OAuthAuthorizationURL()),
+			TokenEndpoint:                       conv.ToPGText(c.config.OAuthTokenURL()),
+			RevocationEndpoint:                  conv.ToPGText(c.config.OAuthRevocationURL()),
+			RegistrationEndpoint:                conv.ToPGText(c.config.OAuthRegistrationURL()),
+			ScopesSupported:                     []string{"tools:read"},
+			GrantTypesSupported:                 []string{"authorization_code", "refresh_token"},
+			AuthorizationGrantProfilesSupported: []string{},
+			ResponseTypesSupported:              []string{"code"},
+			TokenEndpointAuthMethodsSupported:   []string{"none"},
 			// Matches what validateMetadata requires the fixture IdP to
 			// advertise. Deliberately absent from validIssuer: rows created
 			// before this column existed hold NULL, and rejecting them would
@@ -271,7 +273,7 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 	if err := queries.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return fmt.Errorf("lock local fixture client: %w", err)
 	}
-	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID}); err != nil {
+	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID, OrganizationID: request.OrganizationID}); err != nil {
 		return fmt.Errorf("validate local fixture user-session issuer: %w", err)
 	}
 	client, err := queries.GetLocalFixtureOrganizationRemoteSessionClient(ctx, remotesessionsrepo.GetLocalFixtureOrganizationRemoteSessionClientParams{OrganizationID: conv.ToPGText(request.OrganizationID), RemoteSessionIssuerID: issuerID})
@@ -282,17 +284,23 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 		}
 	case errors.Is(err, pgx.ErrNoRows):
 		client, err = queries.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
-			ProjectID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			OrganizationID:          conv.ToPGText(request.OrganizationID),
-			RemoteSessionIssuerID:   issuerID,
-			ClientID:                clientID,
-			ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
-			ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-			ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
-			TokenEndpointAuthMethod: conv.ToPGText("none"),
-			Scope:                   []string{"tools:read"},
-			Audience:                pgtype.Text{String: "", Valid: false},
-			LegacyCallbackUrl:       false,
+			ForwardClientName:               false,
+			ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			OrganizationID:                  conv.ToPGText(request.OrganizationID),
+			RemoteSessionIssuerID:           issuerID,
+			ClientID:                        clientID,
+			ClientIDIssuedAt:                conv.ToPGTimestamptz(time.Now().UTC()),
+			ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+			TokenEndpointAuthMethod:         conv.ToPGText("none"),
+			TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
+			Scope:                           []string{"tools:read"},
+			Audience:                        pgtype.Text{String: "", Valid: false},
+			LegacyCallbackUrl:               false,
+			JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			CallbackBaseUrl:                 pgtype.Text{String: "", Valid: false},
+			GrantTypes:                      nil,
+			CredentialOwner:                 pgtype.Text{String: "", Valid: false},
 		})
 		if err != nil {
 			return fmt.Errorf("create local fixture client: %w", err)
@@ -322,7 +330,7 @@ func (c *ClientConfigurator) attachClient(ctx context.Context, request platformm
 	if err := queries.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return fmt.Errorf("lock local fixture client attachment: %w", err)
 	}
-	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID}); err != nil {
+	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID, OrganizationID: request.OrganizationID}); err != nil {
 		return fmt.Errorf("validate local fixture user-session issuer: %w", err)
 	}
 	if err := requireNoCompetingFixtureBinding(ctx, queries, request, issuerID, clientID); err != nil {
@@ -341,7 +349,7 @@ func requireNoCompetingFixtureBinding(ctx context.Context, queries *remotesessio
 	bound, err := queries.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
 		ProjectID:             request.ProjectID,
 		UserSessionIssuerID:   request.UserSessionIssuerID,
-		OrganizationID:        conv.ToPGText(request.OrganizationID),
+		OrganizationID:        request.OrganizationID,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		Cursor:                uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		LimitValue:            2,
@@ -358,7 +366,7 @@ func requireNoCompetingFixtureBinding(ctx context.Context, queries *remotesessio
 }
 
 func validFixtureClient(client remotesessionsrepo.RemoteSessionClient) bool {
-	return !client.ProjectID.Valid && client.OrganizationID.Valid && client.ClientID != "" && !client.ClientSecretEncrypted.Valid && pgTextEquals(client.TokenEndpointAuthMethod, "none") && slices.Equal(client.Scope, []string{"tools:read"}) && !client.Audience.Valid && !client.ClientIDMetadataUri.Valid && !client.LegacyCallbackUrl
+	return !client.ProjectID.Valid && client.OrganizationID.Valid && client.ClientID != "" && !clientsecrets.Has(clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted)) && pgTextEquals(client.TokenEndpointAuthMethod, "none") && slices.Equal(client.Scope, []string{"tools:read"}) && !client.Audience.Valid && !client.ClientIDMetadataUri.Valid && !client.LegacyCallbackUrl
 }
 
 func pgTextEquals(value pgtype.Text, expected string) bool {

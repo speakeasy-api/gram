@@ -172,8 +172,95 @@ var _ = Service("remoteMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DiscoverRemoteMcpProtectedResourceMetadata"}`)
 	})
 
+	Method("getServerScopes", func() {
+		Description("Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server only. Reads cached state only; never contacts the resource.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The ID of the remote-backed MCP server.", func() {
+				Format(FormatUUID)
+			})
+			Required("mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteMcpServerScopes)
+
+		HTTP(func() {
+			GET("/rpc/remoteMcp.getServerScopes")
+			Param("mcp_server_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRemoteMcpServerScopes")
+		Meta("openapi:extension:x-speakeasy-name-override", "getServerScopes")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetRemoteMcpServerScopes"}`)
+	})
+
+	Method("setServerScopePin", func() {
+		Description("Pin the scopes logins to a remote-backed MCP server's protected resource request, or clear the pin with an empty list. The pin belongs to the protected resource, so it applies to every server in the project with the same upstream URL, and the caller needs write access to all of them. Returns the scope state re-read after the write.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The ID of the remote-backed MCP server.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("scopes", ArrayOf(String, func() {
+				MaxLength(256)
+			}), "Scopes to pin on the server's protected resource, shared by servers with the same upstream URL, in request order. Whitespace is trimmed, blanks and duplicates are dropped, and at most 100 scopes may remain; an empty list clears the pin.", func() {
+				MaxLength(1000)
+			})
+			Required("mcp_server_id", "scopes")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteMcpServerScopes)
+
+		HTTP(func() {
+			POST("/rpc/remoteMcp.setServerScopePin")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setRemoteMcpServerScopePin")
+		Meta("openapi:extension:x-speakeasy-name-override", "setServerScopePin")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetRemoteMcpServerScopePin"}`)
+	})
+
+	Method("probeURL", func() {
+		Description("Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.")
+
+		Payload(func() {
+			Extend(ProbeURLForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ProbeURLResult)
+
+		HTTP(func() {
+			POST("/rpc/remoteMcp.probeURL")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "probeRemoteMcpURL")
+		Meta("openapi:extension:x-speakeasy-name-override", "probeURL")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ProbeRemoteMcpURL"}`)
+	})
+
 	Method("verifyURL", func() {
-		Description("Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.")
+		Description("Probe a candidate remote MCP server URL and return the legacy boolean verification result.\n\nDeprecated: use probeURL instead.")
 
 		Payload(func() {
 			Extend(VerifyURLForm)
@@ -186,6 +273,7 @@ var _ = Service("remoteMcp", func() {
 
 		HTTP(func() {
 			POST("/rpc/remoteMcp.verifyURL")
+			Deprecated()
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -366,6 +454,9 @@ var CreateServerForm = Type("CreateServerForm", func() {
 		Format(FormatURI)
 	})
 	Attribute("transport_type", String, "The transport type for the remote MCP server (e.g. streamable-http)")
+	Attribute("user_session_issuer_id", String, "For createServerAndMcpServer, the ID of an existing project- or organization-owned user session issuer to attach to the linked MCP server. Omit to mint a project issuer. The source-only createServer method rejects this field.", func() {
+		Format(FormatUUID)
+	})
 
 	Required("url", "transport_type")
 })
@@ -423,6 +514,9 @@ var ProtectedResourceMetadata = Type("ProtectedResourceMetadata", func() {
 	Attribute("scopes_supported", ArrayOf(String), "Scopes advertised by the resource server.")
 	Attribute("bearer_methods_supported", ArrayOf(String), "Bearer token presentation methods accepted by the resource server.")
 	Attribute("resource_documentation", String, "URL of human-readable documentation for the resource server.")
+	Attribute("resource_name", String, "Human-readable display name of the resource server.")
+	Attribute("resource_policy_uri", String, "URL of the resource server's data-usage policy.")
+	Attribute("resource_tos_uri", String, "URL of the resource server's terms of service.")
 })
 
 var ProtectedResourceMetadataUnavailable = Type("ProtectedResourceMetadataUnavailable", func() {
@@ -445,8 +539,18 @@ var ProtectedResourceMetadataDiscovery = Type("ProtectedResourceMetadataDiscover
 	Required("available", "discovery_warnings")
 })
 
-var VerifyURLForm = Type("VerifyURLForm", func() {
+var ProbeURLForm = Type("ProbeURLForm", func() {
 	Description("Form for probing a remote MCP server URL")
+
+	Attribute("url", String, "The URL of the remote MCP server to probe", func() {
+		Format(FormatURI)
+	})
+
+	Required("url")
+})
+
+var VerifyURLForm = Type("VerifyURLForm", func() {
+	Description("Legacy form for probing a remote MCP server URL")
 
 	Attribute("url", String, "The URL of the remote MCP server to probe", func() {
 		Format(FormatURI)
@@ -456,8 +560,27 @@ var VerifyURLForm = Type("VerifyURLForm", func() {
 	Required("url", "transport_type")
 })
 
+var ProbeURLResult = Type("ProbeURLResult", func() {
+	Description("Structured outcome of probing a remote MCP server URL. Variant-specific fields are populated only when applicable.")
+
+	Attribute("outcome", String, "Probe outcome.", func() {
+		Enum("mcp_available", "authentication_required", "invalid_mcp_response", "unreachable")
+	})
+	Attribute("protected_resource_metadata_url", String, "Absolute HTTP(S) protected resource metadata URL advertised by a WWW-Authenticate challenge. Present only when authentication is required and the advertised URL is valid.", func() {
+		Format(FormatURI)
+	})
+	Attribute("http_status", Int, "HTTP status returned by the remote server. Required for invalid_mcp_response and present for HTTP-based unreachable outcomes.")
+	Attribute("reason", String, "Stable machine-readable reason code. Present only when outcome is unreachable; currently timeout, rate_limited, server_error, dns_error, tls_error, guardian_rejected, or transport_error.")
+	Attribute("server_name", String, "The name the server reports for itself in the MCP handshake: its title, or its name when it has no title. Present only when outcome is mcp_available and the server reports one.")
+	Attribute("sign_in_setup", String, "How Speakeasy can register as a client with the server's sign-in provider. Present only when authentication is required and the challenge advertised protected resource metadata: dcr (dynamic client registration), cimd (client ID metadata document), manual (a client must be registered by hand), or unknown (the provider's metadata could not be read).", func() {
+		Enum("dcr", "cimd", "manual", "unknown")
+	})
+
+	Required("outcome")
+})
+
 var VerifyURLResult = Type("VerifyURLResult", func() {
-	Description("Outcome of a remote MCP server URL verification")
+	Description("Legacy outcome of a remote MCP server URL verification")
 
 	Attribute("verified", Boolean, "Whether the URL responded in a way consistent with a remote MCP server")
 	Attribute("http_status", Int, "HTTP status code returned by the URL, if any")
@@ -542,4 +665,40 @@ var ListServerHeadersResult = Type("ListServerHeadersResult", func() {
 
 	Attribute("headers", ArrayOf(RemoteMcpServerHeader))
 	Required("headers")
+})
+
+var RemoteMcpServerClientScopes = Type("RemoteMcpServerClientScopes", func() {
+	Description("What a login through one client bound to the MCP server would request now, resolved from cached state.")
+
+	Attribute("client_id", String, "The remote session client's ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("issuer_name", String, "The configured name of the client's authorization server; absent when it has none.")
+	Attribute("issuer_url", String, "The issuer URL of the client's authorization server.")
+	Attribute("scope_source", String, "The precedence step that decided the request.", func() {
+		Enum("resource_pin", "client_scope", "challenge_scope", "live_resource", "cached_resource", "issuer_override", "issuer_omitted", "issuer_catalogue", "none")
+	})
+	Attribute("requested_scopes", ArrayOf(String), "The scope parameter the login would send; empty sends none.")
+	Attribute("unadvertised_pinned_scopes", ArrayOf(String), "Pinned scopes the resource does not advertise; sent regardless. Empty when the pin does not decide or the resource's list is unknown.")
+	Attribute("pin_would_decide", Boolean, "Whether a pin, if set, decides this client's request: discovery is on, the client owns the resource, and neither its own scope nor a challenge outranks the pin.")
+
+	Required("client_id", "scope_source", "requested_scopes", "unadvertised_pinned_scopes", "pin_would_decide")
+})
+
+var RemoteMcpServerScopes = Type("RemoteMcpServerScopes", func() {
+	Description("Scope state of the protected resource a remote-backed MCP server's logins are for.")
+
+	Attribute("resource_url", String, "The protected resource: the server's upstream URL.", func() {
+		Format(FormatURI)
+	})
+	Attribute("pinned_scopes", ArrayOf(String), "The operator's scope pin on the protected resource, shared by servers with the same upstream URL; empty when unset.")
+	Attribute("advertised_scopes_known", Boolean, "Whether a read of the resource's metadata within the last good window captured an advertised list.")
+	Attribute("advertised_scopes", ArrayOf(String), "The resource's advertised scopes_supported from that read. Absent when unknown or empty; see advertised_scopes_known.")
+	Attribute("challenge_scopes", ArrayOf(String), "The scope parameter of the resource's last WWW-Authenticate challenge; empty when none was seen.")
+	Attribute("discovery_enabled", Boolean, "Whether the organization's logins consult the protected resource (challenge scopes, pin, advertised list). Off, the pin is stored but not applied.")
+	Attribute("clients", ArrayOf(RemoteMcpServerClientScopes), "One entry per client bound to the server's user session issuer.")
+	Attribute("shared_server_count", Int, "How many other live MCP servers in the project share this upstream URL, and so this pin.")
+	Attribute("can_pin", Boolean, "Whether the caller may change the pin: write access to this server and every server in the project with the same upstream URL.")
+
+	Required("resource_url", "pinned_scopes", "advertised_scopes_known", "challenge_scopes", "discovery_enabled", "clients", "shared_server_count", "can_pin")
 })

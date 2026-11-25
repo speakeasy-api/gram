@@ -7,6 +7,19 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * How long the requester would like the access for, counted from approval: 1h, 2h or 4h. A suggestion shown to the approver, who still picks the window. Stored only when the request is stored. Cannot be sent with requested_until.
+ */
+export const Duration = {
+  Oneh: "1h",
+  Twoh: "2h",
+  Fourh: "4h",
+} as const;
+/**
+ * How long the requester would like the access for, counted from approval: 1h, 2h or 4h. A suggestion shown to the approver, who still picks the window. Stored only when the request is stored. Cannot be sent with requested_until.
+ */
+export type Duration = ClosedEnum<typeof Duration>;
+
+/**
  * The scope being requested.
  */
 export const RequestAccessFormScope = {
@@ -21,10 +34,24 @@ export const RequestAccessFormScope = {
   EnvironmentWrite: "environment:write",
   SkillRead: "skill:read",
   SkillWrite: "skill:write",
+  PluginWrite: "plugin:write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  InferenceExecute: "inference:execute",
+  LogRead: "log:read",
+  AgentRead: "agent:read",
+  AgentWrite: "agent:write",
+  AgentAuthorize: "agent:authorize",
+  AgentTransfer: "agent:transfer",
+  WorkloadRead: "workload:read",
+  WorkloadWrite: "workload:write",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
+  ChannelsConnect: "channels:connect",
+  ChannelsAdmin: "channels:admin",
+  ChannelsReadAll: "channels:read_all",
 } as const;
 /**
  * The scope being requested.
@@ -36,9 +63,17 @@ export type RequestAccessFormScope = ClosedEnum<typeof RequestAccessFormScope>;
  */
 export type RequestAccessForm = {
   /**
+   * How long the requester would like the access for, counted from approval: 1h, 2h or 4h. A suggestion shown to the approver, who still picks the window. Stored only when the request is stored. Cannot be sent with requested_until.
+   */
+  duration?: Duration | undefined;
+  /**
    * Optional message from the requester explaining why they need access.
    */
   message?: string | undefined;
+  /**
+   * When the requester would like the access until, such as the end of their day as their own clock reads it. Must be in the future and at most 24 hours away. A suggestion shown to the approver, who still picks the window. Cannot be sent with duration.
+   */
+  requestedUntil?: Date | undefined;
   /**
    * Optional resource ID the scope applies to.
    */
@@ -54,13 +89,20 @@ export type RequestAccessForm = {
 };
 
 /** @internal */
+export const Duration$outboundSchema: z.ZodMiniEnum<typeof Duration> = z.enum(
+  Duration,
+);
+
+/** @internal */
 export const RequestAccessFormScope$outboundSchema: z.ZodMiniEnum<
   typeof RequestAccessFormScope
 > = z.enum(RequestAccessFormScope);
 
 /** @internal */
 export type RequestAccessForm$Outbound = {
+  duration?: string | undefined;
   message?: string | undefined;
+  requested_until?: string | undefined;
   resource_id?: string | undefined;
   resource_name?: string | undefined;
   scope: string;
@@ -72,13 +114,18 @@ export const RequestAccessForm$outboundSchema: z.ZodMiniType<
   RequestAccessForm
 > = z.pipe(
   z.object({
+    duration: z.optional(Duration$outboundSchema),
     message: z.optional(z.string()),
+    requestedUntil: z.optional(
+      z.pipe(z.date(), z.transform(v => v.toISOString())),
+    ),
     resourceId: z.optional(z.string()),
     resourceName: z.optional(z.string()),
     scope: RequestAccessFormScope$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      requestedUntil: "requested_until",
       resourceId: "resource_id",
       resourceName: "resource_name",
     });

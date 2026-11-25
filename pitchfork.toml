@@ -2,6 +2,93 @@
 
 # Config docs: https://pitchfork.jdx.dev/reference/configuration.html
 
+[settings.logs]
+time_retention = "5d"
+line_retention = 10000
+
+# Lifecycle operations and the parked page are explicitly started, never part
+# of application startup. Bulk stop still includes them for worktree removal.
+[groups.application]
+daemons = [
+  "dev-idp",
+  "dev-idp-dashboard",
+  "admin",
+  "admin-dashboard",
+  "mock-oidc",
+  "mock-mcp",
+  "server",
+  "worker",
+  "streams",
+  "pystreams-multi",
+  "dashboard",
+  "assistant-runtime",
+  "assistant-relay",
+  "tunnel-gateway",
+  "tailnet-gateway",
+  "network-ingress-server",
+  "network-ingress-worker",
+  "code-runtime",
+]
+
+# Opt-in local private network: `pitchfork start --group private-network`.
+# The listener, its reconciler and the tailnet gateway run without Kubernetes;
+# the gateway attests with a local HMAC-signed token. It needs a real tailnet
+# and an organization with the network_ingress entitlement, so it is not in
+# the default group. Its daemons are also in the application group, so pausing
+# the stack stops them with Postgres.
+[groups.private-network]
+daemons = [
+  "network-ingress-server",
+  "network-ingress-worker",
+  "tailnet-gateway",
+]
+
+[groups.default]
+daemons = [
+  "dev-idp",
+  "dev-idp-dashboard",
+  "admin",
+  "admin-dashboard",
+  "mock-oidc",
+  "mock-mcp",
+  "server",
+  "worker",
+  "streams",
+  "dashboard",
+  "assistant-runtime",
+  "assistant-relay",
+  "tunnel-gateway",
+  "idle-pause",
+]
+
+# Opt-in only: intentionally excluded from the default/application groups.
+[daemons.agentation]
+run = "mise run start:agentation-server"
+ready_output = "Agentation server listening on"
+retry = 0
+
+[daemons.park]
+run = "mise run park"
+ready_output = "Parked on port"
+retry = 0
+
+# Finite operations: acknowledge dispatch immediately; Pitchfork retains
+# ownership until exit. They must not wait on the daemon they are stopping.
+# Only these Compose-using daemons need a primary-checkout fallback instead of
+# inheriting another worktree's project from the supervisor. `mise run` applies
+# the linked worktree's mise.local.toml override after this environment.
+[daemons.pause-stack]
+run = "mise run pause"
+env = { COMPOSE_PROJECT_NAME = "gram" }
+ready_delay = 0
+retry = 0
+
+[daemons.wake-stack]
+run = "mise run wake"
+env = { COMPOSE_PROJECT_NAME = "gram" }
+ready_delay = 0
+retry = 0
+
 [daemons.dev-idp]
 run = "mise run start:dev-idp"
 ready_cmd = "mise run check:daemon --name {{name}}"
@@ -25,18 +112,27 @@ depends = ["admin"]
 run = "mise run start:mock-oidc"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
+# Offline upstream for the local seed's "Acme Tasks (local mock)" remote server.
+[daemons.mock-mcp]
+run = "mise run start:mock-mcp"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
 [daemons.server]
 run = "mise run start:server"
 ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["assistant-relay"]
 
 [daemons.worker]
 run = "mise run start:worker"
 ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["assistant-relay"]
 
 [daemons.streams]
 run = "mise run start:streams"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
+# Not in the default group: `gram streams` stubs its subscriptions unless
+# GRAM_PYSTREAMS_STUB is false, and start/_default starts it only then.
 [daemons.pystreams-multi]
 run = "mise run start:pystreams-multi"
 ready_cmd = "mise run check:daemon --name {{name}}"
@@ -56,6 +152,51 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 run = "mise run start:assistant-runtime"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
+[daemons.assistant-relay]
+run = "mise run start:assistant-relay"
+ready_output = "Assistant relay ready:"
+
 [daemons.tunnel-gateway]
 run = "mise run start:tunnel-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
+
+# Private network group (opt-in). The listener comes first: it creates the
+# attestation key and token the gateway presents, and the gateway forwards to it.
+[daemons.network-ingress-server]
+run = "mise run start:network-ingress-server"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.network-ingress-worker]
+run = "mise run start:network-ingress-worker"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.tailnet-gateway]
+run = "mise run start:tailnet-gateway"
+ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["network-ingress-server"]
+
+# Started by start only when the local code provider is configured.
+[daemons.code-runtime]
+run = "exec mise run start:code-runtime"
+ready_output = "gram-code-runner protocol 2 listening on"
+retry = 0
+
+# Not a service: a cron that checks, every five minutes, whether this
+# worktree's stack has gone unused, and pauses it if so (see
+# `mise run idle-pause`). A developer with several worktrees otherwise pays for
+# every stack they are no longer looking at, and the alternative -- a launchd
+# agent or a systemd timer -- installs a job on the developer's machine that
+# outlives the repo. pitchfork is already running the stack it is watching, so
+# the scheduler comes and goes with it: a paused worktree needs no scheduler,
+# and `mise run wake` brings this back with everything else.
+[daemons.idle-pause]
+run = "mise run idle-pause"
+env = { COMPOSE_PROJECT_NAME = "gram" }
+cron = "0 */5 * * * *"
+
+# Not a service: renews this worktree's Tailscale HTTPS certificate daily and
+# restarts the daemons that serve it when it changes. Started by start only when
+# GRAM_TLS_PROVIDER=tailscale, and stopped with the stack like idle-pause.
+[daemons.tailscale-cert]
+run = "mise run tls:tailscale --restart"
+cron = "0 17 4 * * *"

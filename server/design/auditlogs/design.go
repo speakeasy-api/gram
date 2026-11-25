@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("auditlogs", func() {
-	Description("Manages audit logs in Gram.")
+	Description("Manages audit logs in Speakeasy.")
 
 	Security(security.ByKey, func() {
 		Scope("producer")
@@ -38,6 +38,10 @@ var _ = Service("auditlogs", func() {
 			Param("subject_id")
 			Param("subject_ids")
 			Param("acting_surface")
+			Param("from")
+			Param("to")
+			Param("category")
+			Param("origin")
 		})
 
 		shared.CursorPagination()
@@ -61,6 +65,8 @@ var _ = Service("auditlogs", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Param("project_slug")
+			Param("category")
+			Param("origin")
 		})
 
 		Meta("openapi:operationId", "listAuditLogFacets")
@@ -89,6 +95,10 @@ var AuditLog = Type("AuditLog", func() {
 	Attribute("acting_client_id", String, func() {
 		Description("The registered OAuth client the call authenticated as, when it had one. Absent for calls that carried no OAuth client.")
 	})
+	Attribute("category", String, func() {
+		Description("What kind of event the entry records: 'configuration' for a change to the platform's configuration, 'security' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.")
+		Enum("configuration", "security")
+	})
 
 	Attribute("subject_id", String)
 	Attribute("subject_type", String)
@@ -96,10 +106,10 @@ var AuditLog = Type("AuditLog", func() {
 	Attribute("subject_slug", String)
 
 	Attribute("before_snapshot", Any, func() {
-		Meta("struct:field:type", "json.RawMessage")
+		Meta("struct:field:type", "json.RawMessage", "encoding/json")
 	})
 	Attribute("after_snapshot", Any, func() {
-		Meta("struct:field:type", "json.RawMessage")
+		Meta("struct:field:type", "json.RawMessage", "encoding/json")
 	})
 
 	Attribute("metadata", MapOf(String, Any))
@@ -136,6 +146,23 @@ var ListAuditLogsForm = Type("ListAuditLogsForm", func() {
 	Attribute("acting_surface", String, func() {
 		Description("Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.")
 	})
+	Attribute("from", String, func() {
+		Description("Inclusive start of the window to list changes from. Omit for the whole history.")
+		Format(FormatDateTime)
+	})
+	Attribute("to", String, func() {
+		Description("Exclusive end of the window to list changes from. Omit for the whole history.")
+		Format(FormatDateTime)
+	})
+	Attribute("category", String, func() {
+		Description("Category of entries to list: 'configuration' (the default) for changes to the platform's configuration, or 'security' for machine access and other security-relevant activity such as workloads admitting themselves.")
+		Enum("configuration", "security")
+		Default("configuration")
+	})
+	Attribute("origin", String, func() {
+		Description("Who initiated the entries to list: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.")
+		Enum("user", "system")
+	})
 })
 
 var ListAuditLogsResult = Type("ListAuditLogsResult", func() {
@@ -157,6 +184,15 @@ var AuditLogFacetOption = Type("AuditLogFacetOption", func() {
 var ListAuditLogFacetsForm = Type("ListAuditLogFacetsForm", func() {
 	Attribute("project_slug", String, func() {
 		Description("Project slug to filter facet values to a specific project.")
+	})
+	Attribute("category", String, func() {
+		Description("Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.")
+		Enum("configuration", "security")
+		Default("configuration")
+	})
+	Attribute("origin", String, func() {
+		Description("Who initiated the entries to compute facet values from, matching the list being filtered: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.")
+		Enum("user", "system")
 	})
 })
 

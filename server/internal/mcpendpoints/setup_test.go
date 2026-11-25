@@ -23,17 +23,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functionstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
@@ -119,7 +123,7 @@ func (fakeGitHubPublisher) HasDirectCollaborator(ctx context.Context, installati
 	return false, nil
 }
 
-func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string, include func(path string) bool) (map[string][]byte, error) {
 	return nil, ghclient.ErrRepoNotFound
 }
 
@@ -149,7 +153,6 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 	assetStorage := assetstest.NewTestBlobStore(t)
 	enc := testenv.NewEncryptionClient(t)
 	funcs := functionstest.NewOrchestrator(t, assetStorage)
-	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
 	temporalEnv, _ := infra.NewTemporalEnv(t)
 	auditLogger := audit.NewLogger()
 	f := &feature.InMemory{}
@@ -159,10 +162,10 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 		Org:            "test-org",
 		InstallationID: 12345,
 	}
-	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f)
+	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f, staff.Organization{}, marketplacetokenstest.Tokens(t, conn))
 
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
-		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger),
+		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, auditLogger),
 		&background.WorkerOptions{PluginPublisher: pluginPublisher},
 	)
 	t.Cleanup(func() {
@@ -185,6 +188,25 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 		conn:           conn,
 		sessionManager: sessionManager,
 	}, temporalEnv
+}
+
+func seedBlockedDirectRemoteDistribution(t *testing.T, ctx context.Context, ti *testInstance, serverID uuid.UUID) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := platformrepo.New(ti.conn)
+	registration, err := queries.CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		SourceKind: "remote", CatalogProvider: "direct-remote-url-v1",
+		CatalogReference: serverID.String(), Status: "registered",
+	})
+	require.NoError(t, err)
+	_, err = queries.UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformrepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{
+		ID: registration.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		Status: "registered", McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+	})
+	require.NoError(t, err)
+	ti.service.WithDistributionAdmission(admission.NewGuard())
 }
 
 func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {
@@ -251,6 +273,12 @@ func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 func seedMcpServerWithVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, visibility string) uuid.UUID {
 	t.Helper()
 
+	return seedMcpServerWithMode(t, ctx, conn, projectID, visibility, networkaccess.ModePublicOnly)
+}
+
+func seedMcpServerWithMode(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, visibility string, mode networkaccess.Mode) uuid.UUID {
+	t.Helper()
+
 	server := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
 		ProjectID:     projectID,
 		TransportType: "streamable-http",
@@ -271,6 +299,7 @@ func seedMcpServerWithVisibility(t *testing.T, ctx context.Context, conn *pgxpoo
 		RemoteMcpServerID:   uuid.NullUUID{UUID: server.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Visibility:          visibility,
+		NetworkAccessMode:   networkaccess.Storage(mode),
 	})
 	require.NoError(t, err)
 

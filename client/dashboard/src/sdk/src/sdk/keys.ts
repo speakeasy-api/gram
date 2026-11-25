@@ -3,8 +3,11 @@
  */
 
 import { keysCreate } from "../funcs/keysCreate.js";
+import { keysExtendAgentKeys } from "../funcs/keysExtendAgentKeys.js";
 import { keysList } from "../funcs/keysList.js";
 import { keysRevokeById } from "../funcs/keysRevokeById.js";
+import { keysRotate } from "../funcs/keysRotate.js";
+import { keysUpdatePolicy } from "../funcs/keysUpdatePolicy.js";
 import { keysValidate } from "../funcs/keysValidate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { Key } from "../models/components/key.js";
@@ -15,6 +18,10 @@ import {
   CreateAPIKeySecurity,
 } from "../models/operations/createapikey.js";
 import {
+  ExtendAgentAPIKeysRequest,
+  ExtendAgentAPIKeysSecurity,
+} from "../models/operations/extendagentapikeys.js";
+import {
   ListAPIKeysRequest,
   ListAPIKeysSecurity,
 } from "../models/operations/listapikeys.js";
@@ -22,6 +29,14 @@ import {
   RevokeAPIKeyRequest,
   RevokeAPIKeySecurity,
 } from "../models/operations/revokeapikey.js";
+import {
+  RotateAPIKeyRequest,
+  RotateAPIKeySecurity,
+} from "../models/operations/rotateapikey.js";
+import {
+  UpdateAPIKeyPolicyRequest,
+  UpdateAPIKeyPolicySecurity,
+} from "../models/operations/updateapikeypolicy.js";
 import {
   ValidateAPIKeyRequest,
   ValidateAPIKeySecurity,
@@ -49,10 +64,29 @@ export class Keys extends ClientSDK {
   }
 
   /**
+   * extendAgentKeys keys
+   *
+   * @remarks
+   * Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key's new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are. The result lists only the keys this call changed: keys that already held the grants, expired keys and other people's keys are not in it.
+   */
+  async extendAgentKeys(
+    request: ExtendAgentAPIKeysRequest,
+    security?: ExtendAgentAPIKeysSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListKeysResult> {
+    return unwrapAsync(keysExtendAgentKeys(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listKeys keys
    *
    * @remarks
-   * List all api keys for an organization
+   * List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
    */
   async list(
     request?: ListAPIKeysRequest | undefined,
@@ -79,6 +113,44 @@ export class Keys extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(keysRevokeById(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * rotateKey keys
+   *
+   * @remarks
+   * Rotate an API key. Agent-key rotation replaces immutable delegation and directly revokes the old row.
+   */
+  async rotate(
+    request: RotateAPIKeyRequest,
+    security?: RotateAPIKeySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Key> {
+    return unwrapAsync(keysRotate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateKeyPolicy keys
+   *
+   * @remarks
+   * Replace an ordinary key's own policy: the mcp:connect and mcp:auth grants, and their blocks, its server and auth client access is evaluated against. Agent keys keep their delegated grants. Requires org admin.
+   */
+  async updatePolicy(
+    request: UpdateAPIKeyPolicyRequest,
+    security?: UpdateAPIKeyPolicySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Key> {
+    return unwrapAsync(keysUpdatePolicy(
       this,
       request,
       security,

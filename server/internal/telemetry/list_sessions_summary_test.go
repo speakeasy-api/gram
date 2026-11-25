@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -39,10 +38,7 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	claudeChatID := uuid.NewString()
@@ -134,7 +130,7 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 	narrowTo := now.Add(1 * time.Hour).Format(time.RFC3339)
 	wideFrom, wideTo := summaryWindow(now)
 
-	rawRes := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	rawRes := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   narrowFrom,
 		To:     narrowTo,
 		SortBy: "total_cost",
@@ -143,7 +139,7 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 		return len(res.Sessions) == 4
 	})
 
-	summaryRes := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	summaryRes := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   wideFrom,
 		To:     wideTo,
 		SortBy: "total_cost",
@@ -202,10 +198,7 @@ func TestListSessions_SummaryPathFilters(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	engChatID := uuid.NewString()
@@ -299,7 +292,7 @@ func TestListSessions_SummaryPathFilters(t *testing.T) {
 
 	wideFrom, wideTo := summaryWindow(now)
 
-	deptFiltered := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	deptFiltered := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: wideFrom,
 		To:   wideTo,
 		Filters: []*gen.QueryFilter{
@@ -312,7 +305,7 @@ func TestListSessions_SummaryPathFilters(t *testing.T) {
 	})
 	require.Len(t, deptFiltered.Sessions, 1)
 
-	unsetEmail := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	unsetEmail := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: wideFrom,
 		To:   wideTo,
 		Filters: []*gen.QueryFilter{
@@ -325,7 +318,7 @@ func TestListSessions_SummaryPathFilters(t *testing.T) {
 	})
 	require.Len(t, unsetEmail.Sessions, 1)
 
-	roleFiltered := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	roleFiltered := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: wideFrom,
 		To:   wideTo,
 		Filters: []*gen.QueryFilter{
@@ -338,7 +331,7 @@ func TestListSessions_SummaryPathFilters(t *testing.T) {
 	})
 	require.Len(t, roleFiltered.Sessions, 1)
 
-	coLocated := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	coLocated := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: wideFrom,
 		To:   wideTo,
 		Filters: []*gen.QueryFilter{
@@ -368,10 +361,7 @@ func TestListSessions_SummaryPathDropsPhantomBoundarySessions(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	// Anchor the window end mid-hour so the trailing bucket is admitted by
 	// the bucket bound: the in-window chat sits before `to`, the phantom chat
@@ -408,7 +398,7 @@ func TestListSessions_SummaryPathDropsPhantomBoundarySessions(t *testing.T) {
 		cost:         2.0,
 	})
 
-	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	res := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   windowStart.Format(time.RFC3339),
 		To:     windowEnd.Format(time.RFC3339),
 		SortBy: "total_cost",
@@ -432,10 +422,7 @@ func TestListSessions_ArrayUnsetFilterAlignedAcrossPaths(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	mixedChatID := uuid.NewString()
@@ -477,7 +464,7 @@ func TestListSessions_ArrayUnsetFilterAlignedAcrossPaths(t *testing.T) {
 	unsetFilter := []*gen.QueryFilter{{Dimension: "role", Values: []string{""}}}
 	wideFrom, wideTo := summaryWindow(now)
 
-	rawRes := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	rawRes := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:    now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:      now.Add(1 * time.Hour).Format(time.RFC3339),
 		Filters: unsetFilter,
@@ -488,7 +475,7 @@ func TestListSessions_ArrayUnsetFilterAlignedAcrossPaths(t *testing.T) {
 	})
 	require.Len(t, rawRes.Sessions, 1)
 
-	summaryRes := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	summaryRes := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:    wideFrom,
 		To:      wideTo,
 		Filters: unsetFilter,
@@ -511,10 +498,7 @@ func TestListSessions_SummaryPathCursorPagination(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	chatIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
@@ -538,7 +522,7 @@ func TestListSessions_SummaryPathCursorPagination(t *testing.T) {
 
 	wideFrom, wideTo := summaryWindow(now)
 
-	waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   wideFrom,
 		To:     wideTo,
 		SortBy: "total_cost",

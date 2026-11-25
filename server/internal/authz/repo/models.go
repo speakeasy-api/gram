@@ -32,6 +32,10 @@ const (
 	ReasonInvalidCheck      Reason = "invalid_check"
 	ReasonRBACSkippedAPIKey Reason = "rbac_skipped_apikey" //nolint:gosec // not a credential
 	ReasonDevOverride       Reason = "dev_override"
+
+	// ReasonConnectionOwnerMismatch is a personal connection used by someone
+	// other than the member who made it. It serves only its owner.
+	ReasonConnectionOwnerMismatch Reason = "connection_owner_mismatch"
 )
 
 // PrincipalType is the kind of caller making the check.
@@ -41,6 +45,8 @@ const (
 	PrincipalTypeUser      PrincipalType = "user"
 	PrincipalTypeAPIKey    PrincipalType = "api_key"
 	PrincipalTypeAssistant PrincipalType = "assistant"
+	PrincipalTypeAgent     PrincipalType = "agent"
+	PrincipalTypeWorkload  PrincipalType = "workload"
 )
 
 // ChallengeRow mirrors one row of the authz_challenges table.

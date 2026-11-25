@@ -9,6 +9,9 @@ import { isValidDate } from "@/lib/trial-status";
  * of which satisfy this.
  */
 export type StripeSubscriptionLike = {
+  discountDescription?: string | undefined;
+  discountEndsAt?: Date | null | undefined;
+  gatewayPromotionApplied?: boolean | undefined;
   status: string;
   currentPeriodStart?: Date | null | undefined;
   currentPeriodEnd?: Date | null | undefined;

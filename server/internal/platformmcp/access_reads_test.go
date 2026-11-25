@@ -1,0 +1,198 @@
+package platformmcp
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	accessgen "github.com/speakeasy-api/gram/server/gen/access"
+	accessservice "github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+)
+
+func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
+	t.Parallel()
+
+	roles := ListAccessRolesOutput{Roles: []AccessRole{{
+		Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7),
+		MCPAccess: MCPConnectSummary{AllServers: false, ProjectRules: 1, ServerRules: 1, ToolRules: 1, DispositionRules: []string{"read_only"}, BlockedServers: false, BlockedProjectRules: 1, BlockedServerRules: 1, BlockedToolRules: 0, BlockedDispositionRules: []string{}},
+		DirectorySources: []AccessRoleDirectorySource{
+			{Kind: "group", Group: "Data Analytics", AttributeKey: "", AttributeValue: "", Removed: false, MatchedUsers: NewSubjectCount(6)},
+			{Kind: "attribute", Group: "", AttributeKey: "department_name", AttributeValue: "Research", Removed: false, MatchedUsers: NewSubjectCount(2)},
+			{Kind: "group", Group: "", AttributeKey: "", AttributeValue: "", Removed: true, MatchedUsers: NewSubjectCount(0)},
+		},
+		Reference: "opaque-role", Version: "opaque-version",
+	}}, ExpiresAt: "2026-09-04T12:10:00Z"}
+	require.ElementsMatch(t, []string{"roles", "name", "type", "member_count", "mcp_access", "all_servers", "project_rules", "server_rules", "tool_rules", "disposition_rules", "blocked_servers", "blocked_project_rules", "blocked_server_rules", "blocked_tool_rules", "blocked_disposition_rules", "directory_sources", "kind", "kind", "kind", "group", "attribute_key", "attribute_value", "removed", "matched_users", "matched_users", "matched_users", "reference", "version", "expires_at"}, decodeKeys(t, roles))
+
+	members := ListAccessMembersOutput{
+		Members:      []AccessMember{{MaskedIdentity: "a***@e***", Roles: []string{"Operators"}, Reference: "opaque-member", Version: "opaque-version"}},
+		TotalMatches: NewSubjectCount(7), Suppressed: false, Truncated: false, ExpiresAt: "2026-09-04T12:10:00Z",
+	}
+	require.ElementsMatch(t, []string{"members", "masked_identity", "roles", "reference", "version", "total_matches", "suppressed", "truncated", "exact_email_match", "expires_at"}, decodeKeys(t, members))
+
+	memberAccess := GetMemberMCPAccessOutput{Servers: []MemberMCPAccessRow{{
+		ProjectID: uuid.NewString(), ProjectName: "Default", MCPID: uuid.NewString(), MCPName: "Tasks",
+		Backend: "remote", Visibility: "private", AuthorizationMode: "rbac", ConnectionAccess: "some_tools",
+		CanConnect: true, ToolAccess: "some", CanView: true, CanManage: false,
+		Rules: []accessservice.MCPAccessRuleSummary{{AccessLevel: "use", SourceKind: "role", SourceName: "Operators", Effect: "limits", AppliesTo: "resource", Tools: []string{"delete_tasks"}, Dispositions: []string{"destructive"}, Reason: new("blocked")}},
+	}}}
+	require.ElementsMatch(t, []string{
+		"servers", "project_id", "project_name", "mcp_id", "mcp_name", "backend", "visibility", "authorization_mode",
+		"connection_access", "can_connect", "tool_access", "can_view", "can_manage", "rules", "access_level", "source_kind", "source_name", "effect", "applies_to", "tools", "dispositions", "reason", "truncated",
+	}, decodeKeys(t, memberAccess))
+
+	access := GetMCPAccessOutput{
+		ProjectID:             uuid.NewString(),
+		MCP:                   MCPAccessTarget{ID: uuid.NewString(), Name: "Tasks", Backend: "remote", Visibility: "private", AuthorizationMode: "rbac", AuthorizationSurface: "configured_endpoint", AccessSummary: "by_role", ToolCatalog: "stored_metadata", Tools: []MCPAccessTool{{Name: "list_tasks", Disposition: "read_only"}}},
+		Roles:                 []MCPRoleCoverage{{MatchingPlugins: []MCPMatchingPlugin{{PluginID: uuid.NewString(), Name: "Tasks plugin", Slug: "tasks-plugin"}}, Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7), Reference: "opaque-role", Version: "opaque-version", CanEnterServer: true, KnownToolAccess: "all", AllowedKnownTools: []string{"list_tasks"}, DispositionRules: []string{"read_only"}, BlockedDispositions: []string{}, UnevaluatedGrants: false}},
+		SharedAuthClientRoles: []MCPRoleSharedAuthClients{{Name: "Operators", Reference: "opaque-role", AuthClients: []MCPRoleAuthClientAccess{{AuthClientID: uuid.NewString(), Name: "Token", ClientType: "static_credential", Access: "allowed"}}, UnevaluatedGrants: false}},
+		ExpiresAt:             "2026-09-04T12:10:00Z",
+	}
+	keys := decodeKeys(t, access)
+	require.ElementsMatch(t, []string{
+		"project_id", "mcp", "id", "name", "backend", "visibility", "authorization_mode", "authorization_surface", "access_summary", "tool_catalog", "tools", "name", "tools_truncated", "disposition",
+		"roles", "name", "type", "member_count", "reference", "version", "can_enter_server", "known_tool_access", "allowed_known_tools", "disposition_rules", "blocked_dispositions", "unevaluated_grants", "assignment_eligible", "expires_at", "matching_plugins", "plugin_id", "name", "slug",
+		"shared_auth_client_roles", "name", "reference", "auth_clients", "auth_client_id", "name", "client_type", "access", "unevaluated_grants",
+	}, keys)
+	for _, output := range []any{access, memberAccess} {
+		encoded, err := json.Marshal(output)
+		require.NoError(t, err)
+		for _, forbidden := range []string{"principal_urn", "user_id", "role_id", "email", "selector", "resource_id"} {
+			require.NotContains(t, string(encoded), forbidden)
+		}
+	}
+}
+
+func TestAccessRoleProjectionSummarizesWithoutSelectors(t *testing.T) {
+	t.Parallel()
+
+	readOnly := "read_only"
+	project := uuid.NewString()
+	server := uuid.NewString()
+	summary := summarizeMCPConnect([]*accessgen.RoleGrant{
+		{Scope: string(authz.ScopeMCPConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server, Tool: new("list_tasks")}}},
+		{Scope: string(authz.ScopeMCPConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: authz.WildcardResource, ProjectID: &project, Disposition: &readOnly}}},
+		// mcp:read does not imply connect, so it adds no connect rule.
+		{Scope: string(authz.ScopeMCPRead), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: authz.WildcardResource}}},
+	})
+	require.False(t, summary.AllServers)
+	require.Equal(t, 1, summary.ProjectRules)
+	require.Equal(t, 1, summary.ServerRules)
+	require.Equal(t, 1, summary.ToolRules)
+	require.Equal(t, []string{"read_only"}, summary.DispositionRules)
+
+	blocked := "destructive"
+	summary = summarizeMCPConnect([]*accessgen.RoleGrant{{Scope: string(authz.ScopeMCPBlockedConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: authz.WildcardResource, Tool: new("delete_tasks"), Disposition: &blocked}}}})
+	require.False(t, summary.BlockedServers)
+	require.Equal(t, 1, summary.BlockedToolRules)
+	require.Equal(t, []string{"destructive"}, summary.BlockedDispositionRules)
+
+	project = uuid.NewString()
+	summary = summarizeMCPConnect([]*accessgen.RoleGrant{{Scope: string(authz.ScopeMCPBlockedConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server, ProjectID: &project}}}})
+	require.Equal(t, 1, summary.BlockedProjectRules)
+	require.Equal(t, 1, summary.BlockedServerRules)
+
+	// View and manage blocks never withdraw connect.
+	summary = summarizeMCPConnect([]*accessgen.RoleGrant{
+		{Scope: string(authz.ScopeMCPBlockedRead), Selectors: nil},
+		{Scope: string(authz.ScopeMCPBlockedWrite), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server}}},
+	})
+	require.False(t, summary.BlockedServers)
+	require.Zero(t, summary.BlockedServerRules)
+}
+
+func TestRoleAuthzGrantsUseEffectiveExclusions(t *testing.T) {
+	t.Parallel()
+
+	server := uuid.NewString()
+	tool := "delete_tasks"
+	role := &accessgen.Role{PrincipalUrn: "role:organization:" + uuid.NewString(), Grants: []*accessgen.RoleGrant{
+		{Scope: string(authz.ScopeMCPConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server}}},
+		{Scope: string(authz.ScopeMCPBlockedConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server, Tool: &tool}}},
+	}}
+	grants, unevaluated := roleAuthzGrants(role)
+	require.False(t, unevaluated)
+
+	serverAllowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(server), authz.ProjectIDFrom(uuid.NewString())).Connect())
+	require.NoError(t, err)
+	require.True(t, serverAllowed, "a tool-specific exclusion does not block the server-level check")
+
+	toolAllowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(server), authz.ProjectIDFrom(uuid.NewString())).ToolCall(tool, ""))
+	require.NoError(t, err)
+	require.False(t, toolAllowed)
+}
+
+func TestAccessSummaryAndKnownToolCoverageCannotOverclaim(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "everyone", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "public"}))
+	require.Equal(t, "nobody", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "disabled"}))
+	require.Equal(t, "nobody", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "private", UnproxiedMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}))
+	require.Equal(t, "nobody", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "public", UnproxiedMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}))
+	require.Equal(t, "nobody", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "future_value"}))
+	require.Equal(t, "by_role", accessSummary(platformrepo.GetPlatformMCPInventoryItemRow{Visibility: "private"}))
+
+	require.Equal(t, "all", knownToolAccess(2, 2, "authoritative", false))
+	require.Equal(t, "some_known_tools", knownToolAccess(100, 100, "authoritative", true))
+	require.Equal(t, "not_enumerable", knownToolAccess(0, 0, "dynamic", false))
+}
+
+func TestAmbiguousAccessToolsAreOmitted(t *testing.T) {
+	t.Parallel()
+
+	tools := omitAmbiguousAccessTools([]MCPAccessTool{
+		{Name: "alpha", Disposition: "read_only"},
+		{Name: "shared", Disposition: "destructive"},
+		{Name: "shared", Disposition: "read_only"},
+		{Name: "zeta", Disposition: ""},
+	})
+	require.Equal(t, []MCPAccessTool{{Name: "alpha", Disposition: "read_only"}, {Name: "zeta", Disposition: ""}}, tools)
+}
+
+func TestRoleAuthzGrantsSkipsLegacyMalformedSelectors(t *testing.T) {
+	t.Parallel()
+
+	role := &accessgen.Role{PrincipalUrn: "role:organization:" + uuid.NewString(), Grants: []*accessgen.RoleGrant{{
+		Scope: string(authz.ScopeMCPConnect), Selectors: []*accessgen.Selector{{ResourceKind: "project", ResourceID: uuid.NewString()}},
+	}}}
+	grants, unevaluated := roleAuthzGrants(role)
+	require.True(t, unevaluated)
+	require.Empty(t, grants)
+}
+
+func TestAccessReferencesAreBoundByKindPrincipalAndExpiry(t *testing.T) {
+	t.Parallel()
+
+	codec, err := newSubjectReferenceCodec("access-read-test-key")
+	require.NoError(t, err)
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+	principal := Principal{UserID: "user-a", OrganizationID: "org-a", ConnectionID: "connection-a", Generation: "generation-a"}
+	reference, err := codec.Encode(principal, subjectKindAccessMember, "internal-user-id", now)
+	require.NoError(t, err)
+	require.NotContains(t, reference, "internal-user-id")
+
+	value, err := codec.Decode(reference, principal, subjectKindAccessMember, now)
+	require.NoError(t, err)
+	require.Equal(t, "internal-user-id", value)
+	_, err = codec.Decode(reference, principal, subjectKindAccessRole, now)
+	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
+	_, err = codec.Decode(reference, Principal{UserID: "user-b", OrganizationID: "org-a", ConnectionID: "connection-b", Generation: "generation-b"}, subjectKindAccessMember, now)
+	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
+	_, err = codec.Decode(reference, principal, subjectKindAccessMember, now.Add(SubjectReferenceTTL))
+	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
+}
+
+func TestMCPMatchingPluginsSchema(t *testing.T) {
+	t.Parallel()
+	schema := inferOutputSchema[GetMCPAccessOutput]("get_mcp_access")
+	encoded, err := json.Marshal(schema)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"matching_plugins"`)
+	require.Contains(t, string(encoded), `"plugin_id"`)
+	require.NotContains(t, string(encoded), `"principal_urn"`)
+}

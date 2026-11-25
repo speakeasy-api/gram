@@ -1,46 +1,12 @@
-import { ReactElement } from "react";
+import { traceLogsQueryOptions } from "./traceLogsQuery";
+import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
-import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import type { ToolUsageTraceLogGroup } from "@gram/client/models/components/toolusagetraceloggroup.js";
-import { Operator as Op } from "@gram/client/models/components/logfilter";
-import type { SearchLogsPayload } from "@gram/client/models/components/searchlogspayload";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { unwrapAsync } from "@gram/client/types/fp";
-import { Icon } from "@/components/ui/Icon";
 import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
-
-function buildTraceFilters(
-  logGroup: ToolUsageTraceLogGroup,
-): Pick<SearchLogsPayload, "filter" | "filters"> | null {
-  if (logGroup.kind === "correlation_id") {
-    return {
-      filters: [
-        {
-          path: "gram.trigger.correlation_id",
-          operator: Op.Eq,
-          values: [logGroup.value],
-        },
-      ],
-    };
-  }
-  if (logGroup.kind === "trigger_event_id") {
-    return {
-      filters: [
-        {
-          path: "gram.trigger.event_id",
-          operator: Op.Eq,
-          values: [logGroup.value],
-        },
-      ],
-    };
-  }
-  if (logGroup.kind === "trace_id") {
-    return { filter: { traceId: logGroup.value } };
-  }
-  return null;
-}
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // Editorial severity scale: info is neutral ink (never blue), debug a lighter
 // neutral, warn orange (feedback-orange token), error the red accent. Badges
@@ -97,36 +63,18 @@ export function TraceLogsList({
   to,
 }: TraceLogsListProps): ReactElement | null {
   const client = useGramContext();
-  const traceFilters = buildTraceFilters(logGroup);
 
+  const options = traceLogsQueryOptions(client, logGroup, from, to);
   const { data, isPending, error } = useQuery({
-    queryKey: [
-      "trace-logs",
-      logGroup.kind,
-      logGroup.value,
-      from.toISOString(),
-      to.toISOString(),
-    ],
-    queryFn: () =>
-      unwrapAsync(
-        telemetrySearchLogs(client, {
-          searchLogsPayload: {
-            ...traceFilters,
-            from,
-            to,
-            limit: 100,
-            sort: "asc",
-          },
-        }),
-      ),
-    enabled: isExpanded && traceFilters !== null,
+    ...options,
+    enabled: isExpanded && options.enabled,
   });
 
   if (!isExpanded) {
     return null;
   }
 
-  if (traceFilters === null) {
+  if (!options.enabled) {
     return (
       <div className="text-muted-foreground border-border flex items-center gap-3 border-b px-5 py-2">
         <div className="w-1.5 shrink-0" />
@@ -139,13 +87,11 @@ export function TraceLogsList({
 
   if (isPending) {
     return (
-      <div className="text-muted-foreground border-border flex items-center gap-3 border-b px-5 py-2">
+      <div className="border-border flex items-center gap-3 border-b px-5 py-2">
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
-        <div className="flex w-5 shrink-0 justify-center">
-          <Icon name="loader-circle" className="size-4 animate-spin" />
-        </div>
-        <span className="text-xs">Loading spans...</span>
+        <div className="w-5 shrink-0" />
+        <Skeleton label="Loading spans" className="h-4 w-48" />
       </div>
     );
   }

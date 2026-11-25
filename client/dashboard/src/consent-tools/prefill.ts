@@ -1,5 +1,5 @@
 import {
-  TOOL_ANNOTATIONS,
+  isToolAnnotation,
   type ToolAnnotation,
 } from "@/components/tool-selection/annotations";
 
@@ -11,17 +11,11 @@ interface PrefillAnnotation {
 export type ConsentSelection = null | {
   annotations: PrefillAnnotation[];
   tools: string[];
+  accessMode?: "all" | "cached" | "specific";
 };
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isToolAnnotation(value: unknown): value is ToolAnnotation {
-  return (
-    typeof value === "string" &&
-    (TOOL_ANNOTATIONS as readonly string[]).includes(value)
-  );
 }
 
 /**
@@ -55,5 +49,17 @@ export function parsePrefillBootstrap(
     annotations.push({ name, mode });
   }
   if (!rawTools.every((t): t is string => typeof t === "string")) return null;
-  return { annotations, tools: rawTools };
+  const accessMode = value["accessMode"];
+  if (
+    accessMode !== undefined &&
+    accessMode !== "all" &&
+    accessMode !== "cached" &&
+    accessMode !== "specific"
+  )
+    return null;
+  return {
+    annotations,
+    tools: rawTools,
+    ...(accessMode ? { accessMode } : {}),
+  };
 }

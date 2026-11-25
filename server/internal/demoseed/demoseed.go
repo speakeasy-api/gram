@@ -1,92 +1,193 @@
 // Package demoseed provisions the shared demo organization
-// (constants.DemoOrganizationID). The SQL sources are embedded so the seed
-// versions atomically with the server binary: the daily `gram demo-seed` run
-// always applies the seed that shipped with the current deploy — no
-// migrations, no runtime file fetches. Authoring docs live in seed/demo/.
+// (constants.DemoOrganizationID). The seed is Go code compiled into the server
+// binary, so the daily `gram demo-seed` run always applies the seed that
+// shipped with the current deploy — no migrations, no runtime file fetches.
+// Authoring docs live in seed/demo/.
 package demoseed
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
+	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-//go:embed postgres.sql
-var postgresSQL string
-
-//go:embed clickhouse.sql
-var clickhouseSQL string
-
 //go:embed openapi.yaml
-var openapiDoc []byte
+var openapiDocTemplate []byte
 
-// Run applies the seed for spec's tenant: Postgres first (installs and
-// executes demo.ensure_demo_org(), whose pre/postflight asserts abort the
-// transaction on any isolation violation), then ClickHouse (scoped deletes +
-// inserts with throwIf postflights). Both halves are idempotent; ordering
-// matters only because ClickHouse rows reference Postgres ids.
+// openapiFixturePlaceholder stands for the hosted MCP fixture in openapi.yaml.
+const openapiFixturePlaceholder = "https://speakeasy.example.com/rpc/demoseed"
+
+const (
+	clickHouseDeleteVisibilityTimeout = 30 * time.Second
+	clickHouseDeleteVisibilityPoll    = 250 * time.Millisecond
+	demoSeedLockCleanupTimeout        = 5 * time.Second
+)
+
+// Run replaces the data for spec's tenant while holding the shared advisory
+// lock. The Postgres seed runs in one transaction, so a failed run leaves the
+// previous data in place; each statement in it gets its own statement
+// timeout. Once it commits, the tenant's upstream auth is migrated to typed
+// auth clients by the staff migration's own backfills and checked complete
+// (migrateUpstreamAuth). The ClickHouse seed then deletes both source rows and
+// materialized-view targets before its inserts incrementally repopulate the
+// summaries.
 //
-// Pass DefaultSpec() for the shared production demo org — the scripts are
-// written against its literals, so they run through unmodified.
-func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, spec Spec) error {
+// Pass DefaultSpec() for the shared production demo org.
+func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec) error {
 	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
 	if err := spec.Validate(); err != nil {
 		return err
 	}
 
+	// The advisory lock holds one connection for the whole run, and the
+	// upstream auth backfills acquire another while it is held.
+	if db.Config().MaxConns < 2 {
+		return fmt.Errorf("demo seed needs a postgres pool of at least 2 connections, got %d", db.Config().MaxConns)
+	}
+
+	// Reference data only; the decision backfill would touch other organizations.
+	if err := catalogseed.EnsureCatalog(ctx, db); err != nil {
+		return fmt.Errorf("ensure AI catalog before demo seed: %w", err)
+	}
+	catalog, err := aivendors.Load(ctx, db, logger, aitargets.ValidateCatalog)
+	if err != nil {
+		return fmt.Errorf("load AI catalog before demo seed: %w", err)
+	}
+
+	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {
+		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec, catalog)
+		if err != nil {
+			return err
+		}
+		logger.InfoContext(ctx, "demo seed applied to postgres")
+
+		if err := migrateUpstreamAuth(ctx, logger, db, spec.OrgID); err != nil {
+			return fmt.Errorf("migrate demo seed upstream auth: %w", err)
+		}
+		logger.InfoContext(ctx, "demo seed upstream auth migrated")
+
+		if err := s.runClickHouse(ctx, ch); err != nil {
+			return fmt.Errorf("apply demo seed to clickhouse: %w", err)
+		}
+		logger.InfoContext(ctx, "demo seed applied to clickhouse")
+		return nil
+	})
+}
+
+// withSeedLock runs fn while this session holds the shared demo seed advisory
+// lock, on the connection that holds it. It refuses to run when another
+// session holds the lock.
+func withSeedLock(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, fn func(conn *pgxpool.Conn) error) (retErr error) {
 	conn, err := db.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire postgres connection: %w", err)
 	}
-	defer conn.Release()
 
-	// Serialize whole runs (Postgres AND ClickHouse) behind one advisory
-	// lock: two overlapping runs would interleave the ClickHouse
-	// delete+insert phases and leave duplicated telemetry/summaries. The
-	// session lock is held on this pooled connection, so it must be released
-	// explicitly before the connection returns to the pool.
-	// The lock is scoped to the tenant: distinct Specs write disjoint rows, so
-	// only same-tenant runs need to exclude each other.
-	lockName := "gram-demo-seed:" + spec.OrgID
-	var locked bool
-	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock(hashtext($1))", lockName).Scan(&locked); err != nil {
+	const lockName = "gram-demo-seed"
+	lockQueries := repo.New(conn)
+	locked, err := lockQueries.TryAcquireSeedLock(ctx, lockName)
+	if err != nil {
+		// Cancellation can surface after PostgreSQL acquired the session lock.
+		// Destroy the uncertain session instead of returning it to the pool.
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
+		defer cancel()
+		if closeErr := conn.Hijack().Close(cleanupCtx); closeErr != nil {
+			logger.ErrorContext(cleanupCtx, "close uncertain demo seed lock session", attr.SlogError(closeErr))
+		}
 		return fmt.Errorf("acquire demo seed advisory lock: %w", err)
 	}
 	if !locked {
-		return fmt.Errorf("another demo seed run holds the advisory lock; refusing to run concurrently")
+		conn.Release()
+		return errors.New("another demo seed run holds the advisory lock; refusing to run concurrently")
 	}
 	defer func() {
-		if _, err := conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock(hashtext($1))", lockName); err != nil {
-			logger.ErrorContext(ctx, "release demo seed advisory lock", attr.SlogError(err))
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
+		defer cancel()
+
+		unlocked, unlockErr := lockQueries.ReleaseSeedLock(unlockCtx, lockName)
+		if unlockErr == nil && unlocked {
+			conn.Release()
+			return
 		}
+		if unlockErr == nil {
+			unlockErr = errors.New("demo seed advisory lock was not held by this session")
+		}
+		logger.ErrorContext(unlockCtx, "release demo seed advisory lock", attr.SlogError(unlockErr))
+		if closeErr := conn.Hijack().Close(unlockCtx); closeErr != nil {
+			logger.ErrorContext(unlockCtx, "close demo seed lock session", attr.SlogError(closeErr))
+		}
+		retErr = errors.Join(retErr, fmt.Errorf("release demo seed advisory lock: %w", unlockErr))
 	}()
 
-	// The script is multi-statement (CREATE SCHEMA / CREATE FUNCTION with a
-	// dollar-quoted body / SELECT), which requires the simple query protocol.
-	if err := conn.Conn().PgConn().Exec(ctx, spec.Rewrite(postgresSQL)).Close(); err != nil {
-		return fmt.Errorf("apply demo seed to postgres: %w", err)
-	}
-	logger.InfoContext(ctx, "demo seed applied to postgres")
+	return fn(conn)
+}
 
-	// The Sources page's "OpenAPI Specification" tab serves the asset blob,
-	// which SQL alone cannot place — write the embedded spec through the
-	// asset store (fs locally, GCS in prod) and point the assets row at it.
+// txBeginner starts a transaction. Run passes the *pgxpool.Conn that holds the
+// advisory lock, so the seed runs inside the locked session; tests pass the
+// *pgxpool.Pool.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// seedPostgres runs the Postgres seed for spec in one transaction on db, so a
+// failed run leaves the previous data in place. It returns the seeder, whose
+// clock the ClickHouse seed reuses.
+func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec, catalog *aivendors.Snapshot) (*seeder, error) {
+	if enc == nil {
+		return nil, errors.New("demo seed needs the environment's encryption key")
+	}
+	assistantIssuer := strings.TrimRight(assistantIssuerURL, "/")
+	if assistantIssuer == "" {
+		return nil, errors.New("demo seed needs the deployment's assistant trigger issuer origin")
+	}
+	server, err := parseServerURL(serverURL)
+	if err != nil {
+		return nil, err
+	}
+	s := &seeder{spec: spec, catalog: catalog, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
+	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
+		s.q = repo.New(tx)
+		if err := s.runPostgres(ctx); err != nil {
+			return err
+		}
+		return s.uploadOpenAPIDoc(ctx, blob)
+	}); err != nil {
+		return nil, fmt.Errorf("apply demo seed to postgres: %w", err)
+	}
+	return s, nil
+}
+
+// uploadOpenAPIDoc places the Sources page's "OpenAPI Specification" blob,
+// which SQL alone cannot: it writes the embedded spec through the asset store
+// (fs locally, GCS in prod) and points the seeded assets row at it.
+func (s *seeder) uploadOpenAPIDoc(ctx context.Context, blob assets.BlobStore) error {
+	// The document's OAuth flow names the MCP fixture this deployment hosts.
+	openapiDoc := bytes.ReplaceAll(openapiDocTemplate, []byte(openapiFixturePlaceholder), []byte(fixtureauth.BaseURL(s.serverURL)))
 	docSHA := sha256.Sum256(openapiDoc)
-	docHex := hex.EncodeToString(docSHA[:])
-	w, objURL, err := blob.Write(ctx, "demoseed/"+spec.OrgSlug+"-openapi.yaml", "application/x-yaml", int64(len(openapiDoc)))
+	w, objURL, err := blob.Write(ctx, "demoseed/"+s.spec.OrgSlug+"-openapi.yaml", "application/x-yaml", int64(len(openapiDoc)))
 	if err != nil {
 		return fmt.Errorf("open demo openapi asset for writing: %w", err)
 	}
@@ -97,56 +198,65 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	if err := w.Close(); err != nil {
 		return fmt.Errorf("finalize demo openapi asset: %w", err)
 	}
-	if _, err := conn.Exec(ctx,
-		"UPDATE assets SET url = $1, sha256 = $2, content_length = $3, content_type = 'application/x-yaml' WHERE id = $4 AND project_id = $5",
-		objURL.String(), docHex, len(openapiDoc), spec.AssetID(), spec.ProjectID(),
-	); err != nil {
+	if err := s.q.PointAssetAtUpload(ctx, repo.PointAssetAtUploadParams{
+		Url:           objURL.String(),
+		Sha256:        hex.EncodeToString(docSHA[:]),
+		ContentLength: int64(len(openapiDoc)),
+		ID:            s.assetID(),
+		ProjectID:     s.projectID(),
+	}); err != nil {
 		return fmt.Errorf("point demo assets row at the uploaded spec: %w", err)
 	}
-	logger.InfoContext(ctx, "demo openapi asset uploaded")
-
-	// clickhouse-go executes one statement per call and pools sessions, so the
-	// script's SET line cannot carry across statements — the setting rides on
-	// the context instead. Statements are split on ';': the seed files keep
-	// semicolons out of string literals by convention (see seed/demo/PAGES.md).
-	// lightweight_deletes_sync=2 waits for ALL replicas (prod ClickHouse Cloud
-	// is replicated; =1 would let the re-insert race a delete still running on
-	// another replica). The base client caps max_execution_time at 60s, which
-	// prod-sized telemetry_logs deletes can exceed — raise it here.
-	chCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"lightweight_deletes_sync": 2,
-		"max_execution_time":       600,
-	}))
-	for _, stmt := range splitStatements(spec.Rewrite(clickhouseSQL)) {
-		if strings.HasPrefix(strings.ToUpper(stmt), "SET ") {
-			continue
-		}
-		if err := ch.Exec(chCtx, stmt); err != nil {
-			return fmt.Errorf("apply demo seed to clickhouse: %w: %.120s", err, stmt)
-		}
-	}
-	logger.InfoContext(ctx, "demo seed applied to clickhouse")
-
+	s.logger.InfoContext(ctx, "demo openapi asset uploaded")
 	return nil
 }
 
-// splitStatements strips -- line comments and splits the script into
-// individual statements on ';'.
-func splitStatements(script string) []string {
-	var sb strings.Builder
-	for line := range strings.Lines(script) {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "--") {
-			continue
-		}
-		sb.WriteString(line)
-	}
+func waitForClickHouseDelete(
+	ctx context.Context,
+	timeout time.Duration,
+	pollInterval time.Duration,
+	countRows func(context.Context) (uint64, error),
+) error {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
-	var out []string
-	for stmt := range strings.SplitSeq(sb.String(), ";") {
-		if s := strings.TrimSpace(stmt); s != "" {
-			out = append(out, s)
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		remaining, err := countRows(waitCtx)
+		if err != nil {
+			return fmt.Errorf("check demo delete visibility: %w", err)
+		}
+		if remaining == 0 {
+			return nil
+		}
+
+		select {
+		case <-waitCtx.Done():
+			return fmt.Errorf("wait for demo delete visibility with %d rows remaining: %w", remaining, context.Cause(waitCtx))
+		case <-ticker.C:
 		}
 	}
-	return out
+}
+
+// parseServerURL reads the deployment's own URL. It hosts the MCP fixture the
+// seeded servers reach and serves the seeded clients' metadata documents, so
+// it must be an absolute HTTPS origin, or plain HTTP on a loopback host for
+// local development.
+func parseServerURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(strings.TrimRight(raw, "/"))
+	if err != nil || u.Hostname() == "" {
+		return nil, fmt.Errorf("demo seed needs the deployment's server URL (GRAM_SERVER_URL), got %q", raw)
+	}
+	if u.User != nil {
+		return nil, fmt.Errorf("demo seed server URL %q must not carry credentials", u.Redacted())
+	}
+	if u.Scheme != "https" && (u.Scheme != "http" || !isLoopbackHost(u.Hostname())) {
+		return nil, fmt.Errorf("demo seed server URL %q must be HTTPS", raw)
+	}
+	if u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return nil, fmt.Errorf("demo seed server URL %q must be an origin", raw)
+	}
+	return u, nil
 }

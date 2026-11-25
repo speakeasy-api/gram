@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"goa.design/goa/v3/security"
 
@@ -106,40 +105,22 @@ func TestListInstancesIncludesSafeDiagnostics(t *testing.T) {
 		liteLLMTrafficLog(t, uuid.New(), instanceID, managedKey.ID, now, "ignored-project", "member@example.test", "user-1", liteLLMEventURN("chat")),
 	}
 	require.NoError(t, telemetryrepo.New(ti.chConn).InsertTelemetryLogs(ctx, rows))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-	var diagnostics *gen.LiteLLMInstanceDiagnostics
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		listed, listErr := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
-		assert.NoError(collect, listErr)
-		if listErr != nil {
-			return
-		}
-		withTraffic := instanceByNameCollect(collect, listed, "with-traffic")
-		noTraffic := instanceByNameCollect(collect, listed, "without-traffic")
-		if withTraffic == nil || noTraffic == nil {
-			return
-		}
-		diagnostics = withTraffic.Diagnostics
-		assert.NotNil(collect, diagnostics)
-		if diagnostics != nil {
-			assert.Equal(collect, gen.LiteLLMInstanceHealthStatus("failed"), diagnostics.Status)
-			assert.NotNil(collect, diagnostics.VirtualKeyEmailPct24h)
-			assert.NotNil(collect, diagnostics.PlatformUserPct24h)
-			if diagnostics.VirtualKeyEmailPct24h != nil && diagnostics.PlatformUserPct24h != nil {
-				assert.InDelta(collect, 50.0, *diagnostics.VirtualKeyEmailPct24h, 0.01)
-				assert.InDelta(collect, 50.0, *diagnostics.PlatformUserPct24h, 0.01)
-			}
-		}
-		assert.NotNil(collect, noTraffic.Diagnostics)
-		if noTraffic.Diagnostics != nil {
-			assert.Equal(collect, gen.LiteLLMInstanceHealthStatus("pending"), noTraffic.Diagnostics.Status)
-			assert.Nil(collect, noTraffic.Diagnostics.VirtualKeyEmailPct24h)
-			assert.Nil(collect, noTraffic.Diagnostics.PlatformUserPct24h)
-		}
-	}, 5*time.Second, 20*time.Millisecond)
-
+	listed, err := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
+	require.NoError(t, err)
+	withTraffic := instanceByName(t, listed, "with-traffic")
+	noTraffic := instanceByName(t, listed, "without-traffic")
+	diagnostics := withTraffic.Diagnostics
 	require.NotNil(t, diagnostics)
+	require.Equal(t, gen.LiteLLMInstanceHealthStatus("failed"), diagnostics.Status)
+	require.NotNil(t, diagnostics.VirtualKeyEmailPct24h)
+	require.NotNil(t, diagnostics.PlatformUserPct24h)
+	require.InDelta(t, 50.0, *diagnostics.VirtualKeyEmailPct24h, 0.01)
+	require.InDelta(t, 50.0, *diagnostics.PlatformUserPct24h, 0.01)
+	require.NotNil(t, noTraffic.Diagnostics)
+	require.Equal(t, gen.LiteLLMInstanceHealthStatus("pending"), noTraffic.Diagnostics.Status)
+	require.Nil(t, noTraffic.Diagnostics.VirtualKeyEmailPct24h)
+	require.Nil(t, noTraffic.Diagnostics.PlatformUserPct24h)
 	require.NotNil(t, diagnostics.LastGuardrailEventAt)
 	require.NotNil(t, diagnostics.LastErrorAt)
 	require.Equal(t, gen.LiteLLMInstanceErrorKind("decode_failure"), *diagnostics.LastErrorKind)
@@ -263,14 +244,4 @@ func liteLLMTrafficLog(t *testing.T, projectID, instanceID, apiKeyID uuid.UUID, 
 		ServiceVersion:       nil,
 		GramChatID:           nil,
 	}
-}
-
-func instanceByNameCollect(collect *assert.CollectT, result *gen.ListInstancesResult, name string) *gen.LiteLLMInstance {
-	for _, instance := range result.Instances {
-		if instance.Name == name {
-			return instance
-		}
-	}
-	assert.Fail(collect, "instance not found", name)
-	return nil
 }

@@ -20,6 +20,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
@@ -127,6 +128,7 @@ func newTestCIMDOAuthHTTP(t *testing.T) (*OAuthHTTP, *cimdDocServer) {
 	base, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
 	service, err := NewOAuthHTTP(OAuthHTTPConfig{
+		AICatalog:      aivendorstest.NewStore(),
 		BaseURL:        base,
 		Cache:          &memoryCache{values: map[string]any{}},
 		Store:          platformoauth.NewInMemoryStore(),
@@ -209,7 +211,7 @@ func TestCIMDAuthorize_LoopbackRedirectPortMayVary(t *testing.T) {
 
 	// Every other component still has to match.
 	response = doCIMDAuthorize(t, service, ds.clientID, "http://127.0.0.1:51099/other")
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client"`)
 }
 
@@ -217,7 +219,7 @@ func TestCIMDAuthorize_NonLoopbackRedirectStaysExact(t *testing.T) {
 	t.Parallel()
 
 	service, ds := newTestCIMDOAuthHTTP(t)
-	// Same-origin with the document URL, as Gram's origin-binding policy
+	// Same-origin with the document URL, as Speakeasy's origin-binding policy
 	// requires, and https rather than http so it is not an RFC 8252 §7.3
 	// loopback redirect: the variable-port exception must not apply.
 	ds.set(t, func(ds *cimdDocServer) {
@@ -231,7 +233,7 @@ func TestCIMDAuthorize_NonLoopbackRedirectStaysExact(t *testing.T) {
 	otherPort.Path = "/callback"
 
 	response := doCIMDAuthorize(t, service, ds.clientID, otherPort.String())
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client"`)
 }
 
@@ -260,7 +262,7 @@ func TestCIMDAuthorize_OversizedClientIDDeniedBeforeAnyLookup(t *testing.T) {
 	oversized := ds.srv.URL + "/oauth/" + strings.Repeat("x", admission.MaxClientIDLength) + ".json"
 
 	response := doCIMDAuthorize(t, service, oversized, "http://127.0.0.1:33418/callback")
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client"`)
 	require.Zero(t, ds.requests.Load(), "an oversized client_id must not reach the document host")
 }
@@ -274,6 +276,7 @@ func TestCIMDAuthorize_DocumentClientIDMismatchRejected(t *testing.T) {
 	response := doCIMDAuthorize(t, service, ds.clientID, "http://127.0.0.1:33418/callback")
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client_metadata"`)
+	require.Contains(t, response.Body.String(), "or its return address")
 }
 
 func TestCIMDAuthorize_ConfidentialDocumentRejected(t *testing.T) {
@@ -287,6 +290,7 @@ func TestCIMDAuthorize_ConfidentialDocumentRejected(t *testing.T) {
 	response := doCIMDAuthorize(t, service, ds.clientID, "http://127.0.0.1:33418/callback")
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client_metadata"`)
+	require.Contains(t, response.Body.String(), "or its return address")
 }
 
 func TestCIMDToken_ClientPresentingSecretRejected(t *testing.T) {
@@ -309,7 +313,7 @@ func TestCIMDToken_ClientPresentingSecretRejected(t *testing.T) {
 	response := httptest.NewRecorder()
 	service.TokenHandler().ServeHTTP(response, request)
 
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client"`)
 }
 

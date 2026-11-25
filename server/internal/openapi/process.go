@@ -413,7 +413,7 @@ func readDoc(ctx context.Context, params readDocParams) ([]byte, error) {
 		).LogError(ctx, params.logger)
 	}
 
-	defer o11y.LogDefer(ctx, params.logger, func() error {
+	defer o11y.LogDefer(ctx, params.logger, "failed to close openapi document reader", func() error {
 		return rc.Close()
 	})
 

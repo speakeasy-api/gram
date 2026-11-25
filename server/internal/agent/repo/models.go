@@ -8,10 +8,53 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type DeviceAgentConfiguration struct {
+type AiScanTarget struct {
+	// @access: confidential
 	OrganizationID string
-	SchemaVersion  int32
-	Config         []byte
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	// @access: confidential
+	ID string
+	// The catalog product a built-in's row records a decision about, equal to id; null for a target the organization added. Makes a row's kind durable rather than inferred from whether id happens to match a product. Deleting a referenced product is refused rather than nulling this, which would silently turn the decision into an empty target of the organization's own.
+	// @access: confidential
+	AiProductID pgtype.Text
+	// @access: confidential
+	DisplayName pgtype.Text
+	// @access: confidential
+	Category pgtype.Text
+	// @access: confidential
+	BundleIds []string
+	// @access: confidential
+	Binaries []string
+	// @access: opaque-restricted
+	ConfigDirs []string
+	// @access: confidential
+	ProcessNames []string
+	// @access: confidential
+	VersionPlistKey pgtype.Text
+	// @access: confidential
+	CimdVendorKeys []string
+	// @access: restricted
+	OauthClientIds []string
+	// @access: confidential
+	ClientInfoNames []string
+	// @access: confidential
+	Status string
+	// @access: opaque-restricted
+	Rationale pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type DeviceAgentConfiguration struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	SchemaVersion int32
+	// @access: opaque-restricted
+	Config []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

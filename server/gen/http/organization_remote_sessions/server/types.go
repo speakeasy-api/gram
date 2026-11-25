@@ -30,20 +30,38 @@ type RefreshSessionResponseBody struct {
 	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
 	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
-	// Resolved display name when the subject is a Gram user. Absent for
+	// Resolved display name when the subject is a Speakeasy user. Absent for
 	// apikey/anonymous subjects or unresolved users.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
-	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
-	// subjects or unresolved users.
+	// Resolved email when the subject is a Speakeasy user. Absent for
+	// apikey/anonymous subjects or unresolved users.
 	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
+	// Stored email of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it; never inferred from the Speakeasy
+	// subject.
+	UpstreamEmail *string `form:"upstream_email,omitempty" json:"upstream_email,omitempty" xml:"upstream_email,omitempty"`
+	// Stored display name of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it.
+	UpstreamDisplayName *string `form:"upstream_display_name,omitempty" json:"upstream_display_name,omitempty" xml:"upstream_display_name,omitempty"`
+	// The upstream identity interface that supplied the stored account identity,
+	// such as an ID token or userinfo response. Absent when upstream identity is
+	// unknown.
+	IdentitySource *string `form:"identity_source,omitempty" json:"identity_source,omitempty" xml:"identity_source,omitempty"`
 	// The user_session_issuer this session is bound to.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// The remote_session_client this session was minted against.
 	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
-	// Upstream access-token expiry. Independent of refresh_expires_at.
-	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
+	// Upstream access-token expiry. Independent of refresh_expires_at. Omitted
+	// when the upstream reported no expiry, which readers treat as non-expiring.
+	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Upstream authorization deadline. When present, the connection cannot be used
+	// or refreshed after this time even if its tokens have later expiries.
+	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
+	// Last recorded upstream request, accurate to within five minutes. Null means
+	// unknown.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
 	// action; refresh_expires_at is insufficient because an upstream may issue a
 	// non-expiring refresh token. The token itself is never returned.
@@ -829,20 +847,38 @@ type RemoteSessionResponseBody struct {
 	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
 	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
-	// Resolved display name when the subject is a Gram user. Absent for
+	// Resolved display name when the subject is a Speakeasy user. Absent for
 	// apikey/anonymous subjects or unresolved users.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
-	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
-	// subjects or unresolved users.
+	// Resolved email when the subject is a Speakeasy user. Absent for
+	// apikey/anonymous subjects or unresolved users.
 	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
+	// Stored email of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it; never inferred from the Speakeasy
+	// subject.
+	UpstreamEmail *string `form:"upstream_email,omitempty" json:"upstream_email,omitempty" xml:"upstream_email,omitempty"`
+	// Stored display name of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it.
+	UpstreamDisplayName *string `form:"upstream_display_name,omitempty" json:"upstream_display_name,omitempty" xml:"upstream_display_name,omitempty"`
+	// The upstream identity interface that supplied the stored account identity,
+	// such as an ID token or userinfo response. Absent when upstream identity is
+	// unknown.
+	IdentitySource *string `form:"identity_source,omitempty" json:"identity_source,omitempty" xml:"identity_source,omitempty"`
 	// The user_session_issuer this session is bound to.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// The remote_session_client this session was minted against.
 	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
-	// Upstream access-token expiry. Independent of refresh_expires_at.
-	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
+	// Upstream access-token expiry. Independent of refresh_expires_at. Omitted
+	// when the upstream reported no expiry, which readers treat as non-expiring.
+	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Upstream authorization deadline. When present, the connection cannot be used
+	// or refreshed after this time even if its tokens have later expiries.
+	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
+	// Last recorded upstream request, accurate to within five minutes. Null means
+	// unknown.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
 	// action; refresh_expires_at is insufficient because an upstream may issue a
 	// non-expiring refresh token. The token itself is never returned.
@@ -879,17 +915,22 @@ func NewListClientSessionsResponseBody(res *organizationremotesessions.ListOrgan
 // of the "refreshSession" endpoint of the "organizationRemoteSessions" service.
 func NewRefreshSessionResponseBody(res *types.RemoteSession) *RefreshSessionResponseBody {
 	body := &RefreshSessionResponseBody{
-		ID:                    res.ID,
-		SubjectUrn:            res.SubjectUrn,
-		SubjectDisplayName:    res.SubjectDisplayName,
-		SubjectEmail:          res.SubjectEmail,
-		UserSessionIssuerID:   res.UserSessionIssuerID,
-		RemoteSessionClientID: res.RemoteSessionClientID,
-		AccessExpiresAt:       res.AccessExpiresAt,
-		RefreshExpiresAt:      res.RefreshExpiresAt,
-		HasRefreshToken:       res.HasRefreshToken,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                     res.ID,
+		SubjectUrn:             res.SubjectUrn,
+		SubjectDisplayName:     res.SubjectDisplayName,
+		SubjectEmail:           res.SubjectEmail,
+		UpstreamEmail:          res.UpstreamEmail,
+		UpstreamDisplayName:    res.UpstreamDisplayName,
+		IdentitySource:         res.IdentitySource,
+		UserSessionIssuerID:    res.UserSessionIssuerID,
+		RemoteSessionClientID:  res.RemoteSessionClientID,
+		AccessExpiresAt:        res.AccessExpiresAt,
+		RefreshExpiresAt:       res.RefreshExpiresAt,
+		AuthorizationExpiresAt: res.AuthorizationExpiresAt,
+		LastUsedAt:             res.LastUsedAt,
+		HasRefreshToken:        res.HasRefreshToken,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	if res.Scopes != nil {
 		body.Scopes = make([]string, len(res.Scopes))
@@ -1514,9 +1555,14 @@ func NewRevokeAllClientSessionsGatewayErrorResponseBody(res *goa.ServiceError) *
 
 // NewListClientSessionsPayload builds a organizationRemoteSessions service
 // listClientSessions endpoint payload.
-func NewListClientSessionsPayload(clientID string, cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationremotesessions.ListClientSessionsPayload {
+func NewListClientSessionsPayload(clientID string, search *string, status *string, createdAfter *string, createdBefore *string, sort *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationremotesessions.ListClientSessionsPayload {
 	v := &organizationremotesessions.ListClientSessionsPayload{}
 	v.ClientID = clientID
+	v.Search = search
+	v.Status = status
+	v.CreatedAfter = createdAfter
+	v.CreatedBefore = createdBefore
+	v.Sort = sort
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken

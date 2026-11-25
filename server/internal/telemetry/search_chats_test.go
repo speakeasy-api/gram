@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -86,62 +85,52 @@ func TestSearchChats_AggregatesByChatID(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-			Filter: &gen.SearchChatsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Chats, 2)
+	res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Chats, 2)
 
-		// Find both chats
-		chatsByID := make(map[string]*gen.ChatSummary)
-		for _, chat := range res.Chats {
-			chatsByID[chat.GramChatID] = chat
-		}
+	// Find both chats
+	chatsByID := make(map[string]*gen.ChatSummary)
+	for _, chat := range res.Chats {
+		chatsByID[chat.GramChatID] = chat
+	}
 
-		// Chat 1 assertions
-		c1 := chatsByID[chatID1]
-		if !assert.NotNil(c, c1) {
-			return
-		}
-		assert.Equal(c, uint64(3), c1.LogCount)      // 2 completions + 1 tool call
-		assert.Equal(c, uint64(1), c1.ToolCallCount) // 1 tool call
-		assert.Equal(c, uint64(2), c1.MessageCount)  // 2 completions
-		assert.Greater(c, c1.DurationSeconds, float64(0))
-		assert.Equal(c, "success", c1.Status) // no failed tool calls
-		assert.NotNil(c, c1.Model)
-		assert.Equal(c, "gpt-4", *c1.Model)
-		assert.Equal(c, int64(300), c1.TotalInputTokens)  // 100 + 200
-		assert.Equal(c, int64(150), c1.TotalOutputTokens) // 50 + 100
-		assert.Equal(c, int64(450), c1.TotalTokens)       // 150 + 300
-		assert.Positive(c, c1.StartTimeUnixNano)
-		assert.Positive(c, c1.EndTimeUnixNano)
+	// Chat 1 assertions
+	c1 := chatsByID[chatID1]
+	require.NotNil(t, c1)
+	require.Equal(t, uint64(3), c1.LogCount)      // 2 completions + 1 tool call
+	require.Equal(t, uint64(1), c1.ToolCallCount) // 1 tool call
+	require.Equal(t, uint64(2), c1.MessageCount)  // 2 completions
+	require.Greater(t, c1.DurationSeconds, float64(0))
+	require.Equal(t, "success", c1.Status) // no failed tool calls
+	require.NotNil(t, c1.Model)
+	require.Equal(t, "gpt-4", *c1.Model)
+	require.Equal(t, int64(300), c1.TotalInputTokens)  // 100 + 200
+	require.Equal(t, int64(150), c1.TotalOutputTokens) // 50 + 100
+	require.Equal(t, int64(450), c1.TotalTokens)       // 150 + 300
+	require.Positive(t, c1.StartTimeUnixNano)
+	require.Positive(t, c1.EndTimeUnixNano)
 
-		// Chat 2 assertions
-		c2 := chatsByID[chatID2]
-		if !assert.NotNil(c, c2) {
-			return
-		}
-		assert.Equal(c, uint64(2), c2.LogCount) // 1 completion + 1 tool call
-		assert.Equal(c, uint64(1), c2.ToolCallCount)
-		assert.Equal(c, uint64(1), c2.MessageCount)
-		assert.Equal(c, "error", c2.Status) // failed tool call (status 500)
-		assert.NotNil(c, c2.Model)
-		assert.Equal(c, "claude-3", *c2.Model)
-		assert.Equal(c, int64(150), c2.TotalInputTokens)
-		assert.Equal(c, int64(75), c2.TotalOutputTokens)
-		assert.Equal(c, int64(225), c2.TotalTokens)
-	}, 10*time.Second, 200*time.Millisecond)
+	// Chat 2 assertions
+	c2 := chatsByID[chatID2]
+	require.NotNil(t, c2)
+	require.Equal(t, uint64(2), c2.LogCount) // 1 completion + 1 tool call
+	require.Equal(t, uint64(1), c2.ToolCallCount)
+	require.Equal(t, uint64(1), c2.MessageCount)
+	require.Equal(t, "error", c2.Status) // failed tool call (status 500)
+	require.NotNil(t, c2.Model)
+	require.Equal(t, "claude-3", *c2.Model)
+	require.Equal(t, int64(150), c2.TotalInputTokens)
+	require.Equal(t, int64(75), c2.TotalOutputTokens)
+	require.Equal(t, int64(225), c2.TotalTokens)
 }
 
 func TestSearchChats_Pagination(t *testing.T) {
@@ -167,25 +156,19 @@ func TestSearchChats_Pagination(t *testing.T) {
 
 	// Page 1: limit 2
 	var page1 *gen.SearchChatsResult
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-			Filter: &gen.SearchChatsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 2,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Chats, 2)
-		assert.NotNil(c, res.NextCursor)
-		page1 = res
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 2,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Chats, 2)
+	require.NotNil(t, res.NextCursor)
+	page1 = res
 
 	// Page 2
 	page2, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
@@ -243,24 +226,18 @@ func TestSearchChats_FilterByDeploymentID(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-			Filter: &gen.SearchChatsFilter{
-				From:         &from,
-				To:           &to,
-				DeploymentID: &deployment1,
-			},
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Chats, 2)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From:         &from,
+			To:           &to,
+			DeploymentID: &deployment1,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Chats, 2)
 }
 
 func TestSearchChats_PaginationAscOrder(t *testing.T) {
@@ -286,25 +263,19 @@ func TestSearchChats_PaginationAscOrder(t *testing.T) {
 
 	// Page 1: limit 2 with ascending sort
 	var page1 *gen.SearchChatsResult
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-			Filter: &gen.SearchChatsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 2,
-			Sort:  "asc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Chats, 2)
-		assert.NotNil(c, res.NextCursor)
-		page1 = res
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 2,
+		Sort:  "asc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Chats, 2)
+	require.NotNil(t, res.NextCursor)
+	page1 = res
 
 	// Page 2
 	page2, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
@@ -368,40 +339,31 @@ func TestSearchChats_ChatWithOnlyTools(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-			Filter: &gen.SearchChatsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Chats, 1)
-		if len(res.Chats) != 1 {
-			return
-		}
+	res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Chats, 1)
 
-		chat := res.Chats[0]
-		assert.Equal(c, chatID, chat.GramChatID)
-		assert.Equal(c, uint64(2), chat.LogCount)
-		assert.Equal(c, uint64(2), chat.ToolCallCount)
-		assert.Equal(c, uint64(0), chat.MessageCount) // No completion messages
-		// Model is nil or empty string when no completions (anyIf returns empty string)
-		if chat.Model != nil {
-			assert.Empty(c, *chat.Model, "Model should be empty when no completions")
-		}
-		assert.Equal(c, int64(0), chat.TotalInputTokens)
-		assert.Equal(c, int64(0), chat.TotalOutputTokens)
-		assert.Equal(c, int64(0), chat.TotalTokens)
-		assert.Equal(c, "success", chat.Status) // All tools succeeded (200)
-	}, 10*time.Second, 200*time.Millisecond)
+	chat := res.Chats[0]
+	require.Equal(t, chatID, chat.GramChatID)
+	require.Equal(t, uint64(2), chat.LogCount)
+	require.Equal(t, uint64(2), chat.ToolCallCount)
+	require.Equal(t, uint64(0), chat.MessageCount) // No completion messages
+	// Model is nil or empty string when no completions (anyIf returns empty string)
+	if chat.Model != nil {
+		require.Empty(t, *chat.Model, "Model should be empty when no completions")
+	}
+	require.Equal(t, int64(0), chat.TotalInputTokens)
+	require.Equal(t, int64(0), chat.TotalOutputTokens)
+	require.Equal(t, int64(0), chat.TotalTokens)
+	require.Equal(t, "success", chat.Status) // All tools succeeded (200)
 }
 
 func TestSearchChats_ChatWithOnlyMessages(t *testing.T) {
@@ -423,38 +385,29 @@ func TestSearchChats_ChatWithOnlyMessages(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-			Filter: &gen.SearchChatsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Chats, 1)
-		if len(res.Chats) != 1 {
-			return
-		}
+	res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Chats, 1)
 
-		chat := res.Chats[0]
-		assert.Equal(c, chatID, chat.GramChatID)
-		assert.Equal(c, uint64(2), chat.LogCount)
-		assert.Equal(c, uint64(0), chat.ToolCallCount) // No tool calls
-		assert.Equal(c, uint64(2), chat.MessageCount)
-		assert.NotNil(c, chat.Model)
-		assert.Equal(c, "gpt-4", *chat.Model)
-		assert.Equal(c, int64(300), chat.TotalInputTokens)  // 100 + 200
-		assert.Equal(c, int64(150), chat.TotalOutputTokens) // 50 + 100
-		assert.Equal(c, int64(450), chat.TotalTokens)       // 150 + 300
-		assert.Equal(c, "success", chat.Status)             // No failed tools
-	}, 10*time.Second, 200*time.Millisecond)
+	chat := res.Chats[0]
+	require.Equal(t, chatID, chat.GramChatID)
+	require.Equal(t, uint64(2), chat.LogCount)
+	require.Equal(t, uint64(0), chat.ToolCallCount) // No tool calls
+	require.Equal(t, uint64(2), chat.MessageCount)
+	require.NotNil(t, chat.Model)
+	require.Equal(t, "gpt-4", *chat.Model)
+	require.Equal(t, int64(300), chat.TotalInputTokens)  // 100 + 200
+	require.Equal(t, int64(150), chat.TotalOutputTokens) // 50 + 100
+	require.Equal(t, int64(450), chat.TotalTokens)       // 150 + 300
+	require.Equal(t, "success", chat.Status)             // No failed tools
 }
 
 func TestSearchChats_FilterByGramURN(t *testing.T) {
@@ -485,33 +438,27 @@ func TestSearchChats_FilterByGramURN(t *testing.T) {
 
 	// Filter by "petstore" substring - should match 2 chats
 	gramURN := "petstore"
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-			Filter: &gen.SearchChatsFilter{
-				From:    &from,
-				To:      &to,
-				GramUrn: &gramURN,
-			},
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Chats, 2, "should match 2 chats with petstore in gram_urn")
+	res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From:    &from,
+			To:      &to,
+			GramUrn: &gramURN,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Chats, 2, "should match 2 chats with petstore in gram_urn")
 
-		// Verify the matched chats are the petstore ones
-		chatIDs := make(map[string]bool)
-		for _, chat := range res.Chats {
-			chatIDs[chat.GramChatID] = true
-		}
-		assert.True(c, chatIDs[chatID1], "should include chat with listPets")
-		assert.True(c, chatIDs[chatID3], "should include chat with getPet")
-		assert.False(c, chatIDs[chatID2], "should not include chat with weather")
-	}, 10*time.Second, 200*time.Millisecond)
+	// Verify the matched chats are the petstore ones
+	chatIDs := make(map[string]bool)
+	for _, chat := range res.Chats {
+		chatIDs[chat.GramChatID] = true
+	}
+	require.True(t, chatIDs[chatID1], "should include chat with listPets")
+	require.True(t, chatIDs[chatID3], "should include chat with getPet")
+	require.False(t, chatIDs[chatID2], "should not include chat with weather")
 }
 
 func TestSearchChats_PaginationCursorScopedByProject(t *testing.T) {
@@ -545,25 +492,19 @@ func TestSearchChats_PaginationCursorScopedByProject(t *testing.T) {
 
 	// Page 1: get first 2 chats
 	var page1 *gen.SearchChatsResult
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-			Filter: &gen.SearchChatsFilter{
-				From: &from,
-				To:   &to,
-			},
-			Limit: 2,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Chats, 2)
-		assert.NotNil(c, res.NextCursor)
-		page1 = res
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 2,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Chats, 2)
+	require.NotNil(t, res.NextCursor)
+	page1 = res
 
 	// Page 2: should return exactly the remaining 1 chat from this project
 	page2, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
@@ -591,6 +532,141 @@ func TestSearchChats_PaginationCursorScopedByProject(t *testing.T) {
 	require.Len(t, seen, 3)
 }
 
+// maxChatPages caps collectChatPages. The pagination tests seed at most four
+// chats, so a traversal that repeats a chat runs into this cap well before it
+// would otherwise end, and the repeat shows up in the returned ids.
+const maxChatPages = 8
+
+// collectChatPages pages through SearchChats one chat at a time from cursor
+// until the server stops returning a next cursor or maxChatPages is reached,
+// and returns every chat id it saw in order.
+func collectChatPages(t *testing.T, ctx context.Context, ti *testInstance, filter *gen.SearchChatsFilter, sort string, cursor *string) []string {
+	t.Helper()
+
+	var ids []string
+	for range maxChatPages {
+		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+			Filter: filter,
+			Cursor: cursor,
+			Limit:  1,
+			Sort:   sort,
+		})
+		require.NoError(t, err)
+		for _, chat := range res.Chats {
+			ids = append(ids, chat.GramChatID)
+		}
+		if res.NextCursor == nil {
+			return ids
+		}
+		cursor = res.NextCursor
+	}
+	return ids
+}
+
+// requireChatCount requires SearchChats to see want chats under filter.
+func requireChatCount(t *testing.T, ctx context.Context, ti *testInstance, filter *gen.SearchChatsFilter, want int) {
+	t.Helper()
+
+	res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: filter,
+		Cursor: nil,
+		Limit:  100,
+		Sort:   "asc",
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Chats, want)
+}
+
+// windowFilter is a search window from two hours before now to an hour after.
+func windowFilter(now time.Time) *gen.SearchChatsFilter {
+	return &gen.SearchChatsFilter{
+		From: new(now.Add(-2 * time.Hour).Format(time.RFC3339)),
+		To:   new(now.Add(time.Hour).Format(time.RFC3339)),
+	}
+}
+
+// insertWindowedChats inserts one chat per minute offset (minutes before now)
+// and returns their ids in the same order.
+func insertWindowedChats(t *testing.T, ctx context.Context, projectID, deploymentID string, now time.Time, minutesAgo ...int) []string {
+	t.Helper()
+
+	chatIDs := make([]string, len(minutesAgo))
+	for i, m := range minutesAgo {
+		chatIDs[i] = uuid.New().String()
+		insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-time.Duration(m)*time.Minute), chatIDs[i], 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
+	}
+	return chatIDs
+}
+
+// A chat whose earliest row falls before the search window must not come back
+// on page two of an ascending traversal. Re-deriving the page boundary from the
+// chat id alone ignores the window, finds that earlier row, and compares
+// against a start time smaller than the one the chat was shown with, so the
+// chat satisfies the cursor again on every page and the later chats are never
+// reached.
+func TestSearchChats_AscPaginationIgnoresRowsOutsideWindow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	now := time.Now().UTC()
+
+	chatIDs := insertWindowedChats(t, ctx, projectID, deploymentID, now, 30, 20, 10)
+	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-5*time.Hour), chatIDs[0], 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
+
+	filter := windowFilter(now)
+	requireChatCount(t, ctx, ti, filter, len(chatIDs))
+
+	require.Equal(t, chatIDs, collectChatPages(t, ctx, ti, filter, "asc", nil))
+}
+
+// A chat whose earliest row falls before the search window must not cut a
+// descending traversal short: the re-derived start time sits below every chat
+// still to come, so none of them satisfied the cursor.
+func TestSearchChats_DescPaginationIgnoresRowsOutsideWindow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	now := time.Now().UTC()
+
+	chatIDs := insertWindowedChats(t, ctx, projectID, deploymentID, now, 10, 20, 30)
+	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-5*time.Hour), chatIDs[0], 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
+
+	filter := windowFilter(now)
+	requireChatCount(t, ctx, ti, filter, len(chatIDs))
+
+	require.Equal(t, chatIDs, collectChatPages(t, ctx, ti, filter, "desc", nil))
+}
+
+// A bare chat-id cursor, the shape handed out before the page boundary was
+// sealed, still resumes the traversal and pages through to the end in either
+// direction.
+func TestSearchChats_BareChatIDCursorPagesToTheEnd(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	now := time.Now().UTC()
+
+	chatIDs := insertWindowedChats(t, ctx, projectID, deploymentID, now, 40, 30, 20, 10)
+
+	filter := windowFilter(now)
+	requireChatCount(t, ctx, ti, filter, len(chatIDs))
+
+	require.Equal(t, chatIDs[1:], collectChatPages(t, ctx, ti, filter, "asc", new(chatIDs[0])))
+	require.Equal(t, []string{chatIDs[2], chatIDs[1], chatIDs[0]}, collectChatPages(t, ctx, ti, filter, "desc", new(chatIDs[3])))
+}
+
 func TestSearchLogs_FilterByGramChatID(t *testing.T) {
 	t.Parallel()
 
@@ -611,24 +687,18 @@ func TestSearchLogs_FilterByGramChatID(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-			Filter: &gen.SearchLogsFilter{
-				From:       &from,
-				To:         &to,
-				GramChatID: &chatID,
-			},
-			Limit: 100,
-			Sort:  "desc",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		assert.Len(c, res.Logs, 2, "should only return logs matching gram_chat_id")
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{
+			From:       &from,
+			To:         &to,
+			GramChatID: &chatID,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Logs, 2, "should only return logs matching gram_chat_id")
 }
 
 // TestSearchChats_DerivesTotalTokensWhenProviderOmitsTotal reproduces DNO-323:

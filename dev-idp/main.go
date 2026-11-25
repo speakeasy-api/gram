@@ -1,17 +1,46 @@
-// Package main is the dev-idp binary entrypoint. Boots an HTTP server on
+// Package main is the dev-idp binary entrypoint. Boots an HTTP(S) server on
 // GRAM_DEVIDP_ADDRESS that mounts:
 //
 //   - the Goa management API (under /rpc/...) for /users, /organizations,
-//     /memberships, /organization_roles, /invitations, /devIdp;
-//   - the mock-workos mode at /mock-workos/ (mock WorkOS REST surface);
-//   - the oauth2 mode at /oauth2/;
-//   - the oauth2-1 mode at /oauth2-1/;
-//   - the workos mode at /workos/ (only when GRAM_IDP_MODE=workos and GRAM_IDP_CLIENT_SECRET is a real key).
+//     /memberships, /organization_roles, /invitations, /devIdp, and the
+//     enterprise-managed authorization surfaces /emaApps, /emaResources,
+//     /emaAppAssignments, /emaTrustRules;
+//   - the OAuth 2.1 authorization server at /oauth2-1/;
+//   - a resource authorization server per ema_resources row, at
+//     /resource-as/<slug>/;
+//   - the WorkOS REST surface at /workos/.
+//
+// GRAM_DEVIDP_BACKEND is the only knob that changes behavior: "local"
+// (default) emulates WorkOS against the dev-idp's own SQLite store,
+// "workos" passes through to a real WorkOS environment. Both mount at the
+// same prefixes, so no URL changes when switching.
+//
+// # Enterprise-managed authorization
+//
+// The dev-idp plays both halves of the MCP Enterprise-Managed Authorization
+// profile, on separate issuers, so the whole flow is exercisable in one
+// process:
+//
+//   - /oauth2-1 is the enterprise IdP. Its token endpoint mints an Identity
+//     Assertion JWT Authorization Grant (ID-JAG) under the RFC 8693
+//     token-exchange grant, gated on the ema_apps / ema_app_assignments
+//     policy tables.
+//   - /resource-as/<slug> is a resource authorization server. It redeems an
+//     ID-JAG under the RFC 7523 jwt-bearer grant and returns an RFC 9068 JWT
+//     access token whose `aud` is the MCP server behind it, gated on
+//     ema_trust_rules. Each publishes a JWKS, so a resource server can
+//     enforce that audience restriction without calling back here.
+//
+// Neither half assumes the other: a resource can be configured to trust a
+// foreign issuer, and a grant this dev-idp minted can still be refused at
+// redemption. Both are always mounted -- with no policy rows seeded nothing
+// is reachable, so there is no flag to set. See internal/ema for the shared
+// wire vocabulary.
 //
 // A second tiny health server is mounted on GRAM_DEVIDP_CONTROL_ADDRESS.
 //
 // dev-idp is dev-only -- no auth, no OTel SDK, no production safety
-// guardrails. Intended to back local end-to-end tests of Gram's auth
+// guardrails. Intended to back local end-to-end tests of Speakeasy's auth
 // flows.
 package main
 
@@ -24,6 +53,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -39,8 +69,8 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
 	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"
-	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth2"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
+	"github.com/speakeasy-api/gram/dev-idp/internal/modes/resourceas"
 	devidpworkos "github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"
 	"github.com/speakeasy-api/gram/dev-idp/internal/service"
 	"github.com/speakeasy-api/gram/dev-idp/internal/workos"
@@ -55,22 +85,44 @@ func main() {
 }
 
 func run() error {
-	address := flag.String("address", envOr("GRAM_DEVIDP_ADDRESS", ":35291"), "HTTP listener address")
-	controlAddress := flag.String("control-address", envOr("GRAM_DEVIDP_CONTROL_ADDRESS", ":35292"), "HTTP listener address for the health/control server")
+	address := flag.String("address", envOr("GRAM_DEVIDP_ADDRESS", "127.0.0.1:35291"), "HTTP listener address")
+	controlAddress := flag.String("control-address", envOr("GRAM_DEVIDP_CONTROL_ADDRESS", "127.0.0.1:35292"), "HTTP listener address for the health/control server")
+	sslCertFile := flag.String("ssl-cert-file", os.Getenv("GRAM_SSL_CERT_FILE"), "TLS certificate file for the public listener (requires --ssl-key-file)")
+	sslKeyFile := flag.String("ssl-key-file", os.Getenv("GRAM_SSL_KEY_FILE"), "TLS private key file for the public listener (requires --ssl-cert-file)")
 	externalURL := flag.String("external-url", os.Getenv("GRAM_DEVIDP_EXTERNAL_URL"), "Public base URL for discovery docs / redirect URIs (defaults from --address)")
 	dbSpec := flag.String("db", os.Getenv("GRAM_DEVIDP_DB"), "SQLite location: 'memory' or 'file:<path>' (default file:local/devidp/devidp.db)")
 	rsaKey := flag.String("rsa-private-key", os.Getenv("GRAM_DEVIDP_RSA_PRIVATE_KEY"), "PEM-encoded RSA private key (omit to generate a fresh ephemeral key)")
-	idpMode := flag.String("idp-mode", envOr("GRAM_IDP_MODE", "mock-workos"), "IDP mode: mock-workos (default) or workos")
-	workosKey := flag.String("workos-api-key", os.Getenv("GRAM_IDP_CLIENT_SECRET"), "WorkOS API key (required when --idp-mode=workos)")
-	workosHost := flag.String("workos-host", envOr("WORKOS_API_URL", "https://api.workos.com"), "Base URL of the WorkOS API")
+	backendName := flag.String("backend", os.Getenv("GRAM_DEVIDP_BACKEND"), "Identity backend: local (default) or workos")
+	loginClientID := flag.String("login-client-id", envOr("GRAM_IDP_CLIENT_ID", "gram-local-dev"), "Statically provisioned first-party client id used for dashboard login (skips dynamic client registration)")
+	clientSecret := flag.String("client-secret", os.Getenv("GRAM_IDP_CLIENT_SECRET"), "Client secret used by Speakeasy callers to authenticate to dev-idp")
+	workosKey := flag.String("workos-api-key", os.Getenv("WORKOS_API_KEY"), "WorkOS API key (required when --backend=workos)")
+	emaAudienceAliases := flag.String("ema-audience-aliases", os.Getenv("GRAM_DEVIDP_EMA_AUDIENCE_ALIASES"), "Extra ID-JAG audiences per resource AS as slug=aud[,slug=aud...]; an aliased assertion may omit the resource claim")
+	workosUpstream := flag.String("workos-upstream-url", envOr("GRAM_DEVIDP_WORKOS_UPSTREAM_URL", "https://api.workos.com"), "Real WorkOS API base URL proxied to when --backend=workos")
 	flag.Parse()
+
+	scheme, err := listenerScheme(*sslCertFile, *sslKeyFile, *externalURL)
+	if err != nil {
+		return err
+	}
 
 	logger := plog.NewLogger(os.Stderr).With(slog.String("component", "dev-idp"))
 	slog.SetDefault(logger)
 
+	// Before anything binds: a checkout that predates a prefix rename should
+	// learn so from the first lines of `mise run start`.
+	reportStaleConfig(logger, os.Getenv)
+
 	dbCfg, err := config.ParseDB(*dbSpec)
 	if err != nil {
 		return err
+	}
+
+	backend, err := devidpworkos.ParseBackend(*backendName)
+	if err != nil {
+		return err
+	}
+	if *clientSecret == "" || *clientSecret == "unset" {
+		return errors.New("GRAM_IDP_CLIENT_SECRET must be generated by ./zero before starting dev-idp")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -89,7 +141,7 @@ func run() error {
 
 	pubURL := *externalURL
 	if pubURL == "" {
-		pubURL = deriveExternalURL(*address)
+		pubURL = deriveExternalURL(*address, scheme)
 	}
 
 	var tp trace.TracerProvider = tracenoop.NewTracerProvider()
@@ -117,42 +169,67 @@ func run() error {
 	service.AttachMemberships(goaMux, service.NewMembershipsService(logger, tp, db))
 	service.AttachOrganizationRoles(goaMux, service.NewOrganizationRolesService(logger, tp, db))
 	service.AttachInvitations(goaMux, service.NewInvitationsService(logger, tp, db))
-	service.AttachDevIdp(goaMux, service.NewDevIdpService(logger, tp, db))
+	service.AttachDevIdp(goaMux, service.NewDevIdpService(logger, tp, db, backend))
+	service.AttachEmaApps(goaMux, service.NewEmaAppsService(logger, tp, db))
+	service.AttachEmaResources(goaMux, service.NewEmaResourcesService(logger, tp, db, pubURL))
+	service.AttachEmaAppAssignments(goaMux, service.NewEmaAppAssignmentsService(logger, tp, db))
+	service.AttachEmaTrustRules(goaMux, service.NewEmaTrustRulesService(logger, tp, db))
 
 	outer := http.NewServeMux()
 
-	mockHandler := mockworkos.NewHandler(logger, tp, db)
-	outer.Handle(mockworkos.Prefix+"/", http.StripPrefix(mockworkos.Prefix, mockHandler.Handler()))
+	// Explain the prefixes dev-idp used to serve before anything else claims
+	// them, so stale configuration reports itself instead of 404ing.
+	mountRetiredPrefixes(outer, logger)
 
 	oauth21Handler := oauth21.NewHandler(
-		oauth21.Config{ExternalURL: pubURL},
+		oauth21.Config{ExternalURL: pubURL, LoginClientID: *loginClientID},
 		ks, logger, tp, db,
 	)
 	outer.Handle(oauth21.Prefix+"/", http.StripPrefix(oauth21.Prefix, oauth21Handler.Handler()))
 	oauth21Handler.RegisterRootRoutes(outer)
 
-	oauth2Handler := oauth2.NewHandler(
-		oauth2.Config{ExternalURL: pubURL},
+	// Resource authorization servers -- the redeeming half of cross-app
+	// access. One per ema_resources row, addressed by slug, so a request can
+	// arrive here before any resource is configured and simply 404.
+	audienceAliases, err := resourceas.ParseAudienceAliases(pubURL, *emaAudienceAliases)
+	if err != nil {
+		return fmt.Errorf("parse ema audience aliases: %w", err)
+	}
+	if len(audienceAliases) > 0 {
+		logger.InfoContext(ctx, "ema audience aliases loaded", slog.Any("aliases", audienceAliases))
+	}
+	resourceASHandler := resourceas.NewHandler(
+		resourceas.Config{ExternalURL: pubURL, AudienceAliases: audienceAliases},
 		ks, logger, tp, db,
 	)
-	outer.Handle(oauth2.Prefix+"/", http.StripPrefix(oauth2.Prefix, oauth2Handler.Handler()))
-	oauth2Handler.RegisterRootRoutes(outer)
+	outer.Handle(resourceas.Prefix+"/", http.StripPrefix(resourceas.Prefix, resourceASHandler.Handler()))
+	resourceASHandler.RegisterRootRoutes(outer)
 
-	if *idpMode == "workos" {
-		if *workosKey == "" {
-			return fmt.Errorf("GRAM_IDP_MODE=workos requires GRAM_IDP_CLIENT_SECRET to be a real WorkOS API key")
+	// The WorkOS surface always mounts at the same prefix; only what backs
+	// it changes. That keeps WORKOS_API_URL a constant across backends.
+	var wsClient *workos.Client
+	if backend == devidpworkos.BackendWorkOS {
+		if *workosKey == "" || *workosKey == "unset" {
+			return errors.New("GRAM_DEVIDP_BACKEND=workos requires WORKOS_API_KEY to be a real WorkOS API key")
 		}
-		wsClient := workos.NewClient(*workosKey, workos.Opts{
-			Endpoint: *workosHost,
-		})
-		wsHandler := devidpworkos.NewHandler(
-			wsClient, logger, tp, db,
-		)
-		outer.Handle(devidpworkos.Prefix+"/", http.StripPrefix(devidpworkos.Prefix, wsHandler.Handler()))
-		logger.InfoContext(ctx, "/workos/ proxy mounted (GRAM_IDP_MODE=workos)")
+		wsClient = workos.NewClient(*workosKey, workos.Opts{Endpoint: *workosUpstream})
 	}
+	wsHandler, err := devidpworkos.NewHandler(
+		devidpworkos.Config{
+			Backend:      backend,
+			ClientSecret: *clientSecret,
+			UpstreamURL:  *workosUpstream,
+			APIKey:       *workosKey,
+		},
+		mockworkos.NewHandler(logger, tp, db).Handler(),
+		wsClient, logger, tp, db,
+	)
+	if err != nil {
+		return fmt.Errorf("init workos surface: %w", err)
+	}
+	outer.Handle(devidpworkos.Prefix+"/", http.StripPrefix(devidpworkos.Prefix, wsHandler.Handler()))
 
-	logger.InfoContext(ctx, "idp mode", slog.String("mode", *idpMode))
+	logger.InfoContext(ctx, "dev-idp backend", slog.String("backend", backend.String()))
 
 	outer.Handle("/", goaMux)
 
@@ -189,8 +266,14 @@ func run() error {
 		slog.String("address", *address),
 		slog.String("external_url", pubURL),
 	)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("dev-idp server: %w", err)
+	var serveErr error
+	if scheme == "https" {
+		serveErr = srv.ListenAndServeTLS(*sslCertFile, *sslKeyFile)
+	} else {
+		serveErr = srv.ListenAndServe()
+	}
+	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		return fmt.Errorf("dev-idp server: %w", serveErr)
 	}
 	return nil
 }
@@ -204,17 +287,40 @@ func controlMux() http.Handler {
 	return mux
 }
 
-// deriveExternalURL turns a listener address ("host:port" or ":port") into
-// an externally usable base URL.
-func deriveExternalURL(addr string) string {
+func listenerScheme(certFile, keyFile, externalURL string) (string, error) {
+	if (certFile == "") != (keyFile == "") {
+		return "", errors.New("ssl-cert-file and ssl-key-file must be provided together")
+	}
+	scheme := "http"
+	if certFile != "" {
+		scheme = "https"
+	}
+	if externalURL != "" {
+		parsed, err := url.Parse(externalURL)
+		if err != nil || parsed.Hostname() == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return "", errors.New("external-url must be an absolute HTTP(S) URL without credentials")
+		}
+		if parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.HasSuffix(externalURL, "#") {
+			return "", errors.New("external-url must not contain a query or fragment")
+		}
+		if parsed.Scheme != scheme {
+			return "", fmt.Errorf("external-url scheme %q does not match listener scheme %q; set or clear both ssl-cert-file and ssl-key-file to match", parsed.Scheme, scheme)
+		}
+	}
+	return scheme, nil
+}
+
+// deriveExternalURL turns a listener address ("host:port" or ":port") and
+// its serving scheme into an externally usable base URL.
+func deriveExternalURL(addr, scheme string) string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		return "http://" + strings.TrimPrefix(addr, "http://")
+		return scheme + "://" + strings.TrimPrefix(addr, scheme+"://")
 	}
 	if host == "" || host == "0.0.0.0" || host == "::" {
 		host = "localhost"
 	}
-	return "http://" + net.JoinHostPort(host, port)
+	return scheme + "://" + net.JoinHostPort(host, port)
 }
 
 func envOr(key, fallback string) string {

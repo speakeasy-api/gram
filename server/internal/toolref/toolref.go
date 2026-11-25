@@ -68,3 +68,60 @@ func AttributeTool(name string) (server, function string, isMCP bool) {
 	}
 	return MCPServerOf(name), MCPFunctionOf(name), true
 }
+
+// MCP server sources as Claude Code's `claude mcp list` reports them. They
+// decide the prefix ClaudeMCPServerPrefix derives.
+const (
+	// ClaudeMCPSourceClaudeAI is a connector installed from claude.ai.
+	ClaudeMCPSourceClaudeAI = "claude.ai"
+	// ClaudeMCPSourcePlugin is a server shipped in a plugin's .mcp.json.
+	ClaudeMCPSourcePlugin = "plugin"
+)
+
+// ClaudeMCPServerPrefix returns the "<server>" segment Claude Code derives for
+// an MCP server entry when it names that server's tools "mcp__<server>__<tool>".
+// The rules, inferred from observed tool names such as
+// "mcp__claude_ai_Linear_Speakeasy__..." for the `claude mcp list` entry
+// "claude.ai Linear (Speakeasy)", are:
+//
+//   - source "claude.ai" → "claude_ai_" + sanitize(name)
+//   - source "plugin"    → "plugin_" + sanitize(plugin) + "_" + sanitize(name)
+//   - any other source   → sanitize(name)
+//
+// where sanitize is SanitizeClaudeMCPName and plugin is the plugin manifest
+// name. Claude Code does not document this convention; if it drifts, this
+// function is the only place to update.
+func ClaudeMCPServerPrefix(source, plugin, name string) string {
+	switch source {
+	case ClaudeMCPSourceClaudeAI:
+		return "claude_ai_" + SanitizeClaudeMCPName(name)
+	case ClaudeMCPSourcePlugin:
+		return "plugin_" + SanitizeClaudeMCPName(plugin) + "_" + SanitizeClaudeMCPName(name)
+	default:
+		return SanitizeClaudeMCPName(name)
+	}
+}
+
+// SanitizeClaudeMCPName applies the rewrite Claude Code performs on an MCP
+// server name before embedding it in a tool name: spaces become "_", parens
+// are dropped, consecutive "_" collapse, leading and trailing "_" are trimmed,
+// and hyphens, underscores, and alphanumerics are preserved.
+func SanitizeClaudeMCPName(name string) string {
+	var b strings.Builder
+	b.Grow(len(name))
+	for _, r := range name {
+		switch r {
+		case ' ':
+			b.WriteByte('_')
+		case '(', ')':
+			// dropped
+		default:
+			b.WriteRune(r)
+		}
+	}
+	s := b.String()
+	for strings.Contains(s, "__") {
+		s = strings.ReplaceAll(s, "__", "_")
+	}
+	return strings.Trim(s, "_")
+}

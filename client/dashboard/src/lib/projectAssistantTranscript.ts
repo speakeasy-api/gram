@@ -1,13 +1,13 @@
 import type { GramChatMessage } from "@/elements";
 
-// The Gram assistant runtime persists each turn's input with a
+// The Speakeasy assistant runtime persists each turn's input with a
 // `<message-context>…</message-context>` framing block that the backend's source
 // adapter prepends when constructing the message for the runtime (EventID /
 // UserID lines, MCP auth events). The model needs that block on replay, but it
 // must never reach the dashboard transcript — left in, the first message of a
 // reopened thread renders as a raw bubble exposing internals like MCP AuthURLs.
 //
-// This is a Gram-product transcript convention, so it lives in the dashboard and
+// This is a Speakeasy-product transcript convention, so it lives in the dashboard and
 // is handed to Elements via `history.transformChatMessage` rather than baked
 // into the shared `@/elements` library.
 const MESSAGE_CONTEXT_RE =

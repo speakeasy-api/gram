@@ -12,22 +12,44 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// UpsertAnthropicInferenceConfigRequestBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// request body.
+type UpsertAnthropicInferenceConfigRequestBody struct {
+	// New Anthropic signing secret. Omit to preserve the saved secret.
+	SigningSecret *string `form:"signing_secret,omitempty" json:"signing_secret,omitempty" xml:"signing_secret,omitempty"`
+	// Enable inspection. Requires a saved signing secret.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
 // UpsertConfigRequestBody is the type of the "aiIntegrations" service
 // "upsertConfig" endpoint HTTP request body.
 type UpsertConfigRequestBody struct {
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
-	// Provider API key. Stored encrypted at rest; never returned on reads.
+	// Provider API key. For gemini_compliance, the Google service account JSON key
+	// file, unchanged. Empty keeps the saved key. Stored encrypted at rest; never
+	// returned on reads.
 	APIKey string `form:"api_key" json:"api_key" xml:"api_key"`
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID).
+	// UUID). Optional for gemini_compliance (an open Google Vault matter UUID);
+	// omit it and Speakeasy finds or creates its own matter.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// gemini_compliance only: the Google Workspace admin email the service account
+	// acts as through domain-wide delegation. Omit to keep the saved value.
+	DelegatedUser *string `form:"delegated_user,omitempty" json:"delegated_user,omitempty" xml:"delegated_user,omitempty"`
+	// gemini_compliance only: the Google Workspace organizational unit to export,
+	// from listOrgUnits. Select the root unit for the whole organization. Syncing
+	// starts once one is saved. Omit to keep the saved value.
+	OrgUnitID *string `form:"org_unit_id,omitempty" json:"org_unit_id,omitempty" xml:"org_unit_id,omitempty"`
 	// How the provider org is billed: 'metered', 'flat_rate', or 'unknown'.
 	// Free-form; omit to leave the existing value unchanged.
 	BillingMode *string `form:"billing_mode,omitempty" json:"billing_mode,omitempty" xml:"billing_mode,omitempty"`
-	// Whether the integration should be active.
+	// Whether the integration should be active. gemini_compliance stays inactive
+	// until an organizational unit is saved.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
@@ -35,7 +57,8 @@ type UpsertConfigRequestBody struct {
 // "deleteConfig" endpoint HTTP request body.
 type DeleteConfigRequestBody struct {
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 }
 
@@ -43,7 +66,8 @@ type DeleteConfigRequestBody struct {
 // "setScheduleEnabled" endpoint HTTP request body.
 type SetScheduleEnabledRequestBody struct {
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Schedule identifier (e.g. cursor, anthropic_compliance,
 	// anthropic_analytics_usage).
@@ -56,11 +80,35 @@ type SetScheduleEnabledRequestBody struct {
 // "retrySchedule" endpoint HTTP request body.
 type RetryScheduleRequestBody struct {
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Schedule identifier (e.g. cursor, anthropic_compliance,
 	// anthropic_analytics_usage).
 	Schedule string `form:"schedule" json:"schedule" xml:"schedule"`
+}
+
+// GetAnthropicInferenceConfigResponseBody is the type of the "aiIntegrations"
+// service "getAnthropicInferenceConfig" endpoint HTTP response body.
+type GetAnthropicInferenceConfigResponseBody struct {
+	// Integration identifier. Omitted before setup.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Webhook path on the API server. Omitted before setup.
+	WebhookPath      *string `form:"webhook_path,omitempty" json:"webhook_path,omitempty" xml:"webhook_path,omitempty"`
+	HasSigningSecret *bool   `form:"has_signing_secret,omitempty" json:"has_signing_secret,omitempty" xml:"has_signing_secret,omitempty"`
+	Enabled          *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
+// UpsertAnthropicInferenceConfigResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body.
+type UpsertAnthropicInferenceConfigResponseBody struct {
+	// Integration identifier. Omitted before setup.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Webhook path on the API server. Omitted before setup.
+	WebhookPath      *string `form:"webhook_path,omitempty" json:"webhook_path,omitempty" xml:"webhook_path,omitempty"`
+	HasSigningSecret *bool   `form:"has_signing_secret,omitempty" json:"has_signing_secret,omitempty" xml:"has_signing_secret,omitempty"`
+	Enabled          *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
 // GetConfigResponseBody is the type of the "aiIntegrations" service
@@ -71,14 +119,25 @@ type GetConfigResponseBody struct {
 	// Organization the config belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID); omitted for providers that do not need one.
+	// UUID); for gemini_compliance, the Google Vault matter exports are created
+	// in. Omitted for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// gemini_compliance only: the Google Workspace admin email the service account
+	// acts as. Omitted for other providers.
+	DelegatedUser *string `form:"delegated_user,omitempty" json:"delegated_user,omitempty" xml:"delegated_user,omitempty"`
+	// gemini_compliance only: the selected Google Workspace organizational unit.
+	// Omitted until one is saved.
+	OrgUnitID *string `form:"org_unit_id,omitempty" json:"org_unit_id,omitempty" xml:"org_unit_id,omitempty"`
+	// gemini_compliance only: the selected organizational unit's path; "/" is the
+	// whole organization. Omitted until one is saved.
+	OrgUnitPath *string `form:"org_unit_path,omitempty" json:"org_unit_path,omitempty" xml:"org_unit_path,omitempty"`
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
 	// 'unknown'. Empty/omitted when not declared.
@@ -117,14 +176,25 @@ type UpsertConfigResponseBody struct {
 	// Organization the config belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID); omitted for providers that do not need one.
+	// UUID); for gemini_compliance, the Google Vault matter exports are created
+	// in. Omitted for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// gemini_compliance only: the Google Workspace admin email the service account
+	// acts as. Omitted for other providers.
+	DelegatedUser *string `form:"delegated_user,omitempty" json:"delegated_user,omitempty" xml:"delegated_user,omitempty"`
+	// gemini_compliance only: the selected Google Workspace organizational unit.
+	// Omitted until one is saved.
+	OrgUnitID *string `form:"org_unit_id,omitempty" json:"org_unit_id,omitempty" xml:"org_unit_id,omitempty"`
+	// gemini_compliance only: the selected organizational unit's path; "/" is the
+	// whole organization. Omitted until one is saved.
+	OrgUnitPath *string `form:"org_unit_path,omitempty" json:"org_unit_path,omitempty" xml:"org_unit_path,omitempty"`
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
 	// 'unknown'. Empty/omitted when not declared.
@@ -153,6 +223,13 @@ type UpsertConfigResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// ISO 8601 timestamp of the most recent change. Omitted when no config is set.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListOrgUnitsResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body.
+type ListOrgUnitsResponseBody struct {
+	// Units the saved delegated admin can read, including the root.
+	OrgUnits []*AIIntegrationOrgUnitResponseBody `form:"org_units,omitempty" json:"org_units,omitempty" xml:"org_units,omitempty"`
 }
 
 // ListSchedulesResponseBody is the type of the "aiIntegrations" service
@@ -236,6 +313,576 @@ type RetryScheduleResponseBody struct {
 	// ISO 8601 timestamp when the scheduler auto-paused the schedule after
 	// repeated provider rejections. Omitted unless auto-paused.
 	AutoPausedAt *string `form:"auto_paused_at,omitempty" json:"auto_paused_at,omitempty" xml:"auto_paused_at,omitempty"`
+}
+
+// GetAnthropicInferenceConfigUnauthorizedResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetAnthropicInferenceConfigUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAnthropicInferenceConfigForbiddenResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "forbidden" error.
+type GetAnthropicInferenceConfigForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAnthropicInferenceConfigBadRequestResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "bad_request" error.
+type GetAnthropicInferenceConfigBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAnthropicInferenceConfigNotFoundResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "not_found" error.
+type GetAnthropicInferenceConfigNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAnthropicInferenceConfigConflictResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "conflict" error.
+type GetAnthropicInferenceConfigConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAnthropicInferenceConfigUnsupportedMediaResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetAnthropicInferenceConfigUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAnthropicInferenceConfigInvalidResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invalid" error.
+type GetAnthropicInferenceConfigInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAnthropicInferenceConfigInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetAnthropicInferenceConfigInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAnthropicInferenceConfigUnexpectedResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unexpected" error.
+type GetAnthropicInferenceConfigUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAnthropicInferenceConfigGatewayErrorResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetAnthropicInferenceConfigGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertAnthropicInferenceConfigUnauthorizedResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unauthorized" error.
+type UpsertAnthropicInferenceConfigUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertAnthropicInferenceConfigForbiddenResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "forbidden" error.
+type UpsertAnthropicInferenceConfigForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertAnthropicInferenceConfigBadRequestResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "bad_request" error.
+type UpsertAnthropicInferenceConfigBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertAnthropicInferenceConfigNotFoundResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "not_found" error.
+type UpsertAnthropicInferenceConfigNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertAnthropicInferenceConfigConflictResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "conflict" error.
+type UpsertAnthropicInferenceConfigConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertAnthropicInferenceConfigUnsupportedMediaResponseBody is the type of
+// the "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unsupported_media" error.
+type UpsertAnthropicInferenceConfigUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertAnthropicInferenceConfigInvalidResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invalid" error.
+type UpsertAnthropicInferenceConfigInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertAnthropicInferenceConfigInvariantViolationResponseBody is the type of
+// the "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invariant_violation" error.
+type UpsertAnthropicInferenceConfigInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertAnthropicInferenceConfigUnexpectedResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unexpected" error.
+type UpsertAnthropicInferenceConfigUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpsertAnthropicInferenceConfigGatewayErrorResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "gateway_error" error.
+type UpsertAnthropicInferenceConfigGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteAnthropicInferenceConfigUnauthorizedResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unauthorized" error.
+type DeleteAnthropicInferenceConfigUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteAnthropicInferenceConfigForbiddenResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "forbidden" error.
+type DeleteAnthropicInferenceConfigForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteAnthropicInferenceConfigBadRequestResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "bad_request" error.
+type DeleteAnthropicInferenceConfigBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteAnthropicInferenceConfigNotFoundResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "not_found" error.
+type DeleteAnthropicInferenceConfigNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteAnthropicInferenceConfigConflictResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "conflict" error.
+type DeleteAnthropicInferenceConfigConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteAnthropicInferenceConfigUnsupportedMediaResponseBody is the type of
+// the "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DeleteAnthropicInferenceConfigUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteAnthropicInferenceConfigInvalidResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invalid" error.
+type DeleteAnthropicInferenceConfigInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteAnthropicInferenceConfigInvariantViolationResponseBody is the type of
+// the "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DeleteAnthropicInferenceConfigInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteAnthropicInferenceConfigUnexpectedResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unexpected" error.
+type DeleteAnthropicInferenceConfigUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteAnthropicInferenceConfigGatewayErrorResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "gateway_error" error.
+type DeleteAnthropicInferenceConfigGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
 // GetConfigUnauthorizedResponseBody is the type of the "aiIntegrations"
@@ -778,6 +1425,192 @@ type DeleteConfigUnexpectedResponseBody struct {
 // service "deleteConfig" endpoint HTTP response body for the "gateway_error"
 // error.
 type DeleteConfigGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsUnauthorizedResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListOrgUnitsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsForbiddenResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "forbidden" error.
+type ListOrgUnitsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsBadRequestResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "bad_request"
+// error.
+type ListOrgUnitsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsNotFoundResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body for the "not_found" error.
+type ListOrgUnitsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsConflictResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body for the "conflict" error.
+type ListOrgUnitsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsUnsupportedMediaResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListOrgUnitsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsInvalidResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body for the "invalid" error.
+type ListOrgUnitsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "listOrgUnits" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListOrgUnitsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsUnexpectedResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "unexpected"
+// error.
+type ListOrgUnitsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsGatewayErrorResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListOrgUnitsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1359,6 +2192,19 @@ type RetryScheduleGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// AIIntegrationOrgUnitResponseBody is used to define fields on response body
+// types.
+type AIIntegrationOrgUnitResponseBody struct {
+	// Organizational unit ID, e.g. id:03ph8a2z1a2b3c4.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Full path; "/" is the root, covering the whole organization.
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Display name. Empty when Google omits it.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Admin-entered description. Omitted when empty.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
 // AIIntegrationScheduleStateResponseBody is used to define fields on response
 // body types.
 type AIIntegrationScheduleStateResponseBody struct {
@@ -1395,6 +2241,17 @@ type AIIntegrationScheduleStateResponseBody struct {
 	AutoPausedAt *string `form:"auto_paused_at,omitempty" json:"auto_paused_at,omitempty" xml:"auto_paused_at,omitempty"`
 }
 
+// NewUpsertAnthropicInferenceConfigRequestBody builds the HTTP request body
+// from the payload of the "upsertAnthropicInferenceConfig" endpoint of the
+// "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigRequestBody(p *aiintegrations.UpsertAnthropicInferenceConfigPayload) *UpsertAnthropicInferenceConfigRequestBody {
+	body := &UpsertAnthropicInferenceConfigRequestBody{
+		SigningSecret: p.SigningSecret,
+		Enabled:       p.Enabled,
+	}
+	return body
+}
+
 // NewUpsertConfigRequestBody builds the HTTP request body from the payload of
 // the "upsertConfig" endpoint of the "aiIntegrations" service.
 func NewUpsertConfigRequestBody(p *aiintegrations.UpsertConfigPayload) *UpsertConfigRequestBody {
@@ -1402,6 +2259,8 @@ func NewUpsertConfigRequestBody(p *aiintegrations.UpsertConfigPayload) *UpsertCo
 		Provider:               p.Provider,
 		APIKey:                 p.APIKey,
 		ExternalOrganizationID: p.ExternalOrganizationID,
+		DelegatedUser:          p.DelegatedUser,
+		OrgUnitID:              p.OrgUnitID,
 		BillingMode:            p.BillingMode,
 		Enabled:                p.Enabled,
 	}
@@ -1438,6 +2297,484 @@ func NewRetryScheduleRequestBody(p *aiintegrations.RetrySchedulePayload) *RetryS
 	return body
 }
 
+// NewGetAnthropicInferenceConfigAnthropicInferenceConfigOK builds a
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint result from
+// a HTTP "OK" response.
+func NewGetAnthropicInferenceConfigAnthropicInferenceConfigOK(body *GetAnthropicInferenceConfigResponseBody) *aiintegrations.AnthropicInferenceConfig {
+	v := &aiintegrations.AnthropicInferenceConfig{
+		ID:               body.ID,
+		WebhookPath:      body.WebhookPath,
+		HasSigningSecret: *body.HasSigningSecret,
+		Enabled:          *body.Enabled,
+	}
+
+	return v
+}
+
+// NewGetAnthropicInferenceConfigUnauthorized builds a aiIntegrations service
+// getAnthropicInferenceConfig endpoint unauthorized error.
+func NewGetAnthropicInferenceConfigUnauthorized(body *GetAnthropicInferenceConfigUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAnthropicInferenceConfigForbidden builds a aiIntegrations service
+// getAnthropicInferenceConfig endpoint forbidden error.
+func NewGetAnthropicInferenceConfigForbidden(body *GetAnthropicInferenceConfigForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAnthropicInferenceConfigBadRequest builds a aiIntegrations service
+// getAnthropicInferenceConfig endpoint bad_request error.
+func NewGetAnthropicInferenceConfigBadRequest(body *GetAnthropicInferenceConfigBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAnthropicInferenceConfigNotFound builds a aiIntegrations service
+// getAnthropicInferenceConfig endpoint not_found error.
+func NewGetAnthropicInferenceConfigNotFound(body *GetAnthropicInferenceConfigNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAnthropicInferenceConfigConflict builds a aiIntegrations service
+// getAnthropicInferenceConfig endpoint conflict error.
+func NewGetAnthropicInferenceConfigConflict(body *GetAnthropicInferenceConfigConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAnthropicInferenceConfigUnsupportedMedia builds a aiIntegrations
+// service getAnthropicInferenceConfig endpoint unsupported_media error.
+func NewGetAnthropicInferenceConfigUnsupportedMedia(body *GetAnthropicInferenceConfigUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAnthropicInferenceConfigInvalid builds a aiIntegrations service
+// getAnthropicInferenceConfig endpoint invalid error.
+func NewGetAnthropicInferenceConfigInvalid(body *GetAnthropicInferenceConfigInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAnthropicInferenceConfigInvariantViolation builds a aiIntegrations
+// service getAnthropicInferenceConfig endpoint invariant_violation error.
+func NewGetAnthropicInferenceConfigInvariantViolation(body *GetAnthropicInferenceConfigInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAnthropicInferenceConfigUnexpected builds a aiIntegrations service
+// getAnthropicInferenceConfig endpoint unexpected error.
+func NewGetAnthropicInferenceConfigUnexpected(body *GetAnthropicInferenceConfigUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAnthropicInferenceConfigGatewayError builds a aiIntegrations service
+// getAnthropicInferenceConfig endpoint gateway_error error.
+func NewGetAnthropicInferenceConfigGatewayError(body *GetAnthropicInferenceConfigGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigAnthropicInferenceConfigOK builds a
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint result
+// from a HTTP "OK" response.
+func NewUpsertAnthropicInferenceConfigAnthropicInferenceConfigOK(body *UpsertAnthropicInferenceConfigResponseBody) *aiintegrations.AnthropicInferenceConfig {
+	v := &aiintegrations.AnthropicInferenceConfig{
+		ID:               body.ID,
+		WebhookPath:      body.WebhookPath,
+		HasSigningSecret: *body.HasSigningSecret,
+		Enabled:          *body.Enabled,
+	}
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigUnauthorized builds a aiIntegrations
+// service upsertAnthropicInferenceConfig endpoint unauthorized error.
+func NewUpsertAnthropicInferenceConfigUnauthorized(body *UpsertAnthropicInferenceConfigUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigForbidden builds a aiIntegrations service
+// upsertAnthropicInferenceConfig endpoint forbidden error.
+func NewUpsertAnthropicInferenceConfigForbidden(body *UpsertAnthropicInferenceConfigForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigBadRequest builds a aiIntegrations service
+// upsertAnthropicInferenceConfig endpoint bad_request error.
+func NewUpsertAnthropicInferenceConfigBadRequest(body *UpsertAnthropicInferenceConfigBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigNotFound builds a aiIntegrations service
+// upsertAnthropicInferenceConfig endpoint not_found error.
+func NewUpsertAnthropicInferenceConfigNotFound(body *UpsertAnthropicInferenceConfigNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigConflict builds a aiIntegrations service
+// upsertAnthropicInferenceConfig endpoint conflict error.
+func NewUpsertAnthropicInferenceConfigConflict(body *UpsertAnthropicInferenceConfigConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigUnsupportedMedia builds a aiIntegrations
+// service upsertAnthropicInferenceConfig endpoint unsupported_media error.
+func NewUpsertAnthropicInferenceConfigUnsupportedMedia(body *UpsertAnthropicInferenceConfigUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigInvalid builds a aiIntegrations service
+// upsertAnthropicInferenceConfig endpoint invalid error.
+func NewUpsertAnthropicInferenceConfigInvalid(body *UpsertAnthropicInferenceConfigInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigInvariantViolation builds a aiIntegrations
+// service upsertAnthropicInferenceConfig endpoint invariant_violation error.
+func NewUpsertAnthropicInferenceConfigInvariantViolation(body *UpsertAnthropicInferenceConfigInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigUnexpected builds a aiIntegrations service
+// upsertAnthropicInferenceConfig endpoint unexpected error.
+func NewUpsertAnthropicInferenceConfigUnexpected(body *UpsertAnthropicInferenceConfigUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigGatewayError builds a aiIntegrations
+// service upsertAnthropicInferenceConfig endpoint gateway_error error.
+func NewUpsertAnthropicInferenceConfigGatewayError(body *UpsertAnthropicInferenceConfigGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteAnthropicInferenceConfigUnauthorized builds a aiIntegrations
+// service deleteAnthropicInferenceConfig endpoint unauthorized error.
+func NewDeleteAnthropicInferenceConfigUnauthorized(body *DeleteAnthropicInferenceConfigUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteAnthropicInferenceConfigForbidden builds a aiIntegrations service
+// deleteAnthropicInferenceConfig endpoint forbidden error.
+func NewDeleteAnthropicInferenceConfigForbidden(body *DeleteAnthropicInferenceConfigForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteAnthropicInferenceConfigBadRequest builds a aiIntegrations service
+// deleteAnthropicInferenceConfig endpoint bad_request error.
+func NewDeleteAnthropicInferenceConfigBadRequest(body *DeleteAnthropicInferenceConfigBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteAnthropicInferenceConfigNotFound builds a aiIntegrations service
+// deleteAnthropicInferenceConfig endpoint not_found error.
+func NewDeleteAnthropicInferenceConfigNotFound(body *DeleteAnthropicInferenceConfigNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteAnthropicInferenceConfigConflict builds a aiIntegrations service
+// deleteAnthropicInferenceConfig endpoint conflict error.
+func NewDeleteAnthropicInferenceConfigConflict(body *DeleteAnthropicInferenceConfigConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteAnthropicInferenceConfigUnsupportedMedia builds a aiIntegrations
+// service deleteAnthropicInferenceConfig endpoint unsupported_media error.
+func NewDeleteAnthropicInferenceConfigUnsupportedMedia(body *DeleteAnthropicInferenceConfigUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteAnthropicInferenceConfigInvalid builds a aiIntegrations service
+// deleteAnthropicInferenceConfig endpoint invalid error.
+func NewDeleteAnthropicInferenceConfigInvalid(body *DeleteAnthropicInferenceConfigInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteAnthropicInferenceConfigInvariantViolation builds a aiIntegrations
+// service deleteAnthropicInferenceConfig endpoint invariant_violation error.
+func NewDeleteAnthropicInferenceConfigInvariantViolation(body *DeleteAnthropicInferenceConfigInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteAnthropicInferenceConfigUnexpected builds a aiIntegrations service
+// deleteAnthropicInferenceConfig endpoint unexpected error.
+func NewDeleteAnthropicInferenceConfigUnexpected(body *DeleteAnthropicInferenceConfigUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteAnthropicInferenceConfigGatewayError builds a aiIntegrations
+// service deleteAnthropicInferenceConfig endpoint gateway_error error.
+func NewDeleteAnthropicInferenceConfigGatewayError(body *DeleteAnthropicInferenceConfigGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetConfigAIIntegrationConfigOK builds a "aiIntegrations" service
 // "getConfig" endpoint result from a HTTP "OK" response.
 func NewGetConfigAIIntegrationConfigOK(body *GetConfigResponseBody) *aiintegrations.AIIntegrationConfig {
@@ -1447,6 +2784,9 @@ func NewGetConfigAIIntegrationConfigOK(body *GetConfigResponseBody) *aiintegrati
 		Provider:               *body.Provider,
 		ProjectID:              body.ProjectID,
 		ExternalOrganizationID: body.ExternalOrganizationID,
+		DelegatedUser:          body.DelegatedUser,
+		OrgUnitID:              body.OrgUnitID,
+		OrgUnitPath:            body.OrgUnitPath,
 		BillingMode:            body.BillingMode,
 		Enabled:                *body.Enabled,
 		HasAPIKey:              *body.HasAPIKey,
@@ -1621,6 +2961,9 @@ func NewUpsertConfigAIIntegrationConfigOK(body *UpsertConfigResponseBody) *aiint
 		Provider:               *body.Provider,
 		ProjectID:              body.ProjectID,
 		ExternalOrganizationID: body.ExternalOrganizationID,
+		DelegatedUser:          body.DelegatedUser,
+		OrgUnitID:              body.OrgUnitID,
+		OrgUnitPath:            body.OrgUnitPath,
 		BillingMode:            body.BillingMode,
 		Enabled:                *body.Enabled,
 		HasAPIKey:              *body.HasAPIKey,
@@ -1924,6 +3267,172 @@ func NewDeleteConfigUnexpected(body *DeleteConfigUnexpectedResponseBody) *goa.Se
 // NewDeleteConfigGatewayError builds a aiIntegrations service deleteConfig
 // endpoint gateway_error error.
 func NewDeleteConfigGatewayError(body *DeleteConfigGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsListAIIntegrationOrgUnitsResultOK builds a "aiIntegrations"
+// service "listOrgUnits" endpoint result from a HTTP "OK" response.
+func NewListOrgUnitsListAIIntegrationOrgUnitsResultOK(body *ListOrgUnitsResponseBody) *aiintegrations.ListAIIntegrationOrgUnitsResult {
+	v := &aiintegrations.ListAIIntegrationOrgUnitsResult{}
+	v.OrgUnits = make([]*aiintegrations.AIIntegrationOrgUnit, len(body.OrgUnits))
+	for i, val := range body.OrgUnits {
+		if val == nil {
+			v.OrgUnits[i] = nil
+			continue
+		}
+		v.OrgUnits[i] = unmarshalAIIntegrationOrgUnitResponseBodyToAiintegrationsAIIntegrationOrgUnit(val)
+	}
+
+	return v
+}
+
+// NewListOrgUnitsUnauthorized builds a aiIntegrations service listOrgUnits
+// endpoint unauthorized error.
+func NewListOrgUnitsUnauthorized(body *ListOrgUnitsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsForbidden builds a aiIntegrations service listOrgUnits
+// endpoint forbidden error.
+func NewListOrgUnitsForbidden(body *ListOrgUnitsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsBadRequest builds a aiIntegrations service listOrgUnits
+// endpoint bad_request error.
+func NewListOrgUnitsBadRequest(body *ListOrgUnitsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsNotFound builds a aiIntegrations service listOrgUnits
+// endpoint not_found error.
+func NewListOrgUnitsNotFound(body *ListOrgUnitsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsConflict builds a aiIntegrations service listOrgUnits
+// endpoint conflict error.
+func NewListOrgUnitsConflict(body *ListOrgUnitsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsUnsupportedMedia builds a aiIntegrations service listOrgUnits
+// endpoint unsupported_media error.
+func NewListOrgUnitsUnsupportedMedia(body *ListOrgUnitsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsInvalid builds a aiIntegrations service listOrgUnits endpoint
+// invalid error.
+func NewListOrgUnitsInvalid(body *ListOrgUnitsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsInvariantViolation builds a aiIntegrations service
+// listOrgUnits endpoint invariant_violation error.
+func NewListOrgUnitsInvariantViolation(body *ListOrgUnitsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsUnexpected builds a aiIntegrations service listOrgUnits
+// endpoint unexpected error.
+func NewListOrgUnitsUnexpected(body *ListOrgUnitsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsGatewayError builds a aiIntegrations service listOrgUnits
+// endpoint gateway_error error.
+func NewListOrgUnitsGatewayError(body *ListOrgUnitsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2445,6 +3954,36 @@ func NewRetryScheduleGatewayError(body *RetryScheduleGatewayErrorResponseBody) *
 	return v
 }
 
+// ValidateGetAnthropicInferenceConfigResponseBody runs the validations defined
+// on GetAnthropicInferenceConfigResponseBody
+func ValidateGetAnthropicInferenceConfigResponseBody(body *GetAnthropicInferenceConfigResponseBody) (err error) {
+	if body.HasSigningSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_signing_secret", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateUpsertAnthropicInferenceConfigResponseBody runs the validations
+// defined on UpsertAnthropicInferenceConfigResponseBody
+func ValidateUpsertAnthropicInferenceConfigResponseBody(body *UpsertAnthropicInferenceConfigResponseBody) (err error) {
+	if body.HasSigningSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_signing_secret", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateGetConfigResponseBody runs the validations defined on
 // GetConfigResponseBody
 func ValidateGetConfigResponseBody(body *GetConfigResponseBody) (err error) {
@@ -2517,6 +4056,22 @@ func ValidateUpsertConfigResponseBody(body *UpsertConfigResponseBody) (err error
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListOrgUnitsResponseBody runs the validations defined on
+// ListOrgUnitsResponseBody
+func ValidateListOrgUnitsResponseBody(body *ListOrgUnitsResponseBody) (err error) {
+	if body.OrgUnits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("org_units", "body"))
+	}
+	for _, e := range body.OrgUnits {
+		if e != nil {
+			if err2 := ValidateAIIntegrationOrgUnitResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -2619,6 +4174,741 @@ func ValidateRetryScheduleResponseBody(body *RetryScheduleResponseBody) (err err
 	}
 	if body.AutoPausedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.auto_paused_at", *body.AutoPausedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetAnthropicInferenceConfigUnauthorizedResponseBody runs the
+// validations defined on getAnthropicInferenceConfig_unauthorized_response_body
+func ValidateGetAnthropicInferenceConfigUnauthorizedResponseBody(body *GetAnthropicInferenceConfigUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAnthropicInferenceConfigForbiddenResponseBody runs the
+// validations defined on getAnthropicInferenceConfig_forbidden_response_body
+func ValidateGetAnthropicInferenceConfigForbiddenResponseBody(body *GetAnthropicInferenceConfigForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAnthropicInferenceConfigBadRequestResponseBody runs the
+// validations defined on getAnthropicInferenceConfig_bad_request_response_body
+func ValidateGetAnthropicInferenceConfigBadRequestResponseBody(body *GetAnthropicInferenceConfigBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAnthropicInferenceConfigNotFoundResponseBody runs the validations
+// defined on getAnthropicInferenceConfig_not_found_response_body
+func ValidateGetAnthropicInferenceConfigNotFoundResponseBody(body *GetAnthropicInferenceConfigNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAnthropicInferenceConfigConflictResponseBody runs the validations
+// defined on getAnthropicInferenceConfig_conflict_response_body
+func ValidateGetAnthropicInferenceConfigConflictResponseBody(body *GetAnthropicInferenceConfigConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAnthropicInferenceConfigUnsupportedMediaResponseBody runs the
+// validations defined on
+// getAnthropicInferenceConfig_unsupported_media_response_body
+func ValidateGetAnthropicInferenceConfigUnsupportedMediaResponseBody(body *GetAnthropicInferenceConfigUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAnthropicInferenceConfigInvalidResponseBody runs the validations
+// defined on getAnthropicInferenceConfig_invalid_response_body
+func ValidateGetAnthropicInferenceConfigInvalidResponseBody(body *GetAnthropicInferenceConfigInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAnthropicInferenceConfigInvariantViolationResponseBody runs the
+// validations defined on
+// getAnthropicInferenceConfig_invariant_violation_response_body
+func ValidateGetAnthropicInferenceConfigInvariantViolationResponseBody(body *GetAnthropicInferenceConfigInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAnthropicInferenceConfigUnexpectedResponseBody runs the
+// validations defined on getAnthropicInferenceConfig_unexpected_response_body
+func ValidateGetAnthropicInferenceConfigUnexpectedResponseBody(body *GetAnthropicInferenceConfigUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAnthropicInferenceConfigGatewayErrorResponseBody runs the
+// validations defined on
+// getAnthropicInferenceConfig_gateway_error_response_body
+func ValidateGetAnthropicInferenceConfigGatewayErrorResponseBody(body *GetAnthropicInferenceConfigGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertAnthropicInferenceConfigUnauthorizedResponseBody runs the
+// validations defined on
+// upsertAnthropicInferenceConfig_unauthorized_response_body
+func ValidateUpsertAnthropicInferenceConfigUnauthorizedResponseBody(body *UpsertAnthropicInferenceConfigUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertAnthropicInferenceConfigForbiddenResponseBody runs the
+// validations defined on upsertAnthropicInferenceConfig_forbidden_response_body
+func ValidateUpsertAnthropicInferenceConfigForbiddenResponseBody(body *UpsertAnthropicInferenceConfigForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertAnthropicInferenceConfigBadRequestResponseBody runs the
+// validations defined on
+// upsertAnthropicInferenceConfig_bad_request_response_body
+func ValidateUpsertAnthropicInferenceConfigBadRequestResponseBody(body *UpsertAnthropicInferenceConfigBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertAnthropicInferenceConfigNotFoundResponseBody runs the
+// validations defined on upsertAnthropicInferenceConfig_not_found_response_body
+func ValidateUpsertAnthropicInferenceConfigNotFoundResponseBody(body *UpsertAnthropicInferenceConfigNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertAnthropicInferenceConfigConflictResponseBody runs the
+// validations defined on upsertAnthropicInferenceConfig_conflict_response_body
+func ValidateUpsertAnthropicInferenceConfigConflictResponseBody(body *UpsertAnthropicInferenceConfigConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertAnthropicInferenceConfigUnsupportedMediaResponseBody runs the
+// validations defined on
+// upsertAnthropicInferenceConfig_unsupported_media_response_body
+func ValidateUpsertAnthropicInferenceConfigUnsupportedMediaResponseBody(body *UpsertAnthropicInferenceConfigUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertAnthropicInferenceConfigInvalidResponseBody runs the
+// validations defined on upsertAnthropicInferenceConfig_invalid_response_body
+func ValidateUpsertAnthropicInferenceConfigInvalidResponseBody(body *UpsertAnthropicInferenceConfigInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertAnthropicInferenceConfigInvariantViolationResponseBody runs
+// the validations defined on
+// upsertAnthropicInferenceConfig_invariant_violation_response_body
+func ValidateUpsertAnthropicInferenceConfigInvariantViolationResponseBody(body *UpsertAnthropicInferenceConfigInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertAnthropicInferenceConfigUnexpectedResponseBody runs the
+// validations defined on
+// upsertAnthropicInferenceConfig_unexpected_response_body
+func ValidateUpsertAnthropicInferenceConfigUnexpectedResponseBody(body *UpsertAnthropicInferenceConfigUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpsertAnthropicInferenceConfigGatewayErrorResponseBody runs the
+// validations defined on
+// upsertAnthropicInferenceConfig_gateway_error_response_body
+func ValidateUpsertAnthropicInferenceConfigGatewayErrorResponseBody(body *UpsertAnthropicInferenceConfigGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteAnthropicInferenceConfigUnauthorizedResponseBody runs the
+// validations defined on
+// deleteAnthropicInferenceConfig_unauthorized_response_body
+func ValidateDeleteAnthropicInferenceConfigUnauthorizedResponseBody(body *DeleteAnthropicInferenceConfigUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteAnthropicInferenceConfigForbiddenResponseBody runs the
+// validations defined on deleteAnthropicInferenceConfig_forbidden_response_body
+func ValidateDeleteAnthropicInferenceConfigForbiddenResponseBody(body *DeleteAnthropicInferenceConfigForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteAnthropicInferenceConfigBadRequestResponseBody runs the
+// validations defined on
+// deleteAnthropicInferenceConfig_bad_request_response_body
+func ValidateDeleteAnthropicInferenceConfigBadRequestResponseBody(body *DeleteAnthropicInferenceConfigBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteAnthropicInferenceConfigNotFoundResponseBody runs the
+// validations defined on deleteAnthropicInferenceConfig_not_found_response_body
+func ValidateDeleteAnthropicInferenceConfigNotFoundResponseBody(body *DeleteAnthropicInferenceConfigNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteAnthropicInferenceConfigConflictResponseBody runs the
+// validations defined on deleteAnthropicInferenceConfig_conflict_response_body
+func ValidateDeleteAnthropicInferenceConfigConflictResponseBody(body *DeleteAnthropicInferenceConfigConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteAnthropicInferenceConfigUnsupportedMediaResponseBody runs the
+// validations defined on
+// deleteAnthropicInferenceConfig_unsupported_media_response_body
+func ValidateDeleteAnthropicInferenceConfigUnsupportedMediaResponseBody(body *DeleteAnthropicInferenceConfigUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteAnthropicInferenceConfigInvalidResponseBody runs the
+// validations defined on deleteAnthropicInferenceConfig_invalid_response_body
+func ValidateDeleteAnthropicInferenceConfigInvalidResponseBody(body *DeleteAnthropicInferenceConfigInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteAnthropicInferenceConfigInvariantViolationResponseBody runs
+// the validations defined on
+// deleteAnthropicInferenceConfig_invariant_violation_response_body
+func ValidateDeleteAnthropicInferenceConfigInvariantViolationResponseBody(body *DeleteAnthropicInferenceConfigInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteAnthropicInferenceConfigUnexpectedResponseBody runs the
+// validations defined on
+// deleteAnthropicInferenceConfig_unexpected_response_body
+func ValidateDeleteAnthropicInferenceConfigUnexpectedResponseBody(body *DeleteAnthropicInferenceConfigUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteAnthropicInferenceConfigGatewayErrorResponseBody runs the
+// validations defined on
+// deleteAnthropicInferenceConfig_gateway_error_response_body
+func ValidateDeleteAnthropicInferenceConfigGatewayErrorResponseBody(body *DeleteAnthropicInferenceConfigGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
 	}
 	return
 }
@@ -3322,6 +5612,246 @@ func ValidateDeleteConfigUnexpectedResponseBody(body *DeleteConfigUnexpectedResp
 // ValidateDeleteConfigGatewayErrorResponseBody runs the validations defined on
 // deleteConfig_gateway_error_response_body
 func ValidateDeleteConfigGatewayErrorResponseBody(body *DeleteConfigGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsUnauthorizedResponseBody runs the validations defined on
+// listOrgUnits_unauthorized_response_body
+func ValidateListOrgUnitsUnauthorizedResponseBody(body *ListOrgUnitsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsForbiddenResponseBody runs the validations defined on
+// listOrgUnits_forbidden_response_body
+func ValidateListOrgUnitsForbiddenResponseBody(body *ListOrgUnitsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsBadRequestResponseBody runs the validations defined on
+// listOrgUnits_bad_request_response_body
+func ValidateListOrgUnitsBadRequestResponseBody(body *ListOrgUnitsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsNotFoundResponseBody runs the validations defined on
+// listOrgUnits_not_found_response_body
+func ValidateListOrgUnitsNotFoundResponseBody(body *ListOrgUnitsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsConflictResponseBody runs the validations defined on
+// listOrgUnits_conflict_response_body
+func ValidateListOrgUnitsConflictResponseBody(body *ListOrgUnitsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsUnsupportedMediaResponseBody runs the validations
+// defined on listOrgUnits_unsupported_media_response_body
+func ValidateListOrgUnitsUnsupportedMediaResponseBody(body *ListOrgUnitsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsInvalidResponseBody runs the validations defined on
+// listOrgUnits_invalid_response_body
+func ValidateListOrgUnitsInvalidResponseBody(body *ListOrgUnitsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsInvariantViolationResponseBody runs the validations
+// defined on listOrgUnits_invariant_violation_response_body
+func ValidateListOrgUnitsInvariantViolationResponseBody(body *ListOrgUnitsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsUnexpectedResponseBody runs the validations defined on
+// listOrgUnits_unexpected_response_body
+func ValidateListOrgUnitsUnexpectedResponseBody(body *ListOrgUnitsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsGatewayErrorResponseBody runs the validations defined on
+// listOrgUnits_gateway_error_response_body
+func ValidateListOrgUnitsGatewayErrorResponseBody(body *ListOrgUnitsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4059,6 +6589,21 @@ func ValidateRetryScheduleGatewayErrorResponseBody(body *RetryScheduleGatewayErr
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAIIntegrationOrgUnitResponseBody runs the validations defined on
+// AIIntegrationOrgUnitResponseBody
+func ValidateAIIntegrationOrgUnitResponseBody(body *AIIntegrationOrgUnitResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }

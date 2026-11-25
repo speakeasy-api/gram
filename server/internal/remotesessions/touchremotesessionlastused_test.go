@@ -37,7 +37,7 @@ func TestTouchRemoteSessionLastUsed(t *testing.T) {
 	subject := urn.NewUserSubject("touch-last-used-subject")
 	accessEnc, err := enc.Encrypt([]byte("upstream-access-token"))
 	require.NoError(t, err)
-	session, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientID,
@@ -50,6 +50,7 @@ func TestTouchRemoteSessionLastUsed(t *testing.T) {
 
 	touch := func(now time.Time, subj urn.SessionSubject, client uuid.UUID) error {
 		return q.TouchRemoteSessionLastUsed(ctx, repo.TouchRemoteSessionLastUsedParams{
+			ID:                    session.ID,
 			NowTs:                 pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
 			SubjectUrn:            subj,
 			RemoteSessionClientID: client,

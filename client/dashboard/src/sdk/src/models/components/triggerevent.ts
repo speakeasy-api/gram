@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const TriggerEventStatus = {
 /**
  * The processing status of the event.
  */
-export type TriggerEventStatus = ClosedEnum<typeof TriggerEventStatus>;
+export type TriggerEventStatus = OpenEnum<typeof TriggerEventStatus>;
 
 export type TriggerEvent = {
   /**
@@ -59,9 +60,10 @@ export type TriggerEvent = {
 };
 
 /** @internal */
-export const TriggerEventStatus$inboundSchema: z.ZodMiniEnum<
-  typeof TriggerEventStatus
-> = z.enum(TriggerEventStatus);
+export const TriggerEventStatus$inboundSchema: z.ZodMiniType<
+  TriggerEventStatus,
+  unknown
+> = openEnums.inboundSchema(TriggerEventStatus);
 
 /** @internal */
 export const TriggerEvent$inboundSchema: z.ZodMiniType<TriggerEvent, unknown> =

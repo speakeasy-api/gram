@@ -38,9 +38,10 @@ type ChatAnalysisScore struct {
 }
 
 // InsertChatAnalysisScores writes judged chat analysis verdicts. The insert is
-// fully synchronous because publication marks the evaluation scored right
-// afterwards and a retry re-reads the row through the existence guard: a
-// server-side async buffer would acknowledge rows the guard cannot see yet.
+// synchronous because publication marks the evaluation scored right afterwards
+// and a retry re-reads the row through the existence guard, and because a
+// constraint violation must fail only this insert: an async flush batches rows
+// from other writers into one block, so one bad row would fail them all.
 func (q *Queries) InsertChatAnalysisScores(ctx context.Context, rows []ChatAnalysisScore) error {
 	if len(rows) == 0 {
 		return nil
@@ -77,7 +78,7 @@ func (q *Queries) InsertChatAnalysisScores(ctx context.Context, rows []ChatAnaly
 	if err != nil {
 		return fmt.Errorf("building chat analysis score insert: %w", err)
 	}
-	if err := q.conn.Exec(ctx, query, args...); err != nil {
+	if err := q.conn.Exec(synchronousInsertContext(ctx), query, args...); err != nil {
 		var exception *clickhouse.Exception
 		if errors.As(err, &exception) && exception.Code == int32(proto.ErrViolatedConstraint) {
 			return fmt.Errorf("%w: %w", ErrInvalidChatAnalysisScore, err)

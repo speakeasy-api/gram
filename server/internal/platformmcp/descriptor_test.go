@@ -9,21 +9,44 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 // Every tool the deployment registers declares an audience. A tool with none
 // would be unreachable; a tool admitted by accident would reach a surface
 // nobody reviewed it for, which is what the audience model exists to prevent.
+func TestListProjectsDescriptionDoesNotAdvertiseHiddenResourceSignals(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "list-projects-description-test", Version: "0.0.1"}, nil)
+	registrar := newRegistrar(server)
+	registerListProjectsTool(registrar, nil)
+
+	descriptor := registrar.Descriptors()[0]
+	require.Equal(t, "list_projects", descriptor.Name)
+	require.NotContains(t, descriptor.Description, "filtered")
+}
+
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.Descriptors()
 	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
 
 	for _, descriptor := range descriptors {
 		require.NotEmpty(t, descriptor.Meta.Audiences, "tool %q declares no audience", descriptor.Name)
+		if descriptor.Meta.servesAudience(AudienceExternal) {
+			require.NotEmpty(t, descriptor.Meta.Authorization, "external tool %q declares no authorization policy", descriptor.Name)
+		}
 		require.NotEmpty(t, descriptor.InputSchema, "tool %q advertises no input schema", descriptor.Name)
+	}
+	for _, resource := range registrar.resources {
+		if resource.Meta.servesAudience(AudienceExternal) {
+			require.NotEmpty(t, resource.Meta.Authorization, "external resource %q declares no authorization policy", resource.URI)
+		}
 	}
 
 	// The external endpoint serves everything except the tools that exist only
@@ -52,8 +75,8 @@ func TestAudienceFilterSelectsPerTool(t *testing.T) {
 	t.Parallel()
 
 	registrar := &Registrar{descriptors: []Descriptor{
-		{Name: "both", Meta: ToolMeta{Audiences: []Audience{AudienceExternal, AudienceAssistant}}},
-		{Name: "external-only", Meta: ToolMeta{Audiences: []Audience{AudienceExternal}}},
+		{Name: "both", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal, AudienceAssistant}}},
+		{Name: "external-only", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}}},
 		{Name: "unadmitted", Meta: ToolMeta{}},
 	}}
 
@@ -73,7 +96,9 @@ func TestAddToolExplicitInputSchemaIsAuthoritative(t *testing.T) {
 	t.Parallel()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "schema-test", Version: "0.0.1"}, nil)
+	bindExternalTestPrincipal(server)
 	registrar := newRegistrar(server)
+	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	var calls atomic.Int32
 	schema := &jsonschema.Schema{
 		Type: "object",
@@ -82,7 +107,7 @@ func TestAddToolExplicitInputSchemaIsAuthoritative(t *testing.T) {
 		},
 		AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 	}
-	addTool(registrar, &mcp.Tool{Name: "explicit_schema", InputSchema: schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input explicitSchemaInput) (*mcp.CallToolResult, explicitSchemaOutput, error) {
+	addTool(registrar, &mcp.Tool{Name: "explicit_schema", InputSchema: schema}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input explicitSchemaInput) (*mcp.CallToolResult, explicitSchemaOutput, error) {
 		calls.Add(1)
 		return nil, explicitSchemaOutput(input), nil
 	})
@@ -139,7 +164,7 @@ func TestAddToolInfersInputSchemaWhenUnset(t *testing.T) {
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "inferred-test", Version: "0.0.1"}, nil)
 	registrar := newRegistrar(server)
-	addTool(registrar, &mcp.Tool{Name: "inferred_schema"}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input explicitSchemaInput) (*mcp.CallToolResult, explicitSchemaOutput, error) {
+	addTool(registrar, &mcp.Tool{Name: "inferred_schema"}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input explicitSchemaInput) (*mcp.CallToolResult, explicitSchemaOutput, error) {
 		return nil, explicitSchemaOutput(input), nil
 	})
 
@@ -154,6 +179,223 @@ func TestAddToolInfersInputSchemaWhenUnset(t *testing.T) {
 	_, err = registrar.Descriptors()[0].Invoke(t.Context(), json.RawMessage(`{"mode":"safe"}`))
 	require.NoError(t, err)
 }
+
+type allowExternalCallAuthorizer struct{}
+
+func (allowExternalCallAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	return contextWithPrincipal(ctx, principal), nil
+}
+
+func (allowExternalCallAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
+	return nil
+}
+
+func (allowExternalCallAuthorizer) RequireLiveMembership(context.Context, Principal) error {
+	return nil
+}
+func (allowExternalCallAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return nil }
+
+func bindExternalTestPrincipal(server *mcp.Server) {
+	server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			return next(contextWithPrincipal(ctx, testPrincipal()), method, req)
+		}
+	})
+}
+
+func TestExternalToolRegistrationRequiresAuthorizationPolicy(t *testing.T) {
+	t.Parallel()
+
+	registrar := newRegistrar(newTestMCPServer())
+	require.PanicsWithValue(t, `platformmcp: external tool "missing_policy" declares no authorization policy`, func() {
+		addTool(registrar, &mcp.Tool{Name: "missing_policy"}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, map[string]any, error) {
+			return nil, nil, nil
+		})
+	})
+}
+
+func TestExternalResourceRegistrationRequiresAuthorizationPolicy(t *testing.T) {
+	t.Parallel()
+
+	registrar := newRegistrar(newTestMCPServer())
+	require.PanicsWithValue(t, `platformmcp: external resource "gram://test/missing-policy" declares no authorization policy`, func() {
+		addResource(registrar, &mcp.Resource{URI: "gram://test/missing-policy", Name: "missing_policy"}, ResourceMeta{Audiences: externalOnly}, func(context.Context) (string, error) {
+			return "", nil
+		})
+	})
+}
+
+func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
+	t.Parallel()
+
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	byName := map[string]ExternalAuthorization{}
+	for _, descriptor := range registrar.For(AudienceExternal) {
+		require.Contains(t, []ExternalAuthorization{ExternalAuthorizationMember, ExternalAuthorizationOrgAdmin}, descriptor.Meta.Authorization, descriptor.Name)
+		byName[descriptor.Name] = descriptor.Meta.Authorization
+	}
+	for _, name := range []string{
+		"get_platform_context", "list_projects", "find_mcp", "get_mcp",
+		"request_mcp_review", "get_my_mcp_review_request",
+		"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls", "list_attribute_keys",
+		"search_speakeasy_docs", "list_skills", "get_skill", "list_skill_versions",
+		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
+		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
+		"list_my_sessions", "continue_session", "create_session_handoff_link", searchChatsToolName, readChatToolName,
+		// The analytics reads hold the caller to project:read in the handler.
+		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
+		// The widget tools hold the caller to project:read in the handler; the
+		// widgets service's creator-or-write rule decides updates and deletes.
+		listWidgetsToolName, getWidgetToolName, saveWidgetToolName, duplicateWidgetToolName, deleteWidgetToolName,
+		// The dashboard tools hold the caller to project:read; the
+		// dashboards service decides creator or project:write for a change.
+		listDashboardsToolName, getDashboardToolName, saveDashboardToolName, duplicateDashboardToolName,
+		deleteDashboardToolName, editDashboardLayoutToolName, saveDashboardFiltersToolName,
+	} {
+		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
+	}
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["distribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["undistribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["link_skill_to_mcp"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["unlink_skill_from_mcp"])
+	for _, name := range []string{"list_skill_insights", "compare_skill_versions"} {
+		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], "session cost is organization spend: %s", name)
+	}
+	// The individual-call tools hold the caller to log:read on the project in
+	// the handler, matching the dashboard Tool Logs list. log:read is never a
+	// system-role default, so membership alone admits nobody to the rows.
+	for _, name := range []string{"search_tool_calls", "query_mcp_traces"} {
+		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
+	}
+	for _, resource := range registrar.resources {
+		if resource.Meta.servesAudience(AudienceExternal) {
+			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
+		}
+	}
+}
+
+func TestGetPlatformContextPreservesAssistantCallsWithoutExternalGrants(t *testing.T) {
+	t.Parallel()
+
+	registrar := newRegistrar(newTestMCPServer())
+	registerGetPlatformContextTool(registrar)
+	principal := testPrincipal()
+	principal.ConnectionID = ""
+	principal.Generation = ""
+	principal.ClientID = AssistantClientID
+	principal.Surface = SurfaceProjectAssistant
+
+	result, err := descriptorByName(t, registrar, "get_platform_context").Invoke(
+		ContextWithPrincipal(t.Context(), principal),
+		json.RawMessage(`{}`),
+	)
+
+	require.NoError(t, err)
+	contextResult, ok := result.(PlatformContext)
+	require.True(t, ok)
+	require.Equal(t, principal.OrganizationID, contextResult.OrganizationID)
+	require.Contains(t, contextResult.Overview, "binding unlinking and rebinding are not available through this server")
+	require.Contains(t, contextResult.Overview, "where the catalogue lists get_xaa_readiness (organization administrators on external clients only)")
+	require.Contains(t, contextResult.Overview, "explicitly unlink affected bindings")
+	require.Contains(t, contextResult.Overview, "blocking_reason=identity_chaining and ema_binding_count greater than zero (can_delete=false)")
+	require.Contains(t, contextResult.Overview, "current generation before retrying deletion")
+	require.Contains(t, contextResult.Overview, "Client deletion and its live preflight are not exposed as Platform MCP tools")
+	require.Contains(t, contextResult.Overview, "do not infer a live binding count")
+	require.Contains(t, contextResult.Overview, "If that workflow is unavailable, stop and contact support")
+	require.Contains(t, contextResult.Overview, "never bypass the binding safeguard")
+	require.Empty(t, contextResult.AvailableWorkflows)
+	require.Empty(t, contextResult.RequestableWorkflows)
+}
+
+func TestExternalCatalogueFiltersByLiveCapabilities(t *testing.T) {
+	t.Parallel()
+
+	principal := testPrincipal()
+	registrar := &Registrar{descriptors: []Descriptor{
+		{Name: "context", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly}},
+		{Name: "projects", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryProjectRead}},
+		{Name: "mcps", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryMCPRead}},
+		{Name: "skill_write", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoverySkillWrite}},
+		{Name: "admin", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly}},
+		{Name: "admin_mcp", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, DiscoveryScopes: discoveryMCPRead}},
+	}}
+	tools := []*mcp.Tool{{Name: "context"}, {Name: "projects"}, {Name: "mcps"}, {Name: "skill_write"}, {Name: "admin"}, {Name: "admin_mcp"}}
+
+	memberCtx := authz.GrantsToContext(t.Context(), []authz.Grant{
+		authz.NewGrant(authz.ScopeProjectRead, "project-1"),
+		authz.NewGrant(authz.ScopeSkillRead, "skill-1"),
+	})
+	registrar.withAICatalog(aivendorstest.NewStore())
+	require.Equal(t, []string{"context", "projects"}, toolNames(registrar.FilterExternalTools(memberCtx, principal, tools)))
+
+	blockedCtx := authz.GrantsToContext(t.Context(), []authz.Grant{
+		authz.NewGrant(authz.ScopeProjectRead, "project-1"),
+		authz.NewGrant(authz.ScopeProjectBlockedRead, "project-1"),
+	})
+	require.Equal(t, []string{"context"}, toolNames(registrar.FilterExternalTools(blockedCtx, principal, tools)))
+
+	adminCtx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)})
+	require.Equal(t, []string{"context", "admin"}, toolNames(registrar.FilterExternalTools(adminCtx, principal, tools)))
+	adminMCPContext := authz.GrantsToContext(t.Context(), []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID),
+		authz.NewGrant(authz.ScopeMCPRead, "mcp-1"),
+	})
+	require.Equal(t, []string{"context", "mcps", "admin", "admin_mcp"}, toolNames(registrar.FilterExternalTools(adminMCPContext, principal, tools)))
+
+	rootCtx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
+	require.Equal(t, []string{"context", "projects", "mcps", "skill_write", "admin", "admin_mcp"}, toolNames(registrar.FilterExternalTools(rootCtx, principal, tools)))
+
+	require.Empty(t, registrar.FilterExternalTools(t.Context(), principal, tools), "missing prepared grants fail closed")
+}
+
+func TestExternalToolDenialReturnsReadableErrorWithoutCallingHandler(t *testing.T) {
+	t.Parallel()
+
+	server := newTestMCPServer()
+	bindExternalTestPrincipal(server)
+	registrar := newRegistrar(server)
+	registrar.withExternalAuthorizer(denyExternalCallAuthorizer{err: &ExternalAuthorizationError{
+		RequiredScope:    "org:admin",
+		RequestAccessURL: "https://app.example.test/example/request-access?scope=org%3Aadmin",
+		cause:            ErrForbidden,
+	}})
+	var calls atomic.Int32
+	addTool(registrar, &mcp.Tool{Name: "admin_only"}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, map[string]any, error) {
+		calls.Add(1)
+		return nil, map[string]any{"changed": true}, nil
+	})
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = serverSession.Close() }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "denial-test", Version: "0.0.1"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "admin_only", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	require.Zero(t, calls.Load())
+	require.Len(t, result.Content, 1)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.JSONEq(t, `{"code":"permission_denied","required_scope":"org:admin","request_access_url":"https://app.example.test/example/request-access?scope=org%3Aadmin","message":"You do not have permission to use this Platform MCP tool. This action requires org:admin. Request access: https://app.example.test/example/request-access?scope=org%3Aadmin"}`, text.Text)
+}
+
+type denyExternalCallAuthorizer struct {
+	err error
+}
+
+func (a denyExternalCallAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	return contextWithPrincipal(ctx, principal), nil
+}
+func (a denyExternalCallAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
+	return a.err
+}
+func (denyExternalCallAuthorizer) RequireLiveMembership(context.Context, Principal) error { return nil }
+func (denyExternalCallAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error   { return nil }
 
 func names(descriptors []Descriptor) []string {
 	out := make([]string, 0, len(descriptors))
@@ -170,37 +412,99 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
 		admitted[descriptor.Name] = true
 	}
 
-	// Named-plugin distribution is intentionally unavailable until
-	// compatibility deployment. Session recall is external-only in v1: the
-	// shared project-assistant surface must not serve user-personal
-	// cross-project transcripts.
+	// Named-plugin distribution and assignment changes are intentionally
+	// unavailable until compatibility deployment. Session recall stays
+	// external-only because it contains user-personal cross-project
+	// transcripts. Data exports stay external-only because creation can send
+	// future project data off-platform. Network ingress status stays with
+	// connection-scoped org administration. Unlike connection-scoped tools,
+	// get_xaa_readiness reads an org-wide snapshot under live member org-admin
+	// authority, which managed assistants do not have; it stays external-only.
 	for _, name := range []string{
+		"get_network_ingress",
+		"get_custom_domain_status",
+		"get_xaa_readiness",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
-		"list_plugins",
-		"get_plugin",
+		operationSetPluginAssignments,
+		operationCreatePlugin,
+		operationRenamePlugin,
+		operationSetPluginAutoSync,
+		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
+		"create_session_handoff_link",
+		searchChatsToolName, readChatToolName,
+		"list_data_exports",
+		"create_data_export",
+		pauseDataExportToolName,
+		resumeDataExportToolName,
+		sendDataExportTestEventToolName,
+		setDataExportMinSeverityToolName,
+		// Changing which tools a server exposes republishes every plugin that
+		// carries it to everyone holding one, so it stays on the surface an
+		// administrator drives directly, like the other distribution writes.
+		addToolsToMCPToolName,
+		removeToolsFromMCPToolName,
+		// Authoring a new server from a project's functions is the same kind
+		// of administrator decision.
+		createMCPFromFunctionsToolName,
+		// Gateways decide which servers people reach through one endpoint,
+		// the same kind of administrator decision.
+		createGatewayToolName,
+		setGatewayMembersToolName,
+		// An assistant is bound to its own project: creating another is
+		// outside its reach, and renaming its own is a decision for a person
+		// with write access to it, not for the assistant.
+		createProjectToolName,
+		renameProjectToolName,
+		// Widget writes are audited under a user; an assistant has no user identity.
+		listWidgetsToolName,
+		getWidgetToolName,
+		saveWidgetToolName,
+		duplicateWidgetToolName,
+		deleteWidgetToolName,
+		// Every dashboard write is audited under a user's email, and the
+		// assistant has no user identity; the reads stay with the writes.
+		listDashboardsToolName,
+		getDashboardToolName,
+		saveDashboardToolName,
+		duplicateDashboardToolName,
+		deleteDashboardToolName,
+		editDashboardLayoutToolName,
+		saveDashboardFiltersToolName,
 	} {
-		require.False(t, admitted[name], "tool %q needs a connection or is rollout-gated and must not be admitted to the assistant", name)
+		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}
 
 	// The reads, registration paths, and persisted readiness projections are
 	// connection-less end to end. get_setup_handoff is admitted because the
 	// handoff only carries the caller to the dashboard, which completes setup
-	// under its own session.
+	// under its own session. Plugin reads are admitted so the assistant can
+	// resolve a plugin by name before distributing a skill to it.
 	for _, name := range []string{
 		"get_platform_context",
 		"list_projects",
 		"find_mcp",
 		"get_mcp",
+		"list_plugins",
+		"get_plugin",
+		"list_plugin_assignments",
+		"list_recent_tool_calls",
+		"get_tool_usage_summary",
+		"list_organization_events",
+		"list_chats",
+		"search_users",
+		"get_user_metrics_summary",
+		"search_tool_calls",
+		"list_attribute_keys",
 		"update_mcp_metadata",
 		"register_catalog_mcp",
 		"register_remote_mcp",
@@ -218,10 +522,24 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_risk_policies",
 		"get_risk_policy",
 		"list_risk_exclusions",
+		"get_risk_analysis_status",
+		"list_watchdog_findings",
+		"list_risk_presets",
+		"suggest_risk_policy",
+		"list_risk_findings",
+		"list_risk_findings_by_chat",
+		"get_risk_rule_breakdown",
 		"create_risk_policy",
 		"update_risk_policy",
 		"create_risk_exclusion",
 		"update_risk_exclusion",
+		"list_access_members",
+		"mark_risk_findings_false_positive",
+		"unmark_risk_findings_false_positive",
+		listProjectToolsToolName,
+		describeAnalyticsCatalogToolName,
+		listAnalyticsDimensionValuesToolName,
+		runAnalyticsQueryToolName,
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
@@ -233,7 +551,9 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	bindExternalTestPrincipal(server)
+	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 
 	admitted := make(map[string]bool)
 	for _, descriptor := range registrar.For(AudienceExternal) {
@@ -280,7 +600,9 @@ func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
 	// results carry no subject count. The handler is never called here — only
 	// the schema the registration advertises is under test.
 	server := newTestMCPServer()
-	registerDiagnosticsTools(newRegistrar(server), nil)
+	registrar := newRegistrar(server)
+	registerDiagnosticsTools(registrar, nil)
+	registerSkillUsageTools(registrar, nil)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
@@ -322,9 +644,61 @@ func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
 	}
 }
 
+func TestPluginAssignmentMemberCountSchemaMatchesWireForm(t *testing.T) {
+	t.Parallel()
+
+	schema := inferOutputSchema[GetPluginOutput]("get_plugin")
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	zero := NewSubjectCount(0)
+	reported := NewSubjectCount(16)
+	suppressed := NewSubjectCount(3)
+	for _, count := range []*SubjectCount{&zero, &reported, &suppressed, nil} {
+		output := GetPluginOutput{
+			Servers:     []PluginServer{},
+			Skills:      []PluginSkill{},
+			Assignments: []PluginAssignmentOption{{MemberCount: count}},
+		}
+		encoded, err := json.Marshal(output)
+		require.NoError(t, err)
+		var decoded any
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		require.NoError(t, resolved.Validate(decoded), "output %s", encoded)
+	}
+
+	memberCount := schema.Properties["assignments"].Items.Properties["member_count"]
+	require.ElementsMatch(t, []string{"integer", "string", "null"}, memberCount.Types)
+	resolvedMemberCount, err := memberCount.Resolve(nil)
+	require.NoError(t, err)
+	require.Error(t, resolvedMemberCount.Validate(float64(-1)))
+	require.Error(t, resolvedMemberCount.Validate("redacted"))
+}
+
+func TestAdvertisedSetupCategoryIsClosed(t *testing.T) {
+	t.Parallel()
+
+	schema := inferOutputSchema[GetMCPReadinessToolOutput]("get_mcp_readiness")
+	category := schema.Properties["setup_category"]
+	require.NotNil(t, category)
+	require.Equal(t, setupCategoryEnumValues(), category.Enum)
+}
+
 // Schema inference panics at process boot, so a tool input the nil-dependency
 // server never registers can crash-loop production while CI stays green. The
 // jsonschema tag is a description; a "word=" prefix is rejected outright.
+func TestAdvertisedInventoryBackendKindIsClosed(t *testing.T) {
+	t.Parallel()
+
+	schema := inferOutputSchema[FindMCPOutput]("find_mcp")
+	mcps := schema.Properties["mcps"]
+	require.NotNil(t, mcps)
+	require.NotNil(t, mcps.Items)
+	backendKind := mcps.Items.Properties["backend_kind"]
+	require.NotNil(t, backendKind)
+	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "legacy"}, backendKind.Enum)
+}
+
 func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
 	t.Parallel()
 
@@ -334,4 +708,12 @@ func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
 	schema, err := jsonschema.For[SetMCPClientAdmissionToolInput](nil)
 	require.NoError(t, err)
 	require.Contains(t, schema.Properties["mode"].Description, "presets, open, or disabled")
+}
+
+func TestPlatformOverviewExplainsAssertionReuseSafeguards(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, platformOverview, "use set_workload_assertion_reuse only after explicit confirmation of the exact issuer, desired policy, and organization-wide impact")
+	require.Contains(t, platformOverview, "Reuse of assertions with jti or uti identifiers defaults to disabled")
+	require.Contains(t, platformOverview, "authorized workload administrator must explicitly opt in")
+	require.Contains(t, platformOverview, "Tokens without replay identifiers retain existing exact-token compatibility")
 }

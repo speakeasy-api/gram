@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,12 +19,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+const maxSessionDurationHours = int64(math.MaxInt64) / int64(time.Hour)
+
+func sessionDurationFromHours(hours int) (time.Duration, error) {
+	if hours <= 0 {
+		return 0, fmt.Errorf("session_duration_hours must be positive")
+	}
+	if int64(hours) > maxSessionDurationHours {
+		return 0, fmt.Errorf("session_duration_hours must not exceed %d", maxSessionDurationHours)
+	}
+
+	return time.Duration(int64(hours) * int64(time.Hour)), nil
+}
 
 // Creates an issuer. authn_challenge_mode is "chain" (the issuer
 // re-uses an upstream IdP without prompting) or "interactive" (the
@@ -34,7 +52,7 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -43,10 +61,18 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 	if payload.Slug == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "slug is required").LogError(ctx, logger)
 	}
-	if payload.SessionDurationHours <= 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
+	dur, err := sessionDurationFromHours(payload.SessionDurationHours)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid session_duration_hours: %v", err).LogError(ctx, logger)
 	}
-	dur := time.Duration(payload.SessionDurationHours) * time.Hour
+
+	mode := authserver.ModeEndpoint
+	if payload.AuthorizationServerMode != "" {
+		mode = authserver.Mode(payload.AuthorizationServerMode)
+	}
+	if mode != authserver.ModeEndpoint && mode != authserver.ModeShared {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid authorization_server_mode")
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -55,24 +81,33 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).CreateUserSessionIssuer(ctx, repo.CreateUserSessionIssuerParams{
-		ProjectID:          *authCtx.ProjectID,
-		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
-		Slug:               payload.Slug,
-		AuthnChallengeMode: payload.AuthnChallengeMode,
-		SessionDuration:    pgtype.Interval{Microseconds: dur.Microseconds(), Days: 0, Months: 0, Valid: true},
+		AuthorizationServerMode: conv.ToPGText(string(mode)),
+		UseAuthenticationHost:   pgtype.Bool{Bool: mode == authserver.ModeShared && s.sharedHosts.AuthenticationHostAvailable(), Valid: true},
+		ProjectID:               *authCtx.ProjectID,
+		OrganizationID:          conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                    payload.Slug,
+		AuthnChallengeMode:      payload.AuthnChallengeMode,
+		SessionDuration:         pgtype.Interval{Microseconds: dur.Microseconds(), Days: 0, Months: 0, Valid: true},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create user session issuer").LogError(ctx, logger)
 	}
 
+	if mode == authserver.ModeShared {
+		if _, err := s.sharedHosts.SharedAuthorizationServer(row); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "shared authorization server is unavailable").LogError(ctx, logger)
+		}
+	}
+
 	if err := s.audit.LogUserSessionIssuerCreate(ctx, dbtx, audit.LogUserSessionIssuerCreateEvent{
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		ProjectID:            *authCtx.ProjectID,
-		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:     authCtx.Email,
-		ActorSlug:            nil,
-		UserSessionIssuerURN: urn.NewUserSessionIssuer(row.ID),
-		Slug:                 row.Slug,
+		OrganizationID:                 authCtx.ActiveOrganizationID,
+		ProjectID:                      *authCtx.ProjectID,
+		Actor:                          urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:               authCtx.Email,
+		ActorSlug:                      nil,
+		UserSessionIssuerURN:           urn.NewUserSessionIssuer(row.ID),
+		Slug:                           row.Slug,
+		UserSessionIssuerSnapshotAfter: UserSessionIssuerView(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer creation").LogError(ctx, logger)
 	}
@@ -81,7 +116,7 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return UserSessionIssuerView(row), nil
+	return s.issuerView(ctx, row), nil
 }
 
 // Patches an issuer; nil fields are no-ops.
@@ -91,7 +126,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -104,10 +139,10 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 
 	var durPtr *time.Duration
 	if payload.SessionDurationHours != nil {
-		if *payload.SessionDurationHours <= 0 {
-			return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
+		parsed, parseErr := sessionDurationFromHours(*payload.SessionDurationHours)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid session_duration_hours: %v", parseErr).LogError(ctx, logger)
 		}
-		parsed := time.Duration(*payload.SessionDurationHours) * time.Hour
 		durPtr = &parsed
 	}
 	// Validated in app code: the column carries no CHECK constraint by
@@ -124,8 +159,11 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := lifecycle.LockUserIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id); err != nil {
+		return nil, fmt.Errorf("lock project user session issuer: %w", err)
+	}
 
-	existing, err := txRepo.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+	existing, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -175,7 +213,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return afterView, nil
+	return s.issuerView(ctx, updated), nil
 }
 
 // Lists issuers; keyset paginated by id (descending).
@@ -185,7 +223,43 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	mcpResourceID := *authCtx.ProjectID
+	if payload.McpResourceID != nil {
+		requestedResourceID, err := uuid.Parse(*payload.McpResourceID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_resource_id").LogError(ctx, s.logger)
+		}
+
+		if requestedResourceID != *authCtx.ProjectID {
+			_, toolsetErr := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
+				ID:        requestedResourceID,
+				ProjectID: *authCtx.ProjectID,
+			})
+			if toolsetErr != nil && !errors.Is(toolsetErr, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeUnexpected, toolsetErr, "validate MCP resource project").LogError(ctx, s.logger)
+			}
+
+			if errors.Is(toolsetErr, pgx.ErrNoRows) {
+				_, serverErr := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+					ID:        requestedResourceID,
+					ProjectID: *authCtx.ProjectID,
+				})
+				if errors.Is(serverErr, pgx.ErrNoRows) {
+					return nil, oops.C(oops.CodeForbidden)
+				}
+				if serverErr != nil {
+					return nil, oops.E(oops.CodeUnexpected, serverErr, "validate MCP resource project").LogError(ctx, s.logger)
+				}
+			}
+		}
+
+		mcpResourceID = requestedResourceID
+	}
+
+	if err := s.authz.RequireAny(ctx,
+		authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read(),
+		authz.MCPServer(authz.MCPServerIDOf(mcpResourceID), authz.ProjectIDOf(*authCtx.ProjectID)).Write(),
+	); err != nil {
 		return nil, err
 	}
 
@@ -196,9 +270,10 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 	}
 
 	rows, err := repo.New(s.db).ListUserSessionIssuersByProjectID(ctx, repo.ListUserSessionIssuersByProjectIDParams{
-		ProjectID:  *authCtx.ProjectID,
-		Cursor:     cursor,
-		LimitValue: limit,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Cursor:         cursor,
+		LimitValue:     limit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuers").LogError(ctx, s.logger)
@@ -206,7 +281,7 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 
 	items := make([]*types.UserSessionIssuer, len(rows))
 	for i, row := range rows {
-		items[i] = UserSessionIssuerView(row)
+		items[i] = s.issuerView(ctx, row)
 	}
 
 	var nextCursor *string
@@ -228,7 +303,7 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -246,8 +321,9 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		}
 
 		row, err = repo.New(s.db).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
-			ID:        id,
-			ProjectID: *authCtx.ProjectID,
+			ID:             id,
+			ProjectID:      *authCtx.ProjectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -269,18 +345,18 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		}
 	}
 
-	return UserSessionIssuerView(row), nil
+	return s.issuerView(ctx, row), nil
 }
 
-// Soft-deletes an issuer and cascades to its user_sessions and
-// user_session_consents.
+// DeleteUserSessionIssuer retires the issuer, its sessions and consents, and
+// its explicit attachment and orphaned grant targets.
 func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.DeleteUserSessionIssuerPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -298,6 +374,12 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := guardScopedUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id); err != nil {
+		return err
+	}
+	if err := txRepo.LockUserSessionIssuerForOwnerBinding(ctx, id); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuer for owner binding").LogError(ctx, logger)
+	}
 
 	// Lock the issuer row before the ownership check. A concurrent meta MCP
 	// attach holds this same row lock while writing its reference, so once the
@@ -345,12 +427,12 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").LogError(ctx, logger)
 	}
 
-	orphanCreds, err := s.revoker.DetachUserSessionIssuerFromClients(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	orphanCreds, err := s.revoker.RetireDeletedUserSessionIssuer(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return oops.E(
 			oops.CodeUnexpected,
 			err,
-			"failed to detach remote session clients from user session issuer %s",
+			"failed to retire grants for deleted user session issuer %s",
 			deleted.ID,
 		).LogError(ctx, logger)
 	}
@@ -388,28 +470,92 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 // UserSessionIssuerView projects an issuer row onto the API view. Exported so
 // the Platform MCP admission tools build the same audit snapshots this service
 // writes, rather than a second, drifting projection of the same row.
+//
+// It holds only what the row stores. Where a shared authorization server is
+// served depends on the deployment's hosts too, so issuerView adds it to
+// responses and audit snapshots leave it out.
 func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
-	dur := time.Duration(row.SessionDuration.Microseconds) * time.Microsecond
+	dur, _ := conv.PGIntervalToDuration(row.SessionDuration)
 	// The EFFECTIVE mode, never the raw column: an issuer that has never had
 	// one set stores NULL and reports the resolved default. Clients of this
 	// API — including the audit snapshots built from this view — should never
 	// have to know the unset state exists.
 	mode, _ := admission.ResolveMode(row.ClientIDMetadataAdmissionMode.String, row.ClientIDMetadataAdmissionMode.Valid)
+	// Likewise the effective authorization server mode: the column is not
+	// constrained, and any value but 'shared' serves per-endpoint
+	// authorization servers.
+	authorizationServerMode := authserver.ModeEndpoint
+	if authserver.IssuerInSharedMode(row) {
+		authorizationServerMode = authserver.ModeShared
+	}
 	projectID := ""
 	if row.ProjectID.Valid {
 		projectID = row.ProjectID.UUID.String()
 	}
 
 	return &types.UserSessionIssuer{
-		ID:                            row.ID.String(),
-		ProjectID:                     projectID,
-		Slug:                          row.Slug,
-		AuthnChallengeMode:            row.AuthnChallengeMode,
-		SessionDurationHours:          int(dur / time.Hour),
-		ClientIDMetadataAdmissionMode: string(mode),
-		CreatedAt:                     row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                     row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                                   row.ID.String(),
+		ProjectID:                            projectID,
+		OrganizationID:                       conv.FromPGTextOrEmpty[string](row.OrganizationID),
+		Slug:                                 row.Slug,
+		AuthnChallengeMode:                   row.AuthnChallengeMode,
+		SessionDurationHours:                 int(dur / time.Hour),
+		ClientIDMetadataAdmissionMode:        string(mode),
+		TrustedRemoteSessionIssuerID:         conv.FromNullableUUID(row.TrustedRemoteSessionIssuerID),
+		TrustedRemoteSessionClientID:         conv.FromNullableUUID(row.TrustedRemoteSessionClientID),
+		AuthorizationServerMode:              string(authorizationServerMode),
+		UseAuthenticationHost:                row.UseAuthenticationHost,
+		IssuerURLPinned:                      authserver.IssuerURLPinned(row),
+		IssuerURL:                            nil,
+		TokenEndpoint:                        nil,
+		AuthorizationServerUnavailableReason: nil,
+		ProjectName:                          nil,
+		AuthenticationHostAvailable:          nil,
+		CreatedAt:                            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                            row.UpdatedAt.Time.Format(time.RFC3339),
 	}
+}
+
+// authorizationServerUnavailableReason is why a shared issuer's authorization
+// server is not served. Its values are the API's
+// authorization_server_unavailable_reason enum.
+type authorizationServerUnavailableReason string
+
+const (
+	// authorizationServerPinnedIssuerURLInvalid is a pinned issuer URL that is
+	// not the issuer's own shared authorization server.
+	authorizationServerPinnedIssuerURLInvalid authorizationServerUnavailableReason = "pinned_issuer_url_invalid"
+
+	// authorizationServerHostNotServed is a shared authorization server on a
+	// host the deployment does not serve.
+	authorizationServerHostNotServed authorizationServerUnavailableReason = "host_not_served"
+)
+
+// issuerView is the response view of an issuer: UserSessionIssuerView plus
+// where its shared authorization server is served, derived from the same hosts
+// the MCP service serves it on.
+func (s *Service) issuerView(ctx context.Context, row repo.UserSessionIssuer) *types.UserSessionIssuer {
+	view := UserSessionIssuerView(row)
+	view.AuthenticationHostAvailable = new(s.sharedHosts.AuthenticationHostAvailable())
+	if !authserver.IssuerInSharedMode(row) {
+		return view
+	}
+
+	server, err := s.sharedHosts.SharedAuthorizationServer(row)
+	switch {
+	case err == nil:
+		view.IssuerURL = &server.IssuerURL
+		view.TokenEndpoint = &server.TokenEndpoint
+	case errors.Is(err, authserver.ErrPinnedIssuerURLInvalid):
+		view.AuthorizationServerUnavailableReason = new(string(authorizationServerPinnedIssuerURLInvalid))
+	case errors.Is(err, authserver.ErrHostNotServed):
+		view.AuthorizationServerUnavailableReason = new(string(authorizationServerHostNotServed))
+	default:
+		// No reason the API can name: the issuer reads as shared with neither
+		// its authorization server nor why it is unavailable.
+		s.logger.WarnContext(ctx, "derive user session issuer shared authorization server", attr.SlogError(err))
+	}
+	return view
 }
 
 // pageLimit clamps the user-supplied limit into the documented range and

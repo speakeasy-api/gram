@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#MISE description="Build Gram Functions runner images for local use"
+#MISE description="Build Speakeasy Functions runner images for local use"
 #MISE dir="{{ config_root }}/functions"
 
 #USAGE flag "--arch <arch>" help="Comma-separated list of target architectures (e.g. amd64,arm64). Defaults to the current architecture."

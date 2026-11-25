@@ -1,7 +1,9 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { act, renderHook as baseRenderHook } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
-import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
+import type { CatalogServer } from "@/pages/catalog/hooks";
+import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { ProjectGuideOperationReport } from "./projectGuideMachine";
 
 const queryHooks = vi.hoisted(() => ({
@@ -10,17 +12,17 @@ const queryHooks = vi.hoisted(() => ({
   plugins: vi.fn(),
   remoteServers: vi.fn(),
   servers: vi.fn(),
-  toolTraces: vi.fn(),
+  serverActivity: vi.fn(),
 }));
 const workflowHook = vi.hoisted(() => vi.fn());
 const requestProject = vi.hoisted(() => ({ slug: "request-project" }));
-const refetchTraces = vi.hoisted(() =>
+const refetchActivity = vi.hoisted(() =>
   vi.fn<
     () => Promise<{
-      data: { traces: ToolUsageTraceSummary[] } | undefined;
+      data: { activity: McpServerActivity[] } | undefined;
       isError: boolean;
     }>
-  >(() => Promise.resolve({ data: { traces: [] }, isError: false })),
+  >(() => Promise.resolve({ data: { activity: [] }, isError: false })),
 );
 const startInstall = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const resetInstall = vi.hoisted(() => vi.fn());
@@ -66,23 +68,9 @@ vi.mock("@gram/client/react-query/plugins.js", () => ({
 vi.mock("@gram/client/react-query/remoteMcpServers.js", () => ({
   useRemoteMcpServers: queryHooks.remoteServers,
 }));
-vi.mock("@gram/client/react-query/listToolUsageTraces.js", () => ({
-  useListToolUsageTraces: queryHooks.toolTraces,
-}));
 vi.mock("@gram/client/react-query/getMcpServerActivity.js", () => ({
   invalidateAllGetMcpServerActivity: vi.fn(() => Promise.resolve()),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    logs: { href: () => "/projects/request-project/logs" },
-    mcp: {
-      x: {
-        overview: {
-          href: (slug: string) => `/projects/request-project/mcp/${slug}`,
-        },
-      },
-    },
-  }),
+  useGetMcpServerActivity: queryHooks.serverActivity,
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({}),
@@ -95,16 +83,14 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
 import { useMcpGuideOperations } from "./useMcpGuideOperations";
 import { markProjectGuideMcpServerSelected } from "./projectGuideStores";
 
-function catalogServer(
-  overrides: Partial<PulseMCPServer> = {},
-): PulseMCPServer {
+function catalogServer(overrides: Partial<CatalogServer> = {}): CatalogServer {
   return {
     description: "Read-only test server",
     registryId: "registry",
-    registrySpecifier: "example/read-only",
+    registrySpecifier: "app.linear/mcp",
     version: "1.0.0",
     title: "Linear",
-    meta: { "com.pulsemcp/server": { isOfficial: true } },
+    meta: {},
     toolCount: 2,
     isReadOnly: true,
     supportsDcr: true,
@@ -115,7 +101,7 @@ function catalogServer(
       },
     ],
     ...overrides,
-  } as PulseMCPServer;
+  } as CatalogServer;
 }
 
 const SERVER = catalogServer();
@@ -138,8 +124,8 @@ function queryResult<T>(data: T) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  refetchTraces.mockResolvedValue({
-    data: { traces: [] },
+  refetchActivity.mockResolvedValue({
+    data: { activity: [] },
     isError: false,
   });
   requestProject.slug = "request-project";
@@ -179,9 +165,9 @@ beforeEach(() => {
   );
   queryHooks.endpoints.mockReturnValue(queryResult({ mcpEndpoints: [] }));
   queryHooks.plugins.mockReturnValue(queryResult({ plugins: [] }));
-  queryHooks.toolTraces.mockReturnValue({
-    ...queryResult({ traces: [] }),
-    refetch: refetchTraces,
+  queryHooks.serverActivity.mockReturnValue({
+    ...queryResult({ activity: [] }),
+    refetch: refetchActivity,
   });
   workflowHook.mockReturnValue({
     phase: "configure",
@@ -249,28 +235,22 @@ function setExistingServer({
   );
 }
 
-function toolTrace(
-  overrides: Partial<ToolUsageTraceSummary> = {},
-): ToolUsageTraceSummary {
+function serverActivity(
+  overrides: Partial<McpServerActivity> = {},
+): McpServerActivity {
   return {
-    eventSource: "mcp-proxy",
-    gramUrn: "tools:linear-governed:list_issues",
-    httpStatusCode: 200,
-    id: "trace-row-id",
-    logCount: 2,
-    logGroup: { kind: "trace_id", value: "trace-id" },
-    startTimeUnixNano: "1787140800000000000",
-    targetId: "linear-governed",
-    targetKind: "server",
-    targetLabel: "Linear",
     targetType: "hosted_mcp_server",
-    toolName: "linear.list_issues",
-    traceId: "trace-id",
-    userKey: "user-id",
-    userKind: "user_id",
-    userLabel: "Agent user",
+    targetId: "linear-governed",
+    targetLabel: "Linear",
+    totalToolCalls: 1,
+    recentToolCalls: 1,
+    lastToolCallAt: new Date(Date.now() - 60_000),
     ...overrides,
   };
+}
+
+function renderHook<Result>(callback: () => Result) {
+  return baseRenderHook(callback, { wrapper: MemoryRouter });
 }
 
 describe("useMcpGuideOperations", () => {
@@ -303,14 +283,32 @@ describe("useMcpGuideOperations", () => {
     );
   });
 
+  it("rejects preferred display-title lookalikes with unapproved registry identifiers", () => {
+    queryHooks.catalog.mockReturnValue(
+      queryResult({
+        servers: [
+          catalogServer({
+            registrySpecifier: "example/linear",
+            title: "Linear",
+          }),
+          catalogServer({
+            registrySpecifier: "app.linear/mcp",
+            title: "Renamed Linear",
+          }),
+        ],
+      }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
+    expect(
+      result.current.catalogServers?.map((server) => server.registrySpecifier),
+    ).toEqual(["app.linear/mcp"]);
+  });
+
   it("excludes curated servers that require user-supplied credentials", () => {
     const apiKeyServer = catalogServer({
       title: "Notion",
-      meta: {
-        "com.pulsemcp/server-version": {
-          "remotes[0]": { authOptions: [{ type: "api_key" }] },
-        },
-      },
+      supportsDcr: false,
+      authSetup: "manual",
     });
     queryHooks.catalog.mockReturnValue(
       queryResult({ servers: [catalogServer(), apiKeyServer] }),
@@ -323,14 +321,57 @@ describe("useMcpGuideOperations", () => {
     ).toEqual(["Linear"]);
   });
 
+  it("includes preferred explicit no-auth native records without a verification flag", () => {
+    const publicServer = catalogServer({
+      title: "Linear",
+      supportsDcr: false,
+      authSetup: "none",
+    });
+    const sparse = catalogServer({
+      title: "Notion",
+      supportsDcr: false,
+      meta: undefined,
+    });
+    const notPreferred = catalogServer({
+      title: "Other service",
+      registrySpecifier: "example/other",
+      authSetup: "none",
+    });
+    queryHooks.catalog.mockReturnValue(
+      queryResult({ servers: [publicServer, sparse, notPreferred] }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
+    expect(
+      result.current.catalogServers?.map((server) => server.title),
+    ).toEqual(["Linear"]);
+  });
+
+  it("keeps unknown OAuth setup out of automatic onboarding but allows CIMD", () => {
+    const unknown = catalogServer({
+      title: "Notion",
+      supportsDcr: false,
+      authSetup: "unknown",
+    });
+    const cimd = catalogServer({
+      title: "Linear",
+      supportsDcr: false,
+      supportsCimd: true,
+      authSetup: "cimd",
+    });
+    queryHooks.catalog.mockReturnValue(
+      queryResult({ servers: [unknown, cimd] }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
+    expect(
+      result.current.catalogServers?.map((server) => server.title),
+    ).toEqual(["Linear"]);
+  });
+
   it("reports OAuth setup in the activity output", async () => {
     const oauthServer = catalogServer({
       title: "Notion",
-      meta: {
-        "com.pulsemcp/server-version": {
-          "remotes[0]": { authOptions: [{ type: "oauth" }] },
-        },
-      },
+      supportsDcr: false,
+      authSetup: "dcr",
     });
     queryHooks.catalog.mockReturnValue(queryResult({ servers: [oauthServer] }));
 
@@ -365,6 +406,37 @@ describe("useMcpGuideOperations", () => {
       message: "Adding Notion MCP server to this project",
       progress: 0.5,
     });
+  });
+
+  it("reports a blocked install instead of waiting on canInstall", async () => {
+    workflowHook.mockReturnValue({
+      phase: "configure",
+      canInstall: false,
+      installBlockedReason: "Could not load the organization's issuers.",
+      serverConfigs: [],
+      startInstall,
+      reset: resetInstall,
+      isServerAlreadyInstalled: () => false,
+    });
+    const { result } = renderHook(() => useMcpGuideOperations());
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+
+    act(() => result.current.selectServer(SERVER));
+    act(() =>
+      result.current.handleSignal(
+        { type: "start", scope: SERVER_SCOPE },
+        report,
+      ),
+    );
+
+    await waitFor(() =>
+      expect(report).toHaveBeenCalledWith({
+        type: "error",
+        scope: SERVER_SCOPE,
+        message: "Could not load the organization's issuers.",
+      }),
+    );
+    expect(startInstall).not.toHaveBeenCalled();
   });
 
   it("starts the existing project-scoped install workflow only after start", async () => {
@@ -477,14 +549,8 @@ describe("useMcpGuideOperations", () => {
       autoSelectRemotes: true,
       serverNameSuffix: "_Governed",
     });
-    expect(queryHooks.toolTraces).toHaveBeenCalledWith(
-      {
-        gramProject: "request-project",
-        listToolUsageTracesPayload: expect.objectContaining({
-          hostedToolsetSlugs: ["linear-governed"],
-          targetTypes: ["hosted_mcp_server"],
-        }),
-      },
+    expect(queryHooks.serverActivity).toHaveBeenCalledWith(
+      { gramProject: "request-project", getMcpServerActivityPayload: {} },
       undefined,
       expect.objectContaining({ enabled: true, throwOnError: false }),
     );
@@ -595,7 +661,9 @@ describe("useMcpGuideOperations", () => {
     );
     expect(result.current.prompt).toMatch(/marked read-only/i);
     expect(result.current.prompt).toMatch(/do not create, update, or delete/i);
-    expect(result.current.toolLogsHref).toBe("/projects/request-project/logs");
+    expect(result.current.toolLogsHref).toBe(
+      "/org/projects/request-project/logs",
+    );
 
     expect(result.current.client).toBe("claude");
     expect(result.current.connectionPromptCopied).toBe(false);
@@ -608,17 +676,9 @@ describe("useMcpGuideOperations", () => {
   });
 
   it("captures the selected-server baseline when setup completes", async () => {
-    const now = Date.now();
     setExistingServer();
-    refetchTraces.mockResolvedValueOnce({
-      data: {
-        traces: [
-          toolTrace({
-            id: "baseline-trace",
-            startTimeUnixNano: String(BigInt(now - 1_000) * 1_000_000n),
-          }),
-        ],
-      },
+    refetchActivity.mockResolvedValueOnce({
+      data: { activity: [serverActivity()] },
       isError: false,
     });
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
@@ -631,17 +691,17 @@ describe("useMcpGuideOperations", () => {
       );
     });
 
-    await waitFor(() => expect(refetchTraces).toHaveBeenCalledOnce());
+    await waitFor(() => expect(refetchActivity).toHaveBeenCalledOnce());
     expect(result.current.activityBaselineError).toBe(false);
   });
 
   it("ignores an activity baseline result after the operation is aborted", async () => {
     setExistingServer();
     const pendingRefetch = deferred<{
-      data: { traces: ToolUsageTraceSummary[] };
+      data: { activity: McpServerActivity[] };
       isError: boolean;
     }>();
-    refetchTraces.mockReturnValueOnce(pendingRefetch.promise);
+    refetchActivity.mockReturnValueOnce(pendingRefetch.promise);
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result } = renderHook(() => useMcpGuideOperations());
 
@@ -661,7 +721,7 @@ describe("useMcpGuideOperations", () => {
     });
 
     await act(async () => {
-      pendingRefetch.resolve({ data: { traces: [] }, isError: false });
+      pendingRefetch.resolve({ data: { activity: [] }, isError: false });
       await pendingRefetch.promise;
     });
 
@@ -669,24 +729,14 @@ describe("useMcpGuideOperations", () => {
     expect(result.current.activityBaselineError).toBe(false);
   });
 
-  it("completes from the first new selected-server trace and renders its real details", async () => {
-    const now = Date.now();
-    const traceData = {
-      current: {
-        traces: [
-          toolTrace({
-            id: "old-trace",
-            startTimeUnixNano: String(BigInt(now - 1_000) * 1_000_000n),
-          }),
-        ],
-      },
-    };
-    const refetchTraces = vi.fn(() =>
-      Promise.resolve({ data: traceData.current, isError: false }),
+  async function listenForActivity(baseline: McpServerActivity[]) {
+    const activityData = { current: { activity: baseline } };
+    const refetch = vi.fn(() =>
+      Promise.resolve({ data: activityData.current, isError: false }),
     );
-    queryHooks.toolTraces.mockImplementation(() => ({
-      ...queryResult(traceData.current),
-      refetch: refetchTraces,
+    queryHooks.serverActivity.mockImplementation(() => ({
+      ...queryResult(activityData.current),
+      refetch,
     }));
     setExistingServer();
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
@@ -696,31 +746,45 @@ describe("useMcpGuideOperations", () => {
     await act(async () => {
       expect(await view.result.current.prepareActivityBaseline()).toBe(true);
     });
-    await waitFor(() => expect(refetchTraces).toHaveBeenCalledOnce());
+    await waitFor(() => expect(refetch).toHaveBeenCalledOnce());
     act(() =>
       view.result.current.handleSignal(
         { type: "start", scope: listenScope },
         report,
       ),
     );
+    return { activityData, report, view, listenScope };
+  }
 
-    traceData.current = {
-      traces: [
-        toolTrace({
-          id: "unrelated-trace",
-          startTimeUnixNano: String(BigInt(now + 1_000) * 1_000_000n),
+  const GOVERNED_CALL_EVENT = {
+    kind: "Governed call",
+    tone: "allow",
+    title: "tool call recorded",
+    rows: [
+      { key: "server", value: "Linear" },
+      {
+        key: "endpoint",
+        value: "https://api.example/mcp/linear-endpoint",
+      },
+    ],
+    note: "The first new call is recorded in Tool Logs.",
+  };
+
+  it("completes when the selected server's call count grows past the baseline", async () => {
+    const { activityData, report, view, listenScope } = await listenForActivity(
+      [serverActivity()],
+    );
+
+    activityData.current = {
+      activity: [
+        serverActivity({
           targetId: "another-server",
           targetLabel: "Another server",
-          toolName: "other.unrelated_call",
+          totalToolCalls: 9,
         }),
-        toolTrace({
-          id: "later-trace",
-          startTimeUnixNano: String(BigInt(now + 3_000) * 1_000_000n),
-          toolName: "linear.get_issue",
-        }),
-        toolTrace({
-          id: "first-trace",
-          startTimeUnixNano: String(BigInt(now + 2_000) * 1_000_000n),
+        serverActivity({
+          totalToolCalls: 2,
+          lastToolCallAt: new Date(Date.now() + 1_000),
         }),
       ],
     };
@@ -730,21 +794,85 @@ describe("useMcpGuideOperations", () => {
       expect(report).toHaveBeenCalledWith({
         type: "event",
         scope: listenScope,
-        event: {
-          kind: "Governed call",
-          tone: "allow",
-          title: "linear.list_issues",
-          rows: [
-            { key: "server", value: "Linear" },
-            {
-              key: "endpoint",
-              value: "https://api.example/mcp/linear-endpoint",
-            },
-            { key: "result", value: "HTTP 200" },
-          ],
-          note: "The first new call is recorded in Tool Logs.",
-        },
+        event: GOVERNED_CALL_EVENT,
       }),
+    );
+  });
+
+  it("completes on a later last call even when the windowed count is unchanged", async () => {
+    const { activityData, report, view, listenScope } = await listenForActivity(
+      [serverActivity()],
+    );
+
+    activityData.current = {
+      activity: [
+        serverActivity({ lastToolCallAt: new Date(Date.now() + 5_000) }),
+      ],
+    };
+    view.rerender();
+
+    await waitFor(() =>
+      expect(report).toHaveBeenCalledWith({
+        type: "event",
+        scope: listenScope,
+        event: GOVERNED_CALL_EVENT,
+      }),
+    );
+  });
+
+  it("points every member at Tool Logs and the governed server", async () => {
+    const { view } = await listenForActivity([serverActivity()]);
+
+    // Tool Logs shows the caller's own calls without log:read, so the guide
+    // never has to fall back to the server's overview.
+    expect(view.result.current.toolLogsHref).toBe(
+      "/org/projects/request-project/logs",
+    );
+    expect(view.result.current.mcpServerHref).toBe(
+      "/org/projects/request-project/mcp/linear-governed/overview",
+    );
+  });
+
+  it("does not complete from a call made before listening started but recorded late", async () => {
+    const { activityData, report, view } = await listenForActivity([
+      serverActivity(),
+    ]);
+
+    activityData.current = {
+      activity: [
+        serverActivity({
+          totalToolCalls: 2,
+          lastToolCallAt: new Date(Date.now() - 30_000),
+        }),
+      ],
+    };
+    view.rerender();
+
+    expect(report).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "event" }),
+    );
+  });
+
+  it("does not complete from another server's activity", async () => {
+    const { activityData, report, view } = await listenForActivity([
+      serverActivity(),
+    ]);
+
+    activityData.current = {
+      activity: [
+        serverActivity(),
+        serverActivity({
+          targetId: "another-server",
+          targetLabel: "Another server",
+          totalToolCalls: 4,
+          lastToolCallAt: new Date(Date.now() + 5_000),
+        }),
+      ],
+    };
+    view.rerender();
+
+    expect(report).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "event" }),
     );
   });
 
@@ -753,7 +881,7 @@ describe("useMcpGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result } = renderHook(() => useMcpGuideOperations());
     const listenScope = { ...SERVER_SCOPE, step: 3, runId: 3 };
-    refetchTraces.mockReturnValueOnce(new Promise(() => undefined));
+    refetchActivity.mockReturnValueOnce(new Promise(() => undefined));
 
     act(() => {
       void result.current.prepareActivityBaseline();
@@ -779,8 +907,8 @@ describe("useMcpGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result, rerender } = renderHook(() => useMcpGuideOperations());
     const listenScope = { ...SERVER_SCOPE, step: 3, runId: 3 };
-    refetchTraces.mockResolvedValueOnce({
-      data: { traces: [] },
+    refetchActivity.mockResolvedValueOnce({
+      data: { activity: [] },
       isError: false,
     });
 
@@ -794,12 +922,12 @@ describe("useMcpGuideOperations", () => {
         report,
       );
     });
-    queryHooks.toolTraces.mockReturnValue({
+    queryHooks.serverActivity.mockReturnValue({
       data: undefined,
       isError: true,
       isFetching: false,
       isPending: false,
-      refetch: refetchTraces,
+      refetch: refetchActivity,
     });
     rerender();
 
@@ -817,7 +945,7 @@ describe("useMcpGuideOperations", () => {
     setExistingServer();
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result } = renderHook(() => useMcpGuideOperations());
-    refetchTraces.mockResolvedValueOnce({
+    refetchActivity.mockResolvedValueOnce({
       data: undefined,
       isError: true,
     });
@@ -826,12 +954,10 @@ describe("useMcpGuideOperations", () => {
       expect(await result.current.prepareActivityBaseline()).toBe(false);
     });
 
-    await waitFor(() => expect(refetchTraces).toHaveBeenCalledOnce());
+    await waitFor(() => expect(refetchActivity).toHaveBeenCalledOnce());
 
-    refetchTraces.mockResolvedValueOnce({
-      data: {
-        traces: [toolTrace({ id: "retry-baseline-trace" })],
-      },
+    refetchActivity.mockResolvedValueOnce({
+      data: { activity: [serverActivity()] },
       isError: false,
     });
 
@@ -843,7 +969,7 @@ describe("useMcpGuideOperations", () => {
     );
 
     await waitFor(() => {
-      expect(refetchTraces).toHaveBeenCalledTimes(2);
+      expect(refetchActivity).toHaveBeenCalledTimes(2);
     });
   });
 

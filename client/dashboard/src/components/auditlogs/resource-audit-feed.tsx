@@ -1,12 +1,18 @@
 import {
+  auditActorPrincipal,
+  auditSubjectPrincipal,
+  useAuditPrincipals,
+} from "@/components/auditlogs/audit-principals";
+import { AuditPrincipalLink } from "@/components/auditlogs/principals";
+import {
   ActionIconTile,
   AuditFeedFooter,
   DateGroupHeader,
 } from "@/components/auditlogs/feed";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
 import { Link as TextLink } from "@/components/ui/Link";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
 import {
@@ -65,6 +71,7 @@ export function ResourceAuditFeed({
     () => data?.pages.flatMap((page) => page.result.logs) ?? [],
     [data],
   );
+  const identities = useAuditPrincipals(logs);
   const dateGroups = useMemo(
     () => groupLogsByDate(logs, TIMESTAMP_MODE),
     [logs],
@@ -72,12 +79,11 @@ export function ResourceAuditFeed({
 
   if (!enabled || isPending) {
     return (
-      <div className="text-muted-foreground flex items-center gap-2 py-6">
-        <Icon name="loader-circle" className="size-4 animate-spin" />
-        <Text small muted>
-          Loading activity…
-        </Text>
-      </div>
+      <Skeleton label="Loading activity">
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+      </Skeleton>
     );
   }
 
@@ -111,7 +117,12 @@ export function ResourceAuditFeed({
           <React.Fragment key={group.key}>
             <DateGroupHeader date={group.date} mode={TIMESTAMP_MODE} />
             {group.logs.map((log) => (
-              <ResourceAuditRow key={log.id} log={log} orgSlug={orgSlug} />
+              <ResourceAuditRow
+                key={log.id}
+                log={log}
+                orgSlug={orgSlug}
+                identities={identities}
+              />
             ))}
           </React.Fragment>
         ))}
@@ -153,9 +164,11 @@ export function ResourceAuditFeed({
 }
 
 function ResourceAuditRow({
+  identities,
   log,
   orgSlug,
 }: {
+  identities: ReturnType<typeof useAuditPrincipals>;
   log: AuditLog;
   orgSlug: string | undefined;
 }): JSX.Element {
@@ -168,10 +181,22 @@ function ResourceAuditRow({
       <ActionIconTile action={log.action} />
       <div className="min-w-0 flex-1 text-sm leading-5">
         <strong className="text-foreground font-semibold">
-          {getActorLabel(log)}
+          <AuditPrincipalLink
+            principal={auditActorPrincipal(log)}
+            identities={identities}
+            projectSlug={log.projectSlug || undefined}
+            fallback={getActorLabel(log)}
+          />
         </strong>{" "}
         <span className="text-muted-foreground">{renderVerb(log)}</span>{" "}
-        {href ? (
+        {auditSubjectPrincipal(log) ? (
+          <AuditPrincipalLink
+            principal={auditSubjectPrincipal(log)}
+            identities={identities}
+            projectSlug={log.projectSlug || undefined}
+            fallback={label}
+          />
+        ) : href ? (
           <TextLink
             asChild
             size="xs"

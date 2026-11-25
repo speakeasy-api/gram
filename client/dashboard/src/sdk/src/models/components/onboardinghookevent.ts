@@ -10,7 +10,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type OnboardingHookEvent = {
   /**
-   * Gram chat/session ID that owns this event, when present.
+   * Speakeasy chat/session ID that owns this event, when present.
    */
   chatId?: string | undefined;
   /**
@@ -18,7 +18,7 @@ export type OnboardingHookEvent = {
    */
   eventName?: string | undefined;
   /**
-   * Slug of the Gram project that received the event.
+   * Slug of the Speakeasy project that received the event.
    */
   projectSlug: string;
   /**

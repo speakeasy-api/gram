@@ -7,6 +7,21 @@
 
 package server
 
+// PrepareEMARemoteSessionClientsPath returns the URL path to the remoteSessionClients service prepareEMA HTTP endpoint.
+func PrepareEMARemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.prepareEMA"
+}
+
+// ReadEMARemoteSessionClientsPath returns the URL path to the remoteSessionClients service readEMA HTTP endpoint.
+func ReadEMARemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.readEMA"
+}
+
+// UnlinkEMARemoteSessionClientsPath returns the URL path to the remoteSessionClients service unlinkEMA HTTP endpoint.
+func UnlinkEMARemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.unlinkEMA"
+}
+
 // CreateRemoteSessionClientRemoteSessionClientsPath returns the URL path to the remoteSessionClients service createRemoteSessionClient HTTP endpoint.
 func CreateRemoteSessionClientRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.create"
@@ -32,9 +47,24 @@ func DetachUserSessionIssuerRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.detachUserSessionIssuer"
 }
 
+// AttachKeySetRemoteSessionClientsPath returns the URL path to the remoteSessionClients service attachKeySet HTTP endpoint.
+func AttachKeySetRemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.attachKeySet"
+}
+
+// DetachKeySetRemoteSessionClientsPath returns the URL path to the remoteSessionClients service detachKeySet HTTP endpoint.
+func DetachKeySetRemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.detachKeySet"
+}
+
 // ListRemoteSessionClientsRemoteSessionClientsPath returns the URL path to the remoteSessionClients service listRemoteSessionClients HTTP endpoint.
 func ListRemoteSessionClientsRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.list"
+}
+
+// GetNewClientCallbackURLRemoteSessionClientsPath returns the URL path to the remoteSessionClients service getNewClientCallbackUrl HTTP endpoint.
+func GetNewClientCallbackURLRemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.newClientCallbackUrl"
 }
 
 // GetRemoteSessionClientRemoteSessionClientsPath returns the URL path to the remoteSessionClients service getRemoteSessionClient HTTP endpoint.

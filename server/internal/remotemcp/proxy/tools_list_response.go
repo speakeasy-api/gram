@@ -10,39 +10,36 @@ import (
 )
 
 // ToolsListResponse is a "tools/list"-specific view over the remote message
-// carrying the response. Instances are constructed by the proxy and passed
-// to each [ToolsListResponseInterceptor] after the generic
-// [RemoteMessageInterceptor] chain has run.
+// carrying the response. The proxy constructs it and passes it to each
+// [ToolsListResponseInterceptor] after the generic [RemoteMessageInterceptor]
+// chain has run.
 type ToolsListResponse struct {
 	// Error is the JSON-RPC protocol error when upstream returned an error
-	// response (e.g. "method not found"). Mutually exclusive with Result.
+	// response (e.g. "method not found"). Exactly one of Error and Result is
+	// non-nil.
 	Error *jsonrpc.Error
 
-	// RemoteMessage is the underlying remote message. Other interceptors in the
-	// generic chain may have observed it already.
+	// RemoteMessage is the underlying remote message, which the generic
+	// interceptor chain may already have observed.
 	RemoteMessage *RemoteMessage
 
-	// Request is the tools/list request this response is replying to.
-	// Available so interceptors can correlate input and output without
-	// re-parsing.
+	// Request is the tools/list request this response replies to, so
+	// interceptors can correlate input and output without re-parsing.
 	Request *ToolsListRequest
 
 	// Result is the decoded tools/list result when upstream returned a
-	// JSON-RPC success response. Mutually exclusive with Error — exactly one
-	// of Result and Error is non-nil.
+	// JSON-RPC success response. Exactly one of Error and Result is non-nil.
 	Result *mcp.ListToolsResult
 }
 
 // toolsListResponseFromRemoteMessage returns a ToolsListResponse view over
-// msg if msg carries a JSON-RPC response whose payload decodes cleanly as
-// either a [mcp.ListToolsResult] or a [jsonrpc.Error]. Anything else
-// returns ok=false so the typed interceptor loop is skipped. Decoding
-// failures do not abort the proxy; the response is relayed to the user
-// unchanged.
+// msg if msg carries a JSON-RPC response whose payload decodes as either a
+// [mcp.ListToolsResult] or a [jsonrpc.Error]. Anything else returns ok=false,
+// skipping the typed interceptor loop and relaying the response unchanged.
 //
-// Used by both the buffered JSON path and the SSE-terminal path. In both
-// cases msg.Message is already a *jsonrpc.Response decoded from the wire;
-// the helper just re-decodes its payload as a tools/list shape.
+// Both the buffered JSON path and the SSE-terminal path use this. In both,
+// msg.Message is already a *jsonrpc.Response decoded from the wire, so the
+// helper only re-decodes its payload as a tools/list shape.
 func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMessage) (*ToolsListResponse, bool) {
 	if request == nil || msg == nil {
 		return nil, false
@@ -68,7 +65,7 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 		return resp, true
 	}
 
-	result := &mcp.ListToolsResult{
+	result := &mcp.ListToolsResult{ //nolint:exhaustruct_v5 // ResultType is promoted from an unexported SDK struct, so no literal can set it.
 		Meta:       nil,
 		Cacheable:  mcp.Cacheable{TTLMs: 0, CacheScope: ""},
 		NextCursor: "",
@@ -81,56 +78,33 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 	return resp, true
 }
 
-// SetTools replaces the tools array on a successful tools/list response,
-// marking the underlying remote message dirty so the proxy re-emits the
-// mutated payload to the user. Use this for filter and inject patterns:
-// dropping tools that the caller is not authorized to see, injecting
-// additional schema fields, or replacing the array wholesale.
+// SetTools replaces the tools array on a successful tools/list response and
+// marks the underlying remote message dirty so the proxy re-emits the mutated
+// payload. Use it for filter and inject patterns: dropping tools the caller is
+// not authorized to see, injecting schema fields, or replacing the array
+// wholesale. A nil tools argument is normalized to an empty slice, since MCP
+// tools/list responses carry a JSON array and never null.
 //
-// A nil tools argument is normalized to an empty slice so the wire shape
-// stays spec-compliant — MCP tools/list responses carry a JSON array,
-// never null. Use an explicit empty slice or nil interchangeably when a
-// filter removes every entry.
+// Only the tools member is rewritten. The replacement array is spliced into
+// the original wire payload, so _meta, nextCursor, and members not modeled by
+// [mcp.ListToolsResult] (under MCP 2026-07-28, the required resultType, ttlMs,
+// and cacheScope) keep their original values instead of being dropped by a
+// typed re-marshal. Later interceptors in the same chain see the replacement
+// through the shared *Result pointer.
 //
-// The replacement is observed by every subsequent interceptor in the same
-// chain through the shared *Result pointer — no re-read of wire bytes is
-// required. The outer jsonrpc.Message is re-encoded once after the chain
-// completes (see [RemoteMessage.materializedBytes]); this method does the
-// inner payload swap up front so the dirty signal alone is sufficient to
-// trigger that re-encode. Only the result's tools member is rewritten:
-// the replacement array is spliced into the original wire payload, so
-// _meta, nextCursor, and members not modeled by [mcp.ListToolsResult]
-// (under MCP 2026-07-28, the required resultType, ttlMs, and cacheScope)
-// retain their original values instead of being dropped by a typed
-// re-marshal. Marshal and splice both happen before any typed-view or
-// underlying-message state is touched so a failure leaves everything at
-// its pre-call values — the typed view and the wire remain in sync
-// regardless of the failure mode.
-//
-// Returns a [*MutationError] when the response carries a JSON-RPC Error
-// rather than a Result (mutually exclusive per the typed-view
-// contract), when marshaling the replacement tools array or splicing it
-// into the original result fails, or when the underlying
-// jsonrpc.Message is not a *jsonrpc.Response. The proxy detects
-// [*MutationError] at the interceptor return path and surfaces it as an
-// HTTP 5xx via [oops.E] with [oops.CodeUnexpected] rather than as a
-// user-facing JSON-RPC rejection.
+// Returns a [*MutationError] when the response carries a JSON-RPC Error rather
+// than a Result, when it carries no remote message, when the underlying
+// jsonrpc.Message is not a *jsonrpc.Response, or when marshaling or splicing
+// the replacement fails. Nothing is mutated on those paths, so the typed view
+// and the wire stay in sync. The proxy surfaces a [*MutationError] as an HTTP
+// 5xx via [oops.E] with [oops.CodeUnexpected] rather than as a user-facing
+// JSON-RPC rejection.
 func (r *ToolsListResponse) SetTools(tools []*mcp.Tool) error {
-	return r.setTools(tools, false)
-}
-
-// SetPrivateTools replaces the tools array and marks the rewritten result as
-// private. Use it for per-principal filters whose output varies with the
-// caller's authorization: MCP defaults an absent cacheScope to public, so
-// merely preserving an upstream result without a hint could let a shared
-// intermediary serve one caller's filtered inventory to another.
-func (r *ToolsListResponse) SetPrivateTools(tools []*mcp.Tool) error {
-	return r.setTools(tools, true)
-}
-
-func (r *ToolsListResponse) setTools(tools []*mcp.Tool, private bool) error {
 	if r.Result == nil {
 		return &MutationError{Op: "set tools", Cause: errors.New("response carries an error, not a result")}
+	}
+	if r.RemoteMessage == nil {
+		return &MutationError{Op: "set tools", Cause: errors.New("response carries no remote message")}
 	}
 	rpcResp, ok := r.RemoteMessage.Message.(*jsonrpc.Response)
 	if !ok {
@@ -141,10 +115,8 @@ func (r *ToolsListResponse) setTools(tools []*mcp.Tool, private bool) error {
 		tools = []*mcp.Tool{}
 	}
 
-	// Marshal the replacement array and splice it into the original wire
-	// payload so a failure can't leave the typed view's Tools desynced from
-	// the underlying wire bytes. Only commit (assign to Result.Tools,
-	// rpcResp.Result, dirty) once both steps have succeeded.
+	// Marshal and splice before touching any state, so a failure can't leave
+	// the typed view's Tools desynced from the underlying wire bytes.
 	payload, err := marshalJSONNoHTMLEscape(tools)
 	if err != nil {
 		return &MutationError{Op: "set tools", Cause: fmt.Errorf("marshal replacement tools array: %w", err)}
@@ -152,12 +124,6 @@ func (r *ToolsListResponse) setTools(tools []*mcp.Tool, private bool) error {
 	result, err := spliceTopLevelKey(rpcResp.Result, "tools", payload)
 	if err != nil {
 		return &MutationError{Op: "set tools", Cause: fmt.Errorf("splice replacement tools array: %w", err)}
-	}
-	if private {
-		result, err = spliceTopLevelKey(result, "cacheScope", json.RawMessage(`"private"`))
-		if err != nil {
-			return &MutationError{Op: "set tools", Cause: fmt.Errorf("mark filtered tools private: %w", err)}
-		}
 	}
 
 	r.Result.Tools = tools

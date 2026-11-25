@@ -10,8 +10,8 @@ import (
 // Published MCP protocol revisions, oldest first. Sourced from the
 // specification's revision list (https://modelcontextprotocol.io/specification/versioning).
 //
-// These are NOT a statement of what Gram implements or accepts; the Supported*
-// functions below carry the revisions each Gram surface actually negotiates
+// These are NOT a statement of what Speakeasy implements or accepts; the Supported*
+// functions below carry the revisions each Speakeasy surface actually negotiates
 // and serves. They exist so telemetry can distinguish "a revision we know
 // about" from "something else entirely".
 const (
@@ -23,47 +23,50 @@ const (
 )
 
 // DefaultInEffect is the revision put in effect when no usable version can be
-// taken from the request: a request that names no version at all, and a
-// per-request declaration outside the surface's supported set. The 2026-07-28
-// specification sanctions exactly this value for the first case — a server
-// supporting pre-2025-06-18 clients MAY treat a request that omits the
-// version header as 2025-03-26 — and the second case deliberately reuses it:
-// defaulting downward over-serves rather than wrongly rejecting, which is the
-// safe direction for both cohorts.
+// taken from the request: a request that names no version at all, or the
+// provisional resolution of a declaration outside the surface's supported
+// set before the serving layer rejects it. The 2026-07-28 specification
+// sanctions exactly this value for the first case — a server supporting
+// pre-2025-06-18 clients MAY treat a request that omits the version header as
+// 2025-03-26. The second case needs a stable revision only to encode the
+// UnsupportedProtocolVersionError that prevents the request from dispatching.
 const DefaultInEffect = Version20250326
 
-// The protocol revisions each Gram surface that terminates an MCP session
-// supports, oldest first. A revision in a surface's set is echoed at
-// `initialize` and governs per-request behavior when declared; anything
-// outside the set is answered with the newest member, per the spec's rule that
-// a server must respond with a version it supports and should pick its latest.
+// The protocol revisions each Speakeasy surface that terminates an MCP session
+// supports, oldest first. A revision in a surface's set governs per-request
+// behavior when declared, and is echoed at `initialize` when that revision
+// defines the handshake; anything outside the set is rejected with
+// UnsupportedProtocolVersionError, or at `initialize` answered with the newest
+// handshake revision, per the spec's rule that a server must respond with a
+// version it supports and should pick its latest.
 //
-// The sets are split per surface deliberately, despite currently holding the
+// The hosted, platform, and meta surfaces are dual-era: they serve the
+// handshake-based revisions through Version20251125 and the per-request
+// metadata of Version20260728 side by side, selected by what each request
+// declares. Their sets are split deliberately, despite currently holding the
 // same values. The surfaces face different client populations, so raising one
 // is not the same decision as raising the other, and the ceilings are expected
-// to move on different schedules. The current ceiling is Version20251125;
-// advertising Version20260728 is its own project with its own preconditions.
-// The Version20241105 floor is evidence-based — clients on that revision still
-// make tool calls — and claims support on the Streamable HTTP transport only,
-// not the HTTP+SSE transport that revision also defined.
+// to move on different schedules.
+//
+// The hosted, platform, and meta Version20241105 floor is evidence-based —
+// clients on that revision still make tool calls — and claims support on the
+// Streamable HTTP transport only, not the HTTP+SSE transport that revision
+// also defined. The consent surface is a pinned first-party Streamable HTTP
+// client and starts at Version20250326, advancing independently from those
+// external surfaces. It stops at Version20251125 because its client opens
+// with `initialize` and its server implements no Version20260728 method.
 //
 // The remote MCP proxy has no entry here by design: it never answers a
 // version, it relays whatever the client and the upstream negotiate between
-// themselves. Gram's outbound remote-URL verification probe is also absent —
-// that is Gram acting as a client, so the version it sends is a requested one
-// rather than a served one, and it lives with the probe.
+// themselves. Speakeasy's outbound remote-URL verification probe is also absent —
+// that is Speakeasy acting as a client, so the versions it requests are chosen by
+// the MCP SDK client it connects with rather than served by Speakeasy.
 var (
-	supportedHostedToolset   = []string{Version20241105, Version20250326, Version20250618, Version20251125}
-	supportedPlatformToolset = []string{Version20241105, Version20250326, Version20250618, Version20251125}
+	supportedHostedToolset   = []string{Version20241105, Version20250326, Version20250618, Version20251125, Version20260728}
+	supportedPlatformToolset = []string{Version20241105, Version20250326, Version20250618, Version20251125, Version20260728}
+	supportedMetaServer      = []string{Version20241105, Version20250326, Version20250618, Version20251125, Version20260728}
+	supportedConsentToolset  = []string{Version20250326, Version20250618, Version20251125}
 )
-
-// supportedMetaServer is the set negotiated on meta-MCP-backed /mcp/{slug}
-// endpoints. It matches the hosted surface's range — same installed base of
-// ordinary MCP clients, same Version20251125 ceiling — and gains
-// Version20260728 together with the other surfaces once the remaining
-// 2026-07-28 integration work completes, not before: advertising it early
-// invites clients into the incomplete parts.
-var supportedMetaServer = []string{Version20241105, Version20250326, Version20250618, Version20251125}
 
 // SupportedMetaServer returns the revisions negotiated on meta-MCP-backed
 // /mcp/{slug} endpoints, oldest first.
@@ -71,8 +74,8 @@ func SupportedMetaServer() []string {
 	return slices.Clone(supportedMetaServer)
 }
 
-// SupportedHostedToolset returns the revisions supported on /mcp/{slug} and on
-// the toolset-backed /x/mcp/{slug}, which share a handler, oldest first. This
+// SupportedHostedToolset returns the revisions supported on toolset-backed
+// /mcp/{slug}, oldest first. This
 // surface faces arbitrary third-party MCP clients, so changing the set is a
 // compatibility event with external blast radius.
 func SupportedHostedToolset() []string {
@@ -88,26 +91,49 @@ func SupportedPlatformToolset() []string {
 	return slices.Clone(supportedPlatformToolset)
 }
 
+// SupportedConsentToolset returns the revisions supported by the consent
+// island's local toolset server, oldest first. This surface serves a pinned
+// first-party Streamable HTTP client, so it excludes the hosted surface's
+// evidence-based Version20241105 compatibility exception and advances on its
+// own schedule.
+func SupportedConsentToolset() []string {
+	return slices.Clone(supportedConsentToolset)
+}
+
 // Negotiate applies the MCP version-negotiation rule to an `initialize`
-// request: a supported requested revision is echoed, an absent one resolves to
-// [DefaultInEffect], and anything else — unknown, unrecognized, or known
-// but unsupported — is answered with the newest supported revision. The
-// absent case deliberately does not fall through to the ceiling: a client
-// that omitted the field entirely is the cohort likeliest to break on a new
-// revision, and the spec's omitted-version rule points at 2025-03-26.
+// request. Only supported revisions that define `initialize` (those before
+// 2026-07-28, which removes it) are candidates: a candidate requested
+// revision is echoed, an absent one resolves to [DefaultInEffect] when that is
+// a candidate, and anything else — unknown, unrecognized, or known but not a
+// candidate — is answered with the newest candidate. The absent case
+// deliberately does not fall through to the ceiling: a client that omitted
+// the field entirely is the cohort likeliest to break on a new revision, and
+// the spec's omitted-version rule points at 2025-03-26.
+//
+// It reports false when supported holds no candidate, in which case
+// `initialize` is not available on the surface and there is no revision to
+// answer with.
 //
 // requested may be raw client input; it is bounded by [Sanitize] first.
-// supported must be non-empty and ordered oldest first, as the Supported*
-// functions return.
-func Negotiate(requested string, supported []string) string {
+// supported must be ordered oldest first, as the Supported* functions return.
+func Negotiate(requested string, supported []string) (string, bool) {
+	candidates := make([]string, 0, len(supported))
+	for _, version := range supported {
+		if DefinesMethod(MethodInitialize, version) {
+			candidates = append(candidates, version)
+		}
+	}
+	if len(candidates) == 0 {
+		return "", false
+	}
 	requested = Sanitize(requested)
 	switch {
-	case requested == "":
-		return DefaultInEffect
-	case slices.Contains(supported, requested):
-		return requested
+	case requested == "" && slices.Contains(candidates, DefaultInEffect):
+		return DefaultInEffect, true
+	case slices.Contains(candidates, requested):
+		return requested, true
 	default:
-		return supported[len(supported)-1]
+		return candidates[len(candidates)-1], true
 	}
 }
 
@@ -126,9 +152,11 @@ type Resolution struct {
 	// clamp it themselves so absent and unknown declarations stay countable.
 	Declared string
 
-	// InEffect is the revision governing the request: Declared when the
-	// surface supports it, otherwise [DefaultInEffect]. Never empty.
-	// Version-conditional behavior branches on this value and nothing else.
+	// InEffect is the revision governing an accepted request: Declared when the
+	// surface supports it, otherwise [DefaultInEffect]. In the unsupported case
+	// it provisionally selects legacy-safe error mappings while the serving
+	// layer returns -32022; the request never reaches version-conditional
+	// behavior or dispatch. Never empty.
 	//
 	// For an `initialize` request the entry-time value is provisional — a
 	// conforming handshake declares no version, so it starts at the default —
@@ -141,11 +169,10 @@ type Resolution struct {
 
 // Resolve computes the [Resolution] for a request that declared declared (raw
 // client input; bounded by [Sanitize] here) against a surface's supported
-// set. A declared revision outside the set resolves to [DefaultInEffect],
-// deliberately over-serving downward instead of rejecting; replacing that arm
-// with the spec's UnsupportedProtocolVersionError (-32022) is separate,
-// planned work, so callers must not treat the fallback as a permanent
-// contract.
+// set. A declared revision outside the set resolves provisionally to
+// [DefaultInEffect]; terminating request surfaces reject that declaration with
+// UnsupportedProtocolVersionError (-32022) before dispatch, initialize uses
+// [Negotiate], and remote proxy surfaces do not resolve it at all.
 func Resolve(declared string, supported []string) Resolution {
 	declared = Sanitize(declared)
 	inEffect := DefaultInEffect
@@ -163,7 +190,8 @@ func Resolve(declared string, supported []string) Resolution {
 // Either way it is the version in effect for the request carrying it.
 //
 // It is absent from the `initialize` request itself, since nothing is
-// negotiated yet at that point.
+// negotiated yet at that point. It is a request header only: no revision
+// defines it on a response, so Speakeasy's MCP servers never send it.
 const HTTPHeader = "MCP-Protocol-Version"
 
 // Other and None are the two synthetic buckets [Clamp] emits, so that every
@@ -209,9 +237,42 @@ func All() []string {
 	return slices.Clone(all)
 }
 
+// Latest returns the newest protocol revision this package recognizes. Its
+// rules govern a response to a request that names no usable revision of its
+// own, such as one whose declarations are malformed or contradict each
+// other. It is a statement about the specification, not about what any
+// surface supports.
+func Latest() string {
+	return all[len(all)-1]
+}
+
 // Known reports whether v is a protocol revision this package recognizes.
 func Known(v string) bool {
 	return slices.Contains(all, v)
+}
+
+// AtLeast reports whether v is a recognized revision no older than floor.
+//
+// The comparison is positional in [all] rather than lexical on the
+// identifiers. Both are correct for the revisions recognized today, which are
+// all ISO dates and are held in that order by TestAllIsChronologicallyOrdered
+// and TestAllAreDatedRevisions. Position is used anyway because it depends on
+// the ordering [all] already declares contractual instead of on the shape of
+// the identifiers, so it keeps its meaning if the specification's undated
+// `draft` revision is ever recognized here — where a lexical test would rank
+// it above every dated revision.
+//
+// An unrecognized value is never at least anything, so a garbage revision
+// cannot reach behavior gated on a real one.
+//
+// Callers testing what governs a request pass the revision in effect
+// ([Resolution.InEffect]), never the declared one: what a client asked for
+// does not decide what it is served.
+func AtLeast(v, floor string) bool {
+	vi := slices.Index(all, v)
+	fi := slices.Index(all, floor)
+
+	return vi >= 0 && fi >= 0 && vi >= fi
 }
 
 // Clamp bounds a client-supplied version for use as a metric dimension: a

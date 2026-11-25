@@ -1,5 +1,12 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { toRoleSlug } from "./types";
+import {
+  isProjectFilteredResourceType,
+  isProjectSelectableResourceType,
+  isUnrestrictedResourceType,
+  toRoleSlug,
+  unrestrictedResourceLabel,
+} from "./types";
 
 describe("toRoleSlug", () => {
   it("adds org- prefix to plain name", () => {
@@ -35,26 +42,40 @@ describe("toRoleSlug", () => {
   });
 });
 
-describe("system role slug resolution", () => {
-  // Mirrors the GrantDrawer logic: system roles use toLowerCase(),
-  // custom roles use toRoleSlug().
-  function resolveSlug(name: string, isSystem: boolean): string {
-    return isSystem ? name.toLowerCase() : toRoleSlug(name);
-  }
-
-  it("system Admin → admin (no org- prefix)", () => {
-    expect(resolveSlug("Admin", true)).toBe("admin");
+describe("unrestricted resource types", () => {
+  it("treats agents as unrestricted", () => {
+    expect(isUnrestrictedResourceType("agent")).toBe(true);
+    expect(unrestrictedResourceLabel("agent")).toBe("All agents");
   });
+});
 
-  it("system Member → member (no org- prefix)", () => {
-    expect(resolveSlug("Member", true)).toBe("member");
-  });
+describe("isProjectSelectableResourceType", () => {
+  it.each(["project", "skill"] as const)(
+    "allows selecting projects for %s scopes",
+    (resourceType) => {
+      expect(isProjectSelectableResourceType(resourceType)).toBe(true);
+    },
+  );
 
-  it("custom Editor → org-editor", () => {
-    expect(resolveSlug("Editor", false)).toBe("org-editor");
-  });
+  it.each([
+    "org",
+    "mcp",
+    "environment",
+    "assistant",
+    "risk_policy",
+    "chat",
+  ] as const)(
+    "does not treat %s scopes as project resources",
+    (resourceType) => {
+      expect(isProjectSelectableResourceType(resourceType)).toBe(false);
+    },
+  );
+});
 
-  it("custom role with spaces → org-prefixed slug", () => {
-    expect(resolveSlug("API Developer", false)).toBe("org-api-developer");
+describe("isProjectFilteredResourceType", () => {
+  it("narrows assistant grants to projects through projectId", () => {
+    expect(isProjectFilteredResourceType("assistant")).toBe(true);
+    expect(isProjectFilteredResourceType("skill")).toBe(false);
+    expect(isProjectFilteredResourceType("mcp")).toBe(false);
   });
 });

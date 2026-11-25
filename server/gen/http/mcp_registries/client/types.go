@@ -39,16 +39,12 @@ type GetServerDetailsResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -1022,30 +1018,32 @@ type ExternalMCPServerEntryResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Opaque metadata from the registry
 	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
-	// Number of tools the server exposes
+	// Number of declared tools, when catalog evidence is available
 	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
-	// Whether every tool on the server is read-only
+	// Whether every declared tool is read-only, when catalog evidence is available
 	IsReadOnly *bool `form:"is_read_only,omitempty" json:"is_read_only,omitempty" xml:"is_read_only,omitempty"`
 	// Whether the server's OAuth authorization server advertises a dynamic client
-	// registration endpoint (RFC 7591). When false, connecting requires manual
-	// setup (static OAuth client credentials or API keys).
+	// registration endpoint (RFC 7591). False alone does not establish that manual
+	// setup is required.
 	SupportsDcr *bool `form:"supports_dcr,omitempty" json:"supports_dcr,omitempty" xml:"supports_dcr,omitempty"`
+	// Whether issuer metadata advertises compatible Client ID Metadata Document
+	// support.
+	SupportsCimd *bool `form:"supports_cimd,omitempty" json:"supports_cimd,omitempty" xml:"supports_cimd,omitempty"`
+	// Advertised authentication setup; unknown means evidence is insufficient, not
+	// that manual setup is required.
+	AuthSetup *string `form:"auth_setup,omitempty" json:"auth_setup,omitempty" xml:"auth_setup,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// The source repository the registry links for this server, when it declares
@@ -1166,7 +1164,7 @@ type MCPSetupGuideResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// One-line summary of what the guide covers
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
-	// How the server is meant to be added in Gram, when the guide states one
+	// How the server is meant to be added in Speakeasy, when the guide states one
 	// (e.g., 'catalog', 'custom-remote')
 	AddServerFlow *string `form:"add_server_flow,omitempty" json:"add_server_flow,omitempty" xml:"add_server_flow,omitempty"`
 	// Registry identifiers the guide is also published under
@@ -1183,7 +1181,7 @@ type MCPSetupGuideResponseBody struct {
 	// Markdown instructions for the setup work that happens in the upstream
 	// provider
 	ExternalMarkdown *string `form:"external_markdown,omitempty" json:"external_markdown,omitempty" xml:"external_markdown,omitempty"`
-	// Markdown instructions for the setup work that happens in Gram
+	// Markdown instructions for the setup work that happens in Speakeasy
 	SpeakeasyMarkdown *string `form:"speakeasy_markdown,omitempty" json:"speakeasy_markdown,omitempty" xml:"speakeasy_markdown,omitempty"`
 }
 
@@ -1689,16 +1687,15 @@ func NewListCatalogGatewayError(body *ListCatalogGatewayErrorResponseBody) *goa.
 // "getServerDetails" endpoint result from a HTTP "OK" response.
 func NewGetServerDetailsExternalMCPServerOK(body *GetServerDetailsResponseBody) *types.ExternalMCPServer {
 	v := &types.ExternalMCPServer{
-		RegistrySpecifier:                   *body.RegistrySpecifier,
-		Version:                             *body.Version,
-		Description:                         *body.Description,
-		ToolsetID:                           body.ToolsetID,
-		McpServerID:                         body.McpServerID,
-		RegistryID:                          body.RegistryID,
-		OrganizationMcpCollectionRegistryID: body.OrganizationMcpCollectionRegistryID,
-		Title:                               body.Title,
-		IconURL:                             body.IconURL,
-		Meta:                                body.Meta,
+		RegistrySpecifier: *body.RegistrySpecifier,
+		Version:           *body.Version,
+		Description:       *body.Description,
+		ToolsetID:         body.ToolsetID,
+		McpServerID:       body.McpServerID,
+		RegistryID:        body.RegistryID,
+		Title:             body.Title,
+		IconURL:           body.IconURL,
+		Meta:              body.Meta,
 	}
 	if body.Tools != nil {
 		v.Tools = make([]*types.ExternalMCPTool, len(body.Tools))
@@ -2092,9 +2089,6 @@ func ValidateGetServerDetailsResponseBody(body *GetServerDetailsResponseBody) (e
 	}
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
-	}
-	if body.OrganizationMcpCollectionRegistryID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_mcp_collection_registry_id", *body.OrganizationMcpCollectionRegistryID, goa.FormatUUID))
 	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
@@ -3355,12 +3349,6 @@ func ValidateExternalMCPServerEntryResponseBody(body *ExternalMCPServerEntryResp
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
-	if body.ToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
-	}
-	if body.IsReadOnly == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("is_read_only", "body"))
-	}
 	if body.SupportsDcr == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("supports_dcr", "body"))
 	}
@@ -3373,11 +3361,13 @@ func ValidateExternalMCPServerEntryResponseBody(body *ExternalMCPServerEntryResp
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
 	}
-	if body.OrganizationMcpCollectionRegistryID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_mcp_collection_registry_id", *body.OrganizationMcpCollectionRegistryID, goa.FormatUUID))
-	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
+	}
+	if body.AuthSetup != nil {
+		if !(*body.AuthSetup == "none" || *body.AuthSetup == "dcr" || *body.AuthSetup == "cimd" || *body.AuthSetup == "manual" || *body.AuthSetup == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.auth_setup", *body.AuthSetup, []any{"none", "dcr", "cimd", "manual", "unknown"}))
+		}
 	}
 	for _, e := range body.Remotes {
 		if e != nil {

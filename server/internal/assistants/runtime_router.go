@@ -11,7 +11,7 @@ import (
 // runtimeRouter fans RuntimeBackend calls out to the backend named by each
 // runtime row's Backend column, while presenting the configured target backend
 // for everything that concerns a *new* runtime (Backend(), ServerURL(),
-// ImageRef()). This lets the server run Fly and GKE side by side: rows keep
+// ImageRef()). This lets configured backends run side by side: rows keep
 // reaching whichever backend created them, and freshly reserved rows are
 // stamped with — and admitted onto — the target.
 type runtimeRouter struct {
@@ -20,6 +20,9 @@ type runtimeRouter struct {
 }
 
 func newRuntimeRouter(target string, backends map[string]RuntimeBackend) (*runtimeRouter, error) {
+	if target == RuntimeProviderDisabled {
+		return &runtimeRouter{backends: backends, target: target}, nil
+	}
 	if len(backends) == 0 {
 		return nil, fmt.Errorf("assistant runtime router requires at least one backend")
 	}
@@ -30,8 +33,8 @@ func newRuntimeRouter(target string, backends map[string]RuntimeBackend) (*runti
 }
 
 // route resolves the backend that owns a runtime row. A row referencing a
-// backend the process no longer runs (e.g. flyio rows after a deployment that
-// dropped Fly config) is a configuration error surfaced to the caller, not a
+// backend the process no longer runs is a configuration error surfaced to
+// the caller, not a
 // silent no-op — Stop/Reap of such a row would otherwise leak its resources.
 func (r *runtimeRouter) route(backend string) (RuntimeBackend, error) {
 	b, ok := r.backends[backend]
@@ -49,9 +52,23 @@ func (r *runtimeRouter) SupportsBackend(backend string) bool {
 }
 
 // ServerURL and ImageRef describe where a new runtime launches, so they resolve
-// against the target backend. Both are stable for the process lifetime.
-func (r *runtimeRouter) ServerURL() *url.URL { return r.backends[r.target].ServerURL() }
-func (r *runtimeRouter) ImageRef() string    { return r.backends[r.target].ImageRef() }
+// against the target backend. Both are stable for the process lifetime. With
+// the disabled target nothing launches, so they return nil and "".
+func (r *runtimeRouter) ServerURL() *url.URL {
+	b, ok := r.backends[r.target]
+	if !ok {
+		return nil
+	}
+	return b.ServerURL()
+}
+
+func (r *runtimeRouter) ImageRef() string {
+	b, ok := r.backends[r.target]
+	if !ok {
+		return ""
+	}
+	return b.ImageRef()
+}
 
 func (r *runtimeRouter) Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
 	b, err := r.route(runtime.Backend)

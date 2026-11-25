@@ -1,41 +1,56 @@
+// Command risk-pi-report scores the prompt-injection detector this checkout
+// ships on the labelled fixtures. Each call starts a new run and writes one
+// record per case under ~/.cache/gram-pi-eval/runs/<run>. With -resume it
+// continues the most recent run of the same commit instead: it runs only
+// missing, new or edited cases and cases the run could not fund.
+//
+// `risk-pi-report view` shows every cached run and applies the merge gate to
+// this checkout's run.
+//
+// Run it from the checkout it was built from, such as with
+// `go run ./server/cmd/risk-pi-report` at the repository root.
 package main
 
 import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
-	"sync"
 	"time"
 
-	or "github.com/OpenRouterTeam/go-sdk/models/components"
-	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/risk/categories"
-	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
-	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
-	"github.com/speakeasy-api/gram/server/internal/scanners"
-	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 const (
-	defaultCorpusDir = "server/internal/scanners/promptinjection/testdata/prompt_injection"
-	defaultOutFile   = "server/risk_accuracy_metrics.json"
+	// defaultCorpusDir is this checkout's fixtures, relative to the repository
+	// root.
+	defaultCorpusDir = fixturesPath + "/prompt_injection"
+
+	// judgeConcurrency bounds concurrent cases without turning the benchmark
+	// into a provider load test.
+	judgeConcurrency = 4
+
+	// benchOrgID/benchProjectID label the judge calls. The judge needs an
+	// org/project for the request shape; these are inert identifiers (the
+	// dev-key provisioner ignores the org, projectID must parse as a UUID).
+	benchOrgID     = constants.USSpeakeasyTeamOrganizationID
+	benchProjectID = "00000000-0000-0000-0000-000000000001"
+
+	// viewCommand names the command that shows the cached runs.
+	viewCommand = "view"
 )
 
 type toolCallCase struct {
@@ -44,15 +59,33 @@ type toolCallCase struct {
 }
 
 type labeledCase struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Text   string `json:"text"`
-	Source string `json:"source"`
+	// Window optionally supplies five-message evidence for contextual evaluation.
+	Window *judgemessage.Window `json:"window,omitempty"`
+
+	ID            string `json:"id"`
+	Label         string `json:"label"`
+	Text          string `json:"text"`
+	Source        string `json:"source"`
+	OriginalLabel string `json:"original_label,omitempty"`
+	RelabelReason string `json:"relabel_reason,omitempty"`
 	// Optional agent-runtime framing: plain rows omit these (judged as end-user
-	// content); typed rows carry the message type + tool the judge and scope use.
-	Type      string         `json:"type,omitempty"`       // message.Type; default user_message
-	Tool      string         `json:"tool,omitempty"`       // tool name for a single-tool tool_request/tool_response
-	ToolCalls []toolCallCase `json:"tool_calls,omitempty"` // multi-call tool_request
+	// content); typed rows carry the message type + tool the judge uses.
+	Type                   string         `json:"type,omitempty"`       // message.Type; default user_message
+	Tool                   string         `json:"tool,omitempty"`       // tool name for a single-tool tool_request/tool_response
+	ToolCalls              []toolCallCase `json:"tool_calls,omitempty"` // multi-call tool_request
+	PriorUserRequest       string         `json:"prior_user_request,omitempty"`
+	RecentUntrustedContent string         `json:"recent_untrusted_content,omitempty"`
+
+	// raw is the fixture line the case was read from. Hashing it identifies
+	// the case the same way across versions of this tool.
+	raw string
+}
+
+func (c labeledCase) trajectory() judgemessage.Trajectory {
+	return judgemessage.Trajectory{
+		PriorUserRequest:       c.PriorUserRequest,
+		RecentUntrustedContent: c.RecentUntrustedContent,
+	}
 }
 
 // caseType returns the message type for a case, defaulting to user_message.
@@ -76,315 +109,109 @@ func (c labeledCase) judgeMessage() judgemessage.Message {
 	return judgemessage.New(c.caseType(), c.Tool, c.Text)
 }
 
-// scopeView renders a case as the MessageView the CEL policy scope evaluates,
-// mirroring the production scanner (scanner.go) and batch analyzer construction.
-func (c labeledCase) scopeView() ra.MessageView {
-	typ := c.caseType()
-	view := ra.MessageView{Content: c.Text, Type: typ, Tools: []ra.ToolView{}}
-	switch {
-	case len(c.ToolCalls) > 0:
-		for _, tc := range c.ToolCalls {
-			view.Tools = append(view.Tools, ra.NewToolView(tc.Name, tc.Args))
-		}
-	case typ == message.ToolRequest && c.Tool != "":
-		view.Tools = []ra.ToolView{ra.NewToolView(c.Tool, c.Text)}
-	}
-	return view
-}
-
-type floors struct {
-	FPRateMax     float64  `json:"fp_rate_max"`
-	RecallFloor   *float64 `json:"recall_floor"`
-	LastUpdated   string   `json:"last_updated"`
-	LastUpdatedBy string   `json:"last_updated_by"`
-	Notes         string   `json:"notes"`
-}
-
-type counts struct {
-	TP int `json:"tp"`
-	FP int `json:"fp"`
-	TN int `json:"tn"`
-	FN int `json:"fn"`
-}
-
-type metricsBlock struct {
-	Precision float64 `json:"precision"`
-	Recall    float64 `json:"recall"`
-	F1        float64 `json:"f1"`
-	Accuracy  float64 `json:"accuracy"`
-	FPRate    float64 `json:"fp_rate"`
-}
-
-type sourceSummary struct {
-	Source  string       `json:"source"`
-	Counts  counts       `json:"counts"`
-	Metrics metricsBlock `json:"metrics"`
-}
-
-type ruleHist struct {
-	RuleID string `json:"rule_id"`
-	TP     int    `json:"tp_count"`
-	FP     int    `json:"fp_count"`
-}
-
-type exampleCase struct {
-	ID     string  `json:"id"`
-	Source string  `json:"source"`
-	RuleID string  `json:"rule_id"`
-	Score  float64 `json:"score"`
-	Text   string  `json:"text"`
-}
-
-type modeSummary struct {
-	Name                     string          `json:"name"`
-	Skipped                  bool            `json:"skipped,omitempty"`
-	SkipReason               string          `json:"skip_reason,omitempty"`
-	Total                    int             `json:"total"`
-	Counts                   counts          `json:"counts"`
-	Overall                  metricsBlock    `json:"overall"`
-	Sources                  []sourceSummary `json:"by_source,omitempty"`
-	Rules                    []ruleHist      `json:"by_rule,omitempty"`
-	NewFalsePositives        []exampleCase   `json:"new_false_positives,omitempty"`
-	RecoveredTruePositive    []exampleCase   `json:"recovered_true_positives,omitempty"`
-	MissedAttacks            []exampleCase   `json:"missed_attacks,omitempty"`
-	InScope                  int             `json:"in_scope,omitempty"`
-	LostTruePositives        []exampleCase   `json:"lost_true_positives,omitempty"`
-	SuppressedFalsePositives []exampleCase   `json:"suppressed_false_positives,omitempty"`
-}
-
-type accuracySummary struct {
-	Total   int             `json:"total"`
-	Counts  counts          `json:"counts"`
-	Overall metricsBlock    `json:"overall"`
-	Sources []sourceSummary `json:"by_source"`
-	Rules   []ruleHist      `json:"by_rule"`
-	Modes   []modeSummary   `json:"modes,omitempty"`
-}
-
-type envelope struct {
-	GitSHA    string          `json:"git_sha"`
-	Ref       string          `json:"ref"`
-	Timestamp string          `json:"timestamp"`
-	Summary   accuracySummary `json:"summary"`
-}
-
-type options struct {
-	corpusDir        string
-	outFile          string
-	checkFloors      bool
-	judgeModel       string
-	reasoningEffort  string
-	judgeConcurrency int
-	sources          string
-}
-
-const (
-	// defaultJudgeModel is the report's judge model when none is provided.
-	defaultJudgeModel = "google/gemini-3.1-flash-lite"
-	// judgeConcurrency bounds concurrent judge calls. The corpus is a few hundred
-	// rows; 8 keeps it brisk without tripping provider rate limits.
-	defaultJudgeConcurrency = 8
-	// judgeTimeout bounds a single judge completion call in the bench. Generous
-	// vs prod's 10s — accuracy matters more than latency here.
-	judgeTimeout = 30 * time.Second
-	// judgeAttempts bounds retries of a case whose response did not parse. Three
-	// is enough for a truncated body without masking a model that cannot hold to
-	// the schema, which still fails every attempt and is reported. Only
-	// errUnparseableVerdict is retried: transport and upstream errors (auth,
-	// missing model, 429) fail the same way on every attempt, and immediate
-	// re-calls would amplify an outage.
-	judgeAttempts = 3
-	// benchOrgID/benchProjectID label the judge calls. The judge needs an
-	// org/project for the request shape; these are inert identifiers (the
-	// dev-key provisioner ignores the org, projectID must parse as a UUID).
-	benchOrgID     = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
-	benchProjectID = "00000000-0000-0000-0000-000000000001"
-)
-
 func main() {
-	opts := parseFlags()
-	if err := run(context.Background(), opts); err != nil {
+	if err := dispatch(context.Background(), os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "risk-pi-report: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func parseFlags() options {
-	opts := options{
-		corpusDir:        "",
-		outFile:          "",
-		checkFloors:      false,
-		judgeModel:       "",
-		reasoningEffort:  "",
-		judgeConcurrency: 0,
-		sources:          "",
+// dispatch runs the view command, or measures this checkout's detector.
+func dispatch(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == viewCommand {
+		return runView(ctx, args[1:])
 	}
-	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
-	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
-	flag.BoolVar(&opts.checkFloors, "check-floors", true, "fail if judge metrics violate floors.json")
-	flag.StringVar(&opts.judgeModel, "judge-model", defaultJudgeModel, "OpenRouter model id for the judge (must be allowlisted)")
-	flag.StringVar(&opts.reasoningEffort, "reasoning-effort", "", "reasoning effort override; empty matches production, which disables reasoning. Routes that reject a disabled setting need an effort such as \"low\"")
-	flag.IntVar(&opts.judgeConcurrency, "judge-concurrency", defaultJudgeConcurrency, "max concurrent judge calls")
-	flag.StringVar(&opts.sources, "sources", "", "comma-separated source substrings to keep (empty = all); use to judge a cheap iteration slice")
-	flag.Parse()
-	return opts
+	return runMeasure(ctx, args)
 }
 
-// filterSources keeps only cases whose Source contains one of the comma-separated
-// substrings. Empty spec keeps everything. Used to run a cheap iteration slice
-// (benigns + adversarial + recall guards) without judging the full corpus.
-func filterSources(corpus []labeledCase, spec string) []labeledCase {
-	spec = strings.TrimSpace(spec)
-	if spec == "" {
-		return corpus
+// runMeasure scores this checkout's detector. Every commit's build of this
+// tool is run this way, so the call takes no required flag.
+func runMeasure(ctx context.Context, args []string) error {
+	flags := flag.NewFlagSet("risk-pi-report", flag.ExitOnError)
+	corpusDir := flags.String("corpus-dir", defaultCorpusDir, "directory of prompt-injection JSONL fixtures to score; defaults to this checkout's")
+	resume := flags.Bool("resume", false, "continue the latest run of this checkout's code instead of starting a new one")
+	_ = flags.Parse(args) // ExitOnError exits on a bad flag.
+	// A command this version does not know must not start a paid run.
+	if flags.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "risk-pi-report: unexpected argument %q\n", flags.Arg(0))
+		flags.Usage()
+		os.Exit(2)
 	}
-	var needles []string
-	for s := range strings.SplitSeq(spec, ",") {
-		if s = strings.TrimSpace(s); s != "" {
-			needles = append(needles, s)
-		}
-	}
-	out := corpus[:0:0]
-	for _, c := range corpus {
-		for _, n := range needles {
-			if strings.Contains(c.Source, n) {
-				out = append(out, c)
-				break
-			}
-		}
-	}
-	return out
-}
-
-func run(ctx context.Context, opts options) error {
-	corpus, err := loadCorpus(opts.corpusDir)
+	corpus, err := loadCorpus(*corpusDir)
 	if err != nil {
 		return err
 	}
-	corpus = filterSources(corpus, opts.sources)
-	if len(corpus) == 0 {
-		return fmt.Errorf("no cases after --sources filter %q", opts.sources)
-	}
-	fl, err := loadFloors(opts.corpusDir)
+	commit, err := checkoutCommit(ctx, "")
 	if err != nil {
 		return err
 	}
-
-	judgeMode, judgeFindings, err := scanJudgeMode(ctx, opts, corpus)
+	runs, err := runsDir()
 	if err != nil {
 		return err
 	}
-	modes := []modeSummary{judgeMode}
-
-	// Scope-aware modes: apply the candidate policy scope (scopes.json) as a
-	// pre-filter, so the report shows the FP reduction from scoping AND flags any
-	// malicious case the scope would stop scanning (coverage regression).
-	scopeCfg, hasScope, err := loadScopes(opts.corpusDir)
+	runDir, err := pickRunDir(runs, commit, *resume, time.Now())
 	if err != nil {
 		return err
 	}
-	if hasScope {
-		scope, err := compileScope(scopeCfg)
-		if err != nil {
-			return err
-		}
-		if scope.Active() {
-			modes = append(modes, scopedMode("judge_scoped", corpus, judgeFindings, scope))
-		}
-	}
-
-	summary := accuracySummary{
-		Total:   judgeMode.Total,
-		Counts:  judgeMode.Counts,
-		Overall: judgeMode.Overall,
-		Sources: judgeMode.Sources,
-		Rules:   judgeMode.Rules,
-		Modes:   modes,
-	}
-
-	printSummary(os.Stderr, modes)
-
-	if opts.checkFloors && judgeMode.Overall.FPRate > fl.FPRateMax {
-		return fmt.Errorf(
-			"judge FP-rate %.4f exceeds floor %.4f (floors.json last updated %s by %s)",
-			judgeMode.Overall.FPRate,
-			fl.FPRateMax,
-			fl.LastUpdated,
-			fl.LastUpdatedBy,
-		)
-	}
-
-	return writeMetrics(opts.outFile, summary)
+	return runRecords(ctx, options{runDir: runDir, commit: commit}, corpus)
 }
 
-// scopedMode summarizes findings after applying the policy scope and annotates
-// the coverage impact (in-scope count, lost TPs, suppressed FPs).
-func scopedMode(name string, corpus []labeledCase, findings [][]scanners.Finding, scope ra.CompiledScope) modeSummary {
-	scoped, inScope := applyScope(corpus, findings, scope)
-	m := summarizeFindings(name, corpus, scoped)
-	n := 0
-	for _, in := range inScope {
-		if in {
-			n++
-		}
-	}
-	m.InScope = n
-	m.LostTruePositives, m.SuppressedFalsePositives = scopeImpact(corpus, findings, inScope)
-	return m
-}
-
-// printSummary writes a compact per-mode table for the tuning loop.
-func printSummary(w *os.File, modes []modeSummary) {
-	p := func(format string, a ...any) { _, _ = fmt.Fprintf(w, format, a...) }
-	p("\n=== risk-pi-report summary ===\n")
-	for _, m := range modes {
-		if m.Skipped {
-			p("%-12s SKIPPED (%s)\n", m.Name, m.SkipReason)
-			continue
-		}
-		c := m.Counts
-		p("%-12s TP=%-4d FP=%-4d TN=%-4d FN=%-4d | P=%.3f R=%.3f F1=%.3f FPr=%.4f\n",
-			m.Name, c.TP, c.FP, c.TN, c.FN, m.Overall.Precision, m.Overall.Recall, m.Overall.F1, m.Overall.FPRate)
-		if m.InScope > 0 || len(m.LostTruePositives) > 0 || len(m.SuppressedFalsePositives) > 0 {
-			p("             scope: in_scope=%d suppressed_FPs=%d LOST_TPs=%d\n",
-				m.InScope, len(m.SuppressedFalsePositives), len(m.LostTruePositives))
-			for _, ex := range m.LostTruePositives {
-				p("               ! lost TP %s (%s)\n", ex.ID, ex.Source)
-			}
-		}
-	}
-	p("\n")
-}
-
-// requiredCorpusFiles must exist; optionalCorpusFiles are loaded when present
-// (the agent-runtime extended slices: FP-category benigns and the adversarial
-// coverage set). A missing optional file is skipped, not an error, so CI and
-// keyless dev runs still work on the base corpus.
-var requiredCorpusFiles = []string{
+// corpusOrder lists the fixture files that load first, in this order, so
+// text they share dedupes as it always has. Every other *.jsonl file in the
+// corpus directory loads after them, in name order, so a version of this tool
+// scores fixture files added after it.
+var corpusOrder = []string{
 	"deepset.jsonl",
 	"gram_benigns.jsonl",
 	"litellm_extended.jsonl",
 	"mutations.jsonl",
 	"operational_benigns.jsonl",
-}
-
-var optionalCorpusFiles = []string{
 	"agent_fp_benigns.jsonl",
 	"adversarial_fable.jsonl",
 	"adversarial_codex.jsonl",
+	"agent_fp_ais324.jsonl",
+	"adversarial_ais324.jsonl",
+	"trajectory_twins.jsonl",
+	"llmail_inject.jsonl",
+	"agentdojo.jsonl",
+	"agentdyn.jsonl",
+}
+
+// repeatedTextFiles hold cases that share text on purpose: paired trajectory
+// rows and AgentDojo's task occurrences carry different context. Their cases
+// are never deduped.
+var repeatedTextFiles = []string{"trajectory_twins.jsonl", "agentdojo.jsonl"}
+
+// corpusFiles lists dir's fixture files in load order.
+func corpusFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("list corpus files: %w", err)
+	}
+	var paths []string
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".jsonl") {
+			paths = append(paths, filepath.Join(dir, entry.Name()))
+		}
+	}
+	rank := func(path string) int {
+		if i := slices.Index(corpusOrder, filepath.Base(path)); i >= 0 {
+			return i
+		}
+		return len(corpusOrder)
+	}
+	slices.SortStableFunc(paths, func(a, b string) int { return rank(a) - rank(b) })
+	return paths, nil
 }
 
 func loadCorpus(dir string) ([]labeledCase, error) {
 	seen := map[string]string{}
 	var out []labeledCase
 
-	load := func(name string, optional bool) error {
-		path := filepath.Join(dir, name)
+	load := func(path string, dedupe bool) error {
+		name := filepath.Base(path)
 		f, err := os.Open(path) // #nosec G304 -- local developer/CI harness intentionally reads a configured corpus path.
 		if err != nil {
-			if optional && errors.Is(err, os.ErrNotExist) {
-				return nil
-			}
 			return fmt.Errorf("open %s: %w", path, err)
 		}
 		defer func() { _ = f.Close() }()
@@ -402,6 +229,7 @@ func loadCorpus(dir string) ([]labeledCase, error) {
 			if err := json.Unmarshal([]byte(raw), &c); err != nil {
 				return fmt.Errorf("%s line %d unmarshal: %w", name, line, err)
 			}
+			c.raw = raw
 			if c.ID == "" {
 				return fmt.Errorf("%s line %d missing id", name, line)
 			}
@@ -411,10 +239,12 @@ func loadCorpus(dir string) ([]labeledCase, error) {
 			if c.Type != "" && !message.IsTypeValid(c.Type) {
 				return fmt.Errorf("%s line %d invalid type %q", name, line, c.Type)
 			}
-			if _, dup := seen[c.Text]; dup {
-				continue
+			if dedupe {
+				if _, dup := seen[c.Text]; dup {
+					continue
+				}
+				seen[c.Text] = c.ID
 			}
-			seen[c.Text] = c.ID
 			out = append(out, c)
 		}
 		if err := scanner.Err(); err != nil {
@@ -423,282 +253,20 @@ func loadCorpus(dir string) ([]labeledCase, error) {
 		return nil
 	}
 
-	for _, name := range requiredCorpusFiles {
-		if err := load(name, false); err != nil {
-			return nil, err
-		}
+	paths, err := corpusFiles(dir)
+	if err != nil {
+		return nil, err
 	}
-	for _, name := range optionalCorpusFiles {
-		if err := load(name, true); err != nil {
+	for _, path := range paths {
+		dedupe := !slices.Contains(repeatedTextFiles, filepath.Base(path))
+		if err := load(path, dedupe); err != nil {
 			return nil, err
 		}
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("loaded corpus is empty")
+		return nil, fmt.Errorf("no cases in %s", dir)
 	}
 	return out, nil
-}
-
-type scopeConfig struct {
-	ScopeInclude string `json:"scope_include"`
-	ScopeExempt  string `json:"scope_exempt"`
-}
-
-// loadScopes returns the candidate policy scope: the scopes.json fixture in
-// the corpus dir when present (an experimental override), otherwise the
-// production recommended scope for the prompt_injection category — so the
-// harness validates exactly what ships in the registry.
-func loadScopes(dir string) (cfg scopeConfig, present bool, err error) {
-	raw, err := os.ReadFile(filepath.Join(dir, "scopes.json")) // #nosec G304 -- local harness corpus path.
-	if errors.Is(err, os.ErrNotExist) {
-		rec, ok := recommendedscopes.For(categories.CategoryPromptInjection)
-		if !ok {
-			return scopeConfig{ScopeInclude: "", ScopeExempt: ""}, false, nil
-		}
-		return scopeConfig{ScopeInclude: rec.ScopeInclude, ScopeExempt: rec.ScopeExempt}, true, nil
-	}
-	if err != nil {
-		return scopeConfig{ScopeInclude: "", ScopeExempt: ""}, false, fmt.Errorf("read scopes.json: %w", err)
-	}
-	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return scopeConfig{ScopeInclude: "", ScopeExempt: ""}, false, fmt.Errorf("unmarshal scopes.json: %w", err)
-	}
-	return cfg, true, nil
-}
-
-// compileScope compiles the policy scope against the production CEL env, so an
-// invalid CEL expression fails loudly here rather than silently mis-scoping.
-func compileScope(cfg scopeConfig) (ra.CompiledScope, error) {
-	eng, err := celenv.New()
-	if err != nil {
-		return ra.CompiledScope{}, fmt.Errorf("build cel engine: %w", err)
-	}
-	scope, err := ra.CompileScope(eng, cfg.ScopeInclude, cfg.ScopeExempt)
-	if err != nil {
-		return ra.CompiledScope{}, fmt.Errorf("compile scope: %w", err)
-	}
-	return scope, nil
-}
-
-// applyScope zeroes findings for out-of-scope cases (as the policy would skip
-// them) and returns the scoped findings plus a per-case in-scope mask.
-func applyScope(corpus []labeledCase, findings [][]scanners.Finding, scope ra.CompiledScope) (scoped [][]scanners.Finding, inScope []bool) {
-	scoped = make([][]scanners.Finding, len(findings))
-	inScope = make([]bool, len(corpus))
-	for i, c := range corpus {
-		view := c.scopeView()
-		in := scope.Includes(view) && !scope.Exempts(view)
-		inScope[i] = in
-		if in {
-			scoped[i] = findings[i]
-		}
-	}
-	return scoped, inScope
-}
-
-// scopeImpact splits exempted-but-flagged cases into suppressed benign FPs (the
-// win) and exempted malicious cases the detector would have caught (coverage loss).
-func scopeImpact(corpus []labeledCase, findings [][]scanners.Finding, inScope []bool) (lostTPs, suppressedFPs []exampleCase) {
-	for i, c := range corpus {
-		if inScope[i] || len(findings[i]) == 0 {
-			continue
-		}
-		f := highestConfidenceFinding(findings[i])
-		ex := exampleCase{ID: c.ID, Source: c.Source, RuleID: f.RuleID, Score: f.Confidence, Text: c.Text}
-		if c.Label == "malicious" {
-			lostTPs = append(lostTPs, ex)
-		} else {
-			suppressedFPs = append(suppressedFPs, ex)
-		}
-	}
-	sort.Slice(lostTPs, func(i, j int) bool { return lostTPs[i].ID < lostTPs[j].ID })
-	sort.Slice(suppressedFPs, func(i, j int) bool { return suppressedFPs[i].ID < suppressedFPs[j].ID })
-	return lostTPs, suppressedFPs
-}
-
-func loadFloors(dir string) (floors, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, "floors.json")) // #nosec G304 -- local developer/CI harness intentionally reads a configured corpus path.
-	if err != nil {
-		return floors{}, fmt.Errorf("read floors.json: %w", err)
-	}
-	var fl floors
-	if err := json.Unmarshal(raw, &fl); err != nil {
-		return floors{}, fmt.Errorf("unmarshal floors.json: %w", err)
-	}
-	if fl.LastUpdated == "" {
-		return floors{}, fmt.Errorf("floors.json missing last_updated")
-	}
-	return fl, nil
-}
-
-// scanJudgeMode evaluates the LLM judge over the corpus.
-// It calls GetObjectCompletion directly (the same request piopenrouter builds, minus
-// the engine's per-org rate limiter and fail-open), so the numbers reflect the
-// model's raw accuracy on every case rather than a throttled subset.
-func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (modeSummary, [][]scanners.Finding, error) {
-	apiKey := firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY")
-	if apiKey == "" || apiKey == "unset" {
-		return modeSummary{}, nil, fmt.Errorf("OPENROUTER_DEV_KEY not set")
-	}
-
-	fmt.Fprintf(os.Stderr, "judging %d cases with %s (concurrency=%d)\n", len(corpus), opts.judgeModel, opts.judgeConcurrency)
-	findings, err := scanJudge(ctx, opts, newOpenRouterClient(apiKey), corpus)
-	if err != nil {
-		return modeSummary{}, nil, err
-	}
-
-	mode := summarizeFindings("judge", corpus, findings)
-	empty := make([][]scanners.Finding, len(corpus))
-	mode.NewFalsePositives = changedExamples(corpus, empty, findings, "benign", 500)
-	mode.RecoveredTruePositive = changedExamples(corpus, empty, findings, "malicious", 500)
-	mode.MissedAttacks = missedExamples(corpus, findings, 500)
-	return mode, findings, nil
-}
-
-// scanJudge runs the judge for every corpus row and records positive verdicts.
-func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase) ([][]scanners.Finding, error) {
-	out := make([][]scanners.Finding, len(corpus))
-	ruleID, description := promptinjection.Describe()
-
-	var reasoning *openrouter.Reasoning
-	if opts.reasoningEffort != "" {
-		reasoning = &openrouter.Reasoning{Effort: opts.reasoningEffort, MaxTokens: nil, Exclude: nil, Enabled: nil}
-	}
-
-	sem := make(chan struct{}, opts.judgeConcurrency)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var done int
-	var errs []error
-
-	for i := range corpus {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(i int) {
-			defer wg.Done()
-			defer func() { <-sem }()
-
-			text := corpus[i].Text
-			msg := corpus[i].judgeMessage()
-
-			// A truncated or empty response fails one case, and a single failure
-			// voids the whole corpus below. Retrying is the honest fix: skipping
-			// the case would leave out[i] empty, which scores as "benign" and
-			// quietly understates recall rather than reporting a gap.
-			var isAttack bool
-			var confidence float64
-			var err error
-			for attempt := 1; attempt <= judgeAttempts; attempt++ {
-				isAttack, confidence, err = judgeOne(ctx, client, opts.judgeModel, msg, reasoning)
-				if err == nil || !errors.Is(err, errUnparseableVerdict) || ctx.Err() != nil {
-					break
-				}
-			}
-
-			mu.Lock()
-			defer mu.Unlock()
-			done++
-			if done%20 == 0 || done == len(corpus) {
-				fmt.Fprintf(os.Stderr, "\r  judge %d/%d", done, len(corpus))
-			}
-			if err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", corpus[i].ID, err))
-				return
-			}
-			if !isAttack {
-				return
-			}
-			out[i] = append(out[i], scanners.Finding{
-				RuleID:           ruleID,
-				Description:      description,
-				Match:            text,
-				StartPos:         0,
-				EndPos:           len(text),
-				Source:           promptinjection.Source,
-				Confidence:       confidence,
-				Tags:             []string{"llm-judge", "layer-1"},
-				DeadLetterReason: "",
-
-				McpLookupToolCallID: "",
-				SpanGroupKey:        "",
-				Field:               "",
-				Path:                "",
-			})
-		}(i)
-	}
-	wg.Wait()
-	fmt.Fprintln(os.Stderr)
-	if len(errs) > 0 {
-		return nil, fmt.Errorf("judge corpus: %w", errors.Join(errs...))
-	}
-	return out, nil
-}
-
-// judgeOne issues one GetObjectCompletion shaped exactly like piopenrouter's call:
-// the structured message payload, piopenrouter's system prompt and verdict
-// schema, temperature 0. No copy of the prompt/schema to keep in sync - it
-// drives the production constants directly.
-
-// errUnparseableVerdict marks a completion that arrived but did not carry a
-// usable verdict, the one failure class where an immediate retry can help.
-var errUnparseableVerdict = errors.New("unparseable judge verdict")
-
-func judgeOne(ctx context.Context, client openrouter.CompletionClient, model string, msg judgemessage.Message, reasoning *openrouter.Reasoning) (isAttack bool, confidence float64, err error) {
-	payload, err := json.Marshal(struct {
-		Message judgemessage.Payload `json:"message"`
-	}{Message: judgemessage.RenderPayload(msg)})
-	if err != nil {
-		return false, 0, fmt.Errorf("marshal judge payload: %w", err)
-	}
-
-	strict := true
-	schema := or.ChatJSONSchemaConfig{
-		Name:        "prompt_attack_verdict",
-		Schema:      piopenrouter.VerdictSchema(),
-		Description: nil,
-		Strict:      optionalnullable.From(&strict),
-	}
-	temp := 0.0
-
-	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
-	defer cancel()
-
-	resp, err := client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
-		OrgID:                  benchOrgID,
-		ProjectID:              benchProjectID,
-		Model:                  model,
-		SystemPrompt:           piopenrouter.SystemPrompt,
-		Prompt:                 string(payload),
-		Temperature:            &temp,
-		UsageSource:            billing.ModelUsageSourceGram,
-		KeyType:                openrouter.KeyTypeInternal,
-		KeySlot:                "",
-		UserID:                 "",
-		ExternalUserID:         "",
-		UserEmail:              "",
-		HTTPMetadata:           nil,
-		JSONSchema:             &schema,
-		Reasoning:              reasoning,
-		DisableResponseHealing: false,
-	})
-	if err != nil {
-		return false, 0, fmt.Errorf("openrouter object completion: %w", err)
-	}
-	if resp == nil || resp.Message == nil {
-		return false, 0, fmt.Errorf("empty completion response: %w", errUnparseableVerdict)
-	}
-	raw := strings.TrimSpace(openrouter.GetText(*resp.Message))
-	if raw == "" {
-		return false, 0, fmt.Errorf("empty completion content: %w", errUnparseableVerdict)
-	}
-	var verdict struct {
-		IsAttack   bool    `json:"is_attack"`
-		Confidence float64 `json:"confidence"`
-	}
-	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
-		return false, 0, fmt.Errorf("parse judge response: %w: %w", errUnparseableVerdict, err)
-	}
-	return verdict.IsAttack, max(0, min(1, verdict.Confidence)), nil
 }
 
 // newOpenRouterClient builds the real production OpenRouter client with the
@@ -712,6 +280,7 @@ func newOpenRouterClient(apiKey string) openrouter.CompletionClient {
 	return openrouter.NewUnifiedClient(
 		logger,
 		policy,
+		openrouter.EndpointsFor(partition.US),
 		prov,
 		&openrouter.PlatformKeyResolver{Provisioner: prov},
 		nil, // message capture  (nil-guarded)
@@ -722,8 +291,7 @@ func newOpenRouterClient(apiKey string) openrouter.CompletionClient {
 }
 
 // devProvisioner satisfies openrouter.Provisioner but skips the DB/billing path:
-// it hands back the dev key for every org. Only ProvisionAPIKey is exercised by
-// the GetObjectCompletion path; the rest are unreachable here.
+// it hands back the dev key for every org.
 type devProvisioner struct{ apiKey string }
 
 func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string, _ openrouter.KeyType) (string, error) {
@@ -732,6 +300,14 @@ func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string, _ openrout
 func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ openrouter.KeyType, _ *int) (int, error) {
 	return 0, fmt.Errorf("not implemented in bench")
 }
+func (*devProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
+}
+
+func (*devProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
+}
+
 func (d *devProvisioner) DisableAPIKey(_ context.Context, _ string, _ openrouter.KeyType) error {
 	return fmt.Errorf("not implemented in bench")
 }
@@ -750,195 +326,18 @@ func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string, _ 
 
 var _ openrouter.Provisioner = (*devProvisioner)(nil)
 
-func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.Finding) modeSummary {
-	overall := counts{TP: 0, FP: 0, TN: 0, FN: 0}
-	bySource := map[string]*counts{}
-	ruleTP := map[string]int{}
-	ruleFP := map[string]int{}
+// unsetEnvPlaceholder is mise.toml's OPENROUTER_DEV_KEY. Under mise it
+// overrides the process environment, so CI passes its key as
+// OPENROUTER_API_KEY and the placeholder must not shadow it.
+const unsetEnvPlaceholder = "unset"
 
-	for i, c := range corpus {
-		fs := findings[i]
-		flagged := len(fs) > 0
-
-		bucket, ok := bySource[c.Source]
-		if !ok {
-			bucket = &counts{TP: 0, FP: 0, TN: 0, FN: 0}
-			bySource[c.Source] = bucket
-		}
-
-		switch {
-		case c.Label == "malicious" && flagged:
-			overall.TP++
-			bucket.TP++
-			for _, f := range fs {
-				ruleTP[f.RuleID]++
-			}
-		case c.Label == "malicious" && !flagged:
-			overall.FN++
-			bucket.FN++
-		case c.Label == "benign" && flagged:
-			overall.FP++
-			bucket.FP++
-			for _, f := range fs {
-				ruleFP[f.RuleID]++
-			}
-		case c.Label == "benign" && !flagged:
-			overall.TN++
-			bucket.TN++
-		}
-	}
-
-	sources := make([]sourceSummary, 0, len(bySource))
-	for src, c := range bySource {
-		sources = append(sources, sourceSummary{
-			Source:  src,
-			Counts:  *c,
-			Metrics: deriveMetrics(*c),
-		})
-	}
-	sort.Slice(sources, func(i, j int) bool { return sources[i].Source < sources[j].Source })
-
-	ruleSet := map[string]struct{}{}
-	for r := range ruleTP {
-		ruleSet[r] = struct{}{}
-	}
-	for r := range ruleFP {
-		ruleSet[r] = struct{}{}
-	}
-	rules := make([]ruleHist, 0, len(ruleSet))
-	for r := range ruleSet {
-		rules = append(rules, ruleHist{RuleID: r, TP: ruleTP[r], FP: ruleFP[r]})
-	}
-	sort.Slice(rules, func(i, j int) bool { return rules[i].RuleID < rules[j].RuleID })
-
-	return modeSummary{
-		Name:                     mode,
-		Skipped:                  false,
-		SkipReason:               "",
-		Total:                    len(corpus),
-		Counts:                   overall,
-		Overall:                  deriveMetrics(overall),
-		Sources:                  sources,
-		Rules:                    rules,
-		NewFalsePositives:        nil,
-		RecoveredTruePositive:    nil,
-		MissedAttacks:            nil,
-		InScope:                  0,
-		LostTruePositives:        nil,
-		SuppressedFalsePositives: nil,
-	}
-}
-
-// changedExamples lists rows of the given label that the baseline missed.
-// Sorted by confidence desc, capped at limit.
-func changedExamples(corpus []labeledCase, baseline, candidate [][]scanners.Finding, label string, limit int) []exampleCase {
-	examples := []exampleCase{}
-	for i, c := range corpus {
-		if c.Label != label || len(baseline[i]) > 0 || len(candidate[i]) == 0 {
-			continue
-		}
-		f := highestConfidenceFinding(candidate[i])
-		examples = append(examples, exampleCase{
-			ID:     c.ID,
-			Source: c.Source,
-			RuleID: f.RuleID,
-			Score:  f.Confidence,
-			Text:   c.Text,
-		})
-	}
-	sort.Slice(examples, func(i, j int) bool {
-		if examples[i].Score == examples[j].Score {
-			return examples[i].ID < examples[j].ID
-		}
-		return examples[i].Score > examples[j].Score
-	})
-	if len(examples) > limit {
-		return examples[:limit]
-	}
-	return examples
-}
-
-// missedExamples lists malicious cases the candidate did not flag.
-func missedExamples(corpus []labeledCase, candidate [][]scanners.Finding, limit int) []exampleCase {
-	examples := []exampleCase{}
-	for i, c := range corpus {
-		if c.Label != "malicious" || len(candidate[i]) > 0 {
-			continue
-		}
-		examples = append(examples, exampleCase{ID: c.ID, Source: c.Source, RuleID: "", Score: 0, Text: c.Text})
-	}
-	sort.Slice(examples, func(i, j int) bool { return examples[i].ID < examples[j].ID })
-	if len(examples) > limit {
-		return examples[:limit]
-	}
-	return examples
-}
-
-func highestConfidenceFinding(findings []scanners.Finding) scanners.Finding {
-	out := findings[0]
-	for _, f := range findings[1:] {
-		if f.Confidence > out.Confidence {
-			out = f
-		}
-	}
-	return out
-}
-
+// firstEnv returns the first variable set to a value other than empty or
+// the mise placeholder.
 func firstEnv(keys ...string) string {
 	for _, k := range keys {
-		if v := os.Getenv(k); v != "" {
+		if v := os.Getenv(k); v != "" && v != unsetEnvPlaceholder {
 			return v
 		}
 	}
 	return ""
-}
-
-func writeMetrics(path string, summary accuracySummary) error {
-	payload := envelope{
-		GitSHA:    envOr("GITHUB_SHA", "local"),
-		Ref:       envOr("GITHUB_REF_NAME", "local"),
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Summary:   summary,
-	}
-	body, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal metrics: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return fmt.Errorf("create metrics dir: %w", err)
-	}
-	if err := os.WriteFile(path, body, 0o600); err != nil {
-		return fmt.Errorf("write metrics: %w", err)
-	}
-	return nil
-}
-
-func deriveMetrics(c counts) metricsBlock {
-	p := safeDiv(c.TP, c.TP+c.FP)
-	r := safeDiv(c.TP, c.TP+c.FN)
-	f1 := 0.0
-	if p+r > 0 {
-		f1 = 2 * p * r / (p + r)
-	}
-	return metricsBlock{
-		Precision: p,
-		Recall:    r,
-		F1:        f1,
-		Accuracy:  safeDiv(c.TP+c.TN, c.TP+c.FP+c.TN+c.FN),
-		FPRate:    safeDiv(c.FP, c.FP+c.TN),
-	}
-}
-
-func safeDiv(a, b int) float64 {
-	if b == 0 {
-		return 0
-	}
-	return float64(a) / float64(b)
-}
-
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }

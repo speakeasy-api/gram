@@ -252,3 +252,39 @@ func TestListUserSessionConsents_RBACForbidden(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestListUserSessionConsents_ExcludesSiblingProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "list-consent-sibling")
+
+	listed, err := ti.service.ListUserSessionConsents(ctx, &gen.ListUserSessionConsentsPayload{
+		SubjectUrn:          nil,
+		UserSessionClientID: nil,
+		UserSessionIssuerID: nil,
+		Cursor:              nil,
+		Limit:               nil,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	for _, item := range listed.Items {
+		require.NotEqual(t, sp.consentID.String(), item.ID)
+	}
+
+	issuerID := sp.issuerID.String()
+	filtered, err := ti.service.ListUserSessionConsents(ctx, &gen.ListUserSessionConsentsPayload{
+		SubjectUrn:          nil,
+		UserSessionClientID: nil,
+		UserSessionIssuerID: &issuerID,
+		Cursor:              nil,
+		Limit:               nil,
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, filtered.Items)
+}

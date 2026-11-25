@@ -91,6 +91,17 @@ func (q *Queries) InsertToolsetEmbedding(ctx context.Context, arg InsertToolsetE
 	return i, err
 }
 
+const lockToolsetEmbeddings = `-- name: LockToolsetEmbeddings :exec
+SELECT pg_advisory_xact_lock(hashtextextended('toolset-embeddings:' || ($1::uuid)::text, 0))
+`
+
+// Serialize replacement of one toolset's embeddings while permitting
+// different toolsets to index concurrently.
+func (q *Queries) LockToolsetEmbeddings(ctx context.Context, toolsetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockToolsetEmbeddings, toolsetID)
+	return err
+}
+
 const searchToolsetToolEmbeddingsAllTagsMatch = `-- name: SearchToolsetToolEmbeddingsAllTagsMatch :many
 SELECT
     id,
@@ -154,6 +165,107 @@ func (q *Queries) SearchToolsetToolEmbeddingsAllTagsMatch(ctx context.Context, a
 	var items []SearchToolsetToolEmbeddingsAllTagsMatchRow
 	for rows.Next() {
 		var i SearchToolsetToolEmbeddingsAllTagsMatchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ToolsetID,
+			&i.ToolsetVersion,
+			&i.EntryKey,
+			&i.EmbeddingModel,
+			&i.Payload,
+			&i.Tags,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Similarity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchToolsetToolEmbeddingsAllTagsMatchExact = `-- name: SearchToolsetToolEmbeddingsAllTagsMatchExact :many
+WITH candidates AS MATERIALIZED (
+  SELECT
+      id,
+      project_id,
+      toolset_id,
+      toolset_version,
+      entry_key,
+      embedding_model,
+      embedding_1536,
+      payload,
+      tags,
+      created_at,
+      updated_at
+  FROM toolset_embeddings
+  WHERE project_id = $3
+    AND toolset_id = $4
+    AND toolset_version = $5
+    AND entry_key LIKE 'tools:%'
+    AND (cardinality($6::text[]) = 0 OR tags @> $6)
+    AND deleted IS FALSE
+)
+SELECT
+    id,
+    project_id,
+    toolset_id,
+    toolset_version,
+    entry_key,
+    embedding_model,
+    payload,
+    tags,
+    created_at,
+    updated_at,
+    (1 - (embedding_1536 <=> $1))::float8 AS similarity
+FROM candidates
+ORDER BY embedding_1536 <=> $1
+LIMIT $2
+`
+
+type SearchToolsetToolEmbeddingsAllTagsMatchExactParams struct {
+	QueryEmbedding1536 pgvector_go.Vector
+	ResultLimit        int32
+	ProjectID          uuid.UUID
+	ToolsetID          uuid.UUID
+	ToolsetVersion     int64
+	Tags               []string
+}
+
+type SearchToolsetToolEmbeddingsAllTagsMatchExactRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
+	ToolsetVersion int64
+	EntryKey       string
+	EmbeddingModel string
+	Payload        []byte
+	Tags           []string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Similarity     float64
+}
+
+func (q *Queries) SearchToolsetToolEmbeddingsAllTagsMatchExact(ctx context.Context, arg SearchToolsetToolEmbeddingsAllTagsMatchExactParams) ([]SearchToolsetToolEmbeddingsAllTagsMatchExactRow, error) {
+	rows, err := q.db.Query(ctx, searchToolsetToolEmbeddingsAllTagsMatchExact,
+		arg.QueryEmbedding1536,
+		arg.ResultLimit,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.ToolsetVersion,
+		arg.Tags,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchToolsetToolEmbeddingsAllTagsMatchExactRow
+	for rows.Next() {
+		var i SearchToolsetToolEmbeddingsAllTagsMatchExactRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -263,6 +375,107 @@ func (q *Queries) SearchToolsetToolEmbeddingsAnyTagsMatch(ctx context.Context, a
 	return items, nil
 }
 
+const searchToolsetToolEmbeddingsAnyTagsMatchExact = `-- name: SearchToolsetToolEmbeddingsAnyTagsMatchExact :many
+WITH candidates AS MATERIALIZED (
+  SELECT
+      id,
+      project_id,
+      toolset_id,
+      toolset_version,
+      entry_key,
+      embedding_model,
+      embedding_1536,
+      payload,
+      tags,
+      created_at,
+      updated_at
+  FROM toolset_embeddings
+  WHERE project_id = $3
+    AND toolset_id = $4
+    AND toolset_version = $5
+    AND entry_key LIKE 'tools:%'
+    AND (cardinality($6::text[]) = 0 OR tags && $6::text[])
+    AND deleted IS FALSE
+)
+SELECT
+    id,
+    project_id,
+    toolset_id,
+    toolset_version,
+    entry_key,
+    embedding_model,
+    payload,
+    tags,
+    created_at,
+    updated_at,
+    (1 - (embedding_1536 <=> $1))::float8 AS similarity
+FROM candidates
+ORDER BY embedding_1536 <=> $1
+LIMIT $2
+`
+
+type SearchToolsetToolEmbeddingsAnyTagsMatchExactParams struct {
+	QueryEmbedding1536 pgvector_go.Vector
+	ResultLimit        int32
+	ProjectID          uuid.UUID
+	ToolsetID          uuid.UUID
+	ToolsetVersion     int64
+	Tags               []string
+}
+
+type SearchToolsetToolEmbeddingsAnyTagsMatchExactRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
+	ToolsetVersion int64
+	EntryKey       string
+	EmbeddingModel string
+	Payload        []byte
+	Tags           []string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Similarity     float64
+}
+
+func (q *Queries) SearchToolsetToolEmbeddingsAnyTagsMatchExact(ctx context.Context, arg SearchToolsetToolEmbeddingsAnyTagsMatchExactParams) ([]SearchToolsetToolEmbeddingsAnyTagsMatchExactRow, error) {
+	rows, err := q.db.Query(ctx, searchToolsetToolEmbeddingsAnyTagsMatchExact,
+		arg.QueryEmbedding1536,
+		arg.ResultLimit,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.ToolsetVersion,
+		arg.Tags,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchToolsetToolEmbeddingsAnyTagsMatchExactRow
+	for rows.Next() {
+		var i SearchToolsetToolEmbeddingsAnyTagsMatchExactRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ToolsetID,
+			&i.ToolsetVersion,
+			&i.EntryKey,
+			&i.EmbeddingModel,
+			&i.Payload,
+			&i.Tags,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Similarity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const toolsetAvailableTags = `-- name: ToolsetAvailableTags :many
 SELECT DISTINCT unnest(tags)::text as tag
 FROM toolset_embeddings
@@ -300,44 +513,85 @@ func (q *Queries) ToolsetAvailableTags(ctx context.Context, arg ToolsetAvailable
 	return items, nil
 }
 
+const toolsetIndexRevisionIsCurrent = `-- name: ToolsetIndexRevisionIsCurrent :one
+SELECT EXISTS (
+  SELECT 1
+  FROM toolsets t
+  WHERE t.id = $1
+    AND t.project_id = $2
+    AND t.deleted IS FALSE
+    AND (
+      SELECT tv.version
+      FROM toolset_versions tv
+      WHERE tv.toolset_id = t.id
+        AND tv.deleted IS FALSE
+      ORDER BY tv.version DESC
+      LIMIT 1
+    ) = $3
+    AND (
+      SELECT d.id
+      FROM deployments d
+      WHERE d.project_id = t.project_id
+        AND EXISTS (
+          SELECT 1
+          FROM deployment_statuses ds
+          WHERE ds.deployment_id = d.id
+            AND ds.status = 'completed'
+        )
+      ORDER BY d.seq DESC
+      LIMIT 1
+    ) = $4
+)
+`
+
+type ToolsetIndexRevisionIsCurrentParams struct {
+	ToolsetID      uuid.UUID
+	ProjectID      uuid.UUID
+	ToolsetVersion int64
+	DeploymentID   uuid.UUID
+}
+
+func (q *Queries) ToolsetIndexRevisionIsCurrent(ctx context.Context, arg ToolsetIndexRevisionIsCurrentParams) (bool, error) {
+	row := q.db.QueryRow(ctx, toolsetIndexRevisionIsCurrent,
+		arg.ToolsetID,
+		arg.ProjectID,
+		arg.ToolsetVersion,
+		arg.DeploymentID,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const toolsetToolsAreIndexed = `-- name: ToolsetToolsAreIndexed :one
 WITH latest_deployment AS (
-  SELECT d.created_at
+  SELECT d.id
   FROM deployments d
   JOIN deployment_statuses ds ON d.id = ds.deployment_id
-  WHERE d.project_id = $1
+  WHERE d.project_id = $3
     AND ds.status = 'completed'
-  ORDER BY d.created_at DESC
+  ORDER BY d.seq DESC
   LIMIT 1
-),
-latest_embedding AS (
-  SELECT MAX(created_at) as created_at
-  FROM toolset_embeddings
-  WHERE toolset_embeddings.toolset_id = $2
-    AND toolset_embeddings.toolset_version = $3
-    AND entry_key LIKE 'tools:%'
-    AND deleted IS FALSE
 )
-SELECT
-  CASE
-    -- If no embeddings exist for this version, not indexed
-    WHEN (SELECT created_at FROM latest_embedding) IS NULL THEN FALSE
-    -- If embeddings exist but are older than latest deployment, not indexed
-    WHEN (SELECT created_at FROM latest_deployment) IS NOT NULL
-         AND (SELECT created_at FROM latest_embedding) < (SELECT created_at FROM latest_deployment) THEN FALSE
-    -- Otherwise, embeddings are up to date
-    ELSE TRUE
-  END as indexed
+SELECT EXISTS (
+  SELECT 1
+  FROM toolset_embeddings
+  WHERE toolset_embeddings.toolset_id = $1
+    AND toolset_embeddings.toolset_version = $2
+    AND toolset_embeddings.entry_key LIKE 'tools:%'
+    AND toolset_embeddings.payload ->> '_gramIndexDeploymentId' = (SELECT id::text FROM latest_deployment)
+    AND toolset_embeddings.deleted IS FALSE
+) AS indexed
 `
 
 type ToolsetToolsAreIndexedParams struct {
-	ProjectID      uuid.UUID
 	ToolsetID      uuid.UUID
 	ToolsetVersion int64
+	ProjectID      uuid.UUID
 }
 
 func (q *Queries) ToolsetToolsAreIndexed(ctx context.Context, arg ToolsetToolsAreIndexedParams) (bool, error) {
-	row := q.db.QueryRow(ctx, toolsetToolsAreIndexed, arg.ProjectID, arg.ToolsetID, arg.ToolsetVersion)
+	row := q.db.QueryRow(ctx, toolsetToolsAreIndexed, arg.ToolsetID, arg.ToolsetVersion, arg.ProjectID)
 	var indexed bool
 	err := row.Scan(&indexed)
 	return indexed, err

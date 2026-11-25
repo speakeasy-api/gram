@@ -1,0 +1,730 @@
+package platformmcp
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	genskills "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+)
+
+const (
+	testInsightSkillA        = "aaaaaaaa-1111-4111-8111-111111111111"
+	testInsightSkillB        = "bbbbbbbb-2222-4222-8222-222222222222"
+	testInsightSkillC        = "cccccccc-3333-4333-8333-333333333333"
+	testInsightVersionAOld   = "aaaaaaaa-0000-4000-8000-000000000001"
+	testInsightVersionANew   = "aaaaaaaa-0000-4000-8000-000000000002"
+	testInsightVersionB      = "bbbbbbbb-0000-4000-8000-000000000001"
+	testInsightVersionC      = "cccccccc-0000-4000-8000-000000000001"
+	testInsightProjectID     = "44444444-4444-4444-8444-444444444444"
+	testInsightVersionOldAt  = "2026-07-01T00:00:00Z"
+	testInsightVersionNewAt  = "2026-08-01T00:00:00Z"
+	testInsightVersionOtherA = "2026-07-15T00:00:00Z"
+)
+
+var testInsightNow = time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+
+// stubSkillInsightsReader records what the service asked ClickHouse for and
+// answers with canned buckets. The mutex is for the vertical tests, where the
+// server reads it on another goroutine than the one seeding it.
+type stubSkillInsightsReader struct {
+	mu        sync.Mutex
+	params    *telemetryrepo.QuerySkillInsightsParams
+	rows      []telemetryrepo.SkillInsightBucket
+	watermark int64
+	err       error
+}
+
+func (s *stubSkillInsightsReader) QuerySkillInsights(_ context.Context, params telemetryrepo.QuerySkillInsightsParams) ([]telemetryrepo.SkillInsightBucket, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.params = &params
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.rows, nil
+}
+
+func (s *stubSkillInsightsReader) GetTelemetryWatermark(context.Context, telemetryrepo.GetTelemetryWatermarkParams) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.watermark, nil
+}
+
+// SetRows replaces the canned buckets once the test knows the real IDs.
+func (s *stubSkillInsightsReader) SetRows(rows []telemetryrepo.SkillInsightBucket) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rows = rows
+}
+
+// LastParams is the most recent ClickHouse read, or nil when none happened.
+func (s *stubSkillInsightsReader) LastParams() *telemetryrepo.QuerySkillInsightsParams {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.params
+}
+
+// registrySkillsManagement is a skills registry with several skills, each with
+// its own version list. It records which skills were read so a test can prove
+// which registry pages a tool actually spends.
+type registrySkillsManagement struct {
+	recordingSkillsManagement
+	skills           []*types.Skill
+	versionsBySkill  map[string]*genskills.ListSkillVersionsResult
+	moreSkills       bool
+	moreVersions     bool
+	listCalls        int
+	getCalls         []string
+	listVersionCalls []string
+}
+
+func (s *registrySkillsManagement) List(_ context.Context, _ *genskills.ListPayload) (*genskills.ListSkillsResult, error) {
+	s.listCalls++
+	var next *string
+	if s.moreSkills {
+		cursor := "more"
+		next = &cursor
+	}
+	return &genskills.ListSkillsResult{Skills: s.skills, TotalCount: int64(len(s.skills)), NextCursor: next}, nil
+}
+
+func (s *registrySkillsManagement) Get(_ context.Context, payload *genskills.GetPayload) (*genskills.GetSkillResult, error) {
+	s.getCalls = append(s.getCalls, payload.ID)
+	for _, skill := range s.skills {
+		if skill.ID == payload.ID {
+			return &genskills.GetSkillResult{Skill: skill, LatestVersion: nil, Adoption: nil, SightingTimeline: nil, Drift: nil, AssistantCount: 0, PromptInjectionFindings: nil}, nil
+		}
+	}
+	return nil, fmt.Errorf("skill %s not in fixture", payload.ID)
+}
+
+func (s *registrySkillsManagement) ListVersions(_ context.Context, payload *genskills.ListVersionsPayload) (*genskills.ListSkillVersionsResult, error) {
+	s.listVersionCalls = append(s.listVersionCalls, payload.ID)
+	versions, ok := s.versionsBySkill[payload.ID]
+	if !ok {
+		return &genskills.ListSkillVersionsResult{Versions: nil, NextCursor: nil}, nil
+	}
+	if s.moreVersions {
+		cursor := "more"
+		return &genskills.ListSkillVersionsResult{Versions: versions.Versions, NextCursor: &cursor}, nil
+	}
+	return versions, nil
+}
+
+func insightSkill(id, name string) *types.Skill {
+	return &types.Skill{ID: id, Name: name, DisplayName: strings.ToUpper(name[:1]) + name[1:], Summary: nil, Tags: nil, LatestVersionID: nil, VersionCount: 1, HasValidVersion: true, UpdatedAt: testInsightVersionNewAt}
+}
+
+func insightVersions(versions ...*types.SkillVersion) *genskills.ListSkillVersionsResult {
+	return &genskills.ListSkillVersionsResult{Versions: versions, NextCursor: nil}
+}
+
+func insightVersion(id, skillID, createdAt string) *types.SkillVersion {
+	return &types.SkillVersion{ID: id, SkillID: skillID, Content: "", CanonicalSha256: "", SpecValid: true, CreatedAt: createdAt}
+}
+
+func testInsightRegistry() *registrySkillsManagement {
+	return &registrySkillsManagement{
+		skills: []*types.Skill{
+			insightSkill(testInsightSkillA, "verification"),
+			insightSkill(testInsightSkillB, "release-notes"),
+			insightSkill(testInsightSkillC, "triage"),
+		},
+		versionsBySkill: map[string]*genskills.ListSkillVersionsResult{
+			testInsightSkillA: insightVersions(insightVersion(testInsightVersionAOld, testInsightSkillA, testInsightVersionOldAt), insightVersion(testInsightVersionANew, testInsightSkillA, testInsightVersionNewAt)),
+			testInsightSkillB: insightVersions(insightVersion(testInsightVersionB, testInsightSkillB, testInsightVersionOtherA)),
+			testInsightSkillC: insightVersions(insightVersion(testInsightVersionC, testInsightSkillC, testInsightVersionOtherA)),
+		},
+	}
+}
+
+// testInsightRows: skill A is scored across two versions and saved the most
+// time, skill B is the most expensive but unscored, skill C is scored with a
+// higher average score but less time saved.
+func testInsightRows() []telemetryrepo.SkillInsightBucket {
+	return []telemetryrepo.SkillInsightBucket{
+		{SkillID: testInsightSkillA, SkillVersionID: testInsightVersionAOld, BucketTimeUnixNano: testInsightNow.Add(-20 * 24 * time.Hour).UnixNano(), ActivationCount: 4, ActivatedSessions: 2, TotalSessionCost: 1.0, ScoredSessions: 1, ScoreSum: 0.5, EstimatedTurnsSavedSum: 2, EstimatedTurnsSamples: 1, EstimatedMinutesSavedSum: 10, EstimatedMinutesSamples: 1, ROIConfidenceLow: 1, ROIConfidenceMed: 0, ROIConfidenceHigh: 0, IgnoredCount: 0, MisappliedCount: 0, PartiallyFollowedCount: 1, HarmfulCount: 0},
+		{SkillID: testInsightSkillA, SkillVersionID: testInsightVersionANew, BucketTimeUnixNano: testInsightNow.Add(-2 * 24 * time.Hour).UnixNano(), ActivationCount: 6, ActivatedSessions: 4, TotalSessionCost: 2.0, ScoredSessions: 2, ScoreSum: 1.6, EstimatedTurnsSavedSum: 6, EstimatedTurnsSamples: 2, EstimatedMinutesSavedSum: 30, EstimatedMinutesSamples: 2, ROIConfidenceLow: 0, ROIConfidenceMed: 1, ROIConfidenceHigh: 1, IgnoredCount: 0, MisappliedCount: 0, PartiallyFollowedCount: 0, HarmfulCount: 0},
+		{SkillID: testInsightSkillB, SkillVersionID: testInsightVersionB, BucketTimeUnixNano: testInsightNow.Add(-2 * 24 * time.Hour).UnixNano(), ActivationCount: 9, ActivatedSessions: 8, TotalSessionCost: 12.0, ScoredSessions: 0, ScoreSum: 0, EstimatedTurnsSavedSum: 0, EstimatedTurnsSamples: 0, EstimatedMinutesSavedSum: 0, EstimatedMinutesSamples: 0, ROIConfidenceLow: 0, ROIConfidenceMed: 0, ROIConfidenceHigh: 0, IgnoredCount: 0, MisappliedCount: 0, PartiallyFollowedCount: 0, HarmfulCount: 0},
+		{SkillID: testInsightSkillC, SkillVersionID: testInsightVersionC, BucketTimeUnixNano: testInsightNow.Add(-2 * 24 * time.Hour).UnixNano(), ActivationCount: 2, ActivatedSessions: 2, TotalSessionCost: 0.5, ScoredSessions: 2, ScoreSum: 1.9, EstimatedTurnsSavedSum: 1, EstimatedTurnsSamples: 1, EstimatedMinutesSavedSum: 5, EstimatedMinutesSamples: 1, ROIConfidenceLow: 0, ROIConfidenceMed: 0, ROIConfidenceHigh: 2, IgnoredCount: 0, MisappliedCount: 0, PartiallyFollowedCount: 0, HarmfulCount: 0},
+	}
+}
+
+type insightsFixture struct {
+	service     *SkillsService
+	registry    *registrySkillsManagement
+	reader      *stubSkillInsightsReader
+	skillsLane  *recordingOperationLimiter
+	insightLane *recordingOperationLimiter
+}
+
+func newInsightsFixture(t *testing.T, registry *registrySkillsManagement, reader *stubSkillInsightsReader) insightsFixture {
+	t.Helper()
+	skillsLane := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	insightLane := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	service := NewSkillsService(
+		registry,
+		stubSkillTargets{targets: testTargets()},
+		stubSkillProjects{},
+		passthroughGrants{},
+		stubSkillsGate{enabled: true},
+		OperationBudget{Connection: skillsLane, Organization: skillsLane},
+	).WithInsights(reader, OperationBudget{Connection: insightLane, Organization: insightLane})
+	service.now = func() time.Time { return testInsightNow }
+	return insightsFixture{service: service, registry: registry, reader: reader, skillsLane: skillsLane, insightLane: insightLane}
+}
+
+func TestListSkillInsightsRanksProjectSkillsByEstimatedMinutesSaved(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubSkillInsightsReader{rows: testInsightRows(), watermark: testInsightNow.Add(-time.Minute).UnixNano()}
+	fixture := newInsightsFixture(t, testInsightRegistry(), reader)
+
+	output, err := fixture.service.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
+	require.NoError(t, err)
+
+	require.Equal(t, SkillInsightsSortEstimatedMinutesSaved, output.SortBy)
+	require.True(t, output.ScoresAvailable)
+	require.False(t, output.Truncated)
+	require.Equal(t, testSkillProjectSlug, output.ProjectSlug)
+	require.Contains(t, output.CostAttribution, "do not add up across skills")
+	require.Contains(t, output.ScoreCoverage, "unmeasured rather than bad")
+
+	// Scored skills rank by time saved; the unscored skill ranks last even
+	// though it was the most expensive and most used.
+	require.Equal(t, []string{"verification", "triage", "release-notes"}, insightNames(output.Skills))
+
+	// One skill's figures total its versions, so ranking and comparing agree.
+	verification := output.Skills[0]
+	require.EqualValues(t, 10, verification.Metrics.Activations)
+	require.EqualValues(t, 6, verification.Metrics.ActivatedSessions)
+	require.InDelta(t, 3.0, verification.Metrics.FullSessionCostUSD, 0)
+	require.InDelta(t, 0.5, *verification.Metrics.AverageFullSessionCostUSD, 0)
+	require.NotNil(t, verification.Metrics.Efficacy)
+	require.EqualValues(t, 3, verification.Metrics.Efficacy.ScoredSessions)
+	require.InDelta(t, 0.7, verification.Metrics.Efficacy.AverageScore, 1e-9)
+	require.InDelta(t, 40, verification.Metrics.Efficacy.EstimatedMinutesSavedTotal, 0)
+	require.InDelta(t, 40.0/3, *verification.Metrics.Efficacy.EstimatedMinutesSavedAverage, 1e-9)
+	// The averages divide by the sessions that carried an estimate, and that
+	// count travels with them so a caller can tell a three-sample average from
+	// a thirty-sample one.
+	require.EqualValues(t, 3, verification.Metrics.Efficacy.EstimatedMinutesSavedSamples)
+	require.EqualValues(t, 3, verification.Metrics.Efficacy.EstimatedTurnsSavedSamples)
+	require.InDelta(t, 8.0/3, *verification.Metrics.Efficacy.EstimatedTurnsSavedAverage, 1e-9)
+	require.Equal(t, map[string]uint64{"low": 1, "med": 1, "high": 1}, verification.Metrics.Efficacy.ROIConfidenceCounts)
+	require.Equal(t, map[string]uint64{"ignored": 0, "misapplied": 0, "partially_followed": 1, "harmful": 0}, verification.Metrics.Efficacy.FlagCounts)
+
+	releaseNotes := output.Skills[2]
+	require.Nil(t, releaseNotes.Metrics.Efficacy, "an unscored skill has no efficacy block, not a zero one")
+	require.InDelta(t, 12.0, releaseNotes.Metrics.FullSessionCostUSD, 0)
+
+	// The ClickHouse read is scoped to the resolved project and the registry's
+	// skill IDs over the default month, as one bucket.
+	require.NotNil(t, reader.params)
+	require.Equal(t, testPrincipal().OrganizationID, reader.params.OrganizationID)
+	require.Equal(t, testInsightProjectID, reader.params.ProjectID)
+	require.ElementsMatch(t, []string{testInsightSkillA, testInsightSkillB, testInsightSkillC}, reader.params.SkillIDs)
+	require.Nil(t, reader.params.SkillVersionIDs)
+	require.True(t, reader.params.IncludeSessionUsage)
+	require.Equal(t, testInsightNow.Add(-30*24*time.Hour), reader.params.From)
+	require.Equal(t, testInsightNow, reader.params.To)
+	require.Equal(t, int64((30*24*time.Hour)/time.Second), reader.params.IntervalSeconds)
+
+	require.Equal(t, DiagnosticWindowLastMonth, output.Envelope.ResolvedWindow.Window)
+	require.Equal(t, FreshnessCurrent, output.Envelope.Freshness)
+	require.False(t, output.Envelope.NoObservations)
+
+	// Ranking spends one registry page and never pages versions: per-version
+	// figures are compare_skill_versions' answer, not this one's.
+	require.Equal(t, 1, fixture.registry.listCalls)
+	require.Empty(t, fixture.registry.getCalls)
+	require.Empty(t, fixture.registry.listVersionCalls)
+}
+
+func TestListSkillInsightsHonorsEachSortKey(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		sortBy string
+		order  []string
+	}{
+		{sortBy: SkillInsightsSortEfficacy, order: []string{"triage", "verification", "release-notes"}},
+		{sortBy: SkillInsightsSortActivations, order: []string{"verification", "release-notes", "triage"}},
+		{sortBy: SkillInsightsSortSessionCost, order: []string{"release-notes", "verification", "triage"}},
+		{sortBy: " Estimated_Minutes_Saved ", order: []string{"verification", "triage", "release-notes"}},
+	} {
+		fixture := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{rows: testInsightRows()})
+
+		output, err := fixture.service.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug, SortBy: test.sortBy})
+
+		require.NoError(t, err, test.sortBy)
+		require.Equal(t, test.order, insightNames(output.Skills), test.sortBy)
+		require.Equal(t, strings.ToLower(strings.TrimSpace(test.sortBy)), output.SortBy)
+	}
+}
+
+// An unscored skill must never outrank a scored one on an efficacy key, even a
+// scored skill whose average score is zero: unmeasured is not zero.
+func TestRankSkillInsightsPlacesUnscoredSkillsBelowZeroScores(t *testing.T) {
+	t.Parallel()
+
+	skills := map[string]*types.Skill{
+		testInsightSkillA: insightSkill(testInsightSkillA, "alpha"),
+		testInsightSkillB: insightSkill(testInsightSkillB, "beta"),
+	}
+	rows := []telemetryrepo.SkillInsightBucket{
+		{SkillID: testInsightSkillA, SkillVersionID: testInsightVersionANew, ActivationCount: 1, ActivatedSessions: 1, ScoredSessions: 0},
+		{SkillID: testInsightSkillB, SkillVersionID: testInsightVersionB, ActivationCount: 1, ActivatedSessions: 1, ScoredSessions: 1, ScoreSum: 0},
+	}
+
+	ranked, scoresAvailable := rankSkillInsights(rows, skills, SkillInsightsSortEfficacy)
+
+	require.True(t, scoresAvailable)
+	require.Equal(t, []string{"beta", "alpha"}, insightNames(ranked))
+}
+
+// Rows for a skill the registry did not return are dropped: the registry read
+// runs under the caller's grants and decides what the caller may see.
+func TestRankSkillInsightsDropsRowsForSkillsTheRegistryWithheld(t *testing.T) {
+	t.Parallel()
+
+	skills := map[string]*types.Skill{testInsightSkillA: insightSkill(testInsightSkillA, "alpha")}
+	rows := []telemetryrepo.SkillInsightBucket{
+		{SkillID: testInsightSkillA, SkillVersionID: testInsightVersionANew, ActivationCount: 1, ActivatedSessions: 1},
+		{SkillID: testInsightSkillB, SkillVersionID: testInsightVersionB, ActivationCount: 99, ActivatedSessions: 99},
+	}
+
+	ranked, _ := rankSkillInsights(rows, skills, SkillInsightsSortActivations)
+
+	require.Equal(t, []string{"alpha"}, insightNames(ranked))
+}
+
+func TestCompareSkillVersionsMeasuresEveryRegistryVersion(t *testing.T) {
+	t.Parallel()
+
+	rows := testInsightRows()[1:2] // only the newest version of skill A was used
+	reader := &stubSkillInsightsReader{rows: rows, watermark: testInsightNow.UnixNano()}
+	fixture := newInsightsFixture(t, testInsightRegistry(), reader)
+
+	output, err := fixture.service.CompareSkillVersions(t.Context(), testPrincipal(), CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: " " + testInsightSkillA + " "})
+	require.NoError(t, err)
+
+	require.Equal(t, testInsightSkillA, output.SkillID)
+	require.Equal(t, "verification", output.SkillName)
+	require.Equal(t, "Verification", output.SkillDisplayName)
+	require.Equal(t, []string{testInsightSkillA}, reader.params.SkillIDs)
+	require.False(t, output.Truncated)
+
+	// The skill total matches what the ranking tool reports for the same rows.
+	require.EqualValues(t, 6, output.Metrics.Activations)
+	require.InDelta(t, 2.0, output.Metrics.FullSessionCostUSD, 0)
+
+	// Every registry version is present, newest first; the unused one reads as
+	// zero rather than disappearing from the comparison.
+	require.Len(t, output.Versions, 2)
+	require.Equal(t, testInsightVersionANew, output.Versions[0].ID)
+	require.Equal(t, testInsightVersionNewAt, output.Versions[0].CreatedAt)
+	require.EqualValues(t, 6, output.Versions[0].Metrics.Activations)
+	require.NotNil(t, output.Versions[0].Metrics.Efficacy)
+	require.Equal(t, testInsightVersionAOld, output.Versions[1].ID)
+	require.Equal(t, testInsightVersionOldAt, output.Versions[1].CreatedAt)
+	require.Zero(t, output.Versions[1].Metrics.Activations)
+	require.Nil(t, output.Versions[1].Metrics.AverageFullSessionCostUSD)
+	require.Nil(t, output.Versions[1].Metrics.Efficacy)
+
+	// Comparing reads one skill and its versions; it never lists the registry.
+	require.Zero(t, fixture.registry.listCalls)
+	require.Equal(t, []string{testInsightSkillA}, fixture.registry.getCalls)
+	require.Equal(t, []string{testInsightSkillA}, fixture.registry.listVersionCalls)
+}
+
+// A version used inside the window but beyond the registry page still reports
+// its activity, without a creation time, rather than having it vanish.
+func TestCompareSkillVersionsKeepsActivityFromVersionsBeyondThePage(t *testing.T) {
+	t.Parallel()
+
+	total, compared, scoresAvailable := compareSkillVersionInsights(
+		[]telemetryrepo.SkillInsightBucket{
+			{SkillID: testInsightSkillA, SkillVersionID: testInsightVersionANew, ActivationCount: 2, ActivatedSessions: 1},
+			{SkillID: testInsightSkillA, SkillVersionID: "unpaged-version", ActivationCount: 5, ActivatedSessions: 3},
+			{SkillID: testInsightSkillB, SkillVersionID: testInsightVersionB, ActivationCount: 99, ActivatedSessions: 99},
+		},
+		testInsightSkillA,
+		map[string]string{testInsightVersionANew: testInsightVersionNewAt},
+	)
+
+	require.False(t, scoresAvailable)
+	require.EqualValues(t, 7, total.ActivationCount, "another skill's rows never reach this skill's total")
+	require.Len(t, compared, 2)
+	byID := map[string]SkillVersionInsight{}
+	for _, version := range compared {
+		byID[version.ID] = version
+	}
+	require.EqualValues(t, 5, byID["unpaged-version"].Metrics.Activations)
+	require.Empty(t, byID["unpaged-version"].CreatedAt)
+	require.Equal(t, testInsightVersionANew, compared[0].ID, "a known creation time sorts above an unknown one")
+}
+
+func TestCompareSkillVersionsReportsAPartialVersionPageAsTruncated(t *testing.T) {
+	t.Parallel()
+
+	registry := testInsightRegistry()
+	registry.moreVersions = true
+	fixture := newInsightsFixture(t, registry, &stubSkillInsightsReader{rows: testInsightRows()})
+
+	output, err := fixture.service.CompareSkillVersions(t.Context(), testPrincipal(), CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: testInsightSkillA})
+
+	require.NoError(t, err)
+	require.True(t, output.Truncated)
+}
+
+func TestListSkillInsightsReportsAnEmptyWindowAsNoObservations(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubSkillInsightsReader{rows: nil, watermark: 0}
+	fixture := newInsightsFixture(t, testInsightRegistry(), reader)
+
+	output, err := fixture.service.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
+	require.NoError(t, err)
+
+	require.Empty(t, output.Skills)
+	require.False(t, output.ScoresAvailable)
+	require.True(t, output.Envelope.NoObservations)
+	require.Equal(t, FreshnessUnavailable, output.Envelope.Freshness)
+	require.Empty(t, output.Envelope.DataThrough)
+}
+
+func TestSkillInsightsRefuseInvalidInputBeforeReadingAnything(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name  string
+		input ListSkillInsightsInput
+	}{
+		{name: "missing project", input: ListSkillInsightsInput{ProjectSlug: " "}},
+		{name: "unknown sort key", input: ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug, SortBy: "popularity"}},
+		{name: "unknown window", input: ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug, Window: "2h"}},
+		{name: "window longer than a month", input: ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug, Window: "90d"}},
+	} {
+		reader := &stubSkillInsightsReader{rows: testInsightRows()}
+		fixture := newInsightsFixture(t, testInsightRegistry(), reader)
+
+		_, err := fixture.service.ListSkillInsights(t.Context(), testPrincipal(), test.input)
+
+		require.ErrorIs(t, err, ErrRegistrationInvalid, test.name)
+		require.Nil(t, reader.params, "%s: ClickHouse must not be read for a refused request", test.name)
+		require.Zero(t, fixture.registry.listCalls, test.name)
+	}
+
+	for _, test := range []struct {
+		name  string
+		input CompareSkillVersionsInput
+	}{
+		{name: "missing project", input: CompareSkillVersionsInput{ProjectSlug: " ", SkillID: testInsightSkillA}},
+		{name: "missing skill", input: CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: " "}},
+		{name: "skill id that is not a uuid", input: CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: "verification"}},
+		{name: "unknown window", input: CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: testInsightSkillA, Window: "2h"}},
+	} {
+		reader := &stubSkillInsightsReader{rows: testInsightRows()}
+		fixture := newInsightsFixture(t, testInsightRegistry(), reader)
+
+		_, err := fixture.service.CompareSkillVersions(t.Context(), testPrincipal(), test.input)
+
+		require.ErrorIs(t, err, ErrRegistrationInvalid, test.name)
+		require.Nil(t, reader.params, "%s: ClickHouse must not be read for a refused request", test.name)
+		require.Empty(t, fixture.registry.getCalls, test.name)
+	}
+}
+
+func TestSkillInsightsWindowDefaultsToAMonthAndAcceptsShorterOnes(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		window   string
+		resolved DiagnosticWindow
+		duration time.Duration
+	}{
+		{window: "", resolved: DiagnosticWindowLastMonth, duration: 30 * 24 * time.Hour},
+		{window: "30d", resolved: DiagnosticWindowLastMonth, duration: 30 * 24 * time.Hour},
+		{window: " 7D ", resolved: DiagnosticWindowLastWeek, duration: 7 * 24 * time.Hour},
+		{window: "24h", resolved: DiagnosticWindowLastDay, duration: 24 * time.Hour},
+		{window: "1h", resolved: DiagnosticWindowLastHour, duration: time.Hour},
+	} {
+		listReader := &stubSkillInsightsReader{rows: testInsightRows()}
+		listed, err := newInsightsFixture(t, testInsightRegistry(), listReader).service.
+			ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug, Window: test.window})
+		require.NoError(t, err, test.window)
+		require.Equal(t, test.resolved, listed.Envelope.ResolvedWindow.Window, test.window)
+		require.Equal(t, testInsightNow.Add(-test.duration), listReader.params.From, test.window)
+		require.Equal(t, testInsightNow, listReader.params.To, test.window)
+		require.Equal(t, int64(test.duration/time.Second), listReader.params.IntervalSeconds, test.window)
+		require.Equal(t, testInsightNow.Add(-test.duration).Format(time.RFC3339), listed.Envelope.ResolvedWindow.From, test.window)
+
+		// Both tools answer over the same window, so a caller comparing versions
+		// sees the interval it asked the ranking for.
+		compareReader := &stubSkillInsightsReader{rows: testInsightRows()}
+		compared, err := newInsightsFixture(t, testInsightRegistry(), compareReader).service.
+			CompareSkillVersions(t.Context(), testPrincipal(), CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: testInsightSkillA, Window: test.window})
+		require.NoError(t, err, test.window)
+		require.Equal(t, test.resolved, compared.Envelope.ResolvedWindow.Window, test.window)
+		require.Equal(t, testInsightNow.Add(-test.duration), compareReader.params.From, test.window)
+	}
+}
+
+func TestListSkillInsightsClampsTheLimitAndReportsTruncation(t *testing.T) {
+	t.Parallel()
+
+	registry := &registrySkillsManagement{skills: nil, versionsBySkill: map[string]*genskills.ListSkillVersionsResult{}}
+	var rows []telemetryrepo.SkillInsightBucket
+	for i := range 25 {
+		id := fmt.Sprintf("%08d-0000-4000-8000-000000000000", i)
+		registry.skills = append(registry.skills, insightSkill(id, fmt.Sprintf("skill-%02d", i)))
+		rows = append(rows, telemetryrepo.SkillInsightBucket{SkillID: id, SkillVersionID: id, ActivationCount: uint64(i + 1), ActivatedSessions: 1})
+	}
+
+	for _, test := range []struct {
+		limit int
+		want  int
+	}{
+		{limit: 0, want: skillInsightsDefaultLimit},
+		{limit: -3, want: skillInsightsDefaultLimit},
+		{limit: 5, want: 5},
+		{limit: 99, want: skillInsightsMaxLimit},
+	} {
+		fixture := newInsightsFixture(t, registry, &stubSkillInsightsReader{rows: rows})
+
+		output, err := fixture.service.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug, Limit: test.limit, SortBy: SkillInsightsSortActivations})
+
+		require.NoError(t, err)
+		require.Len(t, output.Skills, test.want, "limit %d", test.limit)
+		require.True(t, output.Truncated, "limit %d cut the ranking", test.limit)
+		require.Equal(t, "skill-24", output.Skills[0].Name, "ranking runs before the cut")
+	}
+
+	// A registry page with more skills behind it is truncation too, even when
+	// the ranking itself fits.
+	registry.skills = registry.skills[:3]
+	registry.moreSkills = true
+	fixture := newInsightsFixture(t, registry, &stubSkillInsightsReader{rows: rows[:3]})
+	output, err := fixture.service.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
+	require.NoError(t, err)
+	require.Len(t, output.Skills, 3)
+	require.True(t, output.Truncated)
+}
+
+// Insights are a ClickHouse aggregate metered with the other telemetry reads.
+// Neither the skill authoring allowance nor the project resolver is touched
+// when that limit refuses, and a permitted read leaves authoring untouched.
+func TestSkillInsightsAreMeteredWithTelemetryReadsNotSkillAuthoring(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubSkillInsightsReader{rows: testInsightRows()}
+	fixture := newInsightsFixture(t, testInsightRegistry(), reader)
+	fixture.insightLane.result = ratelimit.Result{Allowed: false}
+	projects := &countingSkillProjects{}
+	fixture.service.projects = projects
+
+	_, err := fixture.service.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
+	require.ErrorIs(t, err, ErrOperationRateLimited)
+	_, err = fixture.service.CompareSkillVersions(t.Context(), testPrincipal(), CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: testInsightSkillA})
+	require.ErrorIs(t, err, ErrOperationRateLimited)
+
+	require.Nil(t, reader.params)
+	require.Zero(t, projects.calls)
+	require.Empty(t, fixture.skillsLane.keys)
+	require.NotEmpty(t, fixture.insightLane.keys)
+
+	fixture.insightLane.result = ratelimit.Result{Allowed: true}
+	_, err = fixture.service.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
+	require.NoError(t, err)
+	require.Empty(t, fixture.skillsLane.keys, "a permitted insights read spends nothing from the authoring allowance")
+}
+
+func TestSkillInsightsRefuseWhenSkillsAreOffOrTheReaderIsAbsent(t *testing.T) {
+	t.Parallel()
+
+	off := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{})
+	off.service.gate = stubSkillsGate{enabled: false}
+	_, err := off.service.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
+	require.ErrorIs(t, err, ErrSkillsUnavailable)
+	_, err = off.service.CompareSkillVersions(t.Context(), testPrincipal(), CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: testInsightSkillA})
+	require.ErrorIs(t, err, ErrSkillsUnavailable)
+
+	withoutReader := testSkillsService(t, &recordingSkillsManagement{skill: testSkill()})
+	_, err = withoutReader.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
+	require.ErrorIs(t, err, ErrSkillsUnavailable)
+	_, err = withoutReader.CompareSkillVersions(t.Context(), testPrincipal(), CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: testInsightSkillA})
+	require.ErrorIs(t, err, ErrSkillsUnavailable)
+
+	var absent *SkillsService
+	_, err = absent.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
+	require.ErrorIs(t, err, ErrSkillsUnavailable)
+	require.Nil(t, absent.WithInsights(&stubSkillInsightsReader{}, OperationBudget{Connection: nil, Organization: nil}))
+}
+
+func TestSkillInsightsWrapReaderFailuresAsErrorsNotRefusals(t *testing.T) {
+	t.Parallel()
+
+	fixture := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{err: fmt.Errorf("clickhouse unreachable")})
+
+	_, err := fixture.service.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "read skill insights")
+	_, isRefusal := skillsToolResult(err)
+	require.False(t, isRefusal, "an internal failure is a transport error, not a refusal the model should act on")
+}
+
+func TestSkillInsightsOutputsProjectOnlyAllowlistedFields(t *testing.T) {
+	t.Parallel()
+
+	fixture := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{rows: testInsightRows(), watermark: testInsightNow.UnixNano()})
+	listed, err := fixture.service.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
+	require.NoError(t, err)
+
+	// Metrics appear once per skill, so the key walk repeats them; the
+	// allowlist is about which keys exist, not how often.
+	envelopeKeys := []string{"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to"}
+	metricKeys := []string{
+		"metrics", "activations", "activated_sessions", "full_session_cost_usd", "average_full_session_cost_usd",
+		"efficacy", "scored_sessions", "average_score",
+		"estimated_turns_saved_total", "estimated_turns_saved_average", "estimated_turns_saved_samples",
+		"estimated_minutes_saved_total", "estimated_minutes_saved_average", "estimated_minutes_saved_samples",
+		"roi_confidence_counts", "low", "med", "high",
+		"flag_counts", "ignored", "misapplied", "partially_followed", "harmful",
+	}
+	wantListed := append([]string{
+		"project_slug", "sort_by", "scores_available", "cost_attribution", "score_coverage", "truncated",
+		"skills", "id", "name", "display_name",
+	}, append(envelopeKeys, metricKeys...)...)
+	require.ElementsMatch(t, wantListed, uniqueKeys(t, listed))
+
+	compared, err := fixture.service.CompareSkillVersions(t.Context(), testPrincipal(), CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: testInsightSkillA})
+	require.NoError(t, err)
+	wantCompared := append([]string{
+		"project_slug", "skill_id", "skill_name", "skill_display_name",
+		"scores_available", "cost_attribution", "score_coverage", "truncated",
+		"versions", "id", "created_at",
+	}, append(envelopeKeys, metricKeys...)...)
+	require.ElementsMatch(t, wantCompared, uniqueKeys(t, compared))
+}
+
+// The reader flips what the insight tools answer, never whether they exist or
+// who may call them, so a client sees one stable contract across the rollout.
+func TestSkillInsightsToolsAreDeclaredWithAndWithoutTheirReader(t *testing.T) {
+	t.Parallel()
+
+	live := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{rows: testInsightRows()}).service
+	for _, test := range []struct {
+		name    string
+		service *SkillsService
+		served  bool
+	}{
+		{name: "reader attached", service: live, served: true},
+		{name: "no reader", service: testSkillsService(t, &recordingSkillsManagement{skill: testSkill()}), served: false},
+		{name: "skills absent", service: nil, served: false},
+	} {
+		_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.service, nil, nil, nil, nil, CatalogDescriptor{})
+
+		for _, call := range []struct {
+			tool      string
+			arguments string
+		}{
+			{tool: "list_skill_insights", arguments: `{"project_slug":"` + testSkillProjectSlug + `"}`},
+			{tool: "compare_skill_versions", arguments: `{"project_slug":"` + testSkillProjectSlug + `","skill_id":"` + testInsightSkillA + `"}`},
+		} {
+			descriptor := descriptorByName(t, registrar, call.tool)
+			require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization, test.name, call.tool)
+			require.Equal(t, bothAudiences, descriptor.Meta.Audiences, test.name, call.tool)
+			require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope, test.name, call.tool)
+			require.NotNil(t, descriptor.Annotations, test.name, call.tool)
+			require.True(t, descriptor.Annotations.ReadOnlyHint, test.name, call.tool)
+
+			result, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testPrincipal()), json.RawMessage(call.arguments))
+			if test.served {
+				require.Contains(t, string(descriptor.InputSchema), `"project_slug"`, test.name, call.tool)
+				require.NoError(t, err, test.name, call.tool)
+				require.NotNil(t, result, test.name, call.tool)
+				continue
+			}
+			var refusal *ToolRefusalError
+			require.ErrorAs(t, err, &refusal, test.name, call.tool)
+			var body featureUnavailableResult
+			require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &body), test.name, call.tool)
+			require.Equal(t, unavailableCode, body.Code, test.name, call.tool)
+			require.Equal(t, "skill_insights", body.Feature, test.name, call.tool)
+		}
+	}
+}
+
+// Each tool answers exactly one question, so neither takes an argument that
+// would reshape its result.
+func TestSkillInsightsToolSchemasDoNotVaryTheirShape(t *testing.T) {
+	t.Parallel()
+
+	live := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{rows: testInsightRows()}).service
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, live, nil, nil, nil, nil, CatalogDescriptor{})
+
+	listed := string(descriptorByName(t, registrar, "list_skill_insights").InputSchema)
+	require.NotContains(t, listed, `"skill_id"`, "ranking never takes a skill; comparing one skill's versions is its own tool")
+	require.Contains(t, listed, `"sort_by"`)
+
+	compared := string(descriptorByName(t, registrar, "compare_skill_versions").InputSchema)
+	require.Contains(t, compared, `"skill_id"`)
+	require.NotContains(t, compared, `"sort_by"`, "versions come back newest first; there is nothing to rank")
+	require.NotContains(t, compared, `"limit"`)
+}
+
+// Input the service refuses reaches the model as a structured refusal with a
+// code, not as a transport error it cannot act on.
+func TestSkillInsightsToolsReturnStructuredRefusals(t *testing.T) {
+	t.Parallel()
+
+	live := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{rows: testInsightRows()}).service
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, live, nil, nil, nil, nil, CatalogDescriptor{})
+
+	for _, call := range []struct {
+		tool      string
+		arguments string
+	}{
+		{tool: "list_skill_insights", arguments: `{"project_slug":"` + testSkillProjectSlug + `","window":"90d"}`},
+		{tool: "compare_skill_versions", arguments: `{"project_slug":"` + testSkillProjectSlug + `","skill_id":"not-a-uuid"}`},
+	} {
+		_, err := descriptorByName(t, registrar, call.tool).Invoke(ContextWithPrincipal(t.Context(), testPrincipal()), json.RawMessage(call.arguments))
+
+		var refusal *ToolRefusalError
+		require.ErrorAs(t, err, &refusal, call.tool)
+		var body operationBudgetResult
+		require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &body), call.tool)
+		require.Equal(t, "invalid_request", body.Code, call.tool)
+	}
+}
+
+func insightNames(skills []SkillInsight) []string {
+	names := make([]string, 0, len(skills))
+	for _, skill := range skills {
+		names = append(names, skill.Name)
+	}
+	return names
+}
+
+// uniqueKeys is decodeKeys with repeats collapsed, for a result whose rows
+// repeat one object's field names.
+func uniqueKeys(t *testing.T, value any) []string {
+	t.Helper()
+
+	keys := decodeKeys(t, value)
+	slices.Sort(keys)
+	return slices.Compact(keys)
+}

@@ -1,5 +1,5 @@
 // Package sessiontokens implements the product-neutral JWT and revocation
-// primitives used by Gram-issued session tokens.
+// primitives used by Speakeasy-issued session tokens.
 package sessiontokens
 
 import (
@@ -20,17 +20,29 @@ type RevocationChecker interface {
 	IsTokenRevoked(ctx context.Context, jti string) (bool, error)
 }
 
-// SessionClaims is the standard claim shape for Gram-issued user sessions.
+// SessionClaims is the standard claim shape for Speakeasy-issued user sessions.
 type SessionClaims struct {
 	jwt.RegisteredClaims
 
 	ClientID string `json:"client_id,omitempty"`
 }
 
-// FirstPartyClientID identifies a token minted for a Gram surface without a
+// FirstPartyClientID identifies a token minted for a Speakeasy surface without a
 // registered OAuth client. It is deliberately not an HTTPS URL: URL-shaped
 // client IDs are resolved as OAuth Client ID Metadata Documents.
 const FirstPartyClientID = "client:first-party"
+
+// FirstPartyClientName is the connections label for a session the dashboard
+// minted for itself (Inspect). Those rows have no OAuth
+// client registration, so the session list supplies this name when
+// DashboardMintRefreshTokenHashPrefix marks the row.
+const FirstPartyClientName = "Dashboard"
+
+// DashboardMintRefreshTokenHashPrefix marks user_sessions rows minted by the
+// dashboard instead of a registered OAuth client. The session list reads it
+// to apply FirstPartyClientName. It is not a hash: real refresh-token hashes
+// are base64url and cannot contain ':', so the prefix cannot collide with one.
+const DashboardMintRefreshTokenHashPrefix = "dashboard-mint"
 
 // Signer mints HS256-signed session JWTs. It is safe to share across goroutines.
 type Signer struct {
@@ -143,7 +155,9 @@ type ValidatedSession struct {
 	subject   urn.SessionSubject
 	jti       string
 	clientID  string
+	issuer    string
 	validated bool
+	expiresAt time.Time
 }
 
 // Subject returns the verified session subject.
@@ -154,6 +168,12 @@ func (s ValidatedSession) JTI() string { return s.jti }
 
 // ClientID returns the verified OAuth client ID, if present.
 func (s ValidatedSession) ClientID() string { return s.clientID }
+
+// Issuer returns the verified iss claim, or "" when the token carries none.
+func (s ValidatedSession) Issuer() string { return s.issuer }
+
+// ExpiresAt returns the verified expiration time.
+func (s ValidatedSession) ExpiresAt() time.Time { return s.expiresAt }
 
 // Valid reports whether this value was produced by ValidateBearer and still
 // contains a well-formed subject and token identifier.
@@ -174,23 +194,50 @@ func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience str
 	if err != nil {
 		return ValidatedSession{}, err
 	}
+	return validatedBearerFromClaims(ctx, claims, revocation)
+}
+
+// ValidateExactAudienceBearer verifies the same bearer properties as
+// ValidateBearer and additionally requires aud to be exactly one value. It is
+// used for resource-bound sessions that must not be broadened to other MCP
+// servers by an additional audience.
+func (s *Signer) ValidateExactAudienceBearer(ctx context.Context, token, expectedAudience string, revocation RevocationChecker) (ValidatedSession, error) {
+	claims, err := s.ValidateExactAudience(token, expectedAudience)
+	if err != nil {
+		return ValidatedSession{}, err
+	}
+	return validatedBearerFromClaims(ctx, claims, revocation)
+}
+
+// ErrRevocationUnavailable marks a revocation check that could not be
+// completed, such as an unreachable revocation store. The request still fails
+// closed, but the credential itself was never judged: callers that tell a
+// client to discard its token must not do so on this error, or an outage turns
+// every live token into a re-authentication.
+var ErrRevocationUnavailable = errors.New("revocation check unavailable")
+
+// ErrTokenRevoked marks a token whose jti the revocation store recognises. The
+// credential is genuinely dead, so a client holding it should discard it.
+var ErrTokenRevoked = errors.New("token is revoked")
+
+func validatedBearerFromClaims(ctx context.Context, claims *SessionClaims, revocation RevocationChecker) (ValidatedSession, error) {
 	if claims.ID == "" {
 		return ValidatedSession{}, errors.New("validate token: missing jti claim")
 	}
 
 	revoked, err := revocation.IsTokenRevoked(ctx, claims.ID)
 	if err != nil {
-		return ValidatedSession{}, fmt.Errorf("check revocation: %w", err)
+		return ValidatedSession{}, fmt.Errorf("%w: %w", ErrRevocationUnavailable, err)
 	}
 	if revoked {
-		return ValidatedSession{}, errors.New("token is revoked")
+		return ValidatedSession{}, ErrTokenRevoked
 	}
 
 	subject, err := urn.ParseSessionSubject(claims.Subject)
 	if err != nil {
 		return ValidatedSession{}, fmt.Errorf("parse session subject: %w", err)
 	}
-	return ValidatedSession{subject: subject, jti: claims.ID, clientID: claims.ClientID, validated: true}, nil
+	return ValidatedSession{subject: subject, jti: claims.ID, clientID: claims.ClientID, issuer: claims.Issuer, validated: true, expiresAt: claims.ExpiresAt.Time}, nil
 }
 
 func validSuppliedJTI(jti string) bool {
@@ -200,9 +247,36 @@ func validSuppliedJTI(jti string) bool {
 }
 
 // VerifiedJTI extracts a JTI after verifying the token's signature. It skips
-// expiry validation so clients can revoke an expired token, but a valid Gram
+// expiry validation so clients can revoke an expired token, but a valid Speakeasy
 // signature is required before the caller can affect the revocation cache.
 func (s *Signer) VerifiedJTI(token string) (string, error) {
+	claims, err := s.signatureVerifiedClaims(token)
+	if err != nil {
+		return "", err
+	}
+	if claims.ID == "" {
+		return "", errors.New("token missing jti claim")
+	}
+	return claims.ID, nil
+}
+
+// VerifiedSubject extracts the session subject after verifying the token's
+// signature, skipping expiry and audience validation. It says who a token was
+// minted for, never that the token is usable: callers use it to shape a
+// rejection, not to admit a request.
+func (s *Signer) VerifiedSubject(token string) (urn.SessionSubject, error) {
+	claims, err := s.signatureVerifiedClaims(token)
+	if err != nil {
+		return urn.SessionSubject{}, err
+	}
+	subject, err := urn.ParseSessionSubject(claims.Subject)
+	if err != nil {
+		return urn.SessionSubject{}, fmt.Errorf("parse session subject: %w", err)
+	}
+	return subject, nil
+}
+
+func (s *Signer) signatureVerifiedClaims(token string) (*SessionClaims, error) {
 	claims := SessionClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "",
@@ -222,10 +296,7 @@ func (s *Signer) VerifiedJTI(token string) (string, error) {
 		return s.key, nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithoutClaimsValidation())
 	if err != nil {
-		return "", fmt.Errorf("parse token: %w", err)
+		return nil, fmt.Errorf("parse token: %w", err)
 	}
-	if claims.ID == "" {
-		return "", errors.New("token missing jti claim")
-	}
-	return claims.ID, nil
+	return &claims, nil
 }

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -25,7 +26,7 @@ export const StripeSubscriptionStatus = {
 /**
  * The live Stripe subscription status
  */
-export type StripeSubscriptionStatus = ClosedEnum<
+export type StripeSubscriptionStatus = OpenEnum<
   typeof StripeSubscriptionStatus
 >;
 
@@ -51,6 +52,18 @@ export type StripeSubscription = {
    */
   currentPeriodStart: Date;
   /**
+   * Verified terms of a currently applied Stripe subscription discount; absent when unsupported or inactive
+   */
+  discountDescription?: string | undefined;
+  /**
+   * Discount expiration reported by Stripe, when present
+   */
+  discountEndsAt?: Date | undefined;
+  /**
+   * Whether the live discount and gateway price verify the monthly five GiB promotion
+   */
+  gatewayPromotionApplied?: boolean | undefined;
+  /**
    * Whether a past-due subscription has an open latest invoice with an unpaid balance
    */
   paymentFailed: boolean;
@@ -69,9 +82,10 @@ export type StripeSubscription = {
 };
 
 /** @internal */
-export const StripeSubscriptionStatus$inboundSchema: z.ZodMiniEnum<
-  typeof StripeSubscriptionStatus
-> = z.enum(StripeSubscriptionStatus);
+export const StripeSubscriptionStatus$inboundSchema: z.ZodMiniType<
+  StripeSubscriptionStatus,
+  unknown
+> = openEnums.inboundSchema(StripeSubscriptionStatus);
 
 /** @internal */
 export const StripeSubscription$inboundSchema: z.ZodMiniType<
@@ -94,6 +108,11 @@ export const StripeSubscription$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    discount_description: z.optional(z.string()),
+    discount_ends_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    gateway_promotion_applied: z.optional(z.boolean()),
     payment_failed: z.boolean(),
     status: StripeSubscriptionStatus$inboundSchema,
     trial_end: z.optional(
@@ -110,6 +129,9 @@ export const StripeSubscription$inboundSchema: z.ZodMiniType<
       "canceled_at": "canceledAt",
       "current_period_end": "currentPeriodEnd",
       "current_period_start": "currentPeriodStart",
+      "discount_description": "discountDescription",
+      "discount_ends_at": "discountEndsAt",
+      "gateway_promotion_applied": "gatewayPromotionApplied",
       "payment_failed": "paymentFailed",
       "trial_end": "trialEnd",
       "trial_start": "trialStart",

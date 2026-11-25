@@ -51,6 +51,7 @@ func (l *Logger) LogPlatformMcpRegistrationCreate(ctx context.Context, dbtx repo
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -83,7 +84,7 @@ type LogPlatformMcpRegistrationHandoffEvent struct {
 	PlatformMcpRegistrationURN urn.PlatformMcpRegistration
 	CatalogProvider            string
 	CatalogReference           string
-	HandoffID                  uuid.UUID //nolint:glint // Setup handoffs are internal single-use credentials and intentionally have no public URN type.
+	HandoffID                  uuid.UUID //nolint:glint // auditeventurnnaming: Setup handoffs are internal single-use credentials and intentionally have no public URN type.
 	Intent                     string
 }
 
@@ -107,6 +108,7 @@ func (l *Logger) logPlatformMcpRegistrationHandoff(ctx context.Context, dbtx rep
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

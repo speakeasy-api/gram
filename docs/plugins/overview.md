@@ -4,14 +4,14 @@ cwd: ../..
 
 # Plugins
 
-Plugins are distributable bundles of MCP servers (and observability hooks) that org admins create in Gram and publish to AI coding platforms. Once published, team members install the plugin through each platform's native plugin marketplace instead of configuring MCP servers manually.
+Plugins are distributable bundles of MCP servers (and observability hooks) that org admins create in Speakeasy and publish to AI coding platforms. Once published, team members install the plugin through each platform's native plugin marketplace instead of configuring MCP servers manually.
 
 ## What a plugin is
 
-A plugin aggregates one or more Gram toolsets under a single named unit. Admins configure which MCP servers are included, whether each is `required` or `optional`, and which roles/users are assigned to receive it. Gram then generates platform-specific package files and publishes them to a GitHub repo that each platform's marketplace indexes.
+A plugin aggregates one or more Speakeasy toolsets under a single named unit. Admins configure which MCP servers are included, whether each is `required` or `optional`, and which roles/users are assigned to receive it. Speakeasy then generates platform-specific package files and publishes them to a GitHub repo that each platform's marketplace indexes.
 
 ```
-Org admin                     Gram                        GitHub repo (auto-managed)
+Org admin                     Speakeasy                        GitHub repo (auto-managed)
   │                             │                                │
   ├─ create plugin "AI Tools"   │                                │
   ├─ add 3 MCP servers          │                                │
@@ -25,7 +25,7 @@ Team member installs from Claude/Cursor/Codex marketplace
 
 ## Key concepts
 
-**Toolsets as plugin servers.** Each MCP server inside a plugin maps to a Gram toolset with MCP enabled. The toolset's MCP URL is resolved at publish time and embedded in the generated config.
+**Toolsets as plugin servers.** Each MCP server inside a plugin maps to a Speakeasy toolset with MCP enabled. The toolset's MCP URL is resolved at publish time and embedded in the generated config.
 
 **Server policy.** Each server is `required` (always installed) or `optional` (user can opt out). This is expressed in the per-platform plugin manifest.
 
@@ -37,11 +37,17 @@ Team member installs from Claude/Cursor/Codex marketplace
 
 Assignments control who sees the plugin in their marketplace; RBAC (`mcp:connect` scope) still enforces access at the MCP entrypoint.
 
-**Observability plugin.** Every publish automatically includes a per-org observability plugin — one each for Claude, Cursor, Codex, OpenCode and GitHub Copilot — that bundles hooks forwarding tool-use events back to Gram. This is required for proper audit logging.
+**Skills.** Skills distributed to a plugin ship in its package under `skills/` and, behind the `skills-over-mcp` flag, are also served to assigned members over the plugin's hosted MCP servers through the MCP Skills extension. See [Loading skills over MCP](../skills/loading-skills-over-mcp.md).
 
-**GitHub Copilot.** Copilot is supported on two separate tracks. MCP servers and skills ship through the platform-neutral Agent Plugins 1.0 package (`agent-plugins/<plugin-slug>/`). The observability package keeps the Copilot CLI registration explicitly `copilot-cli` and carries a separate managed-install manifest for VS Code's `vscode-copilot` registration. The two runtimes share canonical Gram events, not wire or response codecs. See [Package format](./package-format.md#copilot-observability).
+**Observability plugin.** Every publish automatically includes a per-org observability plugin — one each for Claude, Cursor, Codex, OpenCode, OpenClaw, Pi and GitHub Copilot — that bundles hooks forwarding tool-use events back to Speakeasy. This is required for proper audit logging.
 
-**Scoped API keys.** At publish time, Gram mints two API keys and embeds them in the generated configs:
+**OpenClaw.** The OpenClaw observability package is a native OpenClaw plugin (`openclaw.plugin.json` + `index.js`), installed with `openclaw plugins install <dir>` and a Gateway restart. Two caveats are load-bearing and documented in the [OpenClaw install runbook](../runbooks/openclaw-install.md): conversation-scope hooks require `plugins.entries.speakeasy-observability.hooks.allowConversationAccess: true`, and coverage depends on the customer's model-auth mode — models routed through the Claude CLI harness delegate the tool loop out-of-process, so OpenClaw's tool and LLM hooks never fire for them.
+
+**Pi.** Pi has no hook configuration, so its observability package is a Pi extension (`extensions/speakeasy-observability/index.ts`) that spawns `speakeasy-hooks pi serve`. It installs by extracting the package into `~/.pi/agent/` or a repository's `.pi/`. See [Package format](./package-format.md#pi-observability).
+
+**GitHub Copilot.** Copilot is supported on two separate tracks. MCP servers and skills ship through the platform-neutral Agent Plugins 1.0 package (`agent-plugins/<plugin-slug>/`). The observability package keeps the Copilot CLI registration on the `copilot-cli` codec and carries a separate managed-install manifest for VS Code's `vscode-copilot` registration. The two runtimes share canonical Speakeasy events, not wire or response codecs. See [Package format](./package-format.md#copilot-observability).
+
+**Scoped API keys.** At publish time, Speakeasy mints two API keys and embeds them in the generated configs:
 
 - A `consumer`-scoped key for MCP access
 - A `hooks`-scoped key embedded in the hook script
@@ -65,33 +71,33 @@ Slugs must be unique per `(organization_id, project_id)` (filtered index, ignore
 
 All endpoints live under `/rpc/plugins.<method>` and require session auth + `Gram-Project` header.
 
-| Endpoint                      | Auth scope | Description                                                                                                              |
-| ----------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `listPlugins`                 | `OrgRead`  | List plugins with server/assignment counts                                                                               |
-| `getPlugin`                   | `OrgRead`  | Full plugin detail (nested servers + assignments)                                                                        |
-| `createPlugin`                | `OrgAdmin` | Create plugin (slug auto-derived from name if omitted)                                                                   |
-| `updatePlugin`                | `OrgAdmin` | Rename/re-slug/redescribe                                                                                                |
-| `deletePlugin`                | `OrgAdmin` | Soft-delete plugin + all its servers                                                                                     |
-| `addPluginServer`             | `OrgAdmin` | Add toolset to plugin                                                                                                    |
-| `updatePluginServer`          | `OrgAdmin` | Change display name, policy, sort order                                                                                  |
-| `removePluginServer`          | `OrgAdmin` | Remove server from plugin                                                                                                |
-| `setPluginAssignments`        | `OrgAdmin` | Replace all principal assignments (atomic)                                                                               |
-| `downloadPluginPackage`       | `OrgRead`  | Download single-plugin ZIP for `claude`, `cursor`, or `codex`                                                            |
-| `downloadObservabilityPlugin` | `OrgAdmin` | Download per-org observability plugin ZIP for `claude`, `cursor`, `codex`, `opencode` or `copilot` (mints hooks API key) |
-| `getPublishStatus`            | `OrgRead`  | Check GitHub config + connection status; returns marketplace URL                                                         |
-| `publishPlugins`              | `OrgAdmin` | Generate all plugins, push to GitHub, mint API keys                                                                      |
+| Endpoint                      | Auth scope | Description                                                                                                                                |
+| ----------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `listPlugins`                 | `OrgRead`  | List plugins with server/assignment counts                                                                                                 |
+| `getPlugin`                   | `OrgRead`  | Full plugin detail (nested servers + assignments)                                                                                          |
+| `createPlugin`                | `OrgAdmin` | Create plugin (slug auto-derived from name if omitted)                                                                                     |
+| `updatePlugin`                | `OrgAdmin` | Rename/re-slug/redescribe                                                                                                                  |
+| `deletePlugin`                | `OrgAdmin` | Soft-delete plugin + all its servers                                                                                                       |
+| `addPluginServer`             | `OrgAdmin` | Add toolset to plugin                                                                                                                      |
+| `updatePluginServer`          | `OrgAdmin` | Change display name, policy, sort order                                                                                                    |
+| `removePluginServer`          | `OrgAdmin` | Remove server from plugin                                                                                                                  |
+| `setPluginAssignments`        | `OrgAdmin` | Replace all principal assignments (atomic)                                                                                                 |
+| `downloadPluginPackage`       | `OrgRead`  | Download single-plugin ZIP for `claude`, `cursor`, or `codex`                                                                              |
+| `downloadObservabilityPlugin` | `OrgAdmin` | Download per-org observability plugin ZIP for `claude`, `cursor`, `codex`, `opencode`, `openclaw`, `pi` or `copilot` (mints hooks API key) |
+| `getPublishStatus`            | `OrgRead`  | Check GitHub config + connection status; returns marketplace URL                                                                           |
+| `publishPlugins`              | `OrgAdmin` | Generate all plugins, push to GitHub, mint API keys                                                                                        |
 
 ## Implementation
 
-| Path                                           | Contents                                                   |
-| ---------------------------------------------- | ---------------------------------------------------------- |
-| `server/design/plugins/design.go`              | Goa service definition (types, endpoints, security)        |
-| `server/internal/plugins/impl.go`              | Service logic — all 13 endpoint implementations            |
-| `server/internal/plugins/generate.go`          | Package generation — platform-specific file/ZIP generation |
-| `server/internal/plugins/marketplace_token.go` | 256-bit base64url token for marketplace proxy              |
-| `server/internal/plugins/repo/`                | SQLc-generated database access                             |
-| `server/internal/audit/plugins.go`             | 8 audit event definitions                                  |
-| `client/dashboard/src/pages/plugins/`          | React UI (list, detail, publish, install instructions)     |
+| Path                                         | Contents                                                   |
+| -------------------------------------------- | ---------------------------------------------------------- |
+| `server/design/plugins/design.go`            | Goa service definition (types, endpoints, security)        |
+| `server/internal/plugins/impl.go`            | Service logic — all 13 endpoint implementations            |
+| `server/internal/plugins/generate.go`        | Package generation — platform-specific file/ZIP generation |
+| `server/internal/plugins/marketplacetokens/` | Marketplace proxy tokens: minted, hashed, sealed, opened   |
+| `server/internal/plugins/repo/`              | SQLc-generated database access                             |
+| `server/internal/audit/plugins.go`           | 8 audit event definitions                                  |
+| `client/dashboard/src/pages/plugins/`        | React UI (list, detail, publish, install instructions)     |
 
 ## Audit events
 
@@ -111,5 +117,6 @@ All mutations emit an audit event with actor, action, subject (plugin), and org/
 ## Related docs
 
 - [Local development](./local-development.md) — env vars, GitHub App setup, running locally
-- [Package format](./package-format.md) — exact file layout Gram generates per platform
+- [Package format](./package-format.md) — exact file layout Speakeasy generates per platform
 - [Publishing](./publishing.md) — end-to-end publish flow, marketplace tokens, GitHub integration
+- [Hooks environment overrides](../runbooks/hooks-environment-overrides.md) — the `SPEAKEASY_AI_HOOKS_*` variables an installed plugin honours, and how to collect a debug log

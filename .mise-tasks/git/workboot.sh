@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #MISE dir="{{ config_root }}"
-#MISE hide="true"
+#MISE hide=true
 #MISE description="Boot this worktree's stack, publishing a marker while it runs"
 
 set -e
@@ -27,6 +27,16 @@ echo $$ > "$marker"
 rm -f "$failed"
 trap 'code=$?; rm -f "$marker"; [ "$code" -eq 0 ] || echo "$code" > "$failed"' EXIT
 
+# A fresh worktree is booted so that its containers, migrations and seed data
+# exist -- but it is not left running: a developer usually has several
+# worktrees and only works in one, and idle stacks cost RAM and CPU for nothing.
+# So hand the worktree over paused; `mise run wake` brings it back in seconds
+# (containers are stopped, not removed, so nothing is re-created or re-seeded).
+pause_stack() {
+    echo "Boot complete — pausing the stack. Run \`mise run wake\` to use it."
+    mise run pause
+}
+
 # Re-booting a worktree whose stack is already running fails for a reason that
 # has nothing to do with the worktree: `mise run start` kills the previous
 # daemons, pitchfork records the kill as a daemon failure, `start` reports
@@ -40,27 +50,25 @@ mise run stop || true
 # accepts queries, and several worktree stacks may be booting at once. At 30s
 # infra:start gives up mid-initdb and zero aborts before migrations run,
 # leaving the daemons pointed at an empty database.
-#
-# PRESIDIO_READINESS_TIMEOUT=0 skips the shared analyzer's health wait, which
-# is up to 90s of pure latency here: nothing in the boot path consumes Presidio
-# synchronously (only background Temporal risk activities do, and they already
-# retry), and infra:start treats the wait as advisory anyway. An interactive
-# `./zero` keeps the wait so its success message stays honest.
-if INFRA_READINESS_TIMEOUT=300 PRESIDIO_READINESS_TIMEOUT=0 ./zero --agent; then
+if INFRA_READINESS_TIMEOUT=300 ./zero --agent; then
+    pause_stack
     exit 0
 fi
 
 # `mise run seed` is `zero`'s last step, and the one that fills the org with
 # data and lifts it off the demo gate -- a boot that stops here leaves a
-# dashboard that looks broken. It talks only to Postgres and ClickHouse (no
-# server, no dev-idp handshake), so the remaining failure mode is a database
-# still settling on a cold volume. Retry the seed alone -- if `zero` failed
+# dashboard that looks broken. It needs only Postgres and ClickHouse (its
+# dev-idp setup for the Enterprise Sign-In server is best-effort: if any of
+# those calls fails, the seed logs a warning and leaves that server
+# display-only), so the remaining failure mode is a database still settling on
+# a cold volume. Retry the seed alone -- if `zero` failed
 # earlier than seeding, these retries fail too and the boot is reported failed
 # anyway.
 for delay in 15 30 60; do
     sleep "$delay"
     echo "Retrying seed after a ${delay}s wait..."
     if mise run seed; then
+        pause_stack
         exit 0
     fi
 done

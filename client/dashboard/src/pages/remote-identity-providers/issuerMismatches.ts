@@ -47,12 +47,9 @@ export function mismatchValueLabel(value: string | undefined): string {
   return value;
 }
 
-// TARGET_AUTHORITATIVE is the clause every surface uses to say who wins a
-// non-blocking difference. Exported rather than repeated, so the consolidation
-// dialog and the convergence listing cannot drift into describing one warning
-// two ways for the same administrator.
-export const TARGET_AUTHORITATIVE =
-  "the target provider's values become authoritative";
+// Shared wording for non-blocking differences in tenant consolidation warnings.
+const TARGET_AUTHORITATIVE =
+  "the target authorization server's values become authoritative";
 
 // listMismatchDelta splits a list-valued difference into what the migrated
 // clients gain and what they lose.

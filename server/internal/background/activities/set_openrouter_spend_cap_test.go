@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -153,6 +154,8 @@ func TestSetOpenRouterSpendCapTargetsSecurityInferenceKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Security inference cap", entry.SubjectDisplay)
 	require.NotNil(t, entry.ActingSurface)
+	// The args carry no surface, standing in for a payload created before the
+	// field existed, so the worker derives one and finds nothing.
 	require.Equal(t, string(audit.SurfaceUnknown), *entry.ActingSurface)
 	var generation spendCapAlertGenerationFixture
 	require.NoError(t, cacheAdapter.Get(
@@ -162,6 +165,53 @@ func TestSetOpenRouterSpendCapTargetsSecurityInferenceKey(t *testing.T) {
 	))
 	require.Equal(t, "operation_internal_placeholder", generation.OperationID)
 	require.EqualValues(t, 75, generation.MonthlyCredits)
+}
+
+// TestSetOpenRouterSpendCapRecordsThreadedSurface covers the customer path.
+// usage.SetSpendCap is an authenticated handler that schedules this workflow
+// with BypassPolicy false, so the surface has to arrive in the payload: the
+// activity runs in a worker where that request's context is gone, and keying
+// off BypassPolicy would stamp a customer's own change as admin work.
+func TestSetOpenRouterSpendCapRecordsThreadedSurface(t *testing.T) {
+	t.Parallel()
+
+	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(
+		t,
+		"payg",
+		pgtype.Text{String: "subscription_placeholder", Valid: true},
+	)
+	createSpendCapActivityKey(t, db, organizationID, 50)
+	provisioner.On(
+		"RefreshAPIKeyLimit",
+		mock.Anything,
+		organizationID,
+		openrouter.KeyTypeChat,
+		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 60 }),
+	).Run(func(args mock.Arguments) {
+		ctx, ok := args.Get(0).(context.Context)
+		require.True(t, ok)
+		require.NoError(t, openrouterrepo.New(db).UpdateOpenRouterKeyMonthlyCredits(ctx, openrouterrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+			MonthlyCredits: 60,
+			OrganizationID: organizationID,
+			KeyType:        string(openrouter.KeyTypeChat),
+		}))
+	}).Return(60, nil).Once()
+
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), newSpendCapActivityCache(t))
+	args := spendCapActivityArgs("operation_threaded_placeholder", organizationID, 60)
+	args.ActingSurface = string(audit.SurfaceDashboard)
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(setter.Do)
+	_, err := env.ExecuteActivity(setter.Do, args)
+	require.NoError(t, err)
+	provisioner.AssertExpectations(t)
+
+	entry, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
+	require.NoError(t, err)
+	require.NotNil(t, entry.ActingSurface)
+	require.Equal(t, string(audit.SurfaceDashboard), *entry.ActingSurface)
 }
 
 func spendCapActivityArgs(operationID, organizationID string, limit int) activities.SetOpenRouterSpendCapArgs {
@@ -686,7 +736,6 @@ func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {
 	createSpendCapActivityKey(t, db, organizationID, 100)
 
 	firstStarted := make(chan struct{})
-	secondStarted := make(chan struct{})
 	releaseFirst := make(chan struct{})
 	var releaseOnce sync.Once
 	t.Cleanup(func() { releaseOnce.Do(func() { close(releaseFirst) }) })
@@ -718,7 +767,6 @@ func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {
 		openrouter.KeyTypeChat,
 		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 700 }),
 	).Run(func(args mock.Arguments) {
-		close(secondStarted)
 		updateLimit(args, 700)
 	}).Return(700, nil).Once()
 
@@ -746,11 +794,9 @@ func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {
 
 	secondDone := make(chan error, 1)
 	go func() { secondDone <- run(spendCapActivityArgs("operation_second_placeholder", organizationID, 700)) }()
-	select {
-	case <-secondStarted:
-		require.FailNow(t, "second spend-cap operation bypassed the billing lock")
-	case <-time.After(150 * time.Millisecond):
-	}
+	holderPID, err := testrepo.New(db).GetAdvisoryLockHolderFixture(t.Context(), "openrouter-chat-billing:"+organizationID)
+	require.NoError(t, err)
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), db, uint32(holderPID), 1)
 
 	releaseOnce.Do(func() { close(releaseFirst) })
 	require.NoError(t, <-firstDone)

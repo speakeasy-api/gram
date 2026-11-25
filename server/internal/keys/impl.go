@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -19,6 +20,8 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/keys/server"
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -45,6 +48,7 @@ type Service struct {
 	projectRepo *project_repo.Queries
 	orgsRepo    *organizations_repo.Queries
 	audit       *audit.Logger
+	authorizer  *agentmanagement.Authorizer
 	keyPrefix   string
 }
 
@@ -72,6 +76,7 @@ func NewService(
 		projectRepo: project_repo.New(db),
 		orgsRepo:    organizations_repo.New(db),
 		audit:       auditLogger,
+		authorizer:  agentmanagement.NewAuthorizer(authzEngine),
 		keyPrefix:   fullKeyPrefix,
 	}
 }
@@ -100,9 +105,18 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	// during ingestion, so reserving the namespaces prevents user-created keys
 	// from becoming ambiguous with server-minted key purposes.
 	for _, reserved := range []string{auth.PluginAPIKeyNamePrefix, auth.LiteLLMAPIKeyNamePrefix} {
-		if strings.HasPrefix(payload.Name, reserved) {
+		if strings.HasPrefix(strings.TrimSpace(payload.Name), reserved) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "api key names starting with %q are reserved", reserved).LogError(ctx, s.logger)
 		}
+	}
+	if payload.AgentID != nil || payload.DelegatedGrantsVersion != nil || payload.RequestedGrants != nil || payload.ExpiresAt != nil {
+		if len(payload.PolicyGrants) > 0 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "policy_grants apply to ordinary keys; agent keys use requested_grants")
+		}
+		return s.createAgentKey(ctx, payload)
+	}
+	if len(payload.AuthClientChoices) > 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "auth_client_choices apply to agent keys")
 	}
 	scopes := map[string]struct{}{}
 	for _, rawscope := range payload.Scopes {
@@ -129,10 +143,17 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	// scope grant at all, not even org:read, so gating this on any scope locks
 	// them out of hooks entirely. Every other scope (and any mix) stays
 	// admin-only.
-	if !slices.Equal(finalScopes, []string{auth.APIKeyScopeHooks.String()}) {
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if !slices.Equal(finalScopes, []string{auth.APIKeyScopeHooks.String()}) || len(payload.PolicyGrants) > 0 {
+		if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 			return nil, err
 		}
+	}
+
+	// A policy only covers MCP access, which needs a transport scope that reaches it.
+	if len(payload.PolicyGrants) > 0 && !slices.ContainsFunc(finalScopes, func(scope string) bool {
+		return scope == auth.APIKeyScopeConsumer.String() || scope == auth.APIKeyScopeProducer.String() || scope == auth.APIKeyScopeChat.String()
+	}) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "policy_grants need a consumer, producer or chat scope")
 	}
 
 	fullKey, keyHash, displayPrefix, err := auth.GenerateAPIKeyMaterial(s.keyPrefix)
@@ -140,11 +161,36 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "error generating api key").LogError(ctx, s.logger)
 	}
 
+	// Binding is explicit: ambient request project context must not turn an
+	// organization-wide key into a project-bound key.
 	var projectID uuid.NullUUID
-	if authCtx.ProjectID != nil {
-		projectID = uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
-	} else {
-		projectID = uuid.NullUUID{UUID: uuid.UUID{}, Valid: false}
+	if payload.ProjectID != nil {
+		id, err := uuid.Parse(*payload.ProjectID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid project ID")
+		}
+		project, err := s.projectRepo.GetProjectByIDAndOrganizationID(ctx, project_repo.GetProjectByIDAndOrganizationIDParams{
+			ID: id, OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, nil, "project not found")
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load key project").LogError(ctx, s.logger)
+		}
+		if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(project.ID)).Read()); err != nil {
+			return nil, err
+		}
+		projectID = uuid.NullUUID{UUID: project.ID, Valid: true}
+	}
+
+	policy, err := s.validatedKeyPolicy(ctx, s.db, authCtx.ActiveOrganizationID, payload.PolicyGrants, projectID)
+	if err != nil {
+		return nil, err
+	}
+	policyAudit, err := PolicyAuditPayload(policy)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error preparing api key audit").LogError(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -167,6 +213,9 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating api key").LogError(ctx, s.logger)
 	}
+	if err := authz.PatchPrincipalGrants(ctx, dbtx, authCtx.ActiveOrganizationID, urn.NewAPIKeyPrincipal(createdKey.ID), policy, nil); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving api key policy").LogError(ctx, s.logger)
+	}
 
 	if err := s.audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
@@ -177,6 +226,8 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		KeyURN:           urn.NewAPIKey(createdKey.ID),
 		KeyName:          payload.Name,
 		Scopes:           finalScopes,
+		AgentCredential:  nil,
+		PolicyGrants:     policyAudit,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error adding api key creation audit log").LogError(ctx, s.logger)
 	}
@@ -186,17 +237,22 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	}
 
 	return &gen.Key{
-		ID:              createdKey.ID.String(),
-		Name:            createdKey.Name,
-		OrganizationID:  createdKey.OrganizationID,
-		ProjectID:       conv.FromNullableUUID(createdKey.ProjectID),
-		Key:             &fullKey,
-		KeyPrefix:       createdKey.KeyPrefix,
-		Scopes:          createdKey.Scopes,
-		CreatedByUserID: createdKey.CreatedByUserID,
-		CreatedAt:       createdKey.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:       createdKey.UpdatedAt.Time.Format(time.RFC3339),
-		LastAccessedAt:  nil,
+		ID:                     createdKey.ID.String(),
+		Name:                   createdKey.Name,
+		OrganizationID:         createdKey.OrganizationID,
+		ProjectID:              conv.FromNullableUUID(createdKey.ProjectID),
+		Key:                    &fullKey,
+		KeyPrefix:              createdKey.KeyPrefix,
+		Scopes:                 createdKey.Scopes,
+		CreatedByUserID:        createdKey.CreatedByUserID,
+		SubjectUrn:             nil,
+		DelegatedGrants:        nil,
+		DelegatedGrantsVersion: nil,
+		ExpiresAt:              nil,
+		PolicyGrants:           policyModel(policy),
+		CreatedAt:              createdKey.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              createdKey.UpdatedAt.Time.Format(time.RFC3339),
+		LastAccessedAt:         nil,
 	}, nil
 }
 
@@ -205,13 +261,72 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if payload.AgentID != nil {
+		if payload.Cursor != nil || payload.Limit != nil || payload.Search != nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "cursor, limit and search cannot be combined with agent_id")
+		}
+		return s.listAgentKeys(ctx, *payload.AgentID)
+	}
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
-	keys, err := s.repo.ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	// Without a cursor the walk starts above every real row, so the keyset
+	// comparison stays in the query and the index serves every page.
+	params := repo.ListAPIKeysByOrganizationPageParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		CursorCreatedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Infinity, Valid: true},
+		CursorID:        uuid.Max,
+		NamePattern:     pgtype.Text{String: "", Valid: false},
+		PageLimit:       pgtype.Int4{Int32: 0, Valid: false},
+	}
+	search := ""
+	if payload.Search != nil {
+		search = strings.TrimSpace(*payload.Search)
+	}
+	if search != "" {
+		params.NamePattern = pgtype.Text{String: keyNameContainsPattern(search), Valid: true}
+	}
+	cursorScope := keyListCursorScope(authCtx.ActiveOrganizationID, search)
+	if payload.Cursor != nil {
+		createdAt, id, err := decodeKeyListCursor(*payload.Cursor, cursorScope)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
+		}
+		params.CursorCreatedAt = pgtype.Timestamptz{Time: createdAt, InfinityModifier: pgtype.Finite, Valid: true}
+		params.CursorID = id
+	}
+	// No limit keeps the original contract: every matching key, no cursor.
+	pageSize := 0
+	if payload.Limit != nil {
+		pageSize = *payload.Limit
+		if pageSize < 1 || pageSize > maxListKeysPageSize {
+			return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and %d", maxListKeysPageSize)
+		}
+		// One row past the page says whether another page exists.
+		params.PageLimit = pgtype.Int4{Int32: conv.SafeInt32(pageSize + 1), Valid: true}
+	}
+
+	keys, err := s.repo.ListAPIKeysByOrganizationPage(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing api keys").LogError(ctx, s.logger)
+	}
+
+	var nextCursor *string
+	if pageSize > 0 && len(keys) > pageSize {
+		keys = keys[:pageSize]
+		last := keys[pageSize-1]
+		cursor := encodeKeyListCursor(last.CreatedAt.Time, last.ID, cursorScope)
+		nextCursor = &cursor
+	}
+
+	keyIDs := make([]uuid.UUID, 0, len(keys))
+	for _, key := range keys {
+		keyIDs = append(keyIDs, key.ID)
+	}
+	policies, err := keyPolicies(ctx, s.db, authCtx.ActiveOrganizationID, keyIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing api key policies").LogError(ctx, s.logger)
 	}
 
 	var result []*gen.Key
@@ -223,21 +338,26 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 		}
 
 		result = append(result, &gen.Key{
-			ID:              key.ID.String(),
-			Name:            key.Name,
-			OrganizationID:  key.OrganizationID,
-			ProjectID:       conv.FromNullableUUID(key.ProjectID),
-			Key:             nil,
-			KeyPrefix:       key.KeyPrefix,
-			Scopes:          key.Scopes,
-			CreatedByUserID: key.CreatedByUserID,
-			CreatedAt:       key.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:       key.UpdatedAt.Time.Format(time.RFC3339),
-			LastAccessedAt:  lastAccessedAt,
+			ID:                     key.ID.String(),
+			Name:                   key.Name,
+			OrganizationID:         key.OrganizationID,
+			ProjectID:              conv.FromNullableUUID(key.ProjectID),
+			Key:                    nil,
+			KeyPrefix:              key.KeyPrefix,
+			Scopes:                 key.Scopes,
+			CreatedByUserID:        key.CreatedByUserID,
+			SubjectUrn:             nil,
+			DelegatedGrants:        nil,
+			DelegatedGrantsVersion: nil,
+			ExpiresAt:              nil,
+			PolicyGrants:           policies[urn.NewAPIKeyPrincipal(key.ID).String()],
+			CreatedAt:              key.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:              key.UpdatedAt.Time.Format(time.RFC3339),
+			LastAccessedAt:         lastAccessedAt,
 		})
 	}
 
-	return &gen.ListKeysResult{Keys: result}, nil
+	return &gen.ListKeysResult{Keys: result, NextCursor: nextCursor}, nil
 }
 
 func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) error {
@@ -245,7 +365,29 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	keyID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
+	}
+	loaded, loadErr := s.repo.GetAPIKeyByID(ctx, repo.GetAPIKeyByIDParams{ID: keyID, OrganizationID: authCtx.ActiveOrganizationID})
+	if loadErr != nil && !errors.Is(loadErr, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, loadErr, "load API key for revocation").LogError(ctx, s.logger)
+	}
+	if loadErr == nil && loaded.SubjectUrn.Valid {
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "access agent API keys").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		if err := s.revokeLoadedAgentKey(ctx, tx, loaded); err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "save agent API key revocation").LogError(ctx, s.logger)
+		}
+		return nil
+	}
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -256,11 +398,6 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	kr := s.repo.WithTx(dbtx)
-
-	keyID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid key ID format")
-	}
 
 	managed, err := kr.IsAPIKeyManagedByActiveLiteLLMInstance(ctx, repo.IsAPIKeyManagedByActiveLiteLLMInstanceParams{
 		ID:             keyID,
@@ -284,6 +421,22 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		return oops.E(oops.CodeUnexpected, err, "error revoking api key").LogError(ctx, s.logger)
 	}
 
+	// A revoked key's policy goes with it, recorded in the revocation entry.
+	revokedPolicy, err := authz.LoadGrants(ctx, dbtx, authCtx.ActiveOrganizationID, []urn.Principal{urn.NewAPIKeyPrincipal(keyID)})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error loading api key policy").LogError(ctx, s.logger)
+	}
+	revokedPolicyAudit, err := PolicyAuditPayload(grantsToRoleGrants(revokedPolicy))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error preparing api key audit").LogError(ctx, s.logger)
+	}
+	if _, err := accessrepo.New(dbtx).DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   urn.NewAPIKeyPrincipal(keyID),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error removing api key policy").LogError(ctx, s.logger)
+	}
+
 	if err := s.audit.LogKeyRevoke(ctx, dbtx, audit.LogKeyRevokeEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        deleted.ProjectID,
@@ -293,6 +446,8 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		KeyURN:           urn.NewAPIKey(keyID),
 		KeyName:          deleted.Name,
 		Scopes:           deleted.Scopes,
+		AgentCredential:  nil,
+		PolicyGrants:     revokedPolicyAudit,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error adding api key revocation audit log").LogError(ctx, s.logger)
 	}

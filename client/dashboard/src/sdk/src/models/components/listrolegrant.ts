@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { Selector, Selector$inboundSchema } from "./selector.js";
@@ -18,6 +19,11 @@ export const ListRoleGrantScope = {
   OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
   OrgBlockedAdmin: "org:blocked_admin",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
+  ChannelsConnect: "channels:connect",
+  ChannelsAdmin: "channels:admin",
+  ChannelsReadAll: "channels:read_all",
   ProjectRead: "project:read",
   ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
@@ -28,6 +34,8 @@ export const ListRoleGrantScope = {
   McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentRead: "environment:read",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
@@ -36,22 +44,45 @@ export const ListRoleGrantScope = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginWrite: "plugin:write",
+  PluginBlockedWrite: "plugin:blocked_write",
+  AssistantRead: "assistant:read",
+  AssistantBlockedRead: "assistant:blocked_read",
+  AssistantWrite: "assistant:write",
+  AssistantBlockedWrite: "assistant:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  MemoryRead: "memory:read",
+  MemoryWrite: "memory:write",
+  InferenceExecute: "inference:execute",
+  LogRead: "log:read",
+  AgentRead: "agent:read",
+  AgentWrite: "agent:write",
+  AgentAuthorize: "agent:authorize",
+  AgentTransfer: "agent:transfer",
+  WorkloadRead: "workload:read",
+  WorkloadBlockedRead: "workload:blocked_read",
+  WorkloadWrite: "workload:write",
+  WorkloadBlockedWrite: "workload:blocked_write",
 } as const;
 /**
  * The scope slug this grant applies to.
  */
-export type ListRoleGrantScope = ClosedEnum<typeof ListRoleGrantScope>;
+export type ListRoleGrantScope = OpenEnum<typeof ListRoleGrantScope>;
 
 export const SubScopes = {
   OrgRead: "org:read",
   OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
   OrgBlockedAdmin: "org:blocked_admin",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
+  ChannelsConnect: "channels:connect",
+  ChannelsAdmin: "channels:admin",
+  ChannelsReadAll: "channels:read_all",
   ProjectRead: "project:read",
   ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
@@ -62,6 +93,8 @@ export const SubScopes = {
   McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentRead: "environment:read",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
@@ -70,15 +103,37 @@ export const SubScopes = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginWrite: "plugin:write",
+  PluginBlockedWrite: "plugin:blocked_write",
+  AssistantRead: "assistant:read",
+  AssistantBlockedRead: "assistant:blocked_read",
+  AssistantWrite: "assistant:write",
+  AssistantBlockedWrite: "assistant:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  MemoryRead: "memory:read",
+  MemoryWrite: "memory:write",
+  InferenceExecute: "inference:execute",
+  LogRead: "log:read",
+  AgentRead: "agent:read",
+  AgentWrite: "agent:write",
+  AgentAuthorize: "agent:authorize",
+  AgentTransfer: "agent:transfer",
+  WorkloadRead: "workload:read",
+  WorkloadBlockedRead: "workload:blocked_read",
+  WorkloadWrite: "workload:write",
+  WorkloadBlockedWrite: "workload:blocked_write",
 } as const;
-export type SubScopes = ClosedEnum<typeof SubScopes>;
+export type SubScopes = OpenEnum<typeof SubScopes>;
 
 export type ListRoleGrant = {
+  /**
+   * The subset of this scope's selectors granted to the calling user by name rather than through a role or everyone. For allow scopes it holds only selectors naming a concrete resource, which outrank blocks inherited from roles or everyone on that resource. For blocked scopes it holds the caller's own blocks, which always apply. Omitted when empty.
+   */
+  directSelectors?: Array<Selector> | undefined;
   /**
    * The scope slug this grant applies to.
    */
@@ -94,14 +149,14 @@ export type ListRoleGrant = {
 };
 
 /** @internal */
-export const ListRoleGrantScope$inboundSchema: z.ZodMiniEnum<
-  typeof ListRoleGrantScope
-> = z.enum(ListRoleGrantScope);
+export const ListRoleGrantScope$inboundSchema: z.ZodMiniType<
+  ListRoleGrantScope,
+  unknown
+> = openEnums.inboundSchema(ListRoleGrantScope);
 
 /** @internal */
-export const SubScopes$inboundSchema: z.ZodMiniEnum<typeof SubScopes> = z.enum(
-  SubScopes,
-);
+export const SubScopes$inboundSchema: z.ZodMiniType<SubScopes, unknown> =
+  openEnums.inboundSchema(SubScopes);
 
 /** @internal */
 export const ListRoleGrant$inboundSchema: z.ZodMiniType<
@@ -109,12 +164,14 @@ export const ListRoleGrant$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    direct_selectors: z.optional(z.array(Selector$inboundSchema)),
     scope: ListRoleGrantScope$inboundSchema,
     selectors: z.optional(z.array(Selector$inboundSchema)),
     sub_scopes: z.optional(z.array(SubScopes$inboundSchema)),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "direct_selectors": "directSelectors",
       "sub_scopes": "subScopes",
     });
   }),

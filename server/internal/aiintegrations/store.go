@@ -2,6 +2,7 @@ package aiintegrations
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -16,10 +17,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 )
 
 const (
@@ -33,6 +36,7 @@ const (
 	// are served per ChatGPT workspace (UUID), so each config carries the id
 	// its scope needs in external_organization_id.
 	ProviderChatGPTCompliance = "chatgpt_compliance"
+	ProviderGeminiCompliance  = "gemini_compliance"
 )
 
 var (
@@ -54,6 +58,7 @@ const (
 	ScheduleAnthropicAnalyticsCost  = "anthropic_analytics_cost"
 	ScheduleCodexCompliance         = ProviderCodexCompliance
 	ScheduleChatGPTCompliance       = ProviderChatGPTCompliance
+	ScheduleGeminiCompliance        = ProviderGeminiCompliance
 	// ScheduleCodexCloudSessions imports Codex cloud task transcripts
 	// (CODEX_LOG files) — a second schedule on the chatgpt_compliance config,
 	// which owns the workspace scope both feeds are served under.
@@ -95,7 +100,8 @@ const (
 	// chatgpt.chat.message carries ChatGPT (web/desktop) conversation
 	// messages from the Compliance Logs Platform CONVERSATION_MESSAGE feed —
 	// discrete activity events like claude.chat.message, not metrics.
-	StreamChatGPTChatMessage = "chatgpt.chat.message"
+	StreamChatGPTChatMessage  = "chatgpt.chat.message"
+	StreamGeminiConversations = "gemini.conversations"
 	// codex.cloud.chat.message carries Codex cloud task transcripts (web
 	// tasks; GitHub code review has no CODEX_LOG presence) from the
 	// Compliance Logs Platform CODEX_LOG feed — discrete activity events.
@@ -126,6 +132,8 @@ func streamForSchedule(schedule string) streamInfo {
 		return streamInfo{name: StreamClaudeChatCostUSD, kind: StreamKindMetrics}
 	case ScheduleCodexCompliance:
 		return streamInfo{name: StreamCodexCostUSD, kind: StreamKindMetrics}
+	case ScheduleGeminiCompliance:
+		return streamInfo{name: StreamGeminiConversations, kind: StreamKindEvents}
 	case ScheduleChatGPTCompliance:
 		return streamInfo{name: StreamChatGPTChatMessage, kind: StreamKindEvents}
 	case ScheduleCodexCloudSessions:
@@ -150,6 +158,8 @@ func providerSyncSchedule(provider string) syncSchedule {
 		return syncSchedule{schedule: ScheduleAnthropicCompliance, kind: SyncKindCursor}
 	case ProviderCodexCompliance:
 		return syncSchedule{schedule: ScheduleCodexCompliance, kind: SyncKindTime}
+	case ProviderGeminiCompliance:
+		return syncSchedule{schedule: ScheduleGeminiCompliance, kind: SyncKindCursor}
 	case ProviderChatGPTCompliance:
 		return syncSchedule{schedule: ScheduleChatGPTCompliance, kind: SyncKindTime}
 	default:
@@ -223,7 +233,7 @@ func initialPollLookbackForProvider(provider string) time.Duration {
 	if provider == ProviderCodexCompliance {
 		return codexComplianceInitialLookback
 	}
-	if provider == ProviderChatGPTCompliance {
+	if provider == ProviderChatGPTCompliance || provider == ProviderGeminiCompliance {
 		return chatgptComplianceInitialLookback
 	}
 	return initialUsagePollLookback
@@ -250,7 +260,7 @@ type Store struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	repo   *repo.Queries
-	enc    *encryption.Client
+	keys   *aiproviderkeys.Keys
 }
 
 type Config struct {
@@ -260,19 +270,21 @@ type Config struct {
 	Provider               string
 	ProjectID              uuid.UUID
 	ExternalOrganizationID *string
-	BillingMode            string
-	APIKey                 string
-	Enabled                bool
-	PollWatermarkAt        time.Time
-	PollCheckpoint         timewindowpoller.PollCheckpoint
-	NextPollAfter          time.Time
-	LastPollError          string
-	LastPollFailedAt       time.Time
-	LastPollSuccessAt      time.Time
-	ConsecutiveFailures    int32
-	LastCursor             string
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
+	// Settings holds non-secret provider settings stored beside the key.
+	Settings            ProviderSettings
+	BillingMode         string
+	APIKey              string
+	Enabled             bool
+	PollWatermarkAt     time.Time
+	PollCheckpoint      timewindowpoller.PollCheckpoint
+	NextPollAfter       time.Time
+	LastPollError       string
+	LastPollFailedAt    time.Time
+	LastPollSuccessAt   time.Time
+	ConsecutiveFailures int32
+	LastCursor          string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type UsagePollCandidate struct {
@@ -303,12 +315,12 @@ type UpsertResult struct {
 	CreatedNewGeneration bool
 }
 
-func NewStore(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client) *Store {
+func NewStore(logger *slog.Logger, db *pgxpool.Pool, keys *aiproviderkeys.Keys) *Store {
 	return &Store{
 		logger: logger.With(attr.SlogComponent("aiintegrations")),
 		db:     db,
 		repo:   repo.New(db),
-		enc:    enc,
+		keys:   keys,
 	}
 }
 
@@ -318,7 +330,7 @@ func normalizeProvider(provider string) (string, error) {
 		return "", oops.E(oops.CodeInvalid, nil, "provider is required")
 	}
 	switch provider {
-	case ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance, ProviderChatGPTCompliance:
+	case ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance, ProviderChatGPTCompliance, ProviderGeminiCompliance:
 	default:
 		return "", oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider: %s", provider)
 	}
@@ -342,14 +354,14 @@ func (s *Store) loadForOrgAndProviderRow(ctx context.Context, orgID string, prov
 		return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to load ai integration config")
 	}
 
-	cfg, err := s.configFromGetRow(row)
+	cfg, err := s.configFromGetRow(ctx, nil, row)
 	if err != nil {
 		return emptyConfig(orgID, provider), nil, err
 	}
 	return cfg, &row, nil
 }
 
-func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, externalOrganizationID *string, billingMode *string, resetPollWatermarkAt *time.Time) (UpsertResult, error) {
+func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, externalOrganizationID *string, settings ProviderSettings, billingMode *string, resetPollWatermarkAt *time.Time, rejections []ScheduleRejection) (UpsertResult, error) {
 	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return UpsertResult{}, err
@@ -375,6 +387,22 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		externalOrganizationID = &trimmedWorkspaceID
 	}
 
+	if provider == ProviderGeminiCompliance {
+		if err := validateGeminiConfig(apiKey, settings, externalOrganizationID); err != nil {
+			return UpsertResult{}, err
+		}
+		trimmed := strings.TrimSpace(*externalOrganizationID)
+		externalOrganizationID = &trimmed
+		// Syncing needs an export scope; hold the connection until one is set.
+		enabled = enabled && settings.OrgUnitID != ""
+	} else {
+		settings = ProviderSettings{DelegatedUser: "", OrgUnitID: "", OrgUnitPath: ""}
+	}
+	encodedSettings, err := json.Marshal(settings)
+	if err != nil {
+		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to encode ai integration settings")
+	}
+
 	q := repo.New(dbtx)
 	projectID, err := q.GetFirstProjectByOrganization(ctx, orgID)
 	if err != nil {
@@ -393,21 +421,25 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		}); err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to replace ai integration config")
 		}
-		encrypted, err := s.encryptAPIKey(apiKey)
-		if err != nil {
-			return UpsertResult{}, err
+		apiKey = strings.TrimSpace(apiKey)
+		if apiKey == "" {
+			return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "api_key is required")
 		}
-		row, err = q.InsertConfig(ctx, repo.InsertConfigParams{
+		inserted, err := q.InsertConfig(ctx, repo.InsertConfigParams{
 			OrganizationID:         orgID,
 			Provider:               provider,
 			ProjectID:              projectID,
 			ExternalOrganizationID: conv.PtrToPGTextEmpty(externalOrganizationID),
-			ApiKeyEncrypted:        encrypted,
 			Enabled:                enabled,
 			BillingMode:            conv.PtrToPGTextEmpty(billingMode),
+			Settings:               encodedSettings,
 		})
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
+		}
+		row, err = s.storeAPIKey(ctx, dbtx, orgID, inserted.ID, []byte(apiKey))
+		if err != nil {
+			return UpsertResult{}, err
 		}
 	} else {
 		row, err = q.UpdateConfigSettings(ctx, repo.UpdateConfigSettingsParams{
@@ -417,6 +449,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			ExternalOrganizationID: conv.PtrToPGTextEmpty(externalOrganizationID),
 			Enabled:                enabled,
 			BillingMode:            conv.PtrToPGTextEmpty(billingMode),
+			Settings:               encodedSettings,
 		})
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
@@ -501,7 +534,44 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		}
 	}
 
-	cfg, err := s.configFromRows(row, syncRow)
+	// Pause the schedules the provider refused at save time. This runs after
+	// the pause clear and watermark reset above, which would wipe it, and
+	// inside the same transaction: candidate selection and startUsagePoll
+	// both skip an auto-paused schedule, so committing the pause with the
+	// config leaves no window where the schedule is due but unmarked. It
+	// lands the state AutoPauseAfterRejectedPolls rejections would, minus the
+	// polls.
+	rejectedAt := time.Now().UTC()
+	for _, rejection := range rejections {
+		var errStr string
+		if rejection.Err != nil {
+			errStr = rejection.Err.Error()
+		}
+		nextPollAfter := conv.ToPGTimestamptz(rejectedAt.Add(pollIntervalForSchedule(rejection.Schedule)))
+		affected, err := q.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
+			AiIntegrationConfigID: row.ID,
+			Schedule:              rejection.Schedule,
+			NextPollAfter:         nextPollAfter,
+			LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
+			PauseAfter:            1,
+		})
+		if err != nil {
+			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to record rejected ai integration credentials")
+		}
+		// EnsureSync just created every schedule this provider runs, so a
+		// missing row means the rejection names one it does not.
+		if affected == 0 {
+			return UpsertResult{}, oops.E(oops.CodeUnexpected, nil, "failed to record rejected ai integration credentials: no %s schedule", rejection.Schedule)
+		}
+		if rejection.Schedule == providerSched.schedule {
+			syncRow.NextPollAfter = nextPollAfter
+			syncRow.LastPollError = conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage))
+			syncRow.LastPollFailedAt = conv.ToPGTimestamptz(rejectedAt)
+			syncRow.ConsecutiveFailures++
+		}
+	}
+
+	cfg, err := s.configFromRows(ctx, dbtx, row, syncRow)
 	if err != nil {
 		return UpsertResult{}, err
 	}
@@ -513,7 +583,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 }
 
 func providerRequiresExternalOrganizationID(provider string) bool {
-	return provider == ProviderAnthropicCompliance || provider == ProviderCodexCompliance || provider == ProviderChatGPTCompliance
+	return provider == ProviderAnthropicCompliance || provider == ProviderCodexCompliance || provider == ProviderChatGPTCompliance || provider == ProviderGeminiCompliance
 }
 
 func (s *Store) softDeleteWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string) error {
@@ -543,7 +613,7 @@ func (s *Store) ListEnabledConfigsByProvider(ctx context.Context, provider strin
 
 	configs := make([]Config, 0, len(rows))
 	for _, row := range rows {
-		cfg, err := s.configFromListRow(row)
+		cfg, err := s.configFromListRow(ctx, nil, row)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to decrypt ai integration config",
 				attr.SlogError(err),
@@ -597,7 +667,7 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, pollDueBefore time.
 func (s *Store) ensureActiveSyncSchedules(ctx context.Context) error {
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
 		q := repo.New(tx)
-		for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance, ProviderChatGPTCompliance} {
+		for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance, ProviderChatGPTCompliance, ProviderGeminiCompliance} {
 			for _, sched := range syncSchedulesFor(provider) {
 				// Same initial watermark policy as upsertWithTx: epoch for
 				// time-kind schedules, now for cursor-kind ones.
@@ -705,7 +775,7 @@ func (s *Store) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UUID
 	case err != nil:
 		return Config{}, "", oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll sync")
 	}
-	cfg, err := s.configFromUsagePollConfigBySyncIDRow(row)
+	cfg, err := s.configFromUsagePollConfigBySyncIDRow(ctx, nil, row)
 	if err != nil {
 		return Config{}, "", err
 	}
@@ -723,7 +793,7 @@ func (s *Store) GetProviderUsagePollConfig(ctx context.Context, configID uuid.UU
 	case err != nil:
 		return Config{}, "", oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll config")
 	}
-	cfg, err := s.configFromProviderUsagePollConfigByIDRow(row)
+	cfg, err := s.configFromProviderUsagePollConfigByIDRow(ctx, nil, row)
 	if err != nil {
 		return Config{}, "", err
 	}
@@ -744,7 +814,7 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID, sche
 	case err != nil:
 		return Config{}, oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll config")
 	}
-	cfg, err := s.configFromUsagePollConfigRow(row)
+	cfg, err := s.configFromUsagePollConfigRow(ctx, nil, row)
 	if err != nil {
 		return Config{}, err
 	}
@@ -762,6 +832,25 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, syncID uuid.UUID, sc
 		LastCursorID:    conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
 		return fmt.Errorf("record ai integration usage poll success: %w", err)
+	}
+	return nil
+}
+
+// RecordGeminiPollSuccess checkpoints the last fully imported time independently
+// of the wall clock used to schedule the next Vault export status check. A
+// pending export is checked again in minutes; a caught-up sync waits an hour.
+func (s *Store) RecordGeminiPollSuccess(ctx context.Context, syncID uuid.UUID, watermark time.Time, lastCursor string, pollTime time.Time, pending bool) error {
+	interval := pollIntervalForSchedule(ScheduleGeminiCompliance)
+	if pending {
+		interval = geminiPendingRecheck
+	}
+	if err := s.repo.RecordUsagePollSuccess(ctx, repo.RecordUsagePollSuccessParams{
+		SyncID:          syncID,
+		PollWatermarkAt: conv.ToPGTimestamptz(watermark),
+		NextPollAfter:   conv.ToPGTimestamptz(pollTime.UTC().Add(interval)),
+		LastCursorID:    conv.ToPGTextEmpty(lastCursor),
+	}); err != nil {
+		return fmt.Errorf("record Gemini poll success: %w", err)
 	}
 	return nil
 }
@@ -916,14 +1005,21 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 		anchor = now
 	}
 
-	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
+	rows, err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
 		Schedule:              schedule,
 		NextPollAfter:         conv.ToPGTimestamptz(anchor.Add(retryDelay)),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 		PauseAfter:            pauseAfter,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("record ai integration sync schedule poll failure: %w", err)
+	}
+	// No row means the config or schedule went away under the poll: the
+	// failure has nowhere durable to live, so callers must not call it
+	// recorded and drop it.
+	if rows == 0 {
+		return fmt.Errorf("record ai integration sync schedule poll failure: no %s schedule for config %s", schedule, configID)
 	}
 	return nil
 }
@@ -965,8 +1061,8 @@ func decodeRowPollCheckpoint(encoded pgtype.Text, legacy pgtype.Timestamptz) (ti
 	return checkpoint, nil
 }
 
-func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromGetRow(ctx context.Context, db repo.DBTX, row repo.GetConfigByOrgAndProviderRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -981,6 +1077,7 @@ func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config,
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -997,8 +1094,8 @@ func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config,
 	}, nil
 }
 
-func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromListRow(ctx context.Context, db repo.DBTX, row repo.ListEnabledConfigsByProviderRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1013,6 +1110,7 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -1029,8 +1127,8 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 	}, nil
 }
 
-func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromUsagePollConfigRow(ctx context.Context, db repo.DBTX, row repo.GetUsagePollConfigByIDRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1045,6 +1143,7 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -1061,8 +1160,8 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 	}, nil
 }
 
-func (s *Store) configFromUsagePollConfigBySyncIDRow(row repo.GetUsagePollConfigBySyncIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromUsagePollConfigBySyncIDRow(ctx context.Context, db repo.DBTX, row repo.GetUsagePollConfigBySyncIDRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1077,6 +1176,7 @@ func (s *Store) configFromUsagePollConfigBySyncIDRow(row repo.GetUsagePollConfig
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -1093,8 +1193,8 @@ func (s *Store) configFromUsagePollConfigBySyncIDRow(row repo.GetUsagePollConfig
 	}, nil
 }
 
-func (s *Store) configFromProviderUsagePollConfigByIDRow(row repo.GetProviderUsagePollConfigByIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromProviderUsagePollConfigByIDRow(ctx context.Context, db repo.DBTX, row repo.GetProviderUsagePollConfigByIDRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1109,6 +1209,7 @@ func (s *Store) configFromProviderUsagePollConfigByIDRow(row repo.GetProviderUsa
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -1125,8 +1226,8 @@ func (s *Store) configFromProviderUsagePollConfigByIDRow(row repo.GetProviderUsa
 	}, nil
 }
 
-func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.EnsureSyncRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromRows(ctx context.Context, db repo.DBTX, row repo.AiIntegrationConfig, syncRow repo.EnsureSyncRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1141,6 +1242,7 @@ func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.Ensure
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
 		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		Settings:               decodeProviderSettings(row.Settings),
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
@@ -1157,27 +1259,48 @@ func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.Ensure
 	}, nil
 }
 
-func (s *Store) encryptAPIKey(apiKey string) (string, error) {
-	apiKey = strings.TrimSpace(apiKey)
-	if apiKey == "" {
-		return "", oops.E(oops.CodeInvalid, nil, "api_key is required")
-	}
-	ct, err := s.enc.Encrypt([]byte(apiKey))
+// storeAPIKey seals plaintext for the organization and stores it on config
+// id, in the caller's transaction.
+func (s *Store) storeAPIKey(ctx context.Context, dbtx repo.DBTX, orgID string, id uuid.UUID, plaintext []byte) (repo.AiIntegrationConfig, error) {
+	q := repo.New(dbtx)
+	var row repo.AiIntegrationConfig
+	err := s.keys.Store(ctx, dbtx, orgID, aiproviderkeys.AIIntegrationConfigs, plaintext, func(ctx context.Context, copies orgencryption.Copies, generation int64) (bool, error) {
+		stored, err := q.SetConfigAPIKey(ctx, repo.SetConfigAPIKeyParams{PlatformCopy: copies.Platform, OrgCopy: copies.Org, ID: id, OrganizationID: orgID, DecidedGeneration: generation})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("set ai integration api key: %w", err)
+		}
+		row = stored
+		return true, nil
+	})
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "encrypt ai integration api key")
+		return repo.AiIntegrationConfig{}, apiKeyError(err, "encrypt ai integration api key")
 	}
-	return ct, nil
+	return row, nil
 }
 
-func (s *Store) decryptAPIKey(stored string) (string, error) {
-	if stored == "" {
+// decryptAPIKey opens a row's API key. A row whose only copy is an empty
+// platform copy has no key. db is the caller's transaction, or nil.
+func (s *Store) decryptAPIKey(ctx context.Context, db repo.DBTX, orgID string, stored orgencryption.Copies) (string, error) {
+	if !stored.Org.Valid && stored.Platform.String == "" {
 		return "", nil
 	}
-	plaintext, err := s.enc.Decrypt(stored)
+	plaintext, err := s.keys.Open(ctx, db, orgID, aiproviderkeys.AIIntegrationConfigs, stored)
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "decrypt ai integration api key")
+		return "", apiKeyError(err, "decrypt ai integration api key")
 	}
-	return plaintext, nil
+	return string(plaintext), nil
+}
+
+// apiKeyError maps an aiproviderkeys error: a write that matched no row is a
+// conflict, and the rest follows aiproviderkeys.Error.
+func apiKeyError(err error, msg string) *oops.ShareableError {
+	if errors.Is(err, aiproviderkeys.ErrNotStored) {
+		return oops.E(oops.CodeConflict, err, "The integration changed while saving. Reload and try again.")
+	}
+	return aiproviderkeys.Error(err, msg)
 }
 
 func emptyConfig(orgID string, provider string) Config {
@@ -1188,6 +1311,7 @@ func emptyConfig(orgID string, provider string) Config {
 		Provider:               provider,
 		ProjectID:              uuid.Nil,
 		ExternalOrganizationID: nil,
+		Settings:               ProviderSettings{DelegatedUser: "", OrgUnitID: "", OrgUnitPath: ""},
 		BillingMode:            "",
 		APIKey:                 "",
 		Enabled:                false,
@@ -1202,4 +1326,42 @@ func emptyConfig(orgID string, provider string) Config {
 		CreatedAt:              time.Time{},
 		UpdatedAt:              time.Time{},
 	}
+}
+
+// ProviderSettings is the non-secret, admin-visible configuration stored in
+// ai_integration_configs.settings. Only gemini_compliance uses it today.
+type ProviderSettings struct {
+	// DelegatedUser is the Workspace admin the Gemini service account acts as.
+	DelegatedUser string `json:"delegated_user,omitempty"`
+	// OrgUnitID scopes Gemini exports; the root unit covers the organization.
+	OrgUnitID string `json:"org_unit_id,omitempty"`
+	// OrgUnitPath is the selected unit's path, kept for display.
+	OrgUnitPath string `json:"org_unit_path,omitempty"`
+}
+
+// decodeProviderSettings reads stored settings. Only this package writes the
+// column, after validation, so unreadable JSON decodes as empty settings and
+// the provider's own checks report what is missing.
+func decodeProviderSettings(raw []byte) ProviderSettings {
+	var settings ProviderSettings
+	if len(raw) == 0 || json.Unmarshal(raw, &settings) != nil {
+		return ProviderSettings{DelegatedUser: "", OrgUnitID: "", OrgUnitPath: ""}
+	}
+	return settings
+}
+
+func validateGeminiConfig(apiKey string, settings ProviderSettings, matterID *string) error {
+	if err := geminivault.ParseServiceAccount(apiKey); err != nil {
+		return oops.E(oops.CodeInvalid, nil, "api_key must be a valid Google service account JSON key file with an RSA private key of at least 2048 bits and a Google token endpoint")
+	}
+	if err := geminivault.ValidateDelegatedUser(settings.DelegatedUser); err != nil {
+		return oops.E(oops.CodeInvalid, nil, "delegated_user must be the email address of a Google Workspace admin")
+	}
+	if matterID == nil || !chatgptWorkspaceIDPattern.MatchString(strings.TrimSpace(*matterID)) {
+		return oops.E(oops.CodeInvalid, nil, "external_organization_id must be a Google Vault matter UUID")
+	}
+	if (settings.OrgUnitID == "") != (settings.OrgUnitPath == "") {
+		return oops.E(oops.CodeInvalid, nil, "org_unit_id must be one of the units listOrgUnits returns")
+	}
+	return nil
 }

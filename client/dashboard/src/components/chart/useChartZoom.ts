@@ -27,7 +27,11 @@ export function useChartZoom<
     if (!chart) return;
 
     isResettingRef.current = true;
-    chart.resetZoom();
+    // "none" applies the reset without animating the axes back out. The reset
+    // only ever runs once the narrowed data has arrived, so an animation here
+    // would be the chart zooming out from a range the reader just zoomed into,
+    // fighting the incoming bars for the same 200ms.
+    chart.resetZoom("none");
     queueMicrotask(() => {
       isResettingRef.current = false;
     });

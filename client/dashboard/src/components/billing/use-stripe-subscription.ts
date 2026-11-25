@@ -21,6 +21,10 @@ export function useStripeSubscription(
 ): ReturnType<typeof useGetStripeSubscription> {
   return useGetStripeSubscription(undefined, undefined, {
     throwOnError: false,
+    // Section reordering must not restart reads, with or without cached data.
+    // Banners explicitly opt back into mount refreshes.
+    retryOnMount: false,
+    refetchOnMount: false,
     ...options,
   });
 }

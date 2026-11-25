@@ -46,6 +46,7 @@ type LogMCPApprovalRequestCreateEvent struct {
 // the same subject, which is how the feed shows accumulating demand.
 func (l *Logger) LogMCPApprovalRequestCreate(ctx context.Context, dbtx repo.DBTX, event LogMCPApprovalRequestCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -101,6 +102,7 @@ func (l *Logger) LogMCPApprovalRequestDecide(ctx context.Context, dbtx repo.DBTX
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -156,6 +158,7 @@ func (l *Logger) LogMCPApprovalRequestSupersede(ctx context.Context, dbtx repo.D
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -211,6 +214,7 @@ type LogMCPApprovalRequestEvidenceChangedEvent struct {
 // that, and it runs in the same transaction as this entry.
 func (l *Logger) LogMCPApprovalRequestEvidenceChanged(ctx context.Context, dbtx repo.DBTX, event LogMCPApprovalRequestEvidenceChangedEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -258,6 +262,7 @@ type LogMCPApprovalRequestResearchStartEvent struct {
 // commit atomically.
 func (l *Logger) LogMCPApprovalRequestResearchStart(ctx context.Context, dbtx repo.DBTX, event LogMCPApprovalRequestResearchStartEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

@@ -98,31 +98,10 @@ func TestOIDCDiscoveryDocumentShape(t *testing.T) {
 	require.Contains(t, methods, "S256")
 }
 
-func TestAuthorizeRejectsRequestsWithoutPKCE(t *testing.T) {
-	t.Parallel()
-
-	ks, err := keystore.New(nil, newTestLogger(t))
-	require.NoError(t, err)
-	h := NewHandler(
-		Config{ExternalURL: "https://idp.example.com"},
-		ks,
-		newTestLogger(t),
-		newTestTracer(t),
-		nil, // db unused: PKCE check fires before any DB call
-	)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet,
-		"/authorize?response_type=code&client_id=c&redirect_uri=https%3A%2F%2Fapp.example%2Fcb&state=s",
-		nil)
-	h.Handler().ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusBadRequest, rec.Code)
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	require.Equal(t, "invalid_request", body["error"])
-	require.Contains(t, body["error_description"], "code_challenge")
-}
+// A request without a code_challenge is accepted — see the package comment on
+// why PKCE is optional here. The end-to-end no-PKCE flow is covered by
+// devidptest.TestLoginClient_AuthCodeFlowWithoutPKCE, which needs a real
+// database to reach the auth-code write.
 
 func TestAuthorizeRejectsNonS256Challenge(t *testing.T) {
 	t.Parallel()

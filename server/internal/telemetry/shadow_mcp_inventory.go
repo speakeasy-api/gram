@@ -35,7 +35,7 @@ type BackfillShadowMCPInventoryURLsResult struct {
 }
 
 func (l *Logger) UpsertShadowMCPInventoryURLs(ctx context.Context, inventoryURLs []ShadowMCPInventoryURL) error {
-	if len(inventoryURLs) == 0 || l.chConn == nil {
+	if len(inventoryURLs) == 0 {
 		return nil
 	}
 
@@ -92,6 +92,8 @@ func (s *Service) BackfillShadowMCPInventoryURLs(ctx context.Context, params Bac
 		Limit:               params.Limit,
 		OrganizationID:      "",
 		UserKeys:            nil,
+		From:                nil,
+		To:                  nil,
 	})
 	if err != nil {
 		return BackfillShadowMCPInventoryURLsResult{InventoryURLCount: 0}, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage for backfill")
@@ -124,7 +126,7 @@ func (s *Service) BackfillShadowMCPInventoryURLs(ctx context.Context, params Bac
 		return BackfillShadowMCPInventoryURLsResult{InventoryURLCount: 0}, nil
 	}
 
-	if err := s.chRepo.UpsertShadowMCPInventoryURLs(ctx, upserts); err != nil {
+	if err := repo.New(s.chConn).UpsertShadowMCPInventoryURLs(ctx, upserts); err != nil {
 		return BackfillShadowMCPInventoryURLsResult{InventoryURLCount: 0}, oops.E(oops.CodeUnexpected, err, "upsert shadow mcp inventory urls")
 	}
 

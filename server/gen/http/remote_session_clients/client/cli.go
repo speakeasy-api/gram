@@ -17,6 +17,232 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildPrepareEMAPayload builds the payload for the remoteSessionClients
+// prepareEMA endpoint from CLI flags.
+func BuildPrepareEMAPayload(remoteSessionClientsPrepareEMABody string, remoteSessionClientsPrepareEMASessionToken string, remoteSessionClientsPrepareEMAApikeyToken string, remoteSessionClientsPrepareEMAProjectSlugInput string) (*remotesessionclients.PrepareEMAPayload, error) {
+	var err error
+	var body PrepareEMARequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsPrepareEMABody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"confirm_grants\": [\n         \"abc123\"\n      ],\n      \"expected_generation\": 1,\n      \"mechanism\": \"cimd\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aa\",\n      \"resource_metadata\": {\n         \"authorization_servers\": [\n            \"abc123\"\n         ],\n         \"resource\": \"abc123\"\n      },\n      \"scopes\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource", body.Resource, goa.FormatURI))
+		if utf8.RuneCountInString(body.Resource) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", body.Resource, utf8.RuneCountInString(body.Resource), 1, true))
+		}
+		if utf8.RuneCountInString(body.Resource) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", body.Resource, utf8.RuneCountInString(body.Resource), 2048, false))
+		}
+		if body.ClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id", *body.ClientID, goa.FormatUUID))
+		}
+		for _, e := range body.Scopes {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.scopes[*]", e, "^[!#-[\\]-~]+$"))
+			if utf8.RuneCountInString(e) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes[*]", e, utf8.RuneCountInString(e), 128, false))
+			}
+		}
+		if !(body.Mechanism == "manual" || body.Mechanism == "cimd" || body.Mechanism == "dcr") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mechanism", body.Mechanism, []any{"manual", "cimd", "dcr"}))
+		}
+		if body.TokenEndpointAuthMethod != nil {
+			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+			}
+		}
+		if body.ResourceMetadata != nil {
+			if body.ResourceMetadata.AuthorizationServers == nil {
+				err = goa.MergeErrors(err, goa.MissingFieldError("authorization_servers", "body.resource_metadata"))
+			}
+		}
+		if body.ExpectedGeneration < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expected_generation", body.ExpectedGeneration, 0, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsPrepareEMASessionToken != "" {
+			sessionToken = &remoteSessionClientsPrepareEMASessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsPrepareEMAApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsPrepareEMAApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsPrepareEMAProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsPrepareEMAProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.PrepareEMAPayload{
+		UserSessionIssuerID:     body.UserSessionIssuerID,
+		RemoteSessionIssuerID:   body.RemoteSessionIssuerID,
+		Resource:                body.Resource,
+		ClientID:                body.ClientID,
+		Mechanism:               body.Mechanism,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		ExpectedGeneration:      body.ExpectedGeneration,
+	}
+	if body.Scopes != nil {
+		v.Scopes = make([]string, len(body.Scopes))
+		for i, val := range body.Scopes {
+			v.Scopes[i] = val
+		}
+	}
+	{
+		var zero string
+		if v.Mechanism == zero {
+			v.Mechanism = "manual"
+		}
+	}
+	if body.ResourceMetadata != nil {
+		v.ResourceMetadata = &struct {
+			Resource             string
+			AuthorizationServers []string
+		}{
+			Resource: body.ResourceMetadata.Resource,
+		}
+		if body.ResourceMetadata.AuthorizationServers != nil {
+			v.ResourceMetadata.AuthorizationServers = make([]string, len(body.ResourceMetadata.AuthorizationServers))
+			for i, val := range body.ResourceMetadata.AuthorizationServers {
+				v.ResourceMetadata.AuthorizationServers[i] = val
+			}
+		} else {
+			v.ResourceMetadata.AuthorizationServers = []string{}
+		}
+	}
+	if body.ConfirmGrants != nil {
+		v.ConfirmGrants = make([]string, len(body.ConfirmGrants))
+		for i, val := range body.ConfirmGrants {
+			v.ConfirmGrants[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildReadEMAPayload builds the payload for the remoteSessionClients readEMA
+// endpoint from CLI flags.
+func BuildReadEMAPayload(remoteSessionClientsReadEMABody string, remoteSessionClientsReadEMASessionToken string, remoteSessionClientsReadEMAApikeyToken string, remoteSessionClientsReadEMAProjectSlugInput string) (*remotesessionclients.ReadEMAPayload, error) {
+	var err error
+	var body ReadEMARequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsReadEMABody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aa\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource", body.Resource, goa.FormatURI))
+		if utf8.RuneCountInString(body.Resource) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", body.Resource, utf8.RuneCountInString(body.Resource), 1, true))
+		}
+		if utf8.RuneCountInString(body.Resource) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", body.Resource, utf8.RuneCountInString(body.Resource), 2048, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsReadEMASessionToken != "" {
+			sessionToken = &remoteSessionClientsReadEMASessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsReadEMAApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsReadEMAApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsReadEMAProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsReadEMAProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.ReadEMAPayload{
+		UserSessionIssuerID:   body.UserSessionIssuerID,
+		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
+		Resource:              body.Resource,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUnlinkEMAPayload builds the payload for the remoteSessionClients
+// unlinkEMA endpoint from CLI flags.
+func BuildUnlinkEMAPayload(remoteSessionClientsUnlinkEMABody string, remoteSessionClientsUnlinkEMASessionToken string, remoteSessionClientsUnlinkEMAApikeyToken string, remoteSessionClientsUnlinkEMAProjectSlugInput string) (*remotesessionclients.UnlinkEMAPayload, error) {
+	var err error
+	var body UnlinkEMARequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsUnlinkEMABody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expected_generation\": 1,\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aa\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource", body.Resource, goa.FormatURI))
+		if utf8.RuneCountInString(body.Resource) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", body.Resource, utf8.RuneCountInString(body.Resource), 1, true))
+		}
+		if utf8.RuneCountInString(body.Resource) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", body.Resource, utf8.RuneCountInString(body.Resource), 2048, false))
+		}
+		if body.ExpectedGeneration < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expected_generation", body.ExpectedGeneration, 0, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsUnlinkEMASessionToken != "" {
+			sessionToken = &remoteSessionClientsUnlinkEMASessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsUnlinkEMAApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsUnlinkEMAApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsUnlinkEMAProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsUnlinkEMAProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.UnlinkEMAPayload{
+		UserSessionIssuerID:   body.UserSessionIssuerID,
+		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
+		Resource:              body.Resource,
+		ExpectedGeneration:    body.ExpectedGeneration,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCreateRemoteSessionClientPayload builds the payload for the
 // remoteSessionClients createRemoteSessionClient endpoint from CLI flags.
 func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessionClientBody string, remoteSessionClientsCreateRemoteSessionClientSessionToken string, remoteSessionClientsCreateRemoteSessionClientApikeyToken string, remoteSessionClientsCreateRemoteSessionClientProjectSlugInput string) (*remotesessionclients.CreateRemoteSessionClientPayload, error) {
@@ -25,16 +251,27 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionClientsCreateRemoteSessionClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"credential_owner\": \"self\",\n      \"json_web_key_set_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"template_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
 		for _, e := range body.UserSessionIssuerIds {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
 		}
+		if body.TemplateClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.template_client_id", *body.TemplateClientID, goa.FormatUUID))
+		}
 		if body.TokenEndpointAuthMethod != nil {
-			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
 			}
+		}
+		if body.TokenEndpointAuthAudienceFormat != nil {
+			if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
+			}
+		}
+		if body.JSONWebKeySetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
 		}
 		for _, e := range body.Scope {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
@@ -49,6 +286,15 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 			if utf8.RuneCountInString(*body.Audience) > 512 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
 			}
+		}
+		if !(body.CredentialOwner == "subject" || body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", body.CredentialOwner, []any{"subject", "self"}))
+		}
+		if body.ClientIDIssuedAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+		}
+		if body.ClientSecretExpiresAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 		}
 		if err != nil {
 			return nil, err
@@ -73,11 +319,17 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 		}
 	}
 	v := &remotesessionclients.CreateRemoteSessionClientPayload{
-		RemoteSessionIssuerID:   body.RemoteSessionIssuerID,
-		ClientID:                body.ClientID,
-		ClientSecret:            body.ClientSecret,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		Audience:                body.Audience,
+		RemoteSessionIssuerID:           body.RemoteSessionIssuerID,
+		ClientID:                        body.ClientID,
+		ClientSecret:                    body.ClientSecret,
+		TemplateClientID:                body.TemplateClientID,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		Audience:                        body.Audience,
+		CredentialOwner:                 body.CredentialOwner,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
 	}
 	if body.UserSessionIssuerIds != nil {
 		v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
@@ -89,6 +341,12 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 		v.Scope = make([]string, len(body.Scope))
 		for i, val := range body.Scope {
 			v.Scope[i] = val
+		}
+	}
+	{
+		var zero string
+		if v.CredentialOwner == zero {
+			v.CredentialOwner = "subject"
 		}
 	}
 	v.SessionToken = sessionToken
@@ -179,12 +437,27 @@ func BuildUpdateRemoteSessionClientPayload(remoteSessionClientsUpdateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionClientsUpdateRemoteSessionClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"aa\",\n      \"client_secret\": \"abc123\",\n      \"display_name\": \"aaa\",\n      \"forward_client_name\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.ClientID != nil {
+			if utf8.RuneCountInString(*body.ClientID) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_id", *body.ClientID, utf8.RuneCountInString(*body.ClientID), 1, true))
+			}
+		}
+		if body.DisplayName != nil {
+			if utf8.RuneCountInString(*body.DisplayName) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.display_name", *body.DisplayName, utf8.RuneCountInString(*body.DisplayName), 200, false))
+			}
+		}
 		if body.TokenEndpointAuthMethod != nil {
-			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+			}
+		}
+		if body.TokenEndpointAuthAudienceFormat != nil {
+			if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 			}
 		}
 		for _, e := range body.Scope {
@@ -194,7 +467,7 @@ func BuildUpdateRemoteSessionClientPayload(remoteSessionClientsUpdateRemoteSessi
 			}
 		}
 		if body.Audience != nil {
-			err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]*$"))
 		}
 		if body.Audience != nil {
 			if utf8.RuneCountInString(*body.Audience) > 512 {
@@ -224,10 +497,15 @@ func BuildUpdateRemoteSessionClientPayload(remoteSessionClientsUpdateRemoteSessi
 		}
 	}
 	v := &remotesessionclients.UpdateRemoteSessionClientPayload{
-		ID:                      body.ID,
-		ClientSecret:            body.ClientSecret,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		Audience:                body.Audience,
+		ID:                              body.ID,
+		ClientID:                        body.ClientID,
+		DisplayName:                     body.DisplayName,
+		ClientSecret:                    body.ClientSecret,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		Audience:                        body.Audience,
+		ForwardClientName:               body.ForwardClientName,
+		LegacyCallbackURL:               body.LegacyCallbackURL,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -332,6 +610,90 @@ func BuildDetachUserSessionIssuerPayload(remoteSessionClientsDetachUserSessionIs
 	return v, nil
 }
 
+// BuildAttachKeySetPayload builds the payload for the remoteSessionClients
+// attachKeySet endpoint from CLI flags.
+func BuildAttachKeySetPayload(remoteSessionClientsAttachKeySetBody string, remoteSessionClientsAttachKeySetSessionToken string, remoteSessionClientsAttachKeySetApikeyToken string, remoteSessionClientsAttachKeySetProjectSlugInput string) (*remotesessionclients.AttachKeySetPayload, error) {
+	var err error
+	var body AttachKeySetRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsAttachKeySetBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"json_web_key_set_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", body.JSONWebKeySetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsAttachKeySetSessionToken != "" {
+			sessionToken = &remoteSessionClientsAttachKeySetSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsAttachKeySetApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsAttachKeySetApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsAttachKeySetProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsAttachKeySetProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.AttachKeySetPayload{
+		ID:              body.ID,
+		JSONWebKeySetID: body.JSONWebKeySetID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDetachKeySetPayload builds the payload for the remoteSessionClients
+// detachKeySet endpoint from CLI flags.
+func BuildDetachKeySetPayload(remoteSessionClientsDetachKeySetID string, remoteSessionClientsDetachKeySetSessionToken string, remoteSessionClientsDetachKeySetApikeyToken string, remoteSessionClientsDetachKeySetProjectSlugInput string) (*remotesessionclients.DetachKeySetPayload, error) {
+	var err error
+	var id string
+	{
+		id = remoteSessionClientsDetachKeySetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsDetachKeySetSessionToken != "" {
+			sessionToken = &remoteSessionClientsDetachKeySetSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsDetachKeySetApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsDetachKeySetApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsDetachKeySetProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsDetachKeySetProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.DetachKeySetPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListRemoteSessionClientsPayload builds the payload for the
 // remoteSessionClients listRemoteSessionClients endpoint from CLI flags.
 func BuildListRemoteSessionClientsPayload(remoteSessionClientsListRemoteSessionClientsRemoteSessionIssuerID string, remoteSessionClientsListRemoteSessionClientsUserSessionIssuerID string, remoteSessionClientsListRemoteSessionClientsCursor string, remoteSessionClientsListRemoteSessionClientsLimit string, remoteSessionClientsListRemoteSessionClientsSessionToken string, remoteSessionClientsListRemoteSessionClientsApikeyToken string, remoteSessionClientsListRemoteSessionClientsProjectSlugInput string) (*remotesessionclients.ListRemoteSessionClientsPayload, error) {
@@ -397,6 +759,35 @@ func BuildListRemoteSessionClientsPayload(remoteSessionClientsListRemoteSessionC
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.Cursor = cursor
 	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetNewClientCallbackURLPayload builds the payload for the
+// remoteSessionClients getNewClientCallbackUrl endpoint from CLI flags.
+func BuildGetNewClientCallbackURLPayload(remoteSessionClientsGetNewClientCallbackURLSessionToken string, remoteSessionClientsGetNewClientCallbackURLApikeyToken string, remoteSessionClientsGetNewClientCallbackURLProjectSlugInput string) (*remotesessionclients.GetNewClientCallbackURLPayload, error) {
+	var sessionToken *string
+	{
+		if remoteSessionClientsGetNewClientCallbackURLSessionToken != "" {
+			sessionToken = &remoteSessionClientsGetNewClientCallbackURLSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsGetNewClientCallbackURLApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsGetNewClientCallbackURLApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsGetNewClientCallbackURLProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsGetNewClientCallbackURLProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.GetNewClientCallbackURLPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

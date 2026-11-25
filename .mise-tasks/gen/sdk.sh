@@ -2,50 +2,91 @@
 
 #MISE description="Generate SDK from OpenAPI spec"
 
-#USAGE flag "-c --check" help="Check if the Gram-Internal OpenAPI output is up-to-date"
+#USAGE flag "-c --check" help="Check if the Gram-Internal and Gram-Admin OpenAPI outputs are up-to-date"
+#USAGE flag "-t --target <target>" help="Generate only this workflow target (CI runs one target per job)"
 
 set -e
 
+# The SDK generator is installed as speakeasy-sdks (see mise.toml). mise only
+# applies rename_exe on install, so an install made before the rename still
+# serves the old speakeasy name. Reinstall it once in that case.
+if mise which speakeasy >/dev/null 2>&1; then
+  mise install --force "github:speakeasy-api/speakeasy" >&2
+fi
+
 # The Speakeasy CLI version is baked into every generated artifact (gen.lock,
 # workflow.lock, the SDK_METADATA userAgent), so generating with anything other
-# than the pinned version produces churn CI rejects. `speakeasy run` re-execs
+# than the pinned version produces churn CI rejects. `speakeasy-sdks run` re-execs
 # into the version named by speakeasyVersion in .speakeasy/workflow.yaml, so a
 # system-wide install (Homebrew, `go install`) ahead of the mise shim on PATH
 # still generates with the pinned version.
 generate() {
-  # CI=true keeps `speakeasy run` non-interactive. It used to also matter
+  # CI=true keeps `speakeasy-sdks run` non-interactive. It used to also matter
   # because the TypeScript target compiled the SDK by invoking pnpm, which
   # prompts to purge node_modules and aborts without a TTY; since the SDK was
   # inlined, gen.yaml sets compileCommand to `true` and no package manager is
   # invoked at all.
-  CI=true speakeasy run --skip-versioning --skip-upload-spec --minimal
+  # The pinned generator hardcodes Staticcheck 0.8.1, which cannot decode Go
+  # 1.27 export data. Run the Go compile/lint pipeline below with a compatible
+  # Staticcheck. Both inlined TypeScript targets already use compileCommand=true.
+  CI=true speakeasy-sdks run "$@" --skip-versioning --skip-upload-spec --skip-compile --minimal
 }
 
 check_inputs() {
   workflow=".speakeasy/workflow.yaml"
-  source_key=".sources.Gram-Internal"
-  schema=$(yq "${source_key}.inputs[0].location" "$workflow")
-  output=$(yq "${source_key}.output" "$workflow")
-  overlays=()
-  while IFS= read -r line; do
-    overlays+=("$line")
-  done < <(yq -r "${source_key}.overlays[].location" "$workflow")
+  tmpdir=$(mktemp -d)
+  sources=(Gram-Internal Gram-Admin)
+  outputs=()
 
-  args=(--schema "$schema")
-  for overlay in "${overlays[@]}"; do
-    args+=(--overlay "$overlay")
+  for source in "${sources[@]}"; do
+    output=$(yq ".sources[\"${source}\"].output" "$workflow")
+    outputs+=("$output")
+    cp "$output" "$tmpdir/$source.yaml"
   done
-  result=$(speakeasy overlay apply "${args[@]}")
 
-  if ! diff -q <(echo "$result") "$output" >/dev/null 2>&1; then
-    echo "Gram-Internal OpenAPI spec is out of date. Run 'mise gen:sdk' to regenerate." >&2
-    exit 1
-  fi
-  echo "Gram-Internal OpenAPI spec is up to date."
+  restore_inputs() {
+    for i in "${!sources[@]}"; do
+      cp "$tmpdir/${sources[$i]}.yaml" "${outputs[$i]}"
+    done
+    rm -rf "$tmpdir"
+  }
+  trap restore_inputs EXIT
+
+  status=0
+  for i in "${!sources[@]}"; do
+    source=${sources[$i]}
+    output=${outputs[$i]}
+    generate --source "$source" >/dev/null 2>&1
+
+    if ! diff -q "$tmpdir/$source.yaml" "$output" >/dev/null 2>&1; then
+      echo "${source} OpenAPI spec is out of date. Run 'mise gen:sdk' to regenerate." >&2
+      status=1
+    else
+      echo "${source} OpenAPI spec is up to date."
+    fi
+  done
+
+  return "$status"
 }
 
 if [[ "${usage_check:-}" == "true" ]]; then
   check_inputs
+  exit
+fi
+
+target=${usage_target:-}
+if [[ -n "$target" ]]; then
+  generate --target "$target"
 else
   generate
+fi
+
+if [[ -z "$target" || "$target" == "hooks-go" ]]; then
+  (
+    cd hooks/sdk
+    go mod tidy
+    go build ./...
+    go test -run=XXX_SHOULD_NEVER_MATCH_XXX ./...
+    go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -checks=inherit,-SA1019,-SA5008 ./...
+  )
 fi

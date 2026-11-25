@@ -59,7 +59,7 @@ export type ListAPIKeysQueryError =
  * listKeys keys
  *
  * @remarks
- * List all api keys for an organization
+ * List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
  */
 export function useListAPIKeys(
   request?: ListAPIKeysRequest | undefined,
@@ -82,7 +82,7 @@ export function useListAPIKeys(
  * listKeys keys
  *
  * @remarks
- * List all api keys for an organization
+ * List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
  */
 export function useListAPIKeysSuspense(
   request?: ListAPIKeysRequest | undefined,
@@ -106,7 +106,15 @@ export function useListAPIKeysSuspense(
 
 export function setListAPIKeysData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      agentId?: string | undefined;
+      cursor?: string | undefined;
+      limit?: number | undefined;
+      search?: string | undefined;
+      gramSession?: string | undefined;
+    },
+  ],
   data: ListAPIKeysQueryData,
 ): ListAPIKeysQueryData | undefined {
   const key = queryKeyListAPIKeys(...queryKeyBase);
@@ -117,7 +125,13 @@ export function setListAPIKeysData(
 export function invalidateListAPIKeys(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+    [parameters: {
+      agentId?: string | undefined;
+      cursor?: string | undefined;
+      limit?: number | undefined;
+      search?: string | undefined;
+      gramSession?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

@@ -1,43 +1,63 @@
 # Demo org seed
 
-SQL-first seed for the shared demo organization — and, retargeted,
-for your local development organization. The SQL lives in
-`server/internal/demoseed/{postgres,clickhouse}.sql`, is go:embedded into the
-server binary, and is applied by the `gram demo-seed` subcommand — the SAME
-code path locally and in prod, versioned atomically with each deploy. This
-directory holds the authoring docs:
+Go seed for the shared demo organization — and, retargeted, for your local
+development organization. It lives in `server/internal/demoseed/`, compiles
+into the server binary, and runs through the `gram demo-seed` subcommand — the
+SAME code path locally and in prod, versioned atomically with each deploy.
+This directory holds the authoring docs:
 
-- `server/internal/demoseed/postgres.sql` — installs and executes
-  `demo.ensure_demo_org()` (idempotent; all writes scoped to the demo
-  constants; pre/postflight isolation asserts abort the transaction on any
-  violation). Deliberately NOT a migration: migrations are append-only and
-  the seed churns; `CREATE OR REPLACE` + daily rerun is the upgrade path.
-- `server/internal/demoseed/clickhouse.sql` — scoped deletes (source table +
-  every MV target) followed by fresh inserts; MVs repopulate summaries on
-  INSERT. Postflight `throwIf` asserts fail the run on missing or leaked
-  rows. Keep semicolons out of string literals — the runner splits on ';'.
+- Postgres: `seed_NN_*.go` phases (`seeder.runPostgres` lists them in order),
+  with their sqlc queries in `queries/NN_*.sql` (generated into `repo/` by
+  `mise run gen:sqlc-server`). The phases run in ONE transaction, so a failed
+  run leaves yesterday's data in place, and every statement gets its own
+  `statement_timeout`. The first phase asserts the demo constants collide with
+  nothing else and deletes the demo-scoped data; the last (postflight) phases
+  fail the run on missing or leaked rows. Deliberately NOT a migration:
+  migrations are append-only and the seed churns; the daily rerun is the
+  upgrade path.
+- ClickHouse: `ch_NN_*.go` phases (`seeder.runClickHouse`). Scoped deletes of
+  raw/source tables and every incremental MV target, then fresh inserts built
+  in Go and sent with `PrepareBatch`. The inserts repopulate the MV targets;
+  postflight checks fail the run on missing or leaked rows.
+- Shared helpers: `names.go` (deterministic ids, the chat schedule, risk
+  draws, `hash64` for variety) and `roster.go` (the demo users and fixed ids).
+  Both stores derive chat ids, owners, and timestamps from these, which is
+  what keeps them joined.
 - `PAGES.md` — the acceptance contract: which dashboard page each piece of
   data feeds and its verification status.
 - `verify.md` — the agent-driven page verification playbook.
 
+## Exact upstream-session attachment fixture
+
+The shared seed writes two active release agents with one fictional human owner.
+Both reference the same exact upstream session through
+`principal_remote_session_bindings`; the requesting Example OAuth server session's issuer is
+linked to its upstream client. This is intentionally inert: `.invalid` issuer,
+invalid ciphertext, no refresh token, and auto-refresh off. No real credentials
+or external account IDs are included. Deterministic `gram-demo-attachment-*`
+IDs come from `seeder.det`, which namespaces them by `Spec.NameSeed`. Cleanup runs before
+any referenced parent deletes; postflight checks enforce two reachable
+bindings and one underlying session. See `PAGES.md` and `verify.md` for UI QA.
+
 ## Fixed constants
 
-| Thing      | Value                                                                                         |
-| ---------- | --------------------------------------------------------------------------------------------- |
-| Org id     | `org_gram_demo_workspace` (slug `acme-demo`, account type `enterprise` for gated pages)       |
-| Project    | `dec0de00-0000-4000-a000-000000000001` (`default` — the single demo project)                  |
-| Chat ids   | `demo.det_uuid('gram-demo-chat-' + n)`: md5, version nibble 5, variant 8; same in both stores |
-| Demo users | `user_demo_*` / `*@demo.getgram.ai`                                                           |
+| Thing      | Value                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------ |
+| Org id     | `org_gram_demo_workspace` (slug `acme-demo`, account type `enterprise` for gated pages)                      |
+| Project    | `dec0de00-0000-4000-a000-000000000001` (`default` — the single demo project)                                 |
+| Chat ids   | `seeder.chatID(n)` = `detUUID("gram-demo-chat-" + n)`: md5, version nibble 5, variant 8; same in both stores |
+| Demo users | `user_demo_*` / `*@demo.getgram.ai`                                                                          |
 
 Timestamps are always `now()`-relative (trailing ~12 days): the daily prod
-rerun regenerates a fresh window, data never goes stale, and no MV backfill is
-ever needed (fresh rows are past every MV date cutoff).
+rerun regenerates a fresh window and data never goes stale. Incremental MVs,
+including billing usage's UTC-day summaries, populate their targets on INSERT.
+Physical duplicate meter deliveries intentionally count independently.
 
 ## Tenants
 
-The scripts are written against the demo org's literals. Every other tenant is
-produced by rewriting those literals — one `demoseed.Spec` per tenant, applied
-by `Spec.Rewrite` before the SQL is executed:
+Every id, user, and email the seed writes is built from a `demoseed.Spec`
+through the `seeder` helpers (`orgID`, `projectID`, `fixed`, `det`, `name`,
+`userID`, `email`), one Spec per tenant:
 
 | Spec              | Org id                                     | Used by                                      |
 | ----------------- | ------------------------------------------ | -------------------------------------------- |
@@ -45,12 +65,10 @@ by `Spec.Rewrite` before the SQL is executed:
 | `LocalSpec()`     | derived from WorkOS `org_devidp_speakeasy` | `mise run seed` — your local dev org         |
 | `otherTenantSpec` | `org_gram_othr_workspace`                  | `TestDemoSeedSafety`'s adversarial fixture   |
 
-Rewriting with `DefaultSpec()` is a no-op, so production executes the scripts
-exactly as written (asserted by `TestDefaultSpecRewriteIsIdentity`). Adding a
-new identifier family to the SQL means adding a field to `Spec` — otherwise it
-is NOT rewritten, and the local and test tenants write it into the demo org's
-scope. `TestLocalSpecRewritesEveryDefaultIdentifier` catches that without
-needing a database.
+Adding a new identifier family means adding a field to `Spec` and a helper
+that builds it — a literal written straight into the seed would put the local
+and test tenants' rows in the demo org's scope.
+`TestSeedSourceHasNoDemoIdentifiers` catches that without needing a database.
 
 `LocalSpec` identifies the dev-idp's default org, so logging in locally lands
 you inside the seeded data. Unlike the demo org it is an ordinary org whose
@@ -83,6 +101,19 @@ suffixed slug because the seeded row already holds `speakeasy`.
   grants — use the atlas/owner Postgres URL secret; and run the Cloud SQL
   proxy as an explicit sidecar with --quitquitquit so the Job completes.
 
+### Billing usage summaries
+
+The ClickHouse seed deletes the demo tenant's
+`billing_meter_daily_summaries` rows before deleting its raw meter rows. The
+runner waits until both deletions are visible, then the fresh
+`billing_meter_readings_by_time` inserts synchronously trigger the incremental
+materialized view. This makes each seed run scoped and repeatable without a
+full-history reporting scan or a separate rebuild.
+
+Summaries have UTC-day precision. Every physical delivery contributes to the
+daily `SummingMergeTree`; producer-side deduplication is responsible for
+preventing unwanted duplicate accounting.
+
 ## Local-only fixtures
 
 `gram demo-seed --local` runs `RunLocalFixtures`
@@ -101,10 +132,77 @@ needs and the shared demo org must never have:
   it is a genuinely hardcoded credential, deliberately, scoped to one
   developer's database.
 - **A default environment**, the global `Gram Recommended` MCP registry row
-  (not tenant-scoped, so it cannot live in the seed proper), and the
-  Playground's MCP App: a Gram Function zipped in-memory from
-  `server/internal/demoseed/mcpapp/` and hung off the seeded deployment, so the
-  demo org never gets a functions deployment production would have to run.
+  (not tenant-scoped, so it cannot live in the seed proper).
+- **Working upstream servers.** The seed has five working MCP servers: three
+  named for the configuration they test, plus Linear and Notion, real
+  vendors. (The local fixtures add an Enterprise Sign-In (ID-JAG) Server,
+  below; it does not exist in the public demo org. Acme Wiki, a display-only
+  Enterprise Managed Authorization example, is seeded disabled in both.) Most
+  of the setup is shared, so the same servers work in the public demo org and
+  in the local org right after `mise run seed`; the local fixtures add only
+  what needs the developer's machine (below).
+
+  Every Speakeasy server hosts the demo MCP fixture
+  (`server/internal/demoseed/fixture`) under `GRAM_SERVER_URL/rpc/demoseed`
+  (under `/rpc` because the deployed ingress sends `/rpc` to the API server).
+  It holds fake data only (notes) and offers: an OAuth 2.1 server (sign in by
+  picking an email; dynamic registration, client ID metadata documents, PKCE,
+  refresh rotation, tokens bound to the requested resource), MCP endpoints
+  `/mcp/oauth`, `/mcp/shared` and (locally) `/mcp/ema`, and a stub of the demo API at `/acme-api`.
+  It also serves endpoints the seed does not use: a DCR-only authorization
+  server at `/dcr`, `/mcp/own-token`, `/mcp/open` and a token page at
+  `/tokens`.
+  Its credentials live in `fixtureauth` and are checked in on purpose: they
+  guard nothing real. The shared seed's last phase before postflight
+  (`fixture_servers.go`) points the servers at it and gives every live seeded
+  sign-in real fixture tokens:
+
+  | Server                             | Slug                        | Tests                                                                                                                    | Reaches                                                                                                                                        |
+  | ---------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+  | OpenAPI Server                     | `openapi-server`            | A public server generated from an OpenAPI document; callers bring an OAuth token from the API's own authorization server | The fixture's API stub (`ACME_SERVER_URL` system environment); its external OAuth server (slug `openapi-server`) is the fixture's              |
+  | Example OAuth                      | `example-oauth`             | Each person signs in upstream: expiry, refresh, scope pins, agent connections                                            | `/mcp/oauth`, through a client ID metadata document client; seeded sign-ins hold fixture tokens; also offers the "Shared service token" client |
+  | Example Shared Credential          | `example-shared-credential` | One static shared credential for every caller                                                                            | `/mcp/shared` with the checked-in example shared token as a static Authorization header (not sensitive)                                        |
+  | Enterprise Sign-In (ID-JAG) Server | `enterprise-sign-in`        | Sign-in through the company identity provider, exchanged for an ID-JAG                                                   | Local org only: `/mcp/ema` through the dev-idp (below); not seeded in the public demo org                                                      |
+  | Linear                             | `linear`                    | A real vendor; each person signs in to their own Linear account                                                          | `https://mcp.linear.app/mcp` (below)                                                                                                           |
+  | Notion                             | `notion`                    | A real vendor; each person signs in to their own Notion account                                                          | `https://mcp.notion.com/mcp` (below)                                                                                                           |
+
+  Each server's endpoint is `<org>-<slug>`. The OpenAPI document
+  (`server/internal/demoseed/openapi.yaml`) declares two security schemes,
+  `oauth` (authorization code at the fixture) and `apiKey` (an Authorization
+  header), as alternatives (`security: [{oauth: []}, {apiKey: []}]`); the seed fills in the
+  deployment's fixture URL when it uploads it. Speakeasy lets a hosted server
+  use one auth method, and the OpenAPI Server uses the upstream OAuth one: it
+  needs no Speakeasy sign-in, and its tools forward the caller's fixture
+  token to the API stub.
+
+  The Enterprise Sign-In (ID-JAG) Server is added by `local_ema.go`, in the
+  local org only, and only when the dev-idp is reachable. The dev-idp plays the company identity provider: the seed
+  creates its EMA app, resource, trust rule and the developer's assignment
+  over the dev-idp's control RPC, and provisions the developer in the org's
+  directory (federated sign-in admits only directory-provisioned people). The
+  server's own organization sign-in federates through the dev-idp; Speakeasy
+  then exchanges the developer's ID token for an ID-JAG at the dev-idp and
+  redeems it at the dev-idp's `/resource-as/<slug>` authorization server,
+  whose access token the fixture's `/mcp/ema` checks by introspection. One
+  client id (`GRAM_IDP_CLIENT_ID`) serves all three legs, with a checked-in
+  local secret. A dev-idp that cannot be reached leaves the server
+  display-only, as it is in the public demo org, where no identity provider
+  issues ID-JAGs.
+
+  Linear and Notion (`vendor_apps.go`) are set up in every org as an admin's
+  Auto-Configure would: the vendor's authorization server, a client ID
+  metadata document client served at the deployment's own URL
+  (`GRAM_SERVER_URL`, which the prod CronJob sets), and the server's links to
+  both. The vendor fetches the document when someone signs in, so in the
+  public demo org each visitor signs in to their own account. Locally a vendor
+  cannot reach the document on localhost, so the seed registers a public
+  client at the vendor's `/register` and puts it in that client's place. The
+  client ids are cached in `GRAM_DEMOSEED_CACHE_DIR`
+  (`local/cache/demoseed-<vendor>-client.json`, gitignored) per callback URL,
+  so reseeding reuses them. Signing in needs your own account, and the tools
+  return your real data: mask it in any recording. Offline, the local seed
+  warns and keeps the metadata document clients, which cannot sign in
+  locally.
 
 The fixtures are idempotent, and everything they write is either upserted by a
 fixed id or cascades from the seeded deployment/project, so a reseed rolls
@@ -118,7 +216,8 @@ pipeline is a test's job, not the seed's.
 
 ## Iteration loop
 
-1. Edit the SQL in `server/internal/demoseed/`.
+1. Edit the seed phase (and its sqlc queries) in `server/internal/demoseed/`;
+   run `mise run gen:sqlc-server` after changing a query.
 2. `mise run seed:demo`, verify per `verify.md`.
 3. Run the safety test (below), fix until green, tick the page in `PAGES.md`,
    commit. Prod picks the change up on the next release.
@@ -149,8 +248,10 @@ and the test asserts:
 2. **Cleanup** — the planted stray demo rows are wiped by the rerun, so seed
    versions can always roll forward.
 3. **Idempotence** — per-table row counts are identical after every run for
-   plain MergeTree tables; Summing/Aggregating MV targets collapse rows on
-   `now()`-bucketed keys, so they are checked for isolation only.
+   published plain MergeTree tables and the merged
+   `billing_meter_daily_summaries` target. Other Summing/Aggregating MV targets
+   collapse rows on `now()`-bucketed keys, so they are checked for isolation
+   only.
 
 What that means when extending the seed: scope every statement to the demo
 constants, pair every insert with a delete (or upsert), keep the
@@ -206,3 +307,17 @@ Access is by IMPERSONATION only — demo org never gets membership rows.
 Everything in this directory is committed to a public repo: fictional
 companies, `*@demo.getgram.ai` emails, `EXAMPLE`/`DEMO` marked fake secrets
 only. Never paste real org/project/user ids here.
+
+### Global registry (manual administration)
+
+An empty global registry is expected in production. Once the staff admin UI is
+available, staff manually create the initial servers there; production has no
+JSON import command or starter-data prerequisite.
+
+No starter inventory is shipped, and there is no automatic local import
+workflow. Tenant reseeds and `RunLocalFixtures` never populate or
+reset the global catalog, including staff edits and publication state.
+
+Existing Pulse-backed demo installations remain unchanged; this is not a Pulse
+cutover. Global staff-only administration is not exposed to demo customers, and
+tenant seeds create no demo-prefixed catalog copies.

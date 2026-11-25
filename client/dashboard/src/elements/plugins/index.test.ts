@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { recommended, type Plugin } from "./index";
 import { chart } from "./chart";

@@ -1,8 +1,10 @@
+import { enumPresentation } from "@/lib/enum";
+import { IdentityLink } from "@/components/identity-link";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Switch } from "@/components/ui/Switch";
 import {
   PageTabsList,
@@ -29,7 +31,7 @@ import {
   formatUsd,
   parseRuleUrn,
   ruleStatusOf,
-  targetSummary,
+  matchesRuleSearch,
   usageByRuleId,
   type RuleAction,
   type RuleDraft,
@@ -306,11 +308,7 @@ function RulesTab({
         return false;
       }
       if (!q) return true;
-      return (
-        r.name.toLowerCase().includes(q) ||
-        r.description.toLowerCase().includes(q) ||
-        targetSummary(r.target).toLowerCase().includes(q)
-      );
+      return matchesRuleSearch(r, q);
     });
   }, [rules, query, actionFilter]);
 
@@ -426,7 +424,7 @@ function buildRuleColumns({
       width: "0.6fr",
       render: (rule) => (
         <span className={cn("text-muted-foreground text-sm", dim(rule))}>
-          {WINDOW_LABELS[rule.windowKind]}
+          {enumPresentation(WINDOW_LABELS, rule.windowKind, "Unknown")}
         </span>
       ),
     },
@@ -757,7 +755,9 @@ function EventPersonCell({ event }: { event: SpendRuleEvent }): JSX.Element {
   return (
     <span className="block min-w-0">
       <span className="block truncate text-sm">
-        {event.displayName || event.email}
+        <IdentityLink identifier={event.email ? { email: event.email } : null}>
+          {event.displayName || event.email}
+        </IdentityLink>
       </span>
       {event.displayName && (
         <span className="text-muted-foreground block truncate text-xs">

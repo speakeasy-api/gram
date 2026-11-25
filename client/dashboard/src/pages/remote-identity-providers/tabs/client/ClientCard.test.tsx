@@ -1,0 +1,361 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ClientCard } from "./ClientCard";
+
+// Unlike OverviewTab.test, this renders the real Radix select fields, which a
+// disabled fieldset does not stop from opening.
+
+const testState = vi.hoisted(() => ({
+  admin: false,
+  mutate: vi.fn(),
+  mutateAsync: vi.fn(),
+}));
+beforeEach(() => {
+  testState.admin = false;
+  testState.mutate.mockClear();
+  testState.mutateAsync.mockReset();
+});
+
+vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
+  useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
+}));
+vi.mock("@/contexts/Auth", () => ({ useIsPlatformAdmin: () => true }));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasAnyScope: () => testState.admin,
+    hasScope: () => false,
+    hasAllScopes: () => false,
+    isLoading: false,
+  }),
+}));
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({}),
+}));
+vi.mock(
+  "@gram/client/react-query/updateOrganizationRemoteSessionClient.js",
+  () => ({
+    useUpdateOrganizationRemoteSessionClientMutation: () => ({
+      mutate: testState.mutate,
+      mutateAsync: testState.mutateAsync,
+      isPending: false,
+    }),
+  }),
+);
+vi.mock("./KeySetField", () => ({
+  KeySetField: ({ disabled }: { disabled?: boolean }) => (
+    <div data-testid="key-set" data-disabled={String(disabled)} />
+  ),
+}));
+
+afterEach(cleanup);
+
+describe("sending the MCP client's name to the authorization server", () => {
+  const label = "Send the MCP client's name to the authorization server";
+
+  it("is off by default and saved only when changed", () => {
+    testState.admin = true;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    const checkbox = screen.getByRole("checkbox", { name: label });
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: expect.objectContaining({
+          forwardClientName: true,
+        }),
+      },
+    });
+  });
+
+  it("can be turned off again", () => {
+    testState.admin = true;
+    render(
+      <ClientCard
+        client={{ ...client, forwardClientName: true }}
+        issuer={issuer}
+        issuerId="issuer-1"
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: label }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: expect.objectContaining({
+          forwardClientName: false,
+        }),
+      },
+    });
+  });
+
+  it("is omitted when saving another field", () => {
+    testState.admin = true;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    fireEvent.change(screen.getByLabelText("Audience"), {
+      target: { value: "new-audience" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    const form =
+      testState.mutate.mock.calls[0]?.[0].request.updateRemoteSessionClientForm;
+    expect(form).not.toHaveProperty("forwardClientName");
+  });
+
+  it("is locked for people who cannot edit", () => {
+    testState.admin = false;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    expect(
+      screen.getByRole("checkbox", { name: label }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("is hidden for service accounts, which have no user sign-in", () => {
+    testState.admin = true;
+    render(
+      <ClientCard
+        client={{
+          ...client,
+          credentialOwner: "self",
+          tokenEndpointAuthMethod: AuthMethod.ClientSecretBasic,
+        }}
+        issuer={issuer}
+        issuerId="issuer-1"
+      />,
+    );
+    expect(screen.queryByRole("checkbox", { name: label })).toBeNull();
+  });
+});
+
+describe("client audience updates", () => {
+  it.each([
+    ["cleared", "", ""],
+    ["whitespace-only", "   ", ""],
+    ["changed", "  new-audience  ", "new-audience"],
+  ])("sends the %s audience explicitly", (_label, value, expected) => {
+    testState.admin = true;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    fireEvent.change(screen.getByLabelText("Audience"), { target: { value } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: expect.objectContaining({
+          audience: expected,
+        }),
+      },
+    });
+  });
+
+  it.each(["aud", undefined])(
+    "omits unchanged audience %s when saving another field",
+    (audience) => {
+      testState.admin = true;
+      render(
+        <ClientCard
+          client={{ ...client, audience }}
+          issuer={issuer}
+          issuerId="issuer-1"
+        />,
+      );
+      fireEvent.click(screen.getByRole("switch"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      expect(testState.mutate).toHaveBeenCalledWith({
+        request: {
+          updateRemoteSessionClientForm: expect.objectContaining({
+            legacyCallbackUrl: true,
+          }),
+        },
+      });
+      expect(
+        testState.mutate.mock.lastCall?.[0].request
+          .updateRemoteSessionClientForm,
+      ).not.toHaveProperty("audience");
+    },
+  );
+});
+
+const client = {
+  id: "client-1",
+  clientId: "upstream-client",
+  tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
+  jsonWebKeySetId: "set-1",
+  legacyCallbackUrl: false,
+  forwardClientName: false,
+  audience: "aud",
+} as RemoteSessionClient;
+
+const issuer = {
+  id: "issuer-1",
+  issuer: "https://idp.example.com",
+  scopesSupported: ["openid"],
+} as RemoteSessionIssuer;
+
+describe("client card without org:admin", () => {
+  it("disables the Radix selects and every other control", () => {
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+
+    const triggers = screen
+      .getAllByRole("combobox")
+      .filter((el) => el.id !== "client-scopes");
+    expect(triggers).toHaveLength(2);
+    for (const trigger of triggers) {
+      expect((trigger as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    }
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    expect(
+      (screen.getByRole("combobox", { name: "Scopes" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText("Audience") as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect((screen.getByRole("switch") as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(screen.getByTestId("key-set").getAttribute("data-disabled")).toBe(
+      "true",
+    );
+  });
+});
+
+describe("client card with unsupported configuration", () => {
+  it.each([
+    { tokenEndpointAuthMethod: unrecognized("future_auth") },
+    { tokenEndpointAuthAudienceFormat: unrecognized("future_audience") },
+  ])("disables editing for an administrator: %j", (unknown) => {
+    testState.admin = true;
+    render(
+      <ClientCard
+        client={{ ...client, ...unknown }}
+        issuer={issuer}
+        issuerId="issuer-1"
+      />,
+    );
+    expect(
+      (screen.getByLabelText("Audience") as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    expect(screen.getByText(/unsupported client configuration/)).toBeTruthy();
+    expect(screen.getByTestId("key-set").getAttribute("data-disabled")).toBe(
+      "true",
+    );
+  });
+});
+
+it("preserves unknown audience configuration for unrelated non-JWT edits and blocks switching to JWT", () => {
+  testState.admin = true;
+  render(
+    <ClientCard
+      client={{
+        ...client,
+        tokenEndpointAuthMethod: AuthMethod.ClientSecretPost,
+        tokenEndpointAuthAudienceFormat: unrecognized("future_audience"),
+      }}
+      issuer={issuer}
+      issuerId="issuer-1"
+    />,
+  );
+  const audience = screen.getByLabelText("Audience");
+  expect(audience).toHaveProperty("disabled", false);
+  fireEvent.change(audience, { target: { value: "new-audience" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(testState.mutate).toHaveBeenCalledWith({
+    request: {
+      updateRemoteSessionClientForm: expect.objectContaining({
+        audience: "new-audience",
+      }),
+    },
+  });
+  expect(
+    testState.mutate.mock.lastCall?.[0].request.updateRemoteSessionClientForm,
+  ).not.toHaveProperty("tokenEndpointAuthAudienceFormat");
+  const auth = screen
+    .getAllByRole("combobox")
+    .find((el) => el.id !== "client-scopes")!;
+  fireEvent.click(auth);
+  expect(
+    screen
+      .getByRole("option", { name: /private_key_jwt/ })
+      .getAttribute("aria-disabled"),
+  ).toBe("true");
+});
+
+it("labels an unknown authentication method as unsupported rather than the default", () => {
+  testState.admin = true;
+  render(
+    <ClientCard
+      client={{
+        ...client,
+        tokenEndpointAuthMethod: unrecognized("future_auth"),
+      }}
+      issuer={issuer}
+      issuerId="issuer-1"
+    />,
+  );
+  expect(screen.getByText("Unsupported authentication method")).toBeTruthy();
+  expect(screen.queryByText("client_secret_basic (default)")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+});
+
+// A container such as the duplicate sheet warns before discarding edits, so a
+// corrected client ID must count as unsaved.
+it.each([["Client ID", "corrected-client"]])(
+  "reports an edited %s as unsaved",
+  (label, value) => {
+    testState.admin = true;
+    const onDirtyChange = vi.fn<(dirty: boolean) => void>();
+    render(
+      <ClientCard
+        client={client}
+        issuer={issuer}
+        issuerId="issuer-1"
+        onDirtyChange={onDirtyChange}
+      />,
+    );
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+    const input = screen.getByLabelText(label);
+    const original = (input as HTMLInputElement).value;
+    fireEvent.change(input, { target: { value } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent.change(input, { target: { value: original } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  },
+);
+
+it("renames the client from the card header without submitting the form", async () => {
+  testState.admin = true;
+  testState.mutateAsync.mockResolvedValue({
+    ...client,
+    displayName: "Production",
+  });
+  render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+
+  fireEvent.click(screen.getByTitle("Rename client"));
+  const input = screen.getByLabelText("Name");
+  fireEvent.change(input, { target: { value: "  Production " } });
+  fireEvent.keyDown(input, { key: "Enter" });
+
+  await vi.waitFor(() =>
+    expect(testState.mutateAsync).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: {
+          id: "client-1",
+          displayName: "Production",
+        },
+      },
+    }),
+  );
+  expect(testState.mutate).not.toHaveBeenCalled();
+});

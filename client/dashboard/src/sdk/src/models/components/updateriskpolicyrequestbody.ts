@@ -11,22 +11,33 @@ import {
   RiskDetectionScope$outboundSchema,
 } from "./riskdetectionscope.js";
 import {
+  RiskMCPScope,
+  RiskMCPScope$Outbound,
+  RiskMCPScope$outboundSchema,
+} from "./riskmcpscope.js";
+import {
+  RiskPolicyApprovalConfig,
+  RiskPolicyApprovalConfig$Outbound,
+  RiskPolicyApprovalConfig$outboundSchema,
+} from "./riskpolicyapprovalconfig.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+ * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export const UpdateRiskPolicyRequestBodyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
   Quarantine: "quarantine",
+  RequireApproval: "require_approval",
 } as const;
 /**
- * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+ * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export type UpdateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof UpdateRiskPolicyRequestBodyAction
@@ -62,9 +73,10 @@ export type UpdateRiskPolicyRequestBodyShadowMcpDisposition = ClosedEnum<
 
 export type UpdateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+   * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
    */
   action?: UpdateRiskPolicyRequestBodyAction | undefined;
+  approvalConfig?: RiskPolicyApprovalConfig | undefined;
   /**
    * For the account_identity source: corporate email domains considered approved. Omit to preserve the current list; send an empty array to clear it.
    */
@@ -101,10 +113,7 @@ export type UpdateRiskPolicyRequestBody = {
    * The policy ID.
    */
   id: string;
-  /**
-   * Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.
-   */
-  messageTypes?: Array<string> | undefined;
+  mcpScope?: RiskMCPScope | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name.
@@ -126,14 +135,6 @@ export type UpdateRiskPolicyRequestBody = {
    * Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
    */
   promptInjectionRules?: Array<string> | undefined;
-  /**
-   * CEL exemption predicate. Omit to preserve the current value; send empty to clear.
-   */
-  scopeExempt?: string | undefined;
-  /**
-   * CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
-   */
-  scopeInclude?: string | undefined;
   /**
    * CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.
    */
@@ -185,6 +186,7 @@ export const UpdateRiskPolicyRequestBodyShadowMcpDisposition$outboundSchema:
 /** @internal */
 export type UpdateRiskPolicyRequestBody$Outbound = {
   action?: string | undefined;
+  approval_config?: RiskPolicyApprovalConfig$Outbound | undefined;
   approved_email_domains?: Array<string> | undefined;
   audience_principal_urns?: Array<string> | undefined;
   audience_type?: string | undefined;
@@ -194,15 +196,13 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
   id: string;
-  message_types?: Array<string> | undefined;
+  mcp_scope?: RiskMCPScope$Outbound | undefined;
   model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name: string;
   presidio_entities?: Array<string> | undefined;
   presidio_score_threshold?: number | undefined;
   prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
-  scope_exempt?: string | undefined;
-  scope_include?: string | undefined;
   score?: number | undefined;
   shadow_mcp_allowed_urls?: Array<string> | undefined;
   shadow_mcp_blocked_urls?: Array<string> | undefined;
@@ -219,6 +219,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     action: z.optional(UpdateRiskPolicyRequestBodyAction$outboundSchema),
+    approvalConfig: z.optional(RiskPolicyApprovalConfig$outboundSchema),
     approvedEmailDomains: z.optional(z.array(z.string())),
     audiencePrincipalUrns: z.optional(z.array(z.string())),
     audienceType: z.optional(
@@ -230,15 +231,13 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
     id: z.string(),
-    messageTypes: z.optional(z.array(z.string())),
+    mcpScope: z.optional(RiskMCPScope$outboundSchema),
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.string(),
     presidioEntities: z.optional(z.array(z.string())),
     presidioScoreThreshold: z.optional(z.number()),
     prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
-    scopeExempt: z.optional(z.string()),
-    scopeInclude: z.optional(z.string()),
     score: z.optional(z.number()),
     shadowMcpAllowedUrls: z.optional(z.array(z.string())),
     shadowMcpBlockedUrls: z.optional(z.array(z.string())),
@@ -251,6 +250,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      approvalConfig: "approval_config",
       approvedEmailDomains: "approved_email_domains",
       audiencePrincipalUrns: "audience_principal_urns",
       audienceType: "audience_type",
@@ -258,13 +258,11 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       customRuleIds: "custom_rule_ids",
       detectionScopes: "detection_scopes",
       disabledRules: "disabled_rules",
-      messageTypes: "message_types",
+      mcpScope: "mcp_scope",
       modelConfig: "model_config",
       presidioEntities: "presidio_entities",
       presidioScoreThreshold: "presidio_score_threshold",
       promptInjectionRules: "prompt_injection_rules",
-      scopeExempt: "scope_exempt",
-      scopeInclude: "scope_include",
       shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
       shadowMcpBlockedUrls: "shadow_mcp_blocked_urls",
       shadowMcpDisposition: "shadow_mcp_disposition",

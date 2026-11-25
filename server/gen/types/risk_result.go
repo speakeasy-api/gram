@@ -14,6 +14,31 @@ type RiskResult struct {
 	PolicyID string
 	// Policy version when this result was produced.
 	PolicyVersion int64
+	// The mediated MCP execution (tool call, resource read or prompt get) that
+	// raised this finding. Filter listResults by it to list that execution's
+	// non-dismissed findings.
+	ExecutionID *string
+	// Concrete MCP server that executed the operation.
+	McpServerID *string
+	// Outer gateway that routed the execution, when present.
+	MetaMcpServerID *string
+	// Toolset serving the execution, when present.
+	ToolsetID *string
+	// Name of the concrete tool, when applicable.
+	ToolName *string
+	// Which phase of the mediated MCP execution was scanned: its request or its
+	// response.
+	Phase *string
+	// Concrete mediation surface where the execution was observed.
+	MediationSurface *string
+	// MCP method or equivalent mediated operation.
+	McpMethod *string
+	// Credential provenance class resolved by MCP identity.
+	PrincipalKind *string
+	// Whether MCP identity stamped validated principal provenance.
+	IdentityStamped *bool
+	// Recorded enforcement outcome, independent of policy configuration.
+	EnforcementOutcome *string
 	// ID of the durable tool call block recorded for this finding's message, when
 	// one exists. Links to the block page at /blocks/:id.
 	BlockID *string

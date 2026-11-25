@@ -4,6 +4,47 @@ Run `./zero` until it succeeds. This script is what you will use to run the dash
 
 The main dependencies for this project are Mise and Docker. The `./zero` script will guide you to install these if they are not found.
 
+### Agentation
+
+Optional dashboard annotation toolbar. From your worktree, run:
+
+```sh
+mise run start:agentation
+```
+
+Setup and any needed dashboard restart are handled for you. Refresh the page. You can close the terminal.
+
+Stop with `pitchfork stop agentation` (clears annotations). It won't start again automatically.
+
+### Development over Tailscale
+
+With the Tailscale CLI installed, logged in, and a Tailnet DNS name assigned to this machine, `./zero` offers to configure remote development before generating TLS certificates. Accepting saves the DNS name as `GRAM_HOST`, switches `GRAM_BIND_IP` to the machine's Tailnet IP (preferring IPv4), and refreshes their dependent settings in `mise.local.toml`. Assigned ports and explicit per-service listener overrides are preserved. The machine's DNS name and IPs are also included in the mkcert certificate. Other devices must trust the local mkcert CA.
+
+#### HTTPS certificates over Tailscale
+
+If HTTPS certificates are enabled for the tailnet (on the DNS page of the Tailscale admin console), accepting also sets `GRAM_TLS_PROVIDER=tailscale`. The stack then serves the machine's Tailscale certificate, which Let's Encrypt issues, instead of an mkcert certificate. Browsers on other tailnet devices trust it without installing a local CA. Without HTTPS certificates, setup keeps mkcert and other devices must trust this machine's mkcert CA. Certificates are published in Certificate Transparency logs, so the machine's Tailnet DNS name becomes public.
+
+- `mise run tls:tailscale` fetches the certificate into `local/ssl/tailscale/`. `tailscaled` caches it for every worktree, so the call is a local read while the certificate has more than 14 days left (`--min-validity`) and only then requests a new one. On Linux, the user running the stack must be the Tailscale operator (`sudo tailscale set --operator=$USER`).
+- `mise run start` (and therefore `mise run wake`) refreshes it before the listeners start. While the stack runs, the `tailscale-cert` Pitchfork cron renews it daily and restarts the daemons that serve TLS when it changes.
+- The certificate covers only the Tailnet DNS name, so `zero:tls` fails if an HTTPS endpoint uses another host. Setup also sets `GRAM_ASSISTANT_RUNTIME_SERVER_URL` to the Tailnet server URL, unless you have set it already, because local assistant runtime containers otherwise call back through `host.docker.internal`.
+- To go back to mkcert, set `GRAM_TLS_PROVIDER=mkcert` in `mise.local.toml`, then run `mise run zero:tls` and `mise run start`.
+
+Services using `GRAM_BIND_IP` default to `127.0.0.1` for local development; Tailscale is optional. Accepting Tailscale setup opts these services into listening on the Tailnet address. Health/control listeners stay on `127.0.0.1` independently of the public bind address. The dashboard and parking server have separate listener settings.
+
+Declining adds `zero:tailscale` to the comma-separated `GRAM_ZERO_SKIP` setting. That task also honors `*`. Completed setup does not prompt again unless forced or the machine's hostname, IPs, shared bind address, or dependent templates change. To retry setup, run `mise run zero:tailscale --force`, then `mise run zero:tls` and restart the stack with `mise run start`. Agent-mode setup skips the interactive Tailscale step.
+
+`GRAM_SSL_EXTRA_HOSTS` accepts comma-separated DNS names or bare IP addresses, not URLs or hostnames with ports. Invalid entries are rejected before TLS configuration or CA trust changes.
+
+When you accept Tailscale configuration, setup stages the edits and applies them with an atomic replacement after successful writes. Concurrent-edit detection is best-effort, not a shared writer lock: avoid editing `mise.local.toml` or running other configuration-writing mise commands while setup saves it.
+
+### Local assistant callbacks from Docker
+
+On native Linux Docker, the `assistant-relay` Pitchfork daemon forwards TCP from the default Docker bridge gateway to `GRAM_SERVER_ADDRESS`. It uses the port from `GRAM_ASSISTANT_RUNTIME_SERVER_URL` when that override targets `host.docker.internal`; without an override it uses the port from `GRAM_SERVER_URL`. Runtime containers keep using `host.docker.internal` while the API stays on loopback (or an opted-in Tailnet address). HTTPS is the default, and TLS passes through unchanged, including the existing certificate and runtime CA trust. An explicitly configured HTTP-only development stack remains HTTP through the relay. The relay starts before the server and worker and stops with the stack.
+
+If the API already listens on the gateway or a wildcard address at the callback port, the relay does not open another listener. Docker Desktop uses its built-in host forwarding instead; its VM bridge address is not bound on the host, and `GRAM_ASSISTANT_RELAY_HOST` does not enable a relay there. An explicit `GRAM_ASSISTANT_RUNTIME_SERVER_URL` using a hostname other than `host.docker.internal` also bypasses the relay.
+
+For a customized Docker `host-gateway`, set `GRAM_ASSISTANT_RELAY_HOST` in `mise.local.toml` to the corresponding local interface IP. The relay never falls back to a wildcard listener. If Docker discovery fails or the auto-detected bridge gateway is not a local interface (as with some CI or remote Docker engines), the relay logs that it is inactive and lets the rest of the stack start. Assistant callbacks in those environments need an explicit container-reachable `GRAM_ASSISTANT_RUNTIME_SERVER_URL`. An invalid explicit `GRAM_ASSISTANT_RELAY_HOST` still fails startup. Restart `assistant-relay` after recovering Docker, and restart the stack after changing listener settings or Docker contexts.
+
 ### Seeding the database
 
 Once `./zero` succeeds and all services are running, seed the local database with sample data:
@@ -20,20 +61,20 @@ The data is the same data the public demo organization is built from, retargeted
 
 ### Local auth and identity (dev-idp)
 
-Local development uses **dev-idp** — a lightweight Go server (`dev-idp/`) that replaces the external identity services Gram uses in production. It runs as a pitchfork daemon, uses SQLite, and requires no external accounts.
+Local development uses **dev-idp** — a lightweight Go server (`dev-idp/`) that replaces the external identity services Speakeasy uses in production. It runs as a pitchfork daemon, uses SQLite, and requires no external accounts.
 
-The mode is controlled by a single env var:
+Whichever backend you pick, **login is non-interactive**: you click "Login" and are signed straight in, with no credentials and no hosted login page. That is the point of dev-idp. What the backend changes is only where your identity comes from.
 
 ```
-GRAM_IDP_MODE = "mock-workos" | "workos"
+GRAM_DEVIDP_BACKEND = "local" | "workos"
 ```
 
-#### mock-workos (default — zero config)
+#### local (default — zero config)
 
 This is what you get out of the box after `./zero`. No configuration needed.
 
-- **Login** authenticates instantly with a test user — no credentials needed.
-- **WorkOS API calls** (Roles & Permissions, Team management, Invitations) hit dev-idp's built-in mock instead of the real API.
+- **Login** signs you in as your git committer identity (`git config user.email`), synthesized on first use.
+- **WorkOS API calls** (Roles & Permissions, Team management, Invitations) hit dev-idp's built-in emulator instead of the real API.
 - **Customization**: open `http://localhost:35293` to create/edit users, organizations, roles, and memberships.
 
 #### workos (opt-in — real WorkOS)
@@ -42,29 +83,39 @@ For Speakeasy employees testing against real WorkOS data. The `./zero` script pr
 
 ```toml
 [env]
-GRAM_IDP_MODE = "workos"
-GRAM_IDP_CLIENT_SECRET = "sk_test_..."
-WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
-GRAM_IDP_CLIENT_ID = "client_..."
+GRAM_DEVIDP_BACKEND = "workos"
+WORKOS_API_KEY = "sk_test_..."
 ```
 
-This routes the server's WorkOS API calls through a dev-idp proxy to the real WorkOS API. OIDC login still goes through dev-idp's `/oauth2` handler locally.
+That is the whole configuration — no URLs to repoint. dev-idp passes REST calls through to the real WorkOS API, so roles, memberships and invitations act on live data.
 
-After changing modes, restart pitchfork with `mise run start`.
+Speakeasy authenticates to dev-idp with a separate `GRAM_IDP_CLIENT_SECRET` generated by `./zero`. dev-idp validates that downstream credential and replaces it with `WORKOS_API_KEY` before proxying upstream, so the WorkOS key is never used as the Speakeasy client credential.
+
+Login stays non-interactive: dev-idp looks your git committer email up **through** the WorkOS API and signs you in as that WorkOS user, reporting its real user id. So you need a WorkOS user whose email matches `git config user.email`.
+
+> [!NOTE]
+> Don't set `GRAM_IDP_CLIENT_ID` to a real `client_...` value. The server sends any `client_`-prefixed id to WorkOS's hosted AuthKit, which is an interactive login — the opposite of what dev-idp is for.
+
+After changing backends, restart pitchfork with `mise run start`. Each backend keeps its own `current_users` row, so switching back and forth preserves whichever identity you had set on the other side.
+
+> [!IMPORTANT]
+> **Pulling this into an existing worktree?** Run `mise gws` once, then `mise run start`. dev-idp moved its OAuth surface from `/oauth2` to `/oauth2-1` and its WorkOS surface from `/mock-workos` to `/workos`, and every worktree pins those URLs in `mise.local.toml` with its own port baked in, so the new `mise.toml` defaults never reach a checkout that predates the rename. `git:worksync` refreshes the pinned copies (it recognizes them by the `{{env.…}}` template they still carry) and drops the retired `GRAM_IDP_MODE` setting. If you skip this, dev-idp says so in the first lines of `mise run start`, and any request to an old path answers 410 with the same fix.
+
+`mise gws` evolves dev-idp's SQLite database to the current schema, preserving existing users, organizations and memberships. If a change ever needs more than SQLite can do in place, the sync fails with the affected column and reset instructions.
 
 <details>
 <summary>dev-idp protocol handlers (advanced)</summary>
 
-dev-idp mounts several protocol handlers on a single port, all sharing one SQLite database:
+dev-idp mounts two surfaces on a single port, sharing one SQLite database:
 
-| Prefix         | Purpose            | Details                                                                   |
-| -------------- | ------------------ | ------------------------------------------------------------------------- |
-| `/oauth2`      | User login         | Standard OIDC provider (authorize, token, userinfo, JWKS).                |
-| `/oauth2-1`    | MCP auth           | OAuth 2.1 with PKCE and Dynamic Client Registration.                      |
-| `/mock-workos` | Orgs, roles, teams | Mock WorkOS REST API — always mounted.                                    |
-| `/workos`      | Real WorkOS proxy  | Thin proxy to real WorkOS API — only mounted when `GRAM_IDP_MODE=workos`. |
+| Prefix      | Purpose            | Details                                                                                                               |
+| ----------- | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `/oauth2-1` | Login + MCP auth   | OAuth 2.1 authorization server. PKCE and Dynamic Client Registration; both optional for the first-party login client. |
+| `/workos`   | Orgs, roles, teams | WorkOS REST surface. Emulated locally or proxied upstream, per `GRAM_DEVIDP_BACKEND`.                                 |
 
-The Gram server uses the same code paths as production — only `GRAM_IDP_BASE_URL` and `WORKOS_API_URL` point to localhost instead of external services.
+Login spans both: the browser hits `/oauth2-1/authorize`, which redirects straight back with a code, and the server exchanges that code at `/workos/user_management/authenticate` rather than the OAuth token endpoint. The authorization-code grant is served locally even under the `workos` backend because real WorkOS would reject a code dev-idp minted; WorkOS-native grants such as Magic Auth are proxied.
+
+The Speakeasy server uses the same code paths as production — only `GRAM_IDP_BASE_URL` and `WORKOS_API_URL` point to localhost instead of external services.
 
 </details>
 
@@ -97,7 +148,7 @@ Because `post-start` is backgrounded, `wt switch` returns before the stack is re
 + old-experiment  ○ down https://localhost:62875
 ```
 
-`wt remove` runs `mise run nuke --keep-shared` inside the worktree first, so the right Compose stack is torn down before the directory disappears (the shared Presidio stack stays up for other worktrees). Removing a worktree by hand (`git worktree remove`) skips that and leaves its containers and volumes running.
+`wt remove` runs `mise run nuke --keep-shared --delete-namespace` inside the worktree first, so the right Compose stack and its Temporal namespace are torn down before the directory disappears (shared services stay up for other worktrees). Removing a worktree by hand (`git worktree remove`) skips that and leaves its containers, volumes, and namespace running.
 
 #### Recommended shell setup
 
@@ -131,7 +182,7 @@ go run . --help
 
 Above anything else in this document: we do not perfectly hold to the guidelines below but we do our best to work towards them. Active codebases will readily deteriorate with time unless explicit efforts are made to reverse deterioration.
 
-Good and bad decisions compound and the goal of this document is to get you making good decisions that help build Gram up as a useful and high-quality product.
+Good and bad decisions compound and the goal of this document is to get you making good decisions that help build Speakeasy up as a useful and high-quality product.
 
 ## Preamble
 
@@ -140,15 +191,15 @@ Good and bad decisions compound and the goal of this document is to get you maki
 
 **The world is full of APIs that we want AI agents to leverage effectively.**
 
-Gram is an exploration into how we can take that vast space of APIs and create the right bridges to them for AI agents. We welcome ideas as much as code contributions that serve this goal.
+This project is an exploration into how we can take that vast space of APIs and create the right bridges to them for AI agents. We welcome ideas as much as code contributions that serve this goal.
 
 **Open source as a team effort.**
 
-The goal of open sourcing Gram is to recognize that we solve problems better as a community rather than as a walled off teams and give confidence to those that want to use the service either through Speakeasy or self-hosted. For Gram to succeed as useful product, we want to welcome contributors that share our values and goals around building high-quality products for the Agentic AI frontier.
+The goal of open sourcing this project is to recognize that we solve problems better as a community rather than as a walled off teams and give confidence to those that want to use the service either through Speakeasy or self-hosted. For this project to succeed as useful product, we want to welcome contributors that share our values and goals around building high-quality products for the Agentic AI frontier.
 
 **High quality products are built from high quality decisions.**
 
-The goal of these guidelines and any roadmap plans made in Gram is to ensure we are solving the right problems to connect AI agents to the sprawl of APIs in the world. This may mean we choose to work on some things over others or reject proposals that we do not believe serve this goal. We encourage productive discussions and opinions that are grounded in research and ultimately lead us to make good decisions when building Gram.
+The goal of these guidelines and any roadmap plans made in Speakeasy is to ensure we are solving the right problems to connect AI agents to the sprawl of APIs in the world. This may mean we choose to work on some things over others or reject proposals that we do not believe serve this goal. We encourage productive discussions and opinions that are grounded in research and ultimately lead us to make good decisions when building Speakeasy.
 
 </details>
 
@@ -159,7 +210,7 @@ The goal of these guidelines and any roadmap plans made in Gram is to ensure we 
 
 **Readability, maintainability, strong conventions and the long view.**
 
-We want to be fast at every stage of developing Gram. We're not going to over-index on throwing code into production with no checks and balances when it means we'll sink into a tarpit of bugs and incidents months from now. There is a widely-applicable definition of "fast iteration speed" that includes not making messes along the way. Establishing guardrails and conventions in coding and codebase structure means we can increase our iteration speed by adding well-aligned contributors. Everyone will benefit from this: current and future users and contributors.
+We want to be fast at every stage of developing Speakeasy. We're not going to over-index on throwing code into production with no checks and balances when it means we'll sink into a tarpit of bugs and incidents months from now. There is a widely-applicable definition of "fast iteration speed" that includes not making messes along the way. Establishing guardrails and conventions in coding and codebase structure means we can increase our iteration speed by adding well-aligned contributors. Everyone will benefit from this: current and future users and contributors.
 
 **You are the first reviewer of your AI assistant's contributions.**
 
@@ -171,7 +222,7 @@ Coding agents and assistants are fantastically effective at this. Utilize them i
 
 **Add documentation whenever possible.**
 
-We document how we deploy Gram, how we manage the database schema and migrations and how we manage infrastructure. A lot of this documentation should act as a sort of runbook that aids new contributors and incident responders. If you are materially affecting any of these areas, please add documentation to help others understand how to operate Gram.
+We document how we deploy Speakeasy, how we manage the database schema and migrations and how we manage infrastructure. A lot of this documentation should act as a sort of runbook that aids new contributors and incident responders. If you are materially affecting any of these areas, please add documentation to help others understand how to operate Speakeasy.
 
 **Code comments are great.**
 
@@ -179,7 +230,7 @@ We are not prescriptive about code comments but we encourage them. Particularly 
 
 **Code reviews are great.**
 
-We review all contributions to Gram and will favor pull requests that are small and focused over massive and far reaching ones. We have no preference or expectations for how you structure your commits since we squash all commits on merge. We do however appreciate contributors that spend any time to structure their work if size of change is large.
+We review all contributions to Speakeasy and will favor pull requests that are small and focused over massive and far reaching ones. We have no preference or expectations for how you structure your commits since we squash all commits on merge. We do however appreciate contributors that spend any time to structure their work if size of change is large.
 
 Above all, we expect folks to spend non-zero effort adding a meaningful pull request title and description since these will contribute to the changelog.
 

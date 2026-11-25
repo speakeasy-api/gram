@@ -2,6 +2,8 @@ package remotemcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/secretmask"
 )
 
 // Headers handles encryption and decryption of header values.
@@ -40,6 +43,38 @@ func (h *Headers) ListHeaders(ctx context.Context, serverID uuid.UUID, redacted 
 	}
 
 	return h.revealHeaders(headers, redacted)
+}
+
+// ConfigurationFingerprint detects access-relevant header changes without
+// decrypting secrets. Secret values retain their stored randomized ciphertext,
+// so the digest cannot be used to guess low-entropy plaintext values. Rewriting
+// or re-encrypting a secret conservatively invalidates the fingerprint, even
+// when its plaintext is unchanged. Descriptions and timestamps are excluded.
+func (h *Headers) ConfigurationFingerprint(ctx context.Context, serverID uuid.UUID) (string, error) {
+	headers, err := repo.New(h.db).ListHeadersByServerID(ctx, serverID)
+	if err != nil {
+		return "", fmt.Errorf("list header configuration: %w", err)
+	}
+	type headerConfiguration struct {
+		Name                   string      `json:"name"`
+		Value                  pgtype.Text `json:"value"`
+		ValueFromRequestHeader pgtype.Text `json:"value_from_request_header"`
+		IsRequired             bool        `json:"is_required"`
+		IsSecret               bool        `json:"is_secret"`
+	}
+	// ListHeadersByServerID orders by name, independent of insertion order.
+	config := make([]headerConfiguration, 0, len(headers))
+	for _, header := range headers {
+		config = append(config, headerConfiguration{
+			Name: header.Name, Value: header.Value, ValueFromRequestHeader: header.ValueFromRequestHeader,
+			IsRequired: header.IsRequired, IsSecret: header.IsSecret,
+		})
+	}
+	data, err := json.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("encode header configuration: %w", err)
+	}
+	return fmt.Sprintf("v1:%x", sha256.Sum256(data)), nil
 }
 
 // ListServerHeaders reads a server's headers, scoped to the given project.
@@ -107,8 +142,8 @@ func (h *Headers) UpdateServerHeader(ctx context.Context, params repo.UpdateServ
 	return h.revealHeader(header, true)
 }
 
-// revealHeaders decrypts each secret header's value, redacting it when the
-// caller is a management read rather than the proxy.
+// revealHeaders decrypts each secret header's value for the proxy, or masks it
+// without decrypting when the caller is a management read.
 func (h *Headers) revealHeaders(headers []repo.RemoteMcpServerHeader, redacted bool) ([]repo.RemoteMcpServerHeader, error) {
 	result := make([]repo.RemoteMcpServerHeader, len(headers))
 	for i, header := range headers {
@@ -128,13 +163,16 @@ func (h *Headers) revealHeader(header repo.RemoteMcpServerHeader, redacted bool)
 		return header, nil
 	}
 
+	// encryptValue never encrypts an empty value, so stored ciphertext always
+	// holds one and a management read can mask it without decrypting.
+	if redacted {
+		header.Value = pgtype.Text{String: secretmask.Value, Valid: true}
+		return header, nil
+	}
+
 	decrypted, err := h.enc.Decrypt(header.Value.String)
 	if err != nil {
 		return repo.RemoteMcpServerHeader{}, fmt.Errorf("decrypt header %s: %w", header.Name, err)
-	}
-
-	if redacted {
-		decrypted = redactValue(decrypted)
 	}
 
 	header.Value = pgtype.Text{String: decrypted, Valid: true}
@@ -153,12 +191,4 @@ func (h *Headers) encryptValue(isSecret bool, value pgtype.Text) (pgtype.Text, e
 	}
 
 	return pgtype.Text{String: encrypted, Valid: true}, nil
-}
-
-func redactValue(val string) string {
-	if val == "" {
-		return "<EMPTY>"
-	}
-
-	return "***"
 }

@@ -1,7 +1,7 @@
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { queryKeySessionInfo } from "@gram/client/react-query/sessionInfo.core.js";
 
-function getHttpStatusCode(error: unknown): number | undefined {
+export function getHttpStatusCode(error: unknown): number | undefined {
   if (error instanceof GramError) {
     return error.statusCode;
   }
@@ -25,17 +25,21 @@ export function isNotFoundError(error: unknown): boolean {
   return getHttpStatusCode(error) === 404;
 }
 
+export function isBadRequestError(error: unknown): boolean {
+  return getHttpStatusCode(error) === 400;
+}
+
 export function isUnauthorizedError(error: unknown): boolean {
   return getHttpStatusCode(error) === 401;
 }
 
 /**
- * A 401 from the Gram API itself, meaning the dashboard session is dead.
+ * A 401 from the Speakeasy API itself, meaning the dashboard session is dead.
  *
- * This is deliberately narrower than {@link isUnauthorizedError}: non-Gram
+ * This is deliberately narrower than {@link isUnauthorizedError}: non-Speakeasy
  * clients also surface errors with a 401 status — e.g. the AI SDK's
  * MCPClientError when a proxied MCP upstream rejects its credentials — and
- * those say nothing about the Gram session. Treating them as session expiry
+ * those say nothing about the Speakeasy session. Treating them as session expiry
  * causes a redirect loop: /login sees a valid session and bounces straight
  * back to the page whose query 401s again.
  */

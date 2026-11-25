@@ -178,9 +178,9 @@ func TestUpsertSettingsValidatesCap(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	for _, cap := range []int{-1, 10001} {
+	for _, dailyCap := range []int{-1, 10001} {
 		_, err := ti.service.UpsertWorkUnitsSettings(adminCtx, &gen.UpsertWorkUnitsSettingsPayload{
-			OrganizationID: authCtx.ActiveOrganizationID, WorkUnitsEnabled: true, WorkUnitsDailyCap: cap,
+			OrganizationID: authCtx.ActiveOrganizationID, WorkUnitsEnabled: true, WorkUnitsDailyCap: dailyCap,
 		})
 		requireOopsCode(t, err, oops.CodeInvalid)
 	}

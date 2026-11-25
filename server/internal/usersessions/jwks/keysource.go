@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
 var (

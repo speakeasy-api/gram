@@ -1,5 +1,6 @@
-import { codeToTokens, BundledLanguage, BundledTheme } from "shiki";
-import {
+import type { BundledLanguage, BundledTheme } from "shiki";
+import { codeToTokens } from "shiki";
+import type {
   ProgrammingLanguage,
   SupportedLanguage,
 } from "@/components/ui/lib/types";

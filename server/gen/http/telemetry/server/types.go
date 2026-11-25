@@ -174,6 +174,9 @@ type GetObservabilityOverviewRequestBody struct {
 	// Optional MCP server ID filter (fronting server; spans both remote-backed and
 	// toolset-backed activity)
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Optional gateway (meta MCP server) ID filter; scopes to traffic dispatched
+	// through that gateway
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// Optional event source filter (e.g. 'hook')
 	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
@@ -187,6 +190,46 @@ type GetObservabilityOverviewRequestBody struct {
 	IncludeTimeSeries *bool `form:"include_time_series,omitempty" json:"include_time_series,omitempty" xml:"include_time_series,omitempty"`
 }
 
+// GetMcpNetworkTrafficRequestBody is the type of the "telemetry" service
+// "getMcpNetworkTraffic" endpoint HTTP request body.
+type GetMcpNetworkTrafficRequestBody struct {
+	// MCP server ID (mutually exclusive with meta_mcp_server_id)
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Gateway ID (mutually exclusive with mcp_server_id)
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Recent traffic window
+	Window *string `form:"window,omitempty" json:"window,omitempty" xml:"window,omitempty"`
+}
+
+// GetMetaMcpServerUsageRequestBody is the type of the "telemetry" service
+// "getMetaMcpServerUsage" endpoint HTTP request body.
+type GetMetaMcpServerUsageRequestBody struct {
+	// The gateway (meta MCP server) ID
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
+// GetProjectGatewayOverviewRequestBody is the type of the "telemetry" service
+// "getProjectGatewayOverview" endpoint HTTP request body.
+type GetProjectGatewayOverviewRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
+// GetProjectGatewayUsageRequestBody is the type of the "telemetry" service
+// "getProjectGatewayUsage" endpoint HTTP request body.
+type GetProjectGatewayUsageRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
 // GetProjectOverviewRequestBody is the type of the "telemetry" service
 // "getProjectOverview" endpoint HTTP request body.
 type GetProjectOverviewRequestBody struct {
@@ -194,6 +237,9 @@ type GetProjectOverviewRequestBody struct {
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Also return the project home usage breakdowns (usage_by_user,
+	// usage_by_agent, mcp_usage) in the same response
+	IncludeUsage *bool `form:"include_usage,omitempty" json:"include_usage,omitempty" xml:"include_usage,omitempty"`
 }
 
 // GetUnproxiedMcpServerUsageRequestBody is the type of the "telemetry" service
@@ -268,6 +314,9 @@ type QueryRequestBody struct {
 	// from the time range and is floored to 3600 (the source data is bucketed
 	// hourly).
 	GranularitySeconds *int64 `form:"granularity_seconds,omitempty" json:"granularity_seconds,omitempty" xml:"granularity_seconds,omitempty"`
+	// Whether to include distinct values for other dimensions in each table row.
+	// When omitted, defaults to true.
+	IncludeDimensionValues *bool `form:"include_dimension_values,omitempty" json:"include_dimension_values,omitempty" xml:"include_dimension_values,omitempty"`
 	// When group_by is set, keep at most this many groups (ranked by sort_by); the
 	// remainder are rolled into an 'Other' group. Defaults to 10.
 	TopN *int `form:"top_n,omitempty" json:"top_n,omitempty" xml:"top_n,omitempty"`
@@ -347,17 +396,38 @@ type GetToolUsageSummaryRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
-	// Typed user identities to include
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Speakeasy never saw an initialize handshake for) to include
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
 }
 
 // GetToolUsageTotalsRequestBody is the type of the "telemetry" service
@@ -369,17 +439,38 @@ type GetToolUsageTotalsRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
-	// Typed user identities to include
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Speakeasy never saw an initialize handshake for) to include
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
 }
 
 // GetToolUsageTargetsRequestBody is the type of the "telemetry" service
@@ -391,17 +482,38 @@ type GetToolUsageTargetsRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
-	// Typed user identities to include
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Speakeasy never saw an initialize handshake for) to include
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
 }
 
 // GetToolUsageUsersRequestBody is the type of the "telemetry" service
@@ -413,17 +525,124 @@ type GetToolUsageUsersRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
-	// Typed user identities to include
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Speakeasy never saw an initialize handshake for) to include
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+}
+
+// GetToolUsageClientsRequestBody is the type of the "telemetry" service
+// "getToolUsageClients" endpoint HTTP request body.
+type GetToolUsageClientsRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Target types to include. Empty means all target types.
+	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
+	// Shadow MCP server names to include
+	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
+	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Speakeasy never saw an initialize handshake for) to include
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+}
+
+// GetToolUsageClientToolBreakdownRequestBody is the type of the "telemetry"
+// service "getToolUsageClientToolBreakdown" endpoint HTTP request body.
+type GetToolUsageClientToolBreakdownRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Target types to include. Empty means all target types.
+	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
+	// Shadow MCP server names to include
+	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
+	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Speakeasy never saw an initialize handshake for) to include
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
 }
 
 // GetToolUsageTargetTimeSeriesRequestBody is the type of the "telemetry"
@@ -435,17 +654,38 @@ type GetToolUsageTargetTimeSeriesRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
-	// Typed user identities to include
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Speakeasy never saw an initialize handshake for) to include
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
 }
 
 // GetToolUsageUserTimeSeriesRequestBody is the type of the "telemetry" service
@@ -457,17 +697,38 @@ type GetToolUsageUserTimeSeriesRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
-	// Typed user identities to include
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Speakeasy never saw an initialize handshake for) to include
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
 }
 
 // GetToolUsageUsersByTargetRequestBody is the type of the "telemetry" service
@@ -479,17 +740,38 @@ type GetToolUsageUsersByTargetRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
-	// Typed user identities to include
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Speakeasy never saw an initialize handshake for) to include
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
 }
 
 // GetToolUsageTargetToolBreakdownRequestBody is the type of the "telemetry"
@@ -501,17 +783,38 @@ type GetToolUsageTargetToolBreakdownRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
-	// Typed user identities to include
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Speakeasy never saw an initialize handshake for) to include
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to include (error, success, blocked, pending). Empty means
+	// all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param, applied as the trace
+	// listing applies it.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
 }
 
 // ListToolUsageTracesRequestBody is the type of the "telemetry" service
@@ -523,15 +826,28 @@ type ListToolUsageTracesRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
-	// Typed user identities to include
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys (lowercased self-reported client names; 'unattributed'
+	// selects calls Speakeasy never saw an initialize handshake for) to include
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal'). 'team' includes
 	// unclassified traces.
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -539,7 +855,7 @@ type ListToolUsageTracesRequestBody struct {
 	// all.
 	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
 	// Free-text attribute search string from the q URL param. Matches useful
-	// identifier attributes such as Gram URN, conversation ID, and trigger
+	// identifier attributes such as Speakeasy URN, conversation ID, and trigger
 	// instance ID.
 	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
 	// Arbitrary attribute filter conditions from the af URL param
@@ -561,11 +877,48 @@ type GetToolUsageFilterOptionsRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Filter option types to include. Empty means all option types.
 	OptionTypes []string `form:"option_types,omitempty" json:"option_types,omitempty" xml:"option_types,omitempty"`
+	// Target types to include. Empty means all target types.
+	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not
+	// applied to the server options.
+	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to narrow by. Not applied to the server options.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
+	// Shadow MCP server names to narrow by. Not applied to the server options.
+	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
+	// Gateway (meta MCP server) ids to narrow by. Not applied to the server
+	// options.
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to narrow by. Not applied to the email user options.
+	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to narrow by. Not applied to the agent user options.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	// Hook plugin sources to narrow by.
+	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys to narrow by. Not applied to the client options.
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to narrow by. Empty means all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
 }
 
 // GetMcpServerActivityRequestBody is the type of the "telemetry" service
 // "getMcpServerActivity" endpoint HTTP request body.
 type GetMcpServerActivityRequestBody struct {
+	// Size of the recent-activity window in days. A server with tool calls in the
+	// overall lookback window but none inside this window is flagged as stale.
+	// Defaults to 14.
+	RecentWindowDays *int `form:"recent_window_days,omitempty" json:"recent_window_days,omitempty" xml:"recent_window_days,omitempty"`
+}
+
+// GetOrgMcpServerActivityRequestBody is the type of the "telemetry" service
+// "getOrgMcpServerActivity" endpoint HTTP request body.
+type GetOrgMcpServerActivityRequestBody struct {
 	// Size of the recent-activity window in days. A server with tool calls in the
 	// overall lookback window but none inside this window is flagged as stale.
 	// Defaults to 14.
@@ -677,15 +1030,71 @@ type GetObservabilityOverviewResponseBody struct {
 	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
 }
 
+// GetMcpNetworkTrafficResponseBody is the type of the "telemetry" service
+// "getMcpNetworkTraffic" endpoint HTTP response body.
+type GetMcpNetworkTrafficResponseBody struct {
+	// Start of the window
+	From string `form:"from" json:"from" xml:"from"`
+	// End of the window
+	To string `form:"to" json:"to" xml:"to"`
+	// Hourly request counts
+	Points []*McpNetworkTrafficPointResponseBody `form:"points" json:"points" xml:"points"`
+	// Most recent observed public request in the window
+	LastPublicAt *string `form:"last_public_at,omitempty" json:"last_public_at,omitempty" xml:"last_public_at,omitempty"`
+	// Most recent observed private request in the window
+	LastPrivateAt *string `form:"last_private_at,omitempty" json:"last_private_at,omitempty" xml:"last_private_at,omitempty"`
+}
+
+// GetMetaMcpServerUsageResponseBody is the type of the "telemetry" service
+// "getMetaMcpServerUsage" endpoint HTTP response body.
+type GetMetaMcpServerUsageResponseBody struct {
+	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel" json:"funnel" xml:"funnel"`
+	// Per-member execution breakdown, most active first
+	Members []*MetaMcpMemberUsageResponseBody `form:"members" json:"members" xml:"members"`
+}
+
+// GetProjectGatewayOverviewResponseBody is the type of the "telemetry" service
+// "getProjectGatewayOverview" endpoint HTTP response body.
+type GetProjectGatewayOverviewResponseBody struct {
+	// Current period summary metrics
+	Summary *ObservabilitySummaryResponseBody `form:"summary" json:"summary" xml:"summary"`
+	// Previous period summary metrics for trend calculation
+	Comparison *ObservabilitySummaryResponseBody `form:"comparison" json:"comparison" xml:"comparison"`
+	// Time series data points
+	TimeSeries []*TimeSeriesBucketResponseBody `form:"time_series" json:"time_series" xml:"time_series"`
+	// Top tools by call count
+	TopToolsByCount []*ToolMetricResponseBody `form:"top_tools_by_count" json:"top_tools_by_count" xml:"top_tools_by_count"`
+	// Top tools by failure rate
+	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate" json:"top_tools_by_failure_rate" xml:"top_tools_by_failure_rate"`
+	// The time bucket interval in seconds used for the time series data
+	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+}
+
+// GetProjectGatewayUsageResponseBody is the type of the "telemetry" service
+// "getProjectGatewayUsage" endpoint HTTP response body.
+type GetProjectGatewayUsageResponseBody struct {
+	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel" json:"funnel" xml:"funnel"`
+	// Per-member execution breakdown, most active first
+	Members []*MetaMcpMemberUsageResponseBody `form:"members" json:"members" xml:"members"`
+}
+
 // GetProjectOverviewResponseBody is the type of the "telemetry" service
 // "getProjectOverview" endpoint HTTP response body.
 type GetProjectOverviewResponseBody struct {
 	// Current period summary metrics
 	Summary *ProjectOverviewSummaryResponseBody `form:"summary" json:"summary" xml:"summary"`
-	// Previous period summary metrics for trend calculation
-	Comparison *ProjectOverviewSummaryResponseBody `form:"comparison" json:"comparison" xml:"comparison"`
-	// Indicates whether metrics are session-based or tool-call-based
-	MetricsMode string `form:"metrics_mode" json:"metrics_mode" xml:"metrics_mode"`
+	// Agent usage grouped by user email, ranked by LLM tokens (top 100, no time
+	// series). Only set when include_usage is true and the caller has org:read.
+	UsageByUser *QueryResultResponseBody `form:"usage_by_user,omitempty" json:"usage_by_user,omitempty" xml:"usage_by_user,omitempty"`
+	// Agent usage grouped by hook source, ranked by LLM tokens (top 10, no time
+	// series). Only set when include_usage is true and usage_by_user has agent
+	// usage.
+	UsageByAgent *QueryResultResponseBody `form:"usage_by_agent,omitempty" json:"usage_by_agent,omitempty" xml:"usage_by_agent,omitempty"`
+	// External end user and tool usage summary. Only set when include_usage is
+	// true and usage_by_user shows no agent usage, which includes when that read
+	// fails or the caller lacks org:read. Do not treat its presence as proof the
+	// project has no agent usage.
+	McpUsage *ProjectMcpUsageResponseBody `form:"mcp_usage,omitempty" json:"mcp_usage,omitempty" xml:"mcp_usage,omitempty"`
 }
 
 // GetUnproxiedMcpServerUsageResponseBody is the type of the "telemetry"
@@ -748,10 +1157,17 @@ type QueryTumDetailsResponseBody struct {
 // ListSessionsResponseBody is the type of the "telemetry" service
 // "listSessions" endpoint HTTP response body.
 type ListSessionsResponseBody struct {
-	// List of chat session summaries
+	// List of chat session summaries. Only sessions from projects the caller holds
+	// chat:read on are listed.
 	Sessions []*SessionSummaryResponseBody `form:"sessions" json:"sessions" xml:"sessions"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// True when sessions were withheld because the caller lacks chat:read on one
+	// or more projects. The totals still cover every matching session.
+	Scoped bool `form:"scoped" json:"scoped" xml:"scoped"`
+	// Aggregates over every matching session in the organization. Present only
+	// when scoped is true.
+	Totals *SessionTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
 }
 
 // ListFilterOptionsResponseBody is the type of the "telemetry" service
@@ -808,6 +1224,10 @@ type GetToolUsageSummaryResponseBody struct {
 	UsersByTarget []*ToolUsageUsersByTargetRowResponseBody `form:"users_by_target" json:"users_by_target" xml:"users_by_target"`
 	// Per-tool usage rows grouped by target
 	TargetToolBreakdown []*ToolUsageTargetToolBreakdownRowResponseBody `form:"target_tool_breakdown" json:"target_tool_breakdown" xml:"target_tool_breakdown"`
+	// Top MCP clients for the selected filters and time range
+	Clients []*ToolUsageClientSummaryResponseBody `form:"clients" json:"clients" xml:"clients"`
+	// Per-tool usage rows grouped by MCP client
+	ClientToolBreakdown []*ToolUsageClientToolBreakdownRowResponseBody `form:"client_tool_breakdown" json:"client_tool_breakdown" xml:"client_tool_breakdown"`
 }
 
 // GetToolUsageTotalsResponseBody is the type of the "telemetry" service
@@ -829,6 +1249,20 @@ type GetToolUsageTargetsResponseBody struct {
 type GetToolUsageUsersResponseBody struct {
 	// Top user identities for the selected filters and time range
 	Users []*ToolUsageUserSummaryResponseBody `form:"users" json:"users" xml:"users"`
+}
+
+// GetToolUsageClientsResponseBody is the type of the "telemetry" service
+// "getToolUsageClients" endpoint HTTP response body.
+type GetToolUsageClientsResponseBody struct {
+	// Top MCP clients for the selected filters and time range
+	Clients []*ToolUsageClientSummaryResponseBody `form:"clients" json:"clients" xml:"clients"`
+}
+
+// GetToolUsageClientToolBreakdownResponseBody is the type of the "telemetry"
+// service "getToolUsageClientToolBreakdown" endpoint HTTP response body.
+type GetToolUsageClientToolBreakdownResponseBody struct {
+	// Per-tool usage rows grouped by MCP client
+	ClientToolBreakdown []*ToolUsageClientToolBreakdownRowResponseBody `form:"client_tool_breakdown" json:"client_tool_breakdown" xml:"client_tool_breakdown"`
 }
 
 // GetToolUsageTargetTimeSeriesResponseBody is the type of the "telemetry"
@@ -875,20 +1309,33 @@ type GetToolUsageFilterOptionsResponseBody struct {
 	HostedServers []*ToolUsageHostedServerFilterOptionResponseBody `form:"hosted_servers" json:"hosted_servers" xml:"hosted_servers"`
 	// Shadow MCP servers with usage in the selected time range
 	ShadowServers []*ToolUsageShadowServerFilterOptionResponseBody `form:"shadow_servers" json:"shadow_servers" xml:"shadow_servers"`
+	// Gateways (meta MCP servers) with usage in the selected time range
+	Gateways []*ToolUsageGatewayFilterOptionResponseBody `form:"gateways" json:"gateways" xml:"gateways"`
 	// User identities with usage in the selected time range
 	Users []*ToolUsageUserFilterOptionResponseBody `form:"users" json:"users" xml:"users"`
+	// MCP clients with usage in the selected time range
+	Clients []*ToolUsageClientFilterOptionResponseBody `form:"clients" json:"clients" xml:"clients"`
 }
 
 // GetMcpServerActivityResponseBody is the type of the "telemetry" service
 // "getMcpServerActivity" endpoint HTTP response body.
 type GetMcpServerActivityResponseBody struct {
-	// One entry per MCP server (hosted or tunneled) that has received at least one
-	// tool call within the lookback window
+	// One entry per MCP server (hosted, tunneled, or gateway) that has received at
+	// least one tool call within the lookback window
 	Activity []*McpServerActivityResponseBody `form:"activity" json:"activity" xml:"activity"`
 	// The recent-activity window size in days that was applied
 	RecentWindowDays int `form:"recent_window_days" json:"recent_window_days" xml:"recent_window_days"`
 	// The overall lookback window size in days (bounded by telemetry retention)
 	LookbackDays int `form:"lookback_days" json:"lookback_days" xml:"lookback_days"`
+}
+
+// GetOrgMcpServerActivityResponseBody is the type of the "telemetry" service
+// "getOrgMcpServerActivity" endpoint HTTP response body.
+type GetOrgMcpServerActivityResponseBody struct {
+	// One entry per readable project whose activity was read
+	Projects []*ProjectMcpServerActivityResponseBody `form:"projects" json:"projects" xml:"projects"`
+	// The recent-activity window size in days that was applied
+	RecentWindowDays int `form:"recent_window_days" json:"recent_window_days" xml:"recent_window_days"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -2557,6 +3004,766 @@ type GetObservabilityOverviewUnexpectedResponseBody struct {
 // "telemetry" service "getObservabilityOverview" endpoint HTTP response body
 // for the "gateway_error" error.
 type GetObservabilityOverviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficUnauthorizedResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMcpNetworkTrafficUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficForbiddenResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMcpNetworkTrafficForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficBadRequestResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMcpNetworkTrafficBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficNotFoundResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "not_found" error.
+type GetMcpNetworkTrafficNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficConflictResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "conflict" error.
+type GetMcpNetworkTrafficConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getMcpNetworkTraffic" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetMcpNetworkTrafficUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficInvalidResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the "invalid"
+// error.
+type GetMcpNetworkTrafficInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficInvariantViolationResponseBody is the type of the
+// "telemetry" service "getMcpNetworkTraffic" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetMcpNetworkTrafficInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficUnexpectedResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMcpNetworkTrafficUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficGatewayErrorResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMcpNetworkTrafficGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMetaMcpServerUsageUnauthorizedResponseBody is the type of the "telemetry"
+// service "getMetaMcpServerUsage" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMetaMcpServerUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMetaMcpServerUsageForbiddenResponseBody is the type of the "telemetry"
+// service "getMetaMcpServerUsage" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMetaMcpServerUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMetaMcpServerUsageBadRequestResponseBody is the type of the "telemetry"
+// service "getMetaMcpServerUsage" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMetaMcpServerUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMetaMcpServerUsageNotFoundResponseBody is the type of the "telemetry"
+// service "getMetaMcpServerUsage" endpoint HTTP response body for the
+// "not_found" error.
+type GetMetaMcpServerUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMetaMcpServerUsageConflictResponseBody is the type of the "telemetry"
+// service "getMetaMcpServerUsage" endpoint HTTP response body for the
+// "conflict" error.
+type GetMetaMcpServerUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMetaMcpServerUsageUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getMetaMcpServerUsage" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetMetaMcpServerUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMetaMcpServerUsageInvalidResponseBody is the type of the "telemetry"
+// service "getMetaMcpServerUsage" endpoint HTTP response body for the
+// "invalid" error.
+type GetMetaMcpServerUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMetaMcpServerUsageInvariantViolationResponseBody is the type of the
+// "telemetry" service "getMetaMcpServerUsage" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetMetaMcpServerUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMetaMcpServerUsageUnexpectedResponseBody is the type of the "telemetry"
+// service "getMetaMcpServerUsage" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMetaMcpServerUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMetaMcpServerUsageGatewayErrorResponseBody is the type of the "telemetry"
+// service "getMetaMcpServerUsage" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMetaMcpServerUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayOverviewUnauthorizedResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetProjectGatewayOverviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayOverviewForbiddenResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "forbidden" error.
+type GetProjectGatewayOverviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayOverviewBadRequestResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "bad_request" error.
+type GetProjectGatewayOverviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayOverviewNotFoundResponseBody is the type of the "telemetry"
+// service "getProjectGatewayOverview" endpoint HTTP response body for the
+// "not_found" error.
+type GetProjectGatewayOverviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayOverviewConflictResponseBody is the type of the "telemetry"
+// service "getProjectGatewayOverview" endpoint HTTP response body for the
+// "conflict" error.
+type GetProjectGatewayOverviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayOverviewUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetProjectGatewayOverviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayOverviewInvalidResponseBody is the type of the "telemetry"
+// service "getProjectGatewayOverview" endpoint HTTP response body for the
+// "invalid" error.
+type GetProjectGatewayOverviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayOverviewInvariantViolationResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetProjectGatewayOverviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayOverviewUnexpectedResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "unexpected" error.
+type GetProjectGatewayOverviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayOverviewGatewayErrorResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetProjectGatewayOverviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayUsageUnauthorizedResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "unauthorized" error.
+type GetProjectGatewayUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayUsageForbiddenResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "forbidden" error.
+type GetProjectGatewayUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayUsageBadRequestResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "bad_request" error.
+type GetProjectGatewayUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayUsageNotFoundResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "not_found" error.
+type GetProjectGatewayUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayUsageConflictResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "conflict" error.
+type GetProjectGatewayUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayUsageUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetProjectGatewayUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayUsageInvalidResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "invalid" error.
+type GetProjectGatewayUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayUsageInvariantViolationResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetProjectGatewayUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayUsageUnexpectedResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "unexpected" error.
+type GetProjectGatewayUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayUsageGatewayErrorResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "gateway_error" error.
+type GetProjectGatewayUsageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5381,6 +6588,386 @@ type GetToolUsageUsersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetToolUsageClientsUnauthorizedResponseBody is the type of the "telemetry"
+// service "getToolUsageClients" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetToolUsageClientsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientsForbiddenResponseBody is the type of the "telemetry"
+// service "getToolUsageClients" endpoint HTTP response body for the
+// "forbidden" error.
+type GetToolUsageClientsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientsBadRequestResponseBody is the type of the "telemetry"
+// service "getToolUsageClients" endpoint HTTP response body for the
+// "bad_request" error.
+type GetToolUsageClientsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientsNotFoundResponseBody is the type of the "telemetry"
+// service "getToolUsageClients" endpoint HTTP response body for the
+// "not_found" error.
+type GetToolUsageClientsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientsConflictResponseBody is the type of the "telemetry"
+// service "getToolUsageClients" endpoint HTTP response body for the "conflict"
+// error.
+type GetToolUsageClientsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientsUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getToolUsageClients" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetToolUsageClientsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientsInvalidResponseBody is the type of the "telemetry"
+// service "getToolUsageClients" endpoint HTTP response body for the "invalid"
+// error.
+type GetToolUsageClientsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientsInvariantViolationResponseBody is the type of the
+// "telemetry" service "getToolUsageClients" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetToolUsageClientsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientsUnexpectedResponseBody is the type of the "telemetry"
+// service "getToolUsageClients" endpoint HTTP response body for the
+// "unexpected" error.
+type GetToolUsageClientsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientsGatewayErrorResponseBody is the type of the "telemetry"
+// service "getToolUsageClients" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetToolUsageClientsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientToolBreakdownUnauthorizedResponseBody is the type of the
+// "telemetry" service "getToolUsageClientToolBreakdown" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetToolUsageClientToolBreakdownUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientToolBreakdownForbiddenResponseBody is the type of the
+// "telemetry" service "getToolUsageClientToolBreakdown" endpoint HTTP response
+// body for the "forbidden" error.
+type GetToolUsageClientToolBreakdownForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientToolBreakdownBadRequestResponseBody is the type of the
+// "telemetry" service "getToolUsageClientToolBreakdown" endpoint HTTP response
+// body for the "bad_request" error.
+type GetToolUsageClientToolBreakdownBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientToolBreakdownNotFoundResponseBody is the type of the
+// "telemetry" service "getToolUsageClientToolBreakdown" endpoint HTTP response
+// body for the "not_found" error.
+type GetToolUsageClientToolBreakdownNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientToolBreakdownConflictResponseBody is the type of the
+// "telemetry" service "getToolUsageClientToolBreakdown" endpoint HTTP response
+// body for the "conflict" error.
+type GetToolUsageClientToolBreakdownConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientToolBreakdownUnsupportedMediaResponseBody is the type of
+// the "telemetry" service "getToolUsageClientToolBreakdown" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetToolUsageClientToolBreakdownUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientToolBreakdownInvalidResponseBody is the type of the
+// "telemetry" service "getToolUsageClientToolBreakdown" endpoint HTTP response
+// body for the "invalid" error.
+type GetToolUsageClientToolBreakdownInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientToolBreakdownInvariantViolationResponseBody is the type of
+// the "telemetry" service "getToolUsageClientToolBreakdown" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetToolUsageClientToolBreakdownInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientToolBreakdownUnexpectedResponseBody is the type of the
+// "telemetry" service "getToolUsageClientToolBreakdown" endpoint HTTP response
+// body for the "unexpected" error.
+type GetToolUsageClientToolBreakdownUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageClientToolBreakdownGatewayErrorResponseBody is the type of the
+// "telemetry" service "getToolUsageClientToolBreakdown" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetToolUsageClientToolBreakdownGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetToolUsageTargetTimeSeriesUnauthorizedResponseBody is the type of the
 // "telemetry" service "getToolUsageTargetTimeSeries" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -6711,6 +8298,196 @@ type GetMcpServerActivityGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetOrgMcpServerActivityUnauthorizedResponseBody is the type of the
+// "telemetry" service "getOrgMcpServerActivity" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetOrgMcpServerActivityUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrgMcpServerActivityForbiddenResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "forbidden" error.
+type GetOrgMcpServerActivityForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrgMcpServerActivityBadRequestResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "bad_request" error.
+type GetOrgMcpServerActivityBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrgMcpServerActivityNotFoundResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "not_found" error.
+type GetOrgMcpServerActivityNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrgMcpServerActivityConflictResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "conflict" error.
+type GetOrgMcpServerActivityConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrgMcpServerActivityUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getOrgMcpServerActivity" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetOrgMcpServerActivityUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrgMcpServerActivityInvalidResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "invalid" error.
+type GetOrgMcpServerActivityInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrgMcpServerActivityInvariantViolationResponseBody is the type of the
+// "telemetry" service "getOrgMcpServerActivity" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetOrgMcpServerActivityInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrgMcpServerActivityUnexpectedResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "unexpected" error.
+type GetOrgMcpServerActivityUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrgMcpServerActivityGatewayErrorResponseBody is the type of the
+// "telemetry" service "getOrgMcpServerActivity" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetOrgMcpServerActivityGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListHooksTracesUnauthorizedResponseBody is the type of the "telemetry"
 // service "listHooksTraces" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -6939,7 +8716,7 @@ type ToolCallSummaryResponseBody struct {
 	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
 	// HTTP status code (if applicable)
 	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
-	// Gram URN associated with this tool call
+	// Speakeasy URN associated with this tool call
 	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
 	// Tool name (from attributes.gram.tool.name)
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
@@ -7048,8 +8825,8 @@ type UserAccountResponseBody struct {
 	// Account record id (user_accounts.id); used to scope chat/session views to
 	// this account
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram user id of the directory owner of this account; the authoritative link
-	// between account-email-keyed usage and the org member
+	// Speakeasy user id of the directory owner of this account; the authoritative
+	// link between account-email-keyed usage and the org member
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// AI provider the account belongs to ('anthropic', 'openai', 'cursor')
 	Provider string `form:"provider" json:"provider" xml:"provider"`
@@ -7271,40 +9048,59 @@ type ToolMetricResponseBody struct {
 	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
 }
 
+// McpNetworkTrafficPointResponseBody is used to define fields on response body
+// types.
+type McpNetworkTrafficPointResponseBody struct {
+	// Start of the UTC hour
+	BucketStart string `form:"bucket_start" json:"bucket_start" xml:"bucket_start"`
+	// Observed public requests
+	PublicRequests int64 `form:"public_requests" json:"public_requests" xml:"public_requests"`
+	// Observed private requests
+	PrivateRequests int64 `form:"private_requests" json:"private_requests" xml:"private_requests"`
+}
+
+// MetaMcpDiscoveryFunnelResponseBody is used to define fields on response body
+// types.
+type MetaMcpDiscoveryFunnelResponseBody struct {
+	// list_servers calls
+	ListServers int64 `form:"list_servers" json:"list_servers" xml:"list_servers"`
+	// describe_server calls
+	DescribeServer int64 `form:"describe_server" json:"describe_server" xml:"describe_server"`
+	// describe_tools calls
+	DescribeTools int64 `form:"describe_tools" json:"describe_tools" xml:"describe_tools"`
+	// Tool executions dispatched through the gateway
+	ExecuteTool int64 `form:"execute_tool" json:"execute_tool" xml:"execute_tool"`
+}
+
+// MetaMcpMemberUsageResponseBody is used to define fields on response body
+// types.
+type MetaMcpMemberUsageResponseBody struct {
+	// The member's mcp_servers row id
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// Tool calls dispatched to this member through the gateway
+	ToolCalls int64 `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
+	// Calls that returned an HTTP error status
+	ErrorCount int64 `form:"error_count" json:"error_count" xml:"error_count"`
+	// ISO 8601 timestamp of the most recent call
+	LastCalledAt *string `form:"last_called_at,omitempty" json:"last_called_at,omitempty" xml:"last_called_at,omitempty"`
+	// Display name of the server. Set for Organization Gateway usage, whose
+	// servers span projects the caller may not have loaded.
+	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
+}
+
 // ProjectOverviewSummaryResponseBody is used to define fields on response body
 // types.
 type ProjectOverviewSummaryResponseBody struct {
 	// Total number of chat sessions
 	TotalChats int64 `form:"total_chats" json:"total_chats" xml:"total_chats"`
-	// Number of resolved chat sessions
-	ResolvedChats int64 `form:"resolved_chats" json:"resolved_chats" xml:"resolved_chats"`
-	// Number of failed chat sessions
-	FailedChats int64 `form:"failed_chats" json:"failed_chats" xml:"failed_chats"`
 	// Total number of tool calls
 	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
 	// Number of failed tool calls
 	FailedToolCalls int64 `form:"failed_tool_calls" json:"failed_tool_calls" xml:"failed_tool_calls"`
 	// Number of MCP servers with at least one tool call in the time period
 	ActiveServersCount int64 `form:"active_servers_count" json:"active_servers_count" xml:"active_servers_count"`
-	// Number of unique users with activity in the time period
-	ActiveUsersCount int64 `form:"active_users_count" json:"active_users_count" xml:"active_users_count"`
-	// Top 10 users by activity (# of messages or tool calls depending on
-	// metrics_mode)
-	TopUsers []*TopUserResponseBody `form:"top_users" json:"top_users" xml:"top_users"`
 	// Top 10 MCP servers by tool call count
 	TopServers []*TopServerResponseBody `form:"top_servers" json:"top_servers" xml:"top_servers"`
-	// Breakdown of messages/activity by LLM client/agent
-	LlmClientBreakdown []*LLMClientUsageResponseBody `form:"llm_client_breakdown" json:"llm_client_breakdown" xml:"llm_client_breakdown"`
-}
-
-// TopUserResponseBody is used to define fields on response body types.
-type TopUserResponseBody struct {
-	// User ID (internal or external depending on availability)
-	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
-	// Type of user ID
-	UserType string `form:"user_type" json:"user_type" xml:"user_type"`
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64 `form:"activity_count" json:"activity_count" xml:"activity_count"`
 }
 
 // TopServerResponseBody is used to define fields on response body types.
@@ -7315,52 +9111,16 @@ type TopServerResponseBody struct {
 	ToolCallCount int64 `form:"tool_call_count" json:"tool_call_count" xml:"tool_call_count"`
 }
 
-// LLMClientUsageResponseBody is used to define fields on response body types.
-type LLMClientUsageResponseBody struct {
-	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
-	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64 `form:"activity_count" json:"activity_count" xml:"activity_count"`
-}
-
-// UnproxiedMcpServerUsageBucketResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerUsageBucketResponseBody struct {
-	// Bucket date (YYYY-MM-DD, UTC)
-	Date string `form:"date" json:"date" xml:"date"`
-	// Number of observed tool calls in this bucket
-	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
-}
-
-// UnproxiedMcpServerToolUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerToolUsageRowResponseBody struct {
-	// The tool's name
-	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
-	// Number of observed calls to this tool
-	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
-	// Number of observed calls that errored
-	FailureCount int `form:"failure_count" json:"failure_count" xml:"failure_count"`
-}
-
-// UnproxiedMcpServerUserUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerUserUsageRowResponseBody struct {
-	// The calling user's email, when Shadow MCP could resolve one
-	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
-	// Number of observed calls from this user
-	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
-	// Time of the user's most recent observed call, ISO 8601
-	LastCalledAt string `form:"last_called_at" json:"last_called_at" xml:"last_called_at"`
-}
-
-// UnproxiedMcpServerClientUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerClientUsageRowResponseBody struct {
-	// The hook-reported client/agent surface
-	Client string `form:"client" json:"client" xml:"client"`
-	// Number of observed calls from this client
-	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
+// QueryResultResponseBody is used to define fields on response body types.
+type QueryResultResponseBody struct {
+	// Echoes the requested group_by dimension; empty when none was requested.
+	GroupBy string `form:"group_by" json:"group_by" xml:"group_by"`
+	// The timeseries bucket interval in seconds.
+	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+	// Grouped totals over the full time range, ordered by sort_by descending.
+	Table []*QueryRowResponseBody `form:"table" json:"table" xml:"table"`
+	// One series per group value (aligned with table rows), each gap-filled.
+	Timeseries []*QuerySeriesResponseBody `form:"timeseries" json:"timeseries" xml:"timeseries"`
 }
 
 // QueryRowResponseBody is used to define fields on response body types.
@@ -7422,6 +9182,79 @@ type QueryPointResponseBody struct {
 	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
 	// Aggregated measures for this bucket
 	Measures *QueryMeasuresResponseBody `form:"measures" json:"measures" xml:"measures"`
+}
+
+// ProjectMcpUsageResponseBody is used to define fields on response body types.
+type ProjectMcpUsageResponseBody struct {
+	// Number of distinct external end users with activity in the period
+	EndUsersCount int64 `form:"end_users_count" json:"end_users_count" xml:"end_users_count"`
+	// Top 5 external end users by tool calls
+	TopEndUsers []*ProjectMcpEndUserResponseBody `form:"top_end_users" json:"top_end_users" xml:"top_end_users"`
+	// Top 5 tools by calls
+	TopTools []*ProjectMcpToolUsageResponseBody `form:"top_tools" json:"top_tools" xml:"top_tools"`
+	// Top 5 tools with at least one failure, ranked by failure rate, then by
+	// failures
+	TopFailingTools []*ProjectMcpToolUsageResponseBody `form:"top_failing_tools" json:"top_failing_tools" xml:"top_failing_tools"`
+}
+
+// ProjectMcpEndUserResponseBody is used to define fields on response body
+// types.
+type ProjectMcpEndUserResponseBody struct {
+	// External end user ID
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// Number of tool calls
+	ToolCalls int64 `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
+}
+
+// ProjectMcpToolUsageResponseBody is used to define fields on response body
+// types.
+type ProjectMcpToolUsageResponseBody struct {
+	// Tool URN, or the tool name for agent hook events
+	Urn string `form:"urn" json:"urn" xml:"urn"`
+	// Number of calls
+	Calls int64 `form:"calls" json:"calls" xml:"calls"`
+	// Number of failed calls
+	Failures int64 `form:"failures" json:"failures" xml:"failures"`
+}
+
+// UnproxiedMcpServerUsageBucketResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerUsageBucketResponseBody struct {
+	// Bucket date (YYYY-MM-DD, UTC)
+	Date string `form:"date" json:"date" xml:"date"`
+	// Number of observed tool calls in this bucket
+	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
+}
+
+// UnproxiedMcpServerToolUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerToolUsageRowResponseBody struct {
+	// The tool's name
+	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
+	// Number of observed calls to this tool
+	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
+	// Number of observed calls that errored
+	FailureCount int `form:"failure_count" json:"failure_count" xml:"failure_count"`
+}
+
+// UnproxiedMcpServerUserUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerUserUsageRowResponseBody struct {
+	// The calling user's email, when Shadow MCP could resolve one
+	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
+	// Number of observed calls from this user
+	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
+	// Time of the user's most recent observed call, ISO 8601
+	LastCalledAt string `form:"last_called_at" json:"last_called_at" xml:"last_called_at"`
+}
+
+// UnproxiedMcpServerClientUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerClientUsageRowResponseBody struct {
+	// The hook-reported client/agent surface
+	Client string `form:"client" json:"client" xml:"client"`
+	// Number of observed calls from this client
+	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
 }
 
 // TumDetailsPointResponseBody is used to define fields on response body types.
@@ -7510,6 +9343,24 @@ type SessionSummaryResponseBody struct {
 	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
 	// Chat session status
 	Status string `form:"status" json:"status" xml:"status"`
+}
+
+// SessionTotalsResponseBody is used to define fields on response body types.
+type SessionTotalsResponseBody struct {
+	// Number of matching chat sessions
+	SessionCount int64 `form:"session_count" json:"session_count" xml:"session_count"`
+	// Number of LLM completion messages across the sessions
+	MessageCount int64 `form:"message_count" json:"message_count" xml:"message_count"`
+	// Number of tool calls across the sessions
+	ToolCallCount int64 `form:"tool_call_count" json:"tool_call_count" xml:"tool_call_count"`
+	// Total input tokens used
+	TotalInputTokens int64 `form:"total_input_tokens" json:"total_input_tokens" xml:"total_input_tokens"`
+	// Total output tokens used
+	TotalOutputTokens int64 `form:"total_output_tokens" json:"total_output_tokens" xml:"total_output_tokens"`
+	// Total tokens used
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Total cost in USD
+	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
 }
 
 // FilterOptionResponseBody is used to define fields on response body types.
@@ -7629,6 +9480,10 @@ type ToolUsageTotalsResponseBody struct {
 	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
 	// Fraction of completed tool usage events that failed
 	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
+	// Number of tool usage events a policy denied
+	BlockedCount int64 `form:"blocked_count" json:"blocked_count" xml:"blocked_count"`
+	// Fraction of all tool usage events a policy denied
+	BlockedRate float64 `form:"blocked_rate" json:"blocked_rate" xml:"blocked_rate"`
 	// Number of distinct tools observed
 	UniqueTools int64 `form:"unique_tools" json:"unique_tools" xml:"unique_tools"`
 	// Number of distinct user identities observed
@@ -7648,6 +9503,8 @@ type ToolUsageTargetSummaryResponseBody struct {
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
 	// User-facing label for the target
 	TargetLabel string `form:"target_label" json:"target_label" xml:"target_label"`
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Total number of tool usage events for the target
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
 	// Number of distinct tools observed for the target
@@ -7699,6 +9556,11 @@ type ToolUsageTargetTimeSeriesPointResponseBody struct {
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
 	// Number of failed tool usage events in the bucket
 	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
+	// Number of tool usage events denied by a hook in the bucket
+	BlockedCount int64 `form:"blocked_count" json:"blocked_count" xml:"blocked_count"`
+	// Number of tool usage events observed starting but never finishing in the
+	// bucket
+	PendingCount int64 `form:"pending_count" json:"pending_count" xml:"pending_count"`
 }
 
 // ToolUsageUserTimeSeriesPointResponseBody is used to define fields on
@@ -7765,6 +9627,45 @@ type ToolUsageTargetToolBreakdownRowResponseBody struct {
 	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
 }
 
+// ToolUsageClientSummaryResponseBody is used to define fields on response body
+// types.
+type ToolUsageClientSummaryResponseBody struct {
+	// Stable MCP client identity used by filters and chart grouping
+	ClientKey string `form:"client_key" json:"client_key" xml:"client_key"`
+	// User-facing label for the MCP client
+	ClientLabel string `form:"client_label" json:"client_label" xml:"client_label"`
+	// Total number of tool usage events for the MCP client
+	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
+	// Number of distinct tools observed for the MCP client
+	UniqueTools int64 `form:"unique_tools" json:"unique_tools" xml:"unique_tools"`
+	// Number of successful tool usage events for the MCP client
+	SuccessCount int64 `form:"success_count" json:"success_count" xml:"success_count"`
+	// Number of failed tool usage events for the MCP client
+	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
+	// Fraction of completed tool usage events for the MCP client that failed
+	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
+}
+
+// ToolUsageClientToolBreakdownRowResponseBody is used to define fields on
+// response body types.
+type ToolUsageClientToolBreakdownRowResponseBody struct {
+	// Stable MCP client identity used by filters and chart grouping
+	ClientKey string `form:"client_key" json:"client_key" xml:"client_key"`
+	// User-facing label for the MCP client
+	ClientLabel string `form:"client_label" json:"client_label" xml:"client_label"`
+	// Observed tool name
+	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
+	// Total number of tool usage events for the MCP client and tool
+	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
+	// Number of successful tool usage events for the MCP client and tool
+	SuccessCount int64 `form:"success_count" json:"success_count" xml:"success_count"`
+	// Number of failed tool usage events for the MCP client and tool
+	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
+	// Fraction of completed tool usage events for the MCP client and tool that
+	// failed
+	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
+}
+
 // ToolUsageTraceSummaryResponseBody is used to define fields on response body
 // types.
 type ToolUsageTraceSummaryResponseBody struct {
@@ -7779,7 +9680,7 @@ type ToolUsageTraceSummaryResponseBody struct {
 	StartTimeUnixNano string `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
 	// Number of logs in the trace
 	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
-	// Gram URN associated with the trace
+	// Speakeasy URN associated with the trace
 	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
 	// Tool name shown in the row
 	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
@@ -7791,12 +9692,32 @@ type ToolUsageTraceSummaryResponseBody struct {
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
 	// User-facing target label
 	TargetLabel string `form:"target_label" json:"target_label" xml:"target_label"`
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Stable user identity value
 	UserKey string `form:"user_key" json:"user_key" xml:"user_key"`
 	// User-facing user identity label
 	UserLabel string `form:"user_label" json:"user_label" xml:"user_label"`
 	// Type of user identity represented by the row
 	UserKind string `form:"user_kind" json:"user_kind" xml:"user_kind"`
+	// Person an agent call acted on behalf of; absent for direct calls and for
+	// agents that sign in as themselves
+	AuthorizerUserID *string `form:"authorizer_user_id,omitempty" json:"authorizer_user_id,omitempty" xml:"authorizer_user_id,omitempty"`
+	// Email of the authorizer when they resolve to a known user
+	AuthorizerLabel *string `form:"authorizer_label,omitempty" json:"authorizer_label,omitempty" xml:"authorizer_label,omitempty"`
+	// Type of the auth client that signed an agent's gateway call in to its
+	// upstream server, such as remote_session for a person's connection or
+	// service_account for a shared credential; absent for calls recorded before it
+	// was tracked
+	AuthClientType *string `form:"auth_client_type,omitempty" json:"auth_client_type,omitempty" xml:"auth_client_type,omitempty"`
+	// Auth client that signed an agent's gateway call in to its upstream server
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// Person whose own connection signed an agent's gateway call in; absent for a
+	// shared credential
+	ConnectionOwnerUserID *string `form:"connection_owner_user_id,omitempty" json:"connection_owner_user_id,omitempty" xml:"connection_owner_user_id,omitempty"`
+	// Display name, or email, of the connection owner when they resolve to a known
+	// user
+	ConnectionOwnerLabel *string `form:"connection_owner_label,omitempty" json:"connection_owner_label,omitempty" xml:"connection_owner_label,omitempty"`
 	// Hook plugin source when the row came from hook telemetry
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 	// Telemetry event source
@@ -7810,6 +9731,44 @@ type ToolUsageTraceSummaryResponseBody struct {
 	// AI account classification ('team' or 'personal'); empty/absent when
 	// unclassified
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Gateway (meta MCP server) that dispatched this call to the target; absent
+	// for direct calls and for calls observed against a gateway itself
+	ViaMetaMcpServerID *string `form:"via_meta_mcp_server_id,omitempty" json:"via_meta_mcp_server_id,omitempty" xml:"via_meta_mcp_server_id,omitempty"`
+	// Display name of the dispatching gateway; a deleted gateway keeps its last
+	// name
+	ViaMetaMcpServerName *string `form:"via_meta_mcp_server_name,omitempty" json:"via_meta_mcp_server_name,omitempty" xml:"via_meta_mcp_server_name,omitempty"`
+	// Kind of the dispatching gateway: project for a gateway stored in a project,
+	// organization for the organization gateway, agent for an agent's gateway;
+	// absent when the gateway id resolves to no gateway of the organization
+	ViaMetaMcpServerKind *string `form:"via_meta_mcp_server_kind,omitempty" json:"via_meta_mcp_server_kind,omitempty" xml:"via_meta_mcp_server_kind,omitempty"`
+	// Slug of the project whose page shows the dispatching gateway: the project
+	// holding a project gateway, or the project an organization gateway was
+	// restricted to; absent when the gateway or its project is deleted, and for an
+	// organization gateway serving the whole organization
+	ViaMetaMcpServerProjectSlug *string `form:"via_meta_mcp_server_project_slug,omitempty" json:"via_meta_mcp_server_project_slug,omitempty" xml:"via_meta_mcp_server_project_slug,omitempty"`
+	// Agent whose gateway dispatched this call; absent for other gateway kinds and
+	// when the agent is deleted
+	ViaMetaMcpServerAgentID *string `form:"via_meta_mcp_server_agent_id,omitempty" json:"via_meta_mcp_server_agent_id,omitempty" xml:"via_meta_mcp_server_agent_id,omitempty"`
+	// Kind of the gateway the call reached when target_type is meta_mcp_server:
+	// project for a gateway stored in a project, organization for the organization
+	// gateway, agent for an agent's gateway; absent for other targets and when the
+	// gateway id resolves to no gateway of the organization
+	TargetMetaMcpServerKind *string `form:"target_meta_mcp_server_kind,omitempty" json:"target_meta_mcp_server_kind,omitempty" xml:"target_meta_mcp_server_kind,omitempty"`
+	// Slug of the project whose page shows the gateway the call reached: the
+	// project holding a project gateway, or the project an organization gateway
+	// was restricted to; absent when the gateway or its project is deleted, and
+	// for an organization gateway serving the whole organization
+	TargetMetaMcpServerProjectSlug *string `form:"target_meta_mcp_server_project_slug,omitempty" json:"target_meta_mcp_server_project_slug,omitempty" xml:"target_meta_mcp_server_project_slug,omitempty"`
+	// Agent whose gateway the call reached; absent for other gateway kinds and
+	// when the agent is deleted
+	TargetMetaMcpServerAgentID *string `form:"target_meta_mcp_server_agent_id,omitempty" json:"target_meta_mcp_server_agent_id,omitempty" xml:"target_meta_mcp_server_agent_id,omitempty"`
+	// Stable MCP client identity used by filters; 'unattributed' when the caller
+	// never reported one
+	ClientKey string `form:"client_key" json:"client_key" xml:"client_key"`
+	// User-facing MCP client label as the client reported it
+	ClientLabel string `form:"client_label" json:"client_label" xml:"client_label"`
+	// MCP client version when the client reported one alongside its name
+	ClientVersion *string `form:"client_version,omitempty" json:"client_version,omitempty" xml:"client_version,omitempty"`
 }
 
 // ToolUsageTraceLogGroupResponseBody is used to define fields on response body
@@ -7828,6 +9787,8 @@ type ToolUsageHostedServerFilterOptionResponseBody struct {
 	ToolsetSlug string `form:"toolset_slug" json:"toolset_slug" xml:"toolset_slug"`
 	// Hosted MCP toolset display name
 	ToolsetName string `form:"toolset_name" json:"toolset_name" xml:"toolset_name"`
+	// MCP server id to filter by; absent when the server has no mcp_servers row
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
 }
@@ -7838,6 +9799,18 @@ type ToolUsageShadowServerFilterOptionResponseBody struct {
 	// Observed Shadow MCP server name
 	ServerName string `form:"server_name" json:"server_name" xml:"server_name"`
 	// Number of tool usage events observed for the Shadow MCP server
+	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
+}
+
+// ToolUsageGatewayFilterOptionResponseBody is used to define fields on
+// response body types.
+type ToolUsageGatewayFilterOptionResponseBody struct {
+	// Gateway (meta MCP server) id
+	MetaMcpServerID string `form:"meta_mcp_server_id" json:"meta_mcp_server_id" xml:"meta_mcp_server_id"`
+	// Gateway display name; a deleted gateway keeps its last name
+	Name string `form:"name" json:"name" xml:"name"`
+	// Number of tool usage events dispatched through or observed against the
+	// gateway
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
 }
 
@@ -7854,15 +9827,27 @@ type ToolUsageUserFilterOptionResponseBody struct {
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
 }
 
+// ToolUsageClientFilterOptionResponseBody is used to define fields on response
+// body types.
+type ToolUsageClientFilterOptionResponseBody struct {
+	// Stable MCP client identity used by filters
+	ClientKey string `form:"client_key" json:"client_key" xml:"client_key"`
+	// User-facing label for the MCP client
+	ClientLabel string `form:"client_label" json:"client_label" xml:"client_label"`
+	// Number of tool usage events observed for the MCP client
+	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
+}
+
 // McpServerActivityResponseBody is used to define fields on response body
 // types.
 type McpServerActivityResponseBody struct {
-	// Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)
+	// Specific kind of MCP server target
 	TargetType string `form:"target_type" json:"target_type" xml:"target_type"`
 	// Stable target identifier: toolset slug for hosted servers, MCP server slug
-	// for tunneled/remote servers
+	// for tunneled/remote servers, meta MCP server id for gateways
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
-	// User-facing label for the target
+	// User-facing label for the target. Gateway rows carry the gateway name,
+	// falling back to the meta MCP server id when the gateway no longer exists
 	TargetLabel string `form:"target_label" json:"target_label" xml:"target_label"`
 	// Number of tool calls observed across the whole lookback window
 	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
@@ -7870,6 +9855,16 @@ type McpServerActivityResponseBody struct {
 	RecentToolCalls int64 `form:"recent_tool_calls" json:"recent_tool_calls" xml:"recent_tool_calls"`
 	// ISO 8601 timestamp of the most recent tool call
 	LastToolCallAt *string `form:"last_tool_call_at,omitempty" json:"last_tool_call_at,omitempty" xml:"last_tool_call_at,omitempty"`
+}
+
+// ProjectMcpServerActivityResponseBody is used to define fields on response
+// body types.
+type ProjectMcpServerActivityResponseBody struct {
+	// The project the activity belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// One entry per MCP server in the project with at least one tool call inside
+	// the recent window
+	Activity []*McpServerActivityResponseBody `form:"activity" json:"activity" xml:"activity"`
 }
 
 // HookTraceSummaryResponseBody is used to define fields on response body types.
@@ -7884,7 +9879,7 @@ type HookTraceSummaryResponseBody struct {
 	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
 	// Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
 	BlockReason *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
-	// Gram URN associated with this hook trace
+	// Speakeasy URN associated with this hook trace
 	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
 	// Tool name (from materialized column)
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
@@ -7927,7 +9922,7 @@ type SearchLogsFilterRequestBody struct {
 	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
 	// Service name filter
 	ServiceName *string `form:"service_name,omitempty" json:"service_name,omitempty" xml:"service_name,omitempty"`
-	// Gram URN filter (one or more URNs)
+	// Speakeasy URN filter (one or more URNs)
 	GramUrns []string `form:"gram_urns,omitempty" json:"gram_urns,omitempty" xml:"gram_urns,omitempty"`
 	// Chat ID filter
 	GramChatID *string `form:"gram_chat_id,omitempty" json:"gram_chat_id,omitempty" xml:"gram_chat_id,omitempty"`
@@ -7945,7 +9940,7 @@ type SearchLogsFilterRequestBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Function ID filter
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 }
 
@@ -7962,7 +9957,7 @@ type SearchToolCallsFilterRequestBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Function ID filter
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 }
 
@@ -7974,7 +9969,7 @@ type SearchChatsFilterRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Deployment ID filter
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 	// User ID filter
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
@@ -8231,17 +10226,141 @@ func NewGetObservabilityOverviewResponseBody(res *telemetry.GetObservabilityOver
 	return body
 }
 
+// NewGetMcpNetworkTrafficResponseBody builds the HTTP response body from the
+// result of the "getMcpNetworkTraffic" endpoint of the "telemetry" service.
+func NewGetMcpNetworkTrafficResponseBody(res *telemetry.GetMcpNetworkTrafficResult) *GetMcpNetworkTrafficResponseBody {
+	body := &GetMcpNetworkTrafficResponseBody{
+		From:          res.From,
+		To:            res.To,
+		LastPublicAt:  res.LastPublicAt,
+		LastPrivateAt: res.LastPrivateAt,
+	}
+	if res.Points != nil {
+		body.Points = make([]*McpNetworkTrafficPointResponseBody, len(res.Points))
+		for i, val := range res.Points {
+			if val == nil {
+				body.Points[i] = nil
+				continue
+			}
+			body.Points[i] = marshalTelemetryMcpNetworkTrafficPointToMcpNetworkTrafficPointResponseBody(val)
+		}
+	} else {
+		body.Points = []*McpNetworkTrafficPointResponseBody{}
+	}
+	return body
+}
+
+// NewGetMetaMcpServerUsageResponseBody builds the HTTP response body from the
+// result of the "getMetaMcpServerUsage" endpoint of the "telemetry" service.
+func NewGetMetaMcpServerUsageResponseBody(res *telemetry.GetMetaMcpServerUsageResult) *GetMetaMcpServerUsageResponseBody {
+	body := &GetMetaMcpServerUsageResponseBody{}
+	if res.Funnel != nil {
+		body.Funnel = marshalTelemetryMetaMcpDiscoveryFunnelToMetaMcpDiscoveryFunnelResponseBody(res.Funnel)
+	}
+	if res.Members != nil {
+		body.Members = make([]*MetaMcpMemberUsageResponseBody, len(res.Members))
+		for i, val := range res.Members {
+			if val == nil {
+				body.Members[i] = nil
+				continue
+			}
+			body.Members[i] = marshalTelemetryMetaMcpMemberUsageToMetaMcpMemberUsageResponseBody(val)
+		}
+	} else {
+		body.Members = []*MetaMcpMemberUsageResponseBody{}
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewResponseBody builds the HTTP response body from
+// the result of the "getProjectGatewayOverview" endpoint of the "telemetry"
+// service.
+func NewGetProjectGatewayOverviewResponseBody(res *telemetry.GetObservabilityOverviewResult) *GetProjectGatewayOverviewResponseBody {
+	body := &GetProjectGatewayOverviewResponseBody{
+		IntervalSeconds: res.IntervalSeconds,
+	}
+	if res.Summary != nil {
+		body.Summary = marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(res.Summary)
+	}
+	if res.Comparison != nil {
+		body.Comparison = marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(res.Comparison)
+	}
+	if res.TimeSeries != nil {
+		body.TimeSeries = make([]*TimeSeriesBucketResponseBody, len(res.TimeSeries))
+		for i, val := range res.TimeSeries {
+			if val == nil {
+				body.TimeSeries[i] = nil
+				continue
+			}
+			body.TimeSeries[i] = marshalTelemetryTimeSeriesBucketToTimeSeriesBucketResponseBody(val)
+		}
+	} else {
+		body.TimeSeries = []*TimeSeriesBucketResponseBody{}
+	}
+	if res.TopToolsByCount != nil {
+		body.TopToolsByCount = make([]*ToolMetricResponseBody, len(res.TopToolsByCount))
+		for i, val := range res.TopToolsByCount {
+			if val == nil {
+				body.TopToolsByCount[i] = nil
+				continue
+			}
+			body.TopToolsByCount[i] = marshalTelemetryToolMetricToToolMetricResponseBody(val)
+		}
+	} else {
+		body.TopToolsByCount = []*ToolMetricResponseBody{}
+	}
+	if res.TopToolsByFailureRate != nil {
+		body.TopToolsByFailureRate = make([]*ToolMetricResponseBody, len(res.TopToolsByFailureRate))
+		for i, val := range res.TopToolsByFailureRate {
+			if val == nil {
+				body.TopToolsByFailureRate[i] = nil
+				continue
+			}
+			body.TopToolsByFailureRate[i] = marshalTelemetryToolMetricToToolMetricResponseBody(val)
+		}
+	} else {
+		body.TopToolsByFailureRate = []*ToolMetricResponseBody{}
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageResponseBody builds the HTTP response body from the
+// result of the "getProjectGatewayUsage" endpoint of the "telemetry" service.
+func NewGetProjectGatewayUsageResponseBody(res *telemetry.GetMetaMcpServerUsageResult) *GetProjectGatewayUsageResponseBody {
+	body := &GetProjectGatewayUsageResponseBody{}
+	if res.Funnel != nil {
+		body.Funnel = marshalTelemetryMetaMcpDiscoveryFunnelToMetaMcpDiscoveryFunnelResponseBody(res.Funnel)
+	}
+	if res.Members != nil {
+		body.Members = make([]*MetaMcpMemberUsageResponseBody, len(res.Members))
+		for i, val := range res.Members {
+			if val == nil {
+				body.Members[i] = nil
+				continue
+			}
+			body.Members[i] = marshalTelemetryMetaMcpMemberUsageToMetaMcpMemberUsageResponseBody(val)
+		}
+	} else {
+		body.Members = []*MetaMcpMemberUsageResponseBody{}
+	}
+	return body
+}
+
 // NewGetProjectOverviewResponseBody builds the HTTP response body from the
 // result of the "getProjectOverview" endpoint of the "telemetry" service.
 func NewGetProjectOverviewResponseBody(res *telemetry.GetProjectOverviewResult) *GetProjectOverviewResponseBody {
-	body := &GetProjectOverviewResponseBody{
-		MetricsMode: res.MetricsMode,
-	}
+	body := &GetProjectOverviewResponseBody{}
 	if res.Summary != nil {
 		body.Summary = marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody(res.Summary)
 	}
-	if res.Comparison != nil {
-		body.Comparison = marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody(res.Comparison)
+	if res.UsageByUser != nil {
+		body.UsageByUser = marshalTelemetryQueryResultToQueryResultResponseBody(res.UsageByUser)
+	}
+	if res.UsageByAgent != nil {
+		body.UsageByAgent = marshalTelemetryQueryResultToQueryResultResponseBody(res.UsageByAgent)
+	}
+	if res.McpUsage != nil {
+		body.McpUsage = marshalTelemetryProjectMcpUsageToProjectMcpUsageResponseBody(res.McpUsage)
 	}
 	return body
 }
@@ -8407,6 +10526,7 @@ func NewQueryTumDetailsResponseBody(res *telemetry.TumDetailsResult) *QueryTumDe
 func NewListSessionsResponseBody(res *telemetry.ListSessionsResult) *ListSessionsResponseBody {
 	body := &ListSessionsResponseBody{
 		NextCursor: res.NextCursor,
+		Scoped:     res.Scoped,
 	}
 	if res.Sessions != nil {
 		body.Sessions = make([]*SessionSummaryResponseBody, len(res.Sessions))
@@ -8419,6 +10539,9 @@ func NewListSessionsResponseBody(res *telemetry.ListSessionsResult) *ListSession
 		}
 	} else {
 		body.Sessions = []*SessionSummaryResponseBody{}
+	}
+	if res.Totals != nil {
+		body.Totals = marshalTelemetrySessionTotalsToSessionTotalsResponseBody(res.Totals)
 	}
 	return body
 }
@@ -8630,6 +10753,30 @@ func NewGetToolUsageSummaryResponseBody(res *telemetry.GetToolUsageSummaryResult
 	} else {
 		body.TargetToolBreakdown = []*ToolUsageTargetToolBreakdownRowResponseBody{}
 	}
+	if res.Clients != nil {
+		body.Clients = make([]*ToolUsageClientSummaryResponseBody, len(res.Clients))
+		for i, val := range res.Clients {
+			if val == nil {
+				body.Clients[i] = nil
+				continue
+			}
+			body.Clients[i] = marshalTelemetryToolUsageClientSummaryToToolUsageClientSummaryResponseBody(val)
+		}
+	} else {
+		body.Clients = []*ToolUsageClientSummaryResponseBody{}
+	}
+	if res.ClientToolBreakdown != nil {
+		body.ClientToolBreakdown = make([]*ToolUsageClientToolBreakdownRowResponseBody, len(res.ClientToolBreakdown))
+		for i, val := range res.ClientToolBreakdown {
+			if val == nil {
+				body.ClientToolBreakdown[i] = nil
+				continue
+			}
+			body.ClientToolBreakdown[i] = marshalTelemetryToolUsageClientToolBreakdownRowToToolUsageClientToolBreakdownRowResponseBody(val)
+		}
+	} else {
+		body.ClientToolBreakdown = []*ToolUsageClientToolBreakdownRowResponseBody{}
+	}
 	return body
 }
 
@@ -8677,6 +10824,45 @@ func NewGetToolUsageUsersResponseBody(res *telemetry.GetToolUsageUsersResult) *G
 		}
 	} else {
 		body.Users = []*ToolUsageUserSummaryResponseBody{}
+	}
+	return body
+}
+
+// NewGetToolUsageClientsResponseBody builds the HTTP response body from the
+// result of the "getToolUsageClients" endpoint of the "telemetry" service.
+func NewGetToolUsageClientsResponseBody(res *telemetry.GetToolUsageClientsResult) *GetToolUsageClientsResponseBody {
+	body := &GetToolUsageClientsResponseBody{}
+	if res.Clients != nil {
+		body.Clients = make([]*ToolUsageClientSummaryResponseBody, len(res.Clients))
+		for i, val := range res.Clients {
+			if val == nil {
+				body.Clients[i] = nil
+				continue
+			}
+			body.Clients[i] = marshalTelemetryToolUsageClientSummaryToToolUsageClientSummaryResponseBody(val)
+		}
+	} else {
+		body.Clients = []*ToolUsageClientSummaryResponseBody{}
+	}
+	return body
+}
+
+// NewGetToolUsageClientToolBreakdownResponseBody builds the HTTP response body
+// from the result of the "getToolUsageClientToolBreakdown" endpoint of the
+// "telemetry" service.
+func NewGetToolUsageClientToolBreakdownResponseBody(res *telemetry.GetToolUsageClientToolBreakdownResult) *GetToolUsageClientToolBreakdownResponseBody {
+	body := &GetToolUsageClientToolBreakdownResponseBody{}
+	if res.ClientToolBreakdown != nil {
+		body.ClientToolBreakdown = make([]*ToolUsageClientToolBreakdownRowResponseBody, len(res.ClientToolBreakdown))
+		for i, val := range res.ClientToolBreakdown {
+			if val == nil {
+				body.ClientToolBreakdown[i] = nil
+				continue
+			}
+			body.ClientToolBreakdown[i] = marshalTelemetryToolUsageClientToolBreakdownRowToToolUsageClientToolBreakdownRowResponseBody(val)
+		}
+	} else {
+		body.ClientToolBreakdown = []*ToolUsageClientToolBreakdownRowResponseBody{}
 	}
 	return body
 }
@@ -8811,6 +10997,18 @@ func NewGetToolUsageFilterOptionsResponseBody(res *telemetry.GetToolUsageFilterO
 	} else {
 		body.ShadowServers = []*ToolUsageShadowServerFilterOptionResponseBody{}
 	}
+	if res.Gateways != nil {
+		body.Gateways = make([]*ToolUsageGatewayFilterOptionResponseBody, len(res.Gateways))
+		for i, val := range res.Gateways {
+			if val == nil {
+				body.Gateways[i] = nil
+				continue
+			}
+			body.Gateways[i] = marshalTelemetryToolUsageGatewayFilterOptionToToolUsageGatewayFilterOptionResponseBody(val)
+		}
+	} else {
+		body.Gateways = []*ToolUsageGatewayFilterOptionResponseBody{}
+	}
 	if res.Users != nil {
 		body.Users = make([]*ToolUsageUserFilterOptionResponseBody, len(res.Users))
 		for i, val := range res.Users {
@@ -8822,6 +11020,18 @@ func NewGetToolUsageFilterOptionsResponseBody(res *telemetry.GetToolUsageFilterO
 		}
 	} else {
 		body.Users = []*ToolUsageUserFilterOptionResponseBody{}
+	}
+	if res.Clients != nil {
+		body.Clients = make([]*ToolUsageClientFilterOptionResponseBody, len(res.Clients))
+		for i, val := range res.Clients {
+			if val == nil {
+				body.Clients[i] = nil
+				continue
+			}
+			body.Clients[i] = marshalTelemetryToolUsageClientFilterOptionToToolUsageClientFilterOptionResponseBody(val)
+		}
+	} else {
+		body.Clients = []*ToolUsageClientFilterOptionResponseBody{}
 	}
 	return body
 }
@@ -8844,6 +11054,28 @@ func NewGetMcpServerActivityResponseBody(res *telemetry.GetMcpServerActivityResu
 		}
 	} else {
 		body.Activity = []*McpServerActivityResponseBody{}
+	}
+	return body
+}
+
+// NewGetOrgMcpServerActivityResponseBody builds the HTTP response body from
+// the result of the "getOrgMcpServerActivity" endpoint of the "telemetry"
+// service.
+func NewGetOrgMcpServerActivityResponseBody(res *telemetry.GetOrgMcpServerActivityResult) *GetOrgMcpServerActivityResponseBody {
+	body := &GetOrgMcpServerActivityResponseBody{
+		RecentWindowDays: res.RecentWindowDays,
+	}
+	if res.Projects != nil {
+		body.Projects = make([]*ProjectMcpServerActivityResponseBody, len(res.Projects))
+		for i, val := range res.Projects {
+			if val == nil {
+				body.Projects[i] = nil
+				continue
+			}
+			body.Projects[i] = marshalTelemetryProjectMcpServerActivityToProjectMcpServerActivityResponseBody(val)
+		}
+	} else {
+		body.Projects = []*ProjectMcpServerActivityResponseBody{}
 	}
 	return body
 }
@@ -10160,6 +12392,606 @@ func NewGetObservabilityOverviewUnexpectedResponseBody(res *goa.ServiceError) *G
 // "telemetry" service.
 func NewGetObservabilityOverviewGatewayErrorResponseBody(res *goa.ServiceError) *GetObservabilityOverviewGatewayErrorResponseBody {
 	body := &GetObservabilityOverviewGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getMcpNetworkTraffic" endpoint of the
+// "telemetry" service.
+func NewGetMcpNetworkTrafficUnauthorizedResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficUnauthorizedResponseBody {
+	body := &GetMcpNetworkTrafficUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficForbiddenResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficForbiddenResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficForbiddenResponseBody {
+	body := &GetMcpNetworkTrafficForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficBadRequestResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficBadRequestResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficBadRequestResponseBody {
+	body := &GetMcpNetworkTrafficBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficNotFoundResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficNotFoundResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficNotFoundResponseBody {
+	body := &GetMcpNetworkTrafficNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficConflictResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficConflictResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficConflictResponseBody {
+	body := &GetMcpNetworkTrafficConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getMcpNetworkTraffic" endpoint of the
+// "telemetry" service.
+func NewGetMcpNetworkTrafficUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficUnsupportedMediaResponseBody {
+	body := &GetMcpNetworkTrafficUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficInvalidResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficInvalidResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficInvalidResponseBody {
+	body := &GetMcpNetworkTrafficInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getMcpNetworkTraffic" endpoint of the
+// "telemetry" service.
+func NewGetMcpNetworkTrafficInvariantViolationResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficInvariantViolationResponseBody {
+	body := &GetMcpNetworkTrafficInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficUnexpectedResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficUnexpectedResponseBody {
+	body := &GetMcpNetworkTrafficUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getMcpNetworkTraffic" endpoint of the
+// "telemetry" service.
+func NewGetMcpNetworkTrafficGatewayErrorResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficGatewayErrorResponseBody {
+	body := &GetMcpNetworkTrafficGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMetaMcpServerUsageUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getMetaMcpServerUsage" endpoint of the
+// "telemetry" service.
+func NewGetMetaMcpServerUsageUnauthorizedResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageUnauthorizedResponseBody {
+	body := &GetMetaMcpServerUsageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMetaMcpServerUsageForbiddenResponseBody builds the HTTP response body
+// from the result of the "getMetaMcpServerUsage" endpoint of the "telemetry"
+// service.
+func NewGetMetaMcpServerUsageForbiddenResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageForbiddenResponseBody {
+	body := &GetMetaMcpServerUsageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMetaMcpServerUsageBadRequestResponseBody builds the HTTP response body
+// from the result of the "getMetaMcpServerUsage" endpoint of the "telemetry"
+// service.
+func NewGetMetaMcpServerUsageBadRequestResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageBadRequestResponseBody {
+	body := &GetMetaMcpServerUsageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMetaMcpServerUsageNotFoundResponseBody builds the HTTP response body
+// from the result of the "getMetaMcpServerUsage" endpoint of the "telemetry"
+// service.
+func NewGetMetaMcpServerUsageNotFoundResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageNotFoundResponseBody {
+	body := &GetMetaMcpServerUsageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMetaMcpServerUsageConflictResponseBody builds the HTTP response body
+// from the result of the "getMetaMcpServerUsage" endpoint of the "telemetry"
+// service.
+func NewGetMetaMcpServerUsageConflictResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageConflictResponseBody {
+	body := &GetMetaMcpServerUsageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMetaMcpServerUsageUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getMetaMcpServerUsage" endpoint of the
+// "telemetry" service.
+func NewGetMetaMcpServerUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageUnsupportedMediaResponseBody {
+	body := &GetMetaMcpServerUsageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMetaMcpServerUsageInvalidResponseBody builds the HTTP response body
+// from the result of the "getMetaMcpServerUsage" endpoint of the "telemetry"
+// service.
+func NewGetMetaMcpServerUsageInvalidResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageInvalidResponseBody {
+	body := &GetMetaMcpServerUsageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMetaMcpServerUsageInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getMetaMcpServerUsage" endpoint of the
+// "telemetry" service.
+func NewGetMetaMcpServerUsageInvariantViolationResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageInvariantViolationResponseBody {
+	body := &GetMetaMcpServerUsageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMetaMcpServerUsageUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getMetaMcpServerUsage" endpoint of the "telemetry"
+// service.
+func NewGetMetaMcpServerUsageUnexpectedResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageUnexpectedResponseBody {
+	body := &GetMetaMcpServerUsageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMetaMcpServerUsageGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getMetaMcpServerUsage" endpoint of the
+// "telemetry" service.
+func NewGetMetaMcpServerUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageGatewayErrorResponseBody {
+	body := &GetMetaMcpServerUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayOverview" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayOverviewUnauthorizedResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewUnauthorizedResponseBody {
+	body := &GetProjectGatewayOverviewUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewForbiddenResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayOverviewForbiddenResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewForbiddenResponseBody {
+	body := &GetProjectGatewayOverviewForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewBadRequestResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayOverviewBadRequestResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewBadRequestResponseBody {
+	body := &GetProjectGatewayOverviewBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewNotFoundResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayOverviewNotFoundResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewNotFoundResponseBody {
+	body := &GetProjectGatewayOverviewNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewConflictResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayOverviewConflictResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewConflictResponseBody {
+	body := &GetProjectGatewayOverviewConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayOverview" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayOverviewUnsupportedMediaResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewUnsupportedMediaResponseBody {
+	body := &GetProjectGatewayOverviewUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewInvalidResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayOverviewInvalidResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewInvalidResponseBody {
+	body := &GetProjectGatewayOverviewInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayOverview" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayOverviewInvariantViolationResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewInvariantViolationResponseBody {
+	body := &GetProjectGatewayOverviewInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayOverviewUnexpectedResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewUnexpectedResponseBody {
+	body := &GetProjectGatewayOverviewUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayOverview" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayOverviewGatewayErrorResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewGatewayErrorResponseBody {
+	body := &GetProjectGatewayOverviewGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayUsageUnauthorizedResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageUnauthorizedResponseBody {
+	body := &GetProjectGatewayUsageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageForbiddenResponseBody builds the HTTP response body
+// from the result of the "getProjectGatewayUsage" endpoint of the "telemetry"
+// service.
+func NewGetProjectGatewayUsageForbiddenResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageForbiddenResponseBody {
+	body := &GetProjectGatewayUsageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageBadRequestResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayUsageBadRequestResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageBadRequestResponseBody {
+	body := &GetProjectGatewayUsageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageNotFoundResponseBody builds the HTTP response body
+// from the result of the "getProjectGatewayUsage" endpoint of the "telemetry"
+// service.
+func NewGetProjectGatewayUsageNotFoundResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageNotFoundResponseBody {
+	body := &GetProjectGatewayUsageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageConflictResponseBody builds the HTTP response body
+// from the result of the "getProjectGatewayUsage" endpoint of the "telemetry"
+// service.
+func NewGetProjectGatewayUsageConflictResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageConflictResponseBody {
+	body := &GetProjectGatewayUsageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayUsage" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageUnsupportedMediaResponseBody {
+	body := &GetProjectGatewayUsageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageInvalidResponseBody builds the HTTP response body
+// from the result of the "getProjectGatewayUsage" endpoint of the "telemetry"
+// service.
+func NewGetProjectGatewayUsageInvalidResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageInvalidResponseBody {
+	body := &GetProjectGatewayUsageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayUsage" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayUsageInvariantViolationResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageInvariantViolationResponseBody {
+	body := &GetProjectGatewayUsageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayUsageUnexpectedResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageUnexpectedResponseBody {
+	body := &GetProjectGatewayUsageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageGatewayErrorResponseBody {
+	body := &GetProjectGatewayUsageGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12362,6 +15194,305 @@ func NewGetToolUsageUsersGatewayErrorResponseBody(res *goa.ServiceError) *GetToo
 	return body
 }
 
+// NewGetToolUsageClientsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getToolUsageClients" endpoint of the "telemetry"
+// service.
+func NewGetToolUsageClientsUnauthorizedResponseBody(res *goa.ServiceError) *GetToolUsageClientsUnauthorizedResponseBody {
+	body := &GetToolUsageClientsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientsForbiddenResponseBody builds the HTTP response body
+// from the result of the "getToolUsageClients" endpoint of the "telemetry"
+// service.
+func NewGetToolUsageClientsForbiddenResponseBody(res *goa.ServiceError) *GetToolUsageClientsForbiddenResponseBody {
+	body := &GetToolUsageClientsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientsBadRequestResponseBody builds the HTTP response body
+// from the result of the "getToolUsageClients" endpoint of the "telemetry"
+// service.
+func NewGetToolUsageClientsBadRequestResponseBody(res *goa.ServiceError) *GetToolUsageClientsBadRequestResponseBody {
+	body := &GetToolUsageClientsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientsNotFoundResponseBody builds the HTTP response body
+// from the result of the "getToolUsageClients" endpoint of the "telemetry"
+// service.
+func NewGetToolUsageClientsNotFoundResponseBody(res *goa.ServiceError) *GetToolUsageClientsNotFoundResponseBody {
+	body := &GetToolUsageClientsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientsConflictResponseBody builds the HTTP response body
+// from the result of the "getToolUsageClients" endpoint of the "telemetry"
+// service.
+func NewGetToolUsageClientsConflictResponseBody(res *goa.ServiceError) *GetToolUsageClientsConflictResponseBody {
+	body := &GetToolUsageClientsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getToolUsageClients" endpoint of the
+// "telemetry" service.
+func NewGetToolUsageClientsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetToolUsageClientsUnsupportedMediaResponseBody {
+	body := &GetToolUsageClientsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientsInvalidResponseBody builds the HTTP response body from
+// the result of the "getToolUsageClients" endpoint of the "telemetry" service.
+func NewGetToolUsageClientsInvalidResponseBody(res *goa.ServiceError) *GetToolUsageClientsInvalidResponseBody {
+	body := &GetToolUsageClientsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getToolUsageClients" endpoint of the
+// "telemetry" service.
+func NewGetToolUsageClientsInvariantViolationResponseBody(res *goa.ServiceError) *GetToolUsageClientsInvariantViolationResponseBody {
+	body := &GetToolUsageClientsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getToolUsageClients" endpoint of the "telemetry"
+// service.
+func NewGetToolUsageClientsUnexpectedResponseBody(res *goa.ServiceError) *GetToolUsageClientsUnexpectedResponseBody {
+	body := &GetToolUsageClientsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getToolUsageClients" endpoint of the "telemetry"
+// service.
+func NewGetToolUsageClientsGatewayErrorResponseBody(res *goa.ServiceError) *GetToolUsageClientsGatewayErrorResponseBody {
+	body := &GetToolUsageClientsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientToolBreakdownUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getToolUsageClientToolBreakdown"
+// endpoint of the "telemetry" service.
+func NewGetToolUsageClientToolBreakdownUnauthorizedResponseBody(res *goa.ServiceError) *GetToolUsageClientToolBreakdownUnauthorizedResponseBody {
+	body := &GetToolUsageClientToolBreakdownUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientToolBreakdownForbiddenResponseBody builds the HTTP
+// response body from the result of the "getToolUsageClientToolBreakdown"
+// endpoint of the "telemetry" service.
+func NewGetToolUsageClientToolBreakdownForbiddenResponseBody(res *goa.ServiceError) *GetToolUsageClientToolBreakdownForbiddenResponseBody {
+	body := &GetToolUsageClientToolBreakdownForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientToolBreakdownBadRequestResponseBody builds the HTTP
+// response body from the result of the "getToolUsageClientToolBreakdown"
+// endpoint of the "telemetry" service.
+func NewGetToolUsageClientToolBreakdownBadRequestResponseBody(res *goa.ServiceError) *GetToolUsageClientToolBreakdownBadRequestResponseBody {
+	body := &GetToolUsageClientToolBreakdownBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientToolBreakdownNotFoundResponseBody builds the HTTP
+// response body from the result of the "getToolUsageClientToolBreakdown"
+// endpoint of the "telemetry" service.
+func NewGetToolUsageClientToolBreakdownNotFoundResponseBody(res *goa.ServiceError) *GetToolUsageClientToolBreakdownNotFoundResponseBody {
+	body := &GetToolUsageClientToolBreakdownNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientToolBreakdownConflictResponseBody builds the HTTP
+// response body from the result of the "getToolUsageClientToolBreakdown"
+// endpoint of the "telemetry" service.
+func NewGetToolUsageClientToolBreakdownConflictResponseBody(res *goa.ServiceError) *GetToolUsageClientToolBreakdownConflictResponseBody {
+	body := &GetToolUsageClientToolBreakdownConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientToolBreakdownUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "getToolUsageClientToolBreakdown"
+// endpoint of the "telemetry" service.
+func NewGetToolUsageClientToolBreakdownUnsupportedMediaResponseBody(res *goa.ServiceError) *GetToolUsageClientToolBreakdownUnsupportedMediaResponseBody {
+	body := &GetToolUsageClientToolBreakdownUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientToolBreakdownInvalidResponseBody builds the HTTP
+// response body from the result of the "getToolUsageClientToolBreakdown"
+// endpoint of the "telemetry" service.
+func NewGetToolUsageClientToolBreakdownInvalidResponseBody(res *goa.ServiceError) *GetToolUsageClientToolBreakdownInvalidResponseBody {
+	body := &GetToolUsageClientToolBreakdownInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientToolBreakdownInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "getToolUsageClientToolBreakdown"
+// endpoint of the "telemetry" service.
+func NewGetToolUsageClientToolBreakdownInvariantViolationResponseBody(res *goa.ServiceError) *GetToolUsageClientToolBreakdownInvariantViolationResponseBody {
+	body := &GetToolUsageClientToolBreakdownInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientToolBreakdownUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getToolUsageClientToolBreakdown"
+// endpoint of the "telemetry" service.
+func NewGetToolUsageClientToolBreakdownUnexpectedResponseBody(res *goa.ServiceError) *GetToolUsageClientToolBreakdownUnexpectedResponseBody {
+	body := &GetToolUsageClientToolBreakdownUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageClientToolBreakdownGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getToolUsageClientToolBreakdown"
+// endpoint of the "telemetry" service.
+func NewGetToolUsageClientToolBreakdownGatewayErrorResponseBody(res *goa.ServiceError) *GetToolUsageClientToolBreakdownGatewayErrorResponseBody {
+	body := &GetToolUsageClientToolBreakdownGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetToolUsageTargetTimeSeriesUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "getToolUsageTargetTimeSeries" endpoint
 // of the "telemetry" service.
@@ -13411,6 +16542,156 @@ func NewGetMcpServerActivityGatewayErrorResponseBody(res *goa.ServiceError) *Get
 	return body
 }
 
+// NewGetOrgMcpServerActivityUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getOrgMcpServerActivity" endpoint of the
+// "telemetry" service.
+func NewGetOrgMcpServerActivityUnauthorizedResponseBody(res *goa.ServiceError) *GetOrgMcpServerActivityUnauthorizedResponseBody {
+	body := &GetOrgMcpServerActivityUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrgMcpServerActivityForbiddenResponseBody builds the HTTP response
+// body from the result of the "getOrgMcpServerActivity" endpoint of the
+// "telemetry" service.
+func NewGetOrgMcpServerActivityForbiddenResponseBody(res *goa.ServiceError) *GetOrgMcpServerActivityForbiddenResponseBody {
+	body := &GetOrgMcpServerActivityForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrgMcpServerActivityBadRequestResponseBody builds the HTTP response
+// body from the result of the "getOrgMcpServerActivity" endpoint of the
+// "telemetry" service.
+func NewGetOrgMcpServerActivityBadRequestResponseBody(res *goa.ServiceError) *GetOrgMcpServerActivityBadRequestResponseBody {
+	body := &GetOrgMcpServerActivityBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrgMcpServerActivityNotFoundResponseBody builds the HTTP response body
+// from the result of the "getOrgMcpServerActivity" endpoint of the "telemetry"
+// service.
+func NewGetOrgMcpServerActivityNotFoundResponseBody(res *goa.ServiceError) *GetOrgMcpServerActivityNotFoundResponseBody {
+	body := &GetOrgMcpServerActivityNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrgMcpServerActivityConflictResponseBody builds the HTTP response body
+// from the result of the "getOrgMcpServerActivity" endpoint of the "telemetry"
+// service.
+func NewGetOrgMcpServerActivityConflictResponseBody(res *goa.ServiceError) *GetOrgMcpServerActivityConflictResponseBody {
+	body := &GetOrgMcpServerActivityConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrgMcpServerActivityUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getOrgMcpServerActivity" endpoint of
+// the "telemetry" service.
+func NewGetOrgMcpServerActivityUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrgMcpServerActivityUnsupportedMediaResponseBody {
+	body := &GetOrgMcpServerActivityUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrgMcpServerActivityInvalidResponseBody builds the HTTP response body
+// from the result of the "getOrgMcpServerActivity" endpoint of the "telemetry"
+// service.
+func NewGetOrgMcpServerActivityInvalidResponseBody(res *goa.ServiceError) *GetOrgMcpServerActivityInvalidResponseBody {
+	body := &GetOrgMcpServerActivityInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrgMcpServerActivityInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getOrgMcpServerActivity" endpoint of
+// the "telemetry" service.
+func NewGetOrgMcpServerActivityInvariantViolationResponseBody(res *goa.ServiceError) *GetOrgMcpServerActivityInvariantViolationResponseBody {
+	body := &GetOrgMcpServerActivityInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrgMcpServerActivityUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getOrgMcpServerActivity" endpoint of the
+// "telemetry" service.
+func NewGetOrgMcpServerActivityUnexpectedResponseBody(res *goa.ServiceError) *GetOrgMcpServerActivityUnexpectedResponseBody {
+	body := &GetOrgMcpServerActivityUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrgMcpServerActivityGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getOrgMcpServerActivity" endpoint of the
+// "telemetry" service.
+func NewGetOrgMcpServerActivityGatewayErrorResponseBody(res *goa.ServiceError) *GetOrgMcpServerActivityGatewayErrorResponseBody {
+	body := &GetOrgMcpServerActivityGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListHooksTracesUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listHooksTraces" endpoint of the "telemetry" service.
 func NewListHooksTracesUnauthorizedResponseBody(res *goa.ServiceError) *ListHooksTracesUnauthorizedResponseBody {
@@ -13779,6 +17060,7 @@ func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBod
 		ToolsetSlug:       body.ToolsetSlug,
 		RemoteMcpServerID: body.RemoteMcpServerID,
 		McpServerID:       body.McpServerID,
+		MetaMcpServerID:   body.MetaMcpServerID,
 		EventSource:       body.EventSource,
 		HookSource:        body.HookSource,
 		AccountType:       body.AccountType,
@@ -13797,12 +17079,74 @@ func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBod
 	return v
 }
 
+// NewGetMcpNetworkTrafficPayload builds a telemetry service
+// getMcpNetworkTraffic endpoint payload.
+func NewGetMcpNetworkTrafficPayload(body *GetMcpNetworkTrafficRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetMcpNetworkTrafficPayload {
+	v := &telemetry.GetMcpNetworkTrafficPayload{
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		Window:          *body.Window,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetMetaMcpServerUsagePayload builds a telemetry service
+// getMetaMcpServerUsage endpoint payload.
+func NewGetMetaMcpServerUsagePayload(body *GetMetaMcpServerUsageRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetMetaMcpServerUsagePayload {
+	v := &telemetry.GetMetaMcpServerUsagePayload{
+		MetaMcpServerID: *body.MetaMcpServerID,
+		From:            *body.From,
+		To:              *body.To,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetProjectGatewayOverviewPayload builds a telemetry service
+// getProjectGatewayOverview endpoint payload.
+func NewGetProjectGatewayOverviewPayload(body *GetProjectGatewayOverviewRequestBody, sessionToken *string, projectSlugInput *string) *telemetry.GetProjectGatewayOverviewPayload {
+	v := &telemetry.GetProjectGatewayOverviewPayload{
+		From: *body.From,
+		To:   *body.To,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetProjectGatewayUsagePayload builds a telemetry service
+// getProjectGatewayUsage endpoint payload.
+func NewGetProjectGatewayUsagePayload(body *GetProjectGatewayUsageRequestBody, sessionToken *string, projectSlugInput *string) *telemetry.GetProjectGatewayUsagePayload {
+	v := &telemetry.GetProjectGatewayUsagePayload{
+		From: *body.From,
+		To:   *body.To,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewGetProjectOverviewPayload builds a telemetry service getProjectOverview
 // endpoint payload.
 func NewGetProjectOverviewPayload(body *GetProjectOverviewRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetProjectOverviewPayload {
 	v := &telemetry.GetProjectOverviewPayload{
 		From: *body.From,
 		To:   *body.To,
+	}
+	if body.IncludeUsage != nil {
+		v.IncludeUsage = *body.IncludeUsage
+	}
+	if body.IncludeUsage == nil {
+		v.IncludeUsage = false
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -13900,6 +17244,9 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string) *telemetry.Qu
 		GroupBy:            body.GroupBy,
 		GranularitySeconds: body.GranularitySeconds,
 	}
+	if body.IncludeDimensionValues != nil {
+		v.IncludeDimensionValues = *body.IncludeDimensionValues
+	}
 	if body.TopN != nil {
 		v.TopN = *body.TopN
 	}
@@ -13915,6 +17262,9 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string) *telemetry.Qu
 			}
 			v.Filters[i] = unmarshalQueryFilterRequestBodyToTelemetryQueryFilter(val)
 		}
+	}
+	if body.IncludeDimensionValues == nil {
+		v.IncludeDimensionValues = true
 	}
 	if body.TopN == nil {
 		v.TopN = 10
@@ -14042,6 +17392,7 @@ func NewGetToolUsageSummaryPayload(body *GetToolUsageSummaryRequestBody, apikeyT
 		From:        *body.From,
 		To:          *body.To,
 		AccountType: body.AccountType,
+		Query:       body.Query,
 	}
 	if body.TargetTypes != nil {
 		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
@@ -14055,10 +17406,22 @@ func NewGetToolUsageSummaryPayload(body *GetToolUsageSummaryRequestBody, apikeyT
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
 			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
 		}
 	}
 	if body.UserFilters != nil {
@@ -14071,10 +17434,38 @@ func NewGetToolUsageSummaryPayload(body *GetToolUsageSummaryRequestBody, apikeyT
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	if body.HookSources != nil {
 		v.HookSources = make([]string, len(body.HookSources))
 		for i, val := range body.HookSources {
 			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -14091,6 +17482,7 @@ func NewGetToolUsageTotalsPayload(body *GetToolUsageTotalsRequestBody, apikeyTok
 		From:        *body.From,
 		To:          *body.To,
 		AccountType: body.AccountType,
+		Query:       body.Query,
 	}
 	if body.TargetTypes != nil {
 		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
@@ -14104,10 +17496,22 @@ func NewGetToolUsageTotalsPayload(body *GetToolUsageTotalsRequestBody, apikeyTok
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
 			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
 		}
 	}
 	if body.UserFilters != nil {
@@ -14120,10 +17524,38 @@ func NewGetToolUsageTotalsPayload(body *GetToolUsageTotalsRequestBody, apikeyTok
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	if body.HookSources != nil {
 		v.HookSources = make([]string, len(body.HookSources))
 		for i, val := range body.HookSources {
 			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -14140,6 +17572,7 @@ func NewGetToolUsageTargetsPayload(body *GetToolUsageTargetsRequestBody, apikeyT
 		From:        *body.From,
 		To:          *body.To,
 		AccountType: body.AccountType,
+		Query:       body.Query,
 	}
 	if body.TargetTypes != nil {
 		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
@@ -14153,10 +17586,22 @@ func NewGetToolUsageTargetsPayload(body *GetToolUsageTargetsRequestBody, apikeyT
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
 			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
 		}
 	}
 	if body.UserFilters != nil {
@@ -14169,10 +17614,38 @@ func NewGetToolUsageTargetsPayload(body *GetToolUsageTargetsRequestBody, apikeyT
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	if body.HookSources != nil {
 		v.HookSources = make([]string, len(body.HookSources))
 		for i, val := range body.HookSources {
 			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -14189,6 +17662,7 @@ func NewGetToolUsageUsersPayload(body *GetToolUsageUsersRequestBody, apikeyToken
 		From:        *body.From,
 		To:          *body.To,
 		AccountType: body.AccountType,
+		Query:       body.Query,
 	}
 	if body.TargetTypes != nil {
 		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
@@ -14202,10 +17676,22 @@ func NewGetToolUsageUsersPayload(body *GetToolUsageUsersRequestBody, apikeyToken
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
 			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
 		}
 	}
 	if body.UserFilters != nil {
@@ -14218,10 +17704,218 @@ func NewGetToolUsageUsersPayload(body *GetToolUsageUsersRequestBody, apikeyToken
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	if body.HookSources != nil {
 		v.HookSources = make([]string, len(body.HookSources))
 		for i, val := range body.HookSources {
 			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetToolUsageClientsPayload builds a telemetry service getToolUsageClients
+// endpoint payload.
+func NewGetToolUsageClientsPayload(body *GetToolUsageClientsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetToolUsageClientsPayload {
+	v := &telemetry.GetToolUsageClientsPayload{
+		From:        *body.From,
+		To:          *body.To,
+		AccountType: body.AccountType,
+		Query:       body.Query,
+	}
+	if body.TargetTypes != nil {
+		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
+		for i, val := range body.TargetTypes {
+			v.TargetTypes[i] = telemetry.ToolUsageTargetType(val)
+		}
+	}
+	if body.HostedToolsetSlugs != nil {
+		v.HostedToolsetSlugs = make([]string, len(body.HostedToolsetSlugs))
+		for i, val := range body.HostedToolsetSlugs {
+			v.HostedToolsetSlugs[i] = val
+		}
+	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
+	if body.ShadowServerNames != nil {
+		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
+		for i, val := range body.ShadowServerNames {
+			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
+		}
+	}
+	if body.UserFilters != nil {
+		v.UserFilters = make([]*telemetry.ToolUsageUserFilter, len(body.UserFilters))
+		for i, val := range body.UserFilters {
+			if val == nil {
+				v.UserFilters[i] = nil
+				continue
+			}
+			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
+	if body.HookSources != nil {
+		v.HookSources = make([]string, len(body.HookSources))
+		for i, val := range body.HookSources {
+			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetToolUsageClientToolBreakdownPayload builds a telemetry service
+// getToolUsageClientToolBreakdown endpoint payload.
+func NewGetToolUsageClientToolBreakdownPayload(body *GetToolUsageClientToolBreakdownRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetToolUsageClientToolBreakdownPayload {
+	v := &telemetry.GetToolUsageClientToolBreakdownPayload{
+		From:        *body.From,
+		To:          *body.To,
+		AccountType: body.AccountType,
+		Query:       body.Query,
+	}
+	if body.TargetTypes != nil {
+		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
+		for i, val := range body.TargetTypes {
+			v.TargetTypes[i] = telemetry.ToolUsageTargetType(val)
+		}
+	}
+	if body.HostedToolsetSlugs != nil {
+		v.HostedToolsetSlugs = make([]string, len(body.HostedToolsetSlugs))
+		for i, val := range body.HostedToolsetSlugs {
+			v.HostedToolsetSlugs[i] = val
+		}
+	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
+	if body.ShadowServerNames != nil {
+		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
+		for i, val := range body.ShadowServerNames {
+			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
+		}
+	}
+	if body.UserFilters != nil {
+		v.UserFilters = make([]*telemetry.ToolUsageUserFilter, len(body.UserFilters))
+		for i, val := range body.UserFilters {
+			if val == nil {
+				v.UserFilters[i] = nil
+				continue
+			}
+			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
+	if body.HookSources != nil {
+		v.HookSources = make([]string, len(body.HookSources))
+		for i, val := range body.HookSources {
+			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -14238,6 +17932,7 @@ func NewGetToolUsageTargetTimeSeriesPayload(body *GetToolUsageTargetTimeSeriesRe
 		From:        *body.From,
 		To:          *body.To,
 		AccountType: body.AccountType,
+		Query:       body.Query,
 	}
 	if body.TargetTypes != nil {
 		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
@@ -14251,10 +17946,22 @@ func NewGetToolUsageTargetTimeSeriesPayload(body *GetToolUsageTargetTimeSeriesRe
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
 			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
 		}
 	}
 	if body.UserFilters != nil {
@@ -14267,10 +17974,38 @@ func NewGetToolUsageTargetTimeSeriesPayload(body *GetToolUsageTargetTimeSeriesRe
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	if body.HookSources != nil {
 		v.HookSources = make([]string, len(body.HookSources))
 		for i, val := range body.HookSources {
 			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -14287,6 +18022,7 @@ func NewGetToolUsageUserTimeSeriesPayload(body *GetToolUsageUserTimeSeriesReques
 		From:        *body.From,
 		To:          *body.To,
 		AccountType: body.AccountType,
+		Query:       body.Query,
 	}
 	if body.TargetTypes != nil {
 		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
@@ -14300,10 +18036,22 @@ func NewGetToolUsageUserTimeSeriesPayload(body *GetToolUsageUserTimeSeriesReques
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
 			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
 		}
 	}
 	if body.UserFilters != nil {
@@ -14316,10 +18064,38 @@ func NewGetToolUsageUserTimeSeriesPayload(body *GetToolUsageUserTimeSeriesReques
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	if body.HookSources != nil {
 		v.HookSources = make([]string, len(body.HookSources))
 		for i, val := range body.HookSources {
 			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -14336,6 +18112,7 @@ func NewGetToolUsageUsersByTargetPayload(body *GetToolUsageUsersByTargetRequestB
 		From:        *body.From,
 		To:          *body.To,
 		AccountType: body.AccountType,
+		Query:       body.Query,
 	}
 	if body.TargetTypes != nil {
 		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
@@ -14349,10 +18126,22 @@ func NewGetToolUsageUsersByTargetPayload(body *GetToolUsageUsersByTargetRequestB
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
 			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
 		}
 	}
 	if body.UserFilters != nil {
@@ -14365,10 +18154,38 @@ func NewGetToolUsageUsersByTargetPayload(body *GetToolUsageUsersByTargetRequestB
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	if body.HookSources != nil {
 		v.HookSources = make([]string, len(body.HookSources))
 		for i, val := range body.HookSources {
 			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -14385,6 +18202,7 @@ func NewGetToolUsageTargetToolBreakdownPayload(body *GetToolUsageTargetToolBreak
 		From:        *body.From,
 		To:          *body.To,
 		AccountType: body.AccountType,
+		Query:       body.Query,
 	}
 	if body.TargetTypes != nil {
 		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
@@ -14398,10 +18216,22 @@ func NewGetToolUsageTargetToolBreakdownPayload(body *GetToolUsageTargetToolBreak
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
 			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
 		}
 	}
 	if body.UserFilters != nil {
@@ -14414,10 +18244,38 @@ func NewGetToolUsageTargetToolBreakdownPayload(body *GetToolUsageTargetToolBreak
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	if body.HookSources != nil {
 		v.HookSources = make([]string, len(body.HookSources))
 		for i, val := range body.HookSources {
 			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -14455,10 +18313,22 @@ func NewListToolUsageTracesPayload(body *ListToolUsageTracesRequestBody, apikeyT
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
 			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
 		}
 	}
 	if body.UserFilters != nil {
@@ -14471,10 +18341,22 @@ func NewListToolUsageTracesPayload(body *ListToolUsageTracesRequestBody, apikeyT
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	if body.HookSources != nil {
 		v.HookSources = make([]string, len(body.HookSources))
 		for i, val := range body.HookSources {
 			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
 		}
 	}
 	if body.Statuses != nil {
@@ -14510,13 +18392,89 @@ func NewListToolUsageTracesPayload(body *ListToolUsageTracesRequestBody, apikeyT
 // getToolUsageFilterOptions endpoint payload.
 func NewGetToolUsageFilterOptionsPayload(body *GetToolUsageFilterOptionsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetToolUsageFilterOptionsPayload {
 	v := &telemetry.GetToolUsageFilterOptionsPayload{
-		From: *body.From,
-		To:   *body.To,
+		From:        *body.From,
+		To:          *body.To,
+		AccountType: body.AccountType,
+		Query:       body.Query,
 	}
 	if body.OptionTypes != nil {
 		v.OptionTypes = make([]telemetry.ToolUsageFilterOptionType, len(body.OptionTypes))
 		for i, val := range body.OptionTypes {
 			v.OptionTypes[i] = telemetry.ToolUsageFilterOptionType(val)
+		}
+	}
+	if body.TargetTypes != nil {
+		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
+		for i, val := range body.TargetTypes {
+			v.TargetTypes[i] = telemetry.ToolUsageTargetType(val)
+		}
+	}
+	if body.HostedToolsetSlugs != nil {
+		v.HostedToolsetSlugs = make([]string, len(body.HostedToolsetSlugs))
+		for i, val := range body.HostedToolsetSlugs {
+			v.HostedToolsetSlugs[i] = val
+		}
+	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
+	if body.ShadowServerNames != nil {
+		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
+		for i, val := range body.ShadowServerNames {
+			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
+		}
+	}
+	if body.UserFilters != nil {
+		v.UserFilters = make([]*telemetry.ToolUsageUserFilter, len(body.UserFilters))
+		for i, val := range body.UserFilters {
+			if val == nil {
+				v.UserFilters[i] = nil
+				continue
+			}
+			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
+	if body.HookSources != nil {
+		v.HookSources = make([]string, len(body.HookSources))
+		for i, val := range body.HookSources {
+			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -14539,6 +18497,21 @@ func NewGetMcpServerActivityPayload(body *GetMcpServerActivityRequestBody, apike
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetOrgMcpServerActivityPayload builds a telemetry service
+// getOrgMcpServerActivity endpoint payload.
+func NewGetOrgMcpServerActivityPayload(body *GetOrgMcpServerActivityRequestBody, sessionToken *string) *telemetry.GetOrgMcpServerActivityPayload {
+	v := &telemetry.GetOrgMcpServerActivityPayload{}
+	if body.RecentWindowDays != nil {
+		v.RecentWindowDays = *body.RecentWindowDays
+	}
+	if body.RecentWindowDays == nil {
+		v.RecentWindowDays = 14
+	}
+	v.SessionToken = sessionToken
 
 	return v
 }
@@ -14822,6 +18795,89 @@ func ValidateGetObservabilityOverviewRequestBody(body *GetObservabilityOverviewR
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateGetMcpNetworkTrafficRequestBody runs the validations defined on
+// GetMcpNetworkTrafficRequestBody
+func ValidateGetMcpNetworkTrafficRequestBody(body *GetMcpNetworkTrafficRequestBody) (err error) {
+	if body.Window == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	if body.Window != nil {
+		if !(*body.Window == "24h" || *body.Window == "7d") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.window", *body.Window, []any{"24h", "7d"}))
+		}
+	}
+	return
+}
+
+// ValidateGetMetaMcpServerUsageRequestBody runs the validations defined on
+// GetMetaMcpServerUsageRequestBody
+func ValidateGetMetaMcpServerUsageRequestBody(body *GetMetaMcpServerUsageRequestBody) (err error) {
+	if body.MetaMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("meta_mcp_server_id", "body"))
+	}
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayOverviewRequestBody runs the validations defined on
+// GetProjectGatewayOverviewRequestBody
+func ValidateGetProjectGatewayOverviewRequestBody(body *GetProjectGatewayOverviewRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetProjectGatewayUsageRequestBody runs the validations defined on
+// GetProjectGatewayUsageRequestBody
+func ValidateGetProjectGatewayUsageRequestBody(body *GetProjectGatewayUsageRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	return
 }
@@ -15160,13 +19216,31 @@ func ValidateGetToolUsageSummaryRequestBody(body *GetToolUsageSummaryRequestBody
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -15190,13 +19264,31 @@ func ValidateGetToolUsageTotalsRequestBody(body *GetToolUsageTotalsRequestBody) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -15220,13 +19312,31 @@ func ValidateGetToolUsageTargetsRequestBody(body *GetToolUsageTargetsRequestBody
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -15250,13 +19360,127 @@ func ValidateGetToolUsageUsersRequestBody(body *GetToolUsageUsersRequestBody) (e
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetToolUsageClientsRequestBody runs the validations defined on
+// GetToolUsageClientsRequestBody
+func ValidateGetToolUsageClientsRequestBody(body *GetToolUsageClientsRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	for _, e := range body.TargetTypes {
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+	}
+	for _, e := range body.UserFilters {
+		if e != nil {
+			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetToolUsageClientToolBreakdownRequestBody runs the validations
+// defined on GetToolUsageClientToolBreakdownRequestBody
+func ValidateGetToolUsageClientToolBreakdownRequestBody(body *GetToolUsageClientToolBreakdownRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	for _, e := range body.TargetTypes {
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+	}
+	for _, e := range body.UserFilters {
+		if e != nil {
+			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -15280,13 +19504,31 @@ func ValidateGetToolUsageTargetTimeSeriesRequestBody(body *GetToolUsageTargetTim
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -15310,13 +19552,31 @@ func ValidateGetToolUsageUserTimeSeriesRequestBody(body *GetToolUsageUserTimeSer
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -15340,13 +19600,31 @@ func ValidateGetToolUsageUsersByTargetRequestBody(body *GetToolUsageUsersByTarge
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -15370,13 +19648,31 @@ func ValidateGetToolUsageTargetToolBreakdownRequestBody(body *GetToolUsageTarget
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -15400,9 +19696,15 @@ func ValidateListToolUsageTracesRequestBody(body *ListToolUsageTracesRequestBody
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
@@ -15457,8 +19759,38 @@ func ValidateGetToolUsageFilterOptionsRequestBody(body *GetToolUsageFilterOption
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.OptionTypes {
-		if !(e == "hosted_servers" || e == "shadow_servers" || e == "users") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"hosted_servers", "shadow_servers", "users"}))
+		if !(e == "hosted_servers" || e == "shadow_servers" || e == "gateways" || e == "users" || e == "clients") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"hosted_servers", "shadow_servers", "gateways", "users", "clients"}))
+		}
+	}
+	for _, e := range body.TargetTypes {
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+	}
+	for _, e := range body.UserFilters {
+		if e != nil {
+			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -15467,6 +19799,22 @@ func ValidateGetToolUsageFilterOptionsRequestBody(body *GetToolUsageFilterOption
 // ValidateGetMcpServerActivityRequestBody runs the validations defined on
 // GetMcpServerActivityRequestBody
 func ValidateGetMcpServerActivityRequestBody(body *GetMcpServerActivityRequestBody) (err error) {
+	if body.RecentWindowDays != nil {
+		if *body.RecentWindowDays < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.recent_window_days", *body.RecentWindowDays, 1, true))
+		}
+	}
+	if body.RecentWindowDays != nil {
+		if *body.RecentWindowDays > 90 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.recent_window_days", *body.RecentWindowDays, 90, false))
+		}
+	}
+	return
+}
+
+// ValidateGetOrgMcpServerActivityRequestBody runs the validations defined on
+// GetOrgMcpServerActivityRequestBody
+func ValidateGetOrgMcpServerActivityRequestBody(body *GetOrgMcpServerActivityRequestBody) (err error) {
 	if body.RecentWindowDays != nil {
 		if *body.RecentWindowDays < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.recent_window_days", *body.RecentWindowDays, 1, true))
@@ -15670,8 +20018,8 @@ func ValidateToolUsageUserFilterRequestBody(body *ToolUsageUserFilterRequestBody
 		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "email" || *body.Kind == "external_user_id" || *body.Kind == "user_id" || *body.Kind == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"email", "external_user_id", "user_id", "unknown"}))
+		if !(*body.Kind == "email" || *body.Kind == "external_user_id" || *body.Kind == "user_id" || *body.Kind == "agent_id" || *body.Kind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"email", "external_user_id", "user_id", "agent_id", "unknown"}))
 		}
 	}
 	return

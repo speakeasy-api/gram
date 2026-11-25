@@ -17,13 +17,37 @@
       "Bash(mise lint:*)",
       "Bash(mise build:*)",
       "Bash(mise gen:*)",
-      "Read(*)",
-      "Update(infra:*)",
-      "Update(client:*)",
-      "Update(server:*)",
+      "Read",
+      "Edit(infra/**)",
+      "Edit(client/**)",
+      "Edit(server/**)",
       "WebFetch"
     ],
     "deny": ["Read(mise.local.toml)"]
+  },
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/worktree-hooks/create.sh",
+            "timeout": 900
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/worktree-hooks/remove.sh",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
   },
   "enabledPlugins": {
     "frontend-design@claude-plugins-official": true

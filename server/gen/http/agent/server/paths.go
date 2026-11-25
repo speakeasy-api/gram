@@ -12,6 +12,26 @@ func GetPluginsAgentPath() string {
 	return "/rpc/agent.getPlugins"
 }
 
+// GetMyConnectionsAgentPath returns the URL path to the agent service getMyConnections HTTP endpoint.
+func GetMyConnectionsAgentPath() string {
+	return "/rpc/agent.getMyConnections"
+}
+
+// GetClaudeObservabilityPluginAgentPath returns the URL path to the agent service getClaudeObservabilityPlugin HTTP endpoint.
+func GetClaudeObservabilityPluginAgentPath() string {
+	return "/rpc/agent.getClaudeObservabilityPlugin"
+}
+
+// HideMcpServerAgentPath returns the URL path to the agent service hideMcpServer HTTP endpoint.
+func HideMcpServerAgentPath() string {
+	return "/rpc/agent.hideMcpServer"
+}
+
+// UnhideMcpServerAgentPath returns the URL path to the agent service unhideMcpServer HTTP endpoint.
+func UnhideMcpServerAgentPath() string {
+	return "/rpc/agent.unhideMcpServer"
+}
+
 // ListSyncedUsersAgentPath returns the URL path to the agent service listSyncedUsers HTTP endpoint.
 func ListSyncedUsersAgentPath() string {
 	return "/rpc/agent.listSyncedUsers"
@@ -27,6 +47,21 @@ func UpdateConfigurationAgentPath() string {
 	return "/rpc/agent.updateConfiguration"
 }
 
+// ListAiScanTargetsAgentPath returns the URL path to the agent service listAiScanTargets HTTP endpoint.
+func ListAiScanTargetsAgentPath() string {
+	return "/rpc/agent.listAiScanTargets"
+}
+
+// UpsertAiScanTargetAgentPath returns the URL path to the agent service upsertAiScanTarget HTTP endpoint.
+func UpsertAiScanTargetAgentPath() string {
+	return "/rpc/agent.upsertAiScanTarget"
+}
+
+// DeleteAiScanTargetAgentPath returns the URL path to the agent service deleteAiScanTarget HTTP endpoint.
+func DeleteAiScanTargetAgentPath() string {
+	return "/rpc/agent.deleteAiScanTarget"
+}
+
 // GetSessionMetaAgentPath returns the URL path to the agent service getSessionMeta HTTP endpoint.
 func GetSessionMetaAgentPath() string {
 	return "/rpc/agent.getSessionMeta"
@@ -37,7 +72,27 @@ func ReportSessionMovedAgentPath() string {
 	return "/rpc/agent.reportSessionMoved"
 }
 
+// ReportAIScanAgentPath returns the URL path to the agent service reportAIScan HTTP endpoint.
+func ReportAIScanAgentPath() string {
+	return "/rpc/agent.reportAIScan"
+}
+
+// ReportStateAgentPath returns the URL path to the agent service reportState HTTP endpoint.
+func ReportStateAgentPath() string {
+	return "/rpc/agent.reportState"
+}
+
+// ReportCrashAgentPath returns the URL path to the agent service reportCrash HTTP endpoint.
+func ReportCrashAgentPath() string {
+	return "/rpc/agent.reportCrash"
+}
+
 // CreateSessionHandoffAgentPath returns the URL path to the agent service createSessionHandoff HTTP endpoint.
 func CreateSessionHandoffAgentPath() string {
 	return "/rpc/agent.createSessionHandoff"
+}
+
+// ListPendingAccessRequestsAgentPath returns the URL path to the agent service listPendingAccessRequests HTTP endpoint.
+func ListPendingAccessRequestsAgentPath() string {
+	return "/rpc/agent.listPendingAccessRequests"
 }

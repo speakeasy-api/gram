@@ -8,13 +8,13 @@
 package types
 
 type AssistantMCPServerRef struct {
-	// The MCP server slug exposed to the assistant. Covers remote- and
-	// tunnelled-backed MCP servers, which have no toolset to attach.
+	// The MCP server slug exposed to the assistant. Covers every backend,
+	// including hosted (toolset-backed) servers.
 	McpServerSlug string
 	// Optional environment slug used when connecting to the MCP server.
 	EnvironmentSlug *string
-	// The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}).
-	// Populated on reads; ignored on writes. Absent when the server has no
-	// Gram-hosted endpoint.
+	// The slug of the server's Speakeasy-hosted MCP endpoint
+	// (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when
+	// the server has no Speakeasy-hosted endpoint.
 	EndpointSlug *string
 }

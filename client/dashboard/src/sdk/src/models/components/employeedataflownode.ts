@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const ServerClass = {
 /**
  * Server classification, present for MCP server nodes
  */
-export type ServerClass = ClosedEnum<typeof ServerClass>;
+export type ServerClass = OpenEnum<typeof ServerClass>;
 
 /**
  * Graph tier. Origin nodes identify the hostname or client context that started the call, not the MCP server URL.
@@ -34,7 +35,7 @@ export const EmployeeDataFlowNodeTier = {
 /**
  * Graph tier. Origin nodes identify the hostname or client context that started the call, not the MCP server URL.
  */
-export type EmployeeDataFlowNodeTier = ClosedEnum<
+export type EmployeeDataFlowNodeTier = OpenEnum<
   typeof EmployeeDataFlowNodeTier
 >;
 
@@ -65,13 +66,14 @@ export type EmployeeDataFlowNode = {
 };
 
 /** @internal */
-export const ServerClass$inboundSchema: z.ZodMiniEnum<typeof ServerClass> = z
-  .enum(ServerClass);
+export const ServerClass$inboundSchema: z.ZodMiniType<ServerClass, unknown> =
+  openEnums.inboundSchema(ServerClass);
 
 /** @internal */
-export const EmployeeDataFlowNodeTier$inboundSchema: z.ZodMiniEnum<
-  typeof EmployeeDataFlowNodeTier
-> = z.enum(EmployeeDataFlowNodeTier);
+export const EmployeeDataFlowNodeTier$inboundSchema: z.ZodMiniType<
+  EmployeeDataFlowNodeTier,
+  unknown
+> = openEnums.inboundSchema(EmployeeDataFlowNodeTier);
 
 /** @internal */
 export const EmployeeDataFlowNode$inboundSchema: z.ZodMiniType<

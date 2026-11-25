@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"syscall"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
@@ -28,6 +30,10 @@ type Resolver struct {
 	logger  *slog.Logger
 	metrics *metrics
 }
+
+// ErrKeySetUnavailable marks a transient upstream failure for consumers that
+// explicitly permit a bounded stale-key fallback.
+var ErrKeySetUnavailable = errors.New("key set endpoint temporarily unavailable")
 
 // NewResolver builds the production resolver from a guardian policy, whose
 // SSRF dialer checks the post-DNS resolved IP on every connection (immune to
@@ -225,6 +231,9 @@ func (r *Resolver) resolveRemote(ctx context.Context, source Source, cache Cache
 			responseBytes: 0,
 			err:           err,
 		})
+		if transientFetchError(ctx, fetched.status, err) {
+			return nil, fmt.Errorf("fetch key set: %w: %w", ErrKeySetUnavailable, err)
+		}
 		return nil, fmt.Errorf("fetch key set: %w", err)
 	}
 
@@ -299,6 +308,31 @@ func (r *Resolver) resolveRemote(ctx context.Context, source Source, cache Cache
 	}, nil
 }
 
+// transientFetchError is deliberately narrow: a guardian policy denial or
+// certificate failure must not let callers accept stale issuer keys.
+func transientFetchError(ctx context.Context, status int, err error) bool {
+	if status == http.StatusTooManyRequests || status == http.StatusInternalServerError ||
+		status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout {
+		return true
+	}
+	// A 200 can still fail while reading the response body. Treat its
+	// transport error like one that happened before response headers.
+	if (status != 0 && status != http.StatusOK) || ctx.Err() != nil ||
+		errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+		return true
+	}
+	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.ECONNABORTED) || errors.Is(err, syscall.EHOSTUNREACH) ||
+		errors.Is(err, syscall.ENETUNREACH) || errors.Is(err, syscall.ETIMEDOUT)
+}
+
 func (r *Resolver) cacheTTL(header http.Header) time.Duration {
 	policy := httpcache.FreshnessPolicy{
 		Default: defaultCacheTTL,
@@ -306,6 +340,13 @@ func (r *Resolver) cacheTTL(header http.Header) time.Duration {
 		Max:     maxCacheTTL,
 	}
 	return policy.TTL(header, time.Now())
+}
+
+// keySetHTTPError retains only an HTTP status, safe for a persisted summary.
+type keySetHTTPError struct{ status int }
+
+func (e *keySetHTTPError) Error() string {
+	return fmt.Sprintf("key set endpoint returned status %d", e.status)
 }
 
 // fetchedKeySet is one HTTP exchange with a key set host.
@@ -349,7 +390,13 @@ func (r *Resolver) fetchKeySet(ctx context.Context, source Source, etag string) 
 		req.Header.Set("If-None-Match", etag)
 	}
 
-	resp, err := r.client.Do(req)
+	// A source may carry its own transport (a tunnel into a customer network,
+	// say); the resolver's direct-egress client is the default.
+	var doer Doer = r.client
+	if source.doer != nil {
+		doer = source.doer
+	}
+	resp, err := doer.Do(req)
 	if err != nil {
 		return fetchedKeySet{body: nil, status: 0, notModified: false, header: nil}, fmt.Errorf("request key set: %w", err)
 	}
@@ -360,7 +407,7 @@ func (r *Resolver) fetchKeySet(ctx context.Context, source Source, etag string) 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fetchedKeySet{body: nil, status: resp.StatusCode, notModified: false, header: resp.Header}, fmt.Errorf("key set endpoint returned status %d", resp.StatusCode)
+		return fetchedKeySet{body: nil, status: resp.StatusCode, notModified: false, header: resp.Header}, &keySetHTTPError{status: resp.StatusCode}
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(nil, resp.Body, maxKeySetBytes))

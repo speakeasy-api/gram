@@ -13,13 +13,17 @@
 # pre-merge = "npm test"
 
 # Blocking: copies mise.local.toml/local/ from the main worktree, installs deps,
-# and remaps ports — everything else in the worktree depends on this.
+# remaps ports, and registers Platform MCP for OpenCode and Claude Code —
+# everything else in the worktree depends on this.
 [[pre-start]]
 workinit = "mise run git:workinit"
 
 # Background: brings the worktree's stack up on the ports workinit just
 # assigned — compose infra, migrations, dev-idp, the pitchfork daemons, then
-# seed. Non-blocking, so worktree creation returns without waiting on it;
+# seed — and then PAUSES it (`mise run pause`): daemons stopped, containers
+# stopped but not removed. A worktree is therefore handed over complete but
+# idle; `mise run wake` restarts it in seconds when you (or your agent) want
+# it. Non-blocking, so worktree creation returns without waiting on it;
 # `wt config state logs` has the output. The task also publishes a pid marker
 # while it runs, which is what lets `wt status` say "booting" rather than
 # "down". Keep the hook key `stack` — the log file is named after it.
@@ -31,10 +35,15 @@ workinit = "mise run git:workinit"
 [post-start]
 stack = "mise run git:workboot"
 
+# Remove Claude's external, project-local MCP registration before deletion.
+# OpenCode's ignored config is deleted along with the worktree.
+[[pre-remove]]
+mcp = "mise run git:workmcp --remove || echo 'Warning: MCP cleanup failed' >&2"
+
 # Runs inside the worktree before deletion — nuke needs this worktree's
 # COMPOSE_PROJECT_NAME (mise.local.toml) and local/ dir to tear down the right
 # compose stack. post-remove would run in the primary worktree instead.
-# --keep-shared leaves the shared Presidio stack up for the other worktrees.
+# --keep-shared leaves the shared containers up for the other worktrees.
 [[pre-remove]]
 nuke = "mise run nuke --keep-shared"
 

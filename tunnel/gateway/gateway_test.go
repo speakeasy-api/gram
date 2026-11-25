@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/hashicorp/yamux"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -21,7 +23,7 @@ import (
 func TestPublicHandlerDoesNotForward(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
@@ -36,13 +38,21 @@ func newForwardTestGateway(t *testing.T, cfg Config) *Gateway {
 	t.Helper()
 	gw, err := New(cfg, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		drainCtx, cancelDrain := context.WithTimeout(context.Background(), time.Second)
+		gw.Drain(drainCtx)
+		cancelDrain()
+		closeSessionsCtx, cancelCloseSessions := context.WithTimeout(context.Background(), time.Second)
+		gw.CloseSessions(closeSessionsCtx)
+		cancelCloseSessions()
+	})
 	return gw
 }
 
 func TestNewRejectsMissingForwardToken(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(Config{}, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	_, err := New(Config{AuthzPublicKeys: ""}, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	require.ErrorIs(t, err, errMissingForwardToken)
 }
@@ -50,7 +60,7 @@ func TestNewRejectsMissingForwardToken(t *testing.T) {
 func TestForwardHandlerRejectsMissingOrWrongToken(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
 
 	for _, token := range []string{"", "wrong"} {
 		rec := httptest.NewRecorder()
@@ -63,13 +73,15 @@ func TestForwardHandlerRejectsMissingOrWrongToken(t *testing.T) {
 		gw.ForwardHandler().ServeHTTP(rec, req)
 
 		require.Equal(t, http.StatusForbidden, rec.Code)
+		require.Equal(t, wire.TunnelErrorForwardRejected, rec.Header().Get(wire.HeaderTunnelError))
+		require.Equal(t, "forbidden\n", rec.Body.String())
 	}
 }
 
 func TestForwardHandlerAcceptsValidTokenAndStripsIt(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
@@ -84,16 +96,19 @@ func TestForwardHandlerAcceptsValidTokenAndStripsIt(t *testing.T) {
 	require.Empty(t, req.Header.Get(wire.HeaderTunnelForwardToken))
 }
 
+func TestStripUpstreamTunnelError(t *testing.T) {
+	t.Parallel()
+
+	resp := &http.Response{Header: http.Header{wire.HeaderTunnelError: []string{wire.TunnelErrorNoLiveSession}}}
+	require.NoError(t, stripUpstreamTunnelError(resp))
+	require.Empty(t, resp.Header.Get(wire.HeaderTunnelError))
+}
+
 func TestForwardHandlerRejectsMissingForwardTokenConfig(t *testing.T) {
 	t.Parallel()
 
-	gw := &Gateway{
-		cfg:    Config{},
-		keys:   NewStaticKeyStore(map[string]string{}),
-		routes: route.NewRouteTable(),
-		reg:    newRegistry(),
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "configured"})
+	gw.cfg.ForwardToken = ""
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
@@ -102,6 +117,8 @@ func TestForwardHandlerRejectsMissingForwardTokenConfig(t *testing.T) {
 	gw.ForwardHandler().ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Equal(t, wire.TunnelErrorForwardRejected, rec.Header().Get(wire.HeaderTunnelError))
+	require.Equal(t, "forbidden\n", rec.Body.String())
 }
 
 func TestParseServiceMetadata(t *testing.T) {
@@ -126,8 +143,8 @@ func TestRegistryBeginForwardRoundRobinsWithoutConsumerSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
 	sessionB := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
-	removeB := reg.add("tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	removeA := reg.add("tunnel-1", "session-a", "", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := reg.add("tunnel-1", "session-b", "", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 	t.Cleanup(removeB)
 
@@ -143,8 +160,8 @@ func TestRegistryBeginForwardSticksStableConsumerSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
 	sessionB := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
-	removeB := reg.add("tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	removeA := reg.add("tunnel-1", "session-a", "", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := reg.add("tunnel-1", "session-b", "", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 	t.Cleanup(removeB)
 
@@ -161,8 +178,8 @@ func TestRegistryBeginForwardUsesNextRankedEligibleSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
 	sessionB := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
-	removeB := reg.add("tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	removeA := reg.add("tunnel-1", "session-a", "", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := reg.add("tunnel-1", "session-b", "", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 	t.Cleanup(removeB)
 
@@ -185,7 +202,7 @@ func TestRegistryBeginForwardDistinguishesBusyFromNoSession(t *testing.T) {
 	require.Equal(t, forwardNoSession, failure)
 
 	session := newYamuxSession(t)
-	remove := reg.add("tunnel-1", "session-a", session, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	remove := reg.add("tunnel-1", "session-a", "", session, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(remove)
 
 	entry, failure := reg.beginForward("tunnel-1", "", "", time.Now().UTC(), 1)
@@ -202,9 +219,9 @@ func TestRegistryBeginForwardDistinguishesBusyFromNoSession(t *testing.T) {
 func TestForwardHandlerReportsTunnelBusyAtCap(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret", MaxStreamsPerTunnel: 1})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret", MaxStreamsPerTunnel: 1})
 	session := newYamuxSession(t)
-	remove := gw.reg.add("tunnel-1", "session-a", session, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	remove := gw.reg.add("tunnel-1", "session-a", "", session, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(remove)
 
 	// Occupy the single substream slot so the next forward hits the cap.
@@ -220,71 +237,7 @@ func TestForwardHandlerReportsTunnelBusyAtCap(t *testing.T) {
 
 	require.Equal(t, http.StatusBadGateway, rec.Code)
 	require.Equal(t, wire.TunnelErrorTunnelBusy, rec.Header().Get("X-Gram-Tunnel-Error"))
-}
-
-// unpublishHookStore wraps a route.Store and runs a hook just before the
-// underlying Unpublish executes — used to interleave a concurrent connect at
-// the worst possible moment of the disconnect cleanup.
-type unpublishHookStore struct {
-	route.Store
-	beforeUnpublish func()
-}
-
-func (s *unpublishHookStore) Unpublish(ctx context.Context, tunnelID, addr string) error {
-	if s.beforeUnpublish != nil {
-		s.beforeUnpublish()
-	}
-	return s.Store.Unpublish(ctx, tunnelID, addr)
-}
-
-// TestCleanupSessionStateHealsReconnectRace reproduces the disconnect/connect
-// race: session A's cleanup reads count==0, a replacement session B registers
-// (its Publish already happened), then A's Unpublish deletes B's fresh route.
-// The cleanup must detect the survivor and republish.
-func TestCleanupSessionStateHealsReconnectRace(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	table := route.NewRouteTable()
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret", AdvertiseAddr: "gw-1:8091"})
-
-	hooked := &unpublishHookStore{Store: table, beforeUnpublish: nil}
-	gw.routes = hooked
-
-	// Replacement session B "connected" earlier in the race: its Publish has
-	// already landed; its registry add slips in during A's cleanup below.
-	require.NoError(t, table.Publish(ctx, "tunnel-1", "gw-1:8091", time.Minute))
-	sessionB := newYamuxSession(t)
-	hooked.beforeUnpublish = func() {
-		remove := gw.reg.add("tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
-		t.Cleanup(remove)
-	}
-
-	// Session A already removed itself from the registry; count reads 0.
-	gw.cleanupSessionState("tunnel-1")
-
-	candidates, err := table.Candidates(ctx, "tunnel-1")
-	require.NoError(t, err)
-	require.Equal(t, []string{"gw-1:8091"}, candidates, "route for the live replacement session must survive the stale cleanup")
-}
-
-// TestCleanupSessionStateRemovesRouteWhenLastSessionCloses covers the normal
-// path: no survivors, route and snapshot removed.
-func TestCleanupSessionStateRemovesRouteWhenLastSessionCloses(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	table := route.NewRouteTable()
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret", AdvertiseAddr: "gw-1:8091"})
-	gw.routes = table
-
-	require.NoError(t, table.Publish(ctx, "tunnel-1", "gw-1:8091", time.Minute))
-
-	gw.cleanupSessionState("tunnel-1")
-
-	candidates, err := table.Candidates(ctx, "tunnel-1")
-	require.NoError(t, err)
-	require.Empty(t, candidates)
+	require.Equal(t, "MCP server is temporarily unavailable\n", rec.Body.String())
 }
 
 // recordingKeyStore wraps StaticKeyStore with a MarkConnected spy.
@@ -306,8 +259,13 @@ func TestConnectProbeDoesNotMarkConnected(t *testing.T) {
 	t.Parallel()
 
 	keys := &recordingKeyStore{StaticKeyStore: NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_testkey"}), markConnectedCalls: 0}
-	gw, err := New(Config{ForwardToken: "s3cret"}, keys, route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	gw, err := New(Config{AuthzPublicKeys: "", ForwardToken: "s3cret"}, keys, route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		gw.Drain(ctx)
+	})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/connect", nil)
@@ -339,8 +297,8 @@ func TestRegistryBeginForwardExactSessionHitsOnlyThatSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
 	sessionB := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
-	removeB := reg.add("tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	removeA := reg.add("tunnel-1", "session-a", "", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := reg.add("tunnel-1", "session-b", "", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 	t.Cleanup(removeB)
 
@@ -356,7 +314,7 @@ func TestRegistryBeginForwardExactSessionHitsOnlyThatSession(t *testing.T) {
 func TestRegistryBeginForwardExactSessionMissingIsNoSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeA := reg.add("tunnel-1", "session-a", "", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 
 	_, failure := reg.beginForward("tunnel-1", "", "session-gone", time.Now().UTC(), 0)
@@ -368,7 +326,7 @@ func TestRegistryBeginForwardExactSessionMissingIsNoSession(t *testing.T) {
 func TestRegistryBeginForwardExactSessionAtCapIsBusy(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeA := reg.add("tunnel-1", "session-a", "", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 
 	entry, failure := reg.beginForward("tunnel-1", "", "session-a", time.Now().UTC(), 1)
@@ -384,21 +342,27 @@ func TestRegistryBeginForwardExactSessionAtCapIsBusy(t *testing.T) {
 func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
+	keys := NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_active"})
+	gw.keys = keys
 	session := newYamuxSession(t)
 	var forwarded http.Header
 	captureProxy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		forwarded = r.Header.Clone()
 		w.WriteHeader(http.StatusOK)
 	})
-	remove := gw.reg.add("tunnel-1", "session-a", session, captureProxy, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	remove := gw.reg.add("tunnel-1", "session-a", wire.HashKey("gram_tunnel_active"), session, captureProxy, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(remove)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0"}`))
 	req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
 	req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
+	req.Header.Set(wire.HeaderTunnelRequireActive, "1")
 	req.Header.Set(wire.HeaderTunnelAgentSession, "session-a")
+	for _, header := range []string{wire.HeaderControlToken, wire.HeaderCapabilities, wire.HeaderTargetDisplay} {
+		req.Header.Set(header, "private")
+	}
 
 	gw.ForwardHandler().ServeHTTP(rec, req)
 
@@ -407,4 +371,220 @@ func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelAgentSession))
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelID))
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelForwardToken))
+	require.Empty(t, forwarded.Get(wire.HeaderTunnelRequireActive))
+	for _, header := range []string{wire.HeaderControlToken, wire.HeaderCapabilities, wire.HeaderTargetDisplay} {
+		require.Empty(t, forwarded.Get(header))
+	}
+}
+
+func TestForwardHandlerRejectsSensitiveRequestAfterTunnelRevocation(t *testing.T) {
+	t.Parallel()
+
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
+	keys := NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_revoked"})
+	gw.keys = keys
+	session := newYamuxSession(t)
+	forwarded := false
+	captureProxy := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forwarded = true
+		w.WriteHeader(http.StatusOK)
+	})
+	remove := gw.reg.add("tunnel-1", "session-a", wire.HashKey("gram_tunnel_revoked"), session, captureProxy, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	t.Cleanup(remove)
+	keys.Revoke("tunnel-1")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader("grant_type=authorization_code"))
+	req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+	req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
+	req.Header.Set(wire.HeaderTunnelRequireActive, "1")
+
+	gw.ForwardHandler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.Equal(t, wire.TunnelErrorNoLiveSession, rec.Header().Get(wire.HeaderTunnelError))
+	require.False(t, forwarded)
+}
+
+func TestForwardHandlerSkipsRotatedKeySessionForSensitiveRequest(t *testing.T) {
+	t.Parallel()
+
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
+	keys := NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_current"})
+	gw.keys = keys
+	staleSession := newYamuxSession(t)
+	activeSession := newYamuxSession(t)
+	removeStale := gw.reg.add("tunnel-1", "session-stale", wire.HashKey("gram_tunnel_old"), staleSession, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-stale", Metadata: map[string]string{}})
+	t.Cleanup(removeStale)
+	forwarded := false
+	activeProxy := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forwarded = true
+		w.WriteHeader(http.StatusOK)
+	})
+	removeActive := gw.reg.add("tunnel-1", "session-active", wire.HashKey("gram_tunnel_current"), activeSession, activeProxy, route.Connection{GatewaySessionID: "session-active", Metadata: map[string]string{}})
+	t.Cleanup(removeActive)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader("grant_type=authorization_code"))
+	req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+	req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
+	req.Header.Set(wire.HeaderTunnelRequireActive, "1")
+
+	gw.ForwardHandler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.True(t, forwarded)
+	require.Equal(t, "session-active", rec.Header().Get(wire.HeaderTunnelAgentSession))
+}
+
+func TestRegistryAddRejectsAfterDrainBegins(t *testing.T) {
+	t.Parallel()
+
+	reg := newRegistry()
+	reg.beginDrain()
+	session := newYamuxSession(t)
+
+	remove := reg.add("tunnel-1", "session-a", "key-hash", session, http.NotFoundHandler(), route.Connection{
+		GatewaySessionID: "session-a",
+		Metadata:         map[string]string{},
+	})
+
+	require.Nil(t, remove)
+	require.True(t, session.IsClosed())
+	require.Zero(t, reg.activeSessions())
+}
+
+func TestForwardHandlerRejectsDiagnosticControlPaths(t *testing.T) {
+	t.Parallel()
+	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	for _, path := range []string{wire.ControlStatusPath, wire.ControlPathPrefix + "other"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
+		req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+		rec := httptest.NewRecorder()
+		gw.ForwardHandler().ServeHTTP(rec, req)
+		require.Equal(t, http.StatusNotFound, rec.Code)
+	}
+}
+
+// connectAgent dials the gateway's /connect endpoint with the given headers and
+// holds the agent end of the yamux session without accepting substreams, so the
+// gateway's hello and diagnostics polls stay outstanding and the connection
+// keeps the diagnostics state it was registered with.
+func connectAgent(t *testing.T, gatewayURL, key string, header http.Header) {
+	t.Helper()
+
+	header.Set("Authorization", "Bearer "+key)
+	header.Set(wire.HeaderTunnelServiceVersion, "1.0.0")
+	ws, _, err := websocket.Dial(t.Context(), gatewayURL, &websocket.DialOptions{HTTPHeader: header})
+	require.NoError(t, err)
+
+	ycfg := yamux.DefaultConfig()
+	ycfg.LogOutput = io.Discard
+	session, err := yamux.Server(websocket.NetConn(t.Context(), ws, websocket.MessageBinary), ycfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+}
+
+func TestConnectRecordsAgentDiagnosticsState(t *testing.T) {
+	t.Parallel()
+
+	controlToken := strings.Repeat("ab", 32)
+	tests := []struct {
+		name              string
+		header            http.Header
+		wantState         string
+		wantTargetDisplay string
+		wantPoll          bool
+	}{
+		{
+			name: "diagnostics agent",
+			header: http.Header{
+				wire.HeaderCapabilities:  {wire.DiagnosticsCapability},
+				wire.HeaderControlToken:  {controlToken},
+				wire.HeaderTargetDisplay: {"https://mcp.internal:8443"},
+			},
+			wantState:         "pending",
+			wantTargetDisplay: "https://mcp.internal:8443",
+			wantPoll:          true,
+		},
+		{
+			name: "agent with diagnostics turned off",
+			header: http.Header{
+				wire.HeaderCapabilities: {wire.DiagnosticsDisabledCapability},
+			},
+			wantState:         "disabled",
+			wantTargetDisplay: "",
+			wantPoll:          false,
+		},
+		{
+			name:              "agent that predates diagnostics",
+			header:            http.Header{},
+			wantState:         "unsupported",
+			wantTargetDisplay: "",
+			wantPoll:          false,
+		},
+		{
+			name: "target path from an older agent is dropped",
+			header: http.Header{
+				wire.HeaderCapabilities:  {wire.DiagnosticsCapability},
+				wire.HeaderControlToken:  {controlToken},
+				wire.HeaderTargetDisplay: {"https://mcp.internal:8443/mcp/secret-token"},
+			},
+			wantState:         "pending",
+			wantTargetDisplay: "https://mcp.internal:8443",
+			wantPoll:          true,
+		},
+		{
+			name: "diagnostics capability without a valid control token",
+			header: http.Header{
+				wire.HeaderCapabilities:  {wire.DiagnosticsCapability},
+				wire.HeaderControlToken:  {"not-a-control-token"},
+				wire.HeaderTargetDisplay: {"https://mcp.internal:8443"},
+			},
+			wantState:         "unsupported",
+			wantTargetDisplay: "",
+			wantPoll:          false,
+		},
+		{
+			name: "agent with diagnostics turned off cannot supply a target",
+			header: http.Header{
+				wire.HeaderCapabilities:  {wire.DiagnosticsDisabledCapability},
+				wire.HeaderTargetDisplay: {"https://mcp.internal:8443"},
+			},
+			wantState:         "disabled",
+			wantTargetDisplay: "",
+			wantPoll:          false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			const tunnelID = "tunnel-1"
+			const key = "gram_tunnel_testkey"
+			gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+			keys, ok := gw.keys.(*StaticKeyStore)
+			require.True(t, ok)
+			keys.Add(tunnelID, key)
+			server := httptest.NewServer(gw.PublicHandler())
+			t.Cleanup(server.Close)
+
+			connectAgent(t, "ws"+strings.TrimPrefix(server.URL, "http")+"/connect", key, tc.header.Clone())
+
+			var connection route.Connection
+			require.EventuallyWithT(t, func(c *assert.CollectT) {
+				connections := gw.reg.connections(tunnelID, time.Now())
+				if assert.Len(c, connections, 1) {
+					connection = connections[0]
+				}
+			}, 5*time.Second, 10*time.Millisecond)
+			require.NotNil(t, connection.Diagnostics)
+			require.Equal(t, tc.wantState, connection.Diagnostics.State)
+			require.Equal(t, tc.wantTargetDisplay, connection.TargetDisplay)
+
+			_, _, poll := agentDiagnostics(tc.header)
+			require.Equal(t, tc.wantPoll, poll)
+		})
+	}
 }

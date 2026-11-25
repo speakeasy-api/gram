@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { getActionCategory, getActionColorConfig } from "./audit-log-colors";
 
@@ -34,6 +35,7 @@ describe("getActionCategory", () => {
       "destructive",
     );
     expect(getActionCategory("api_key:revoke")).toBe("destructive");
+    expect(getActionCategory("skill:unlink")).toBe("destructive");
     expect(getActionCategory("organization:enterprise_trial_demoted")).toBe(
       "destructive",
     );

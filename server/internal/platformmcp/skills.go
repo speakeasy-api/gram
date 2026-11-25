@@ -1,4 +1,4 @@
-//nolint:exhaustruct,wrapcheck // Zero-value summaries are the documented "absent" signal, and a skills-service refusal is returned unwrapped so its typed code survives the trip to the tool result.
+//nolint:exhaustruct_v5,wrapcheck // Zero-value summaries are the documented "absent" signal, and a skills-service refusal is returned unwrapped so its typed code survives the trip to the tool result.
 package platformmcp
 
 import (
@@ -7,21 +7,29 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	genskills "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // maxSkillContentBytes mirrors the skills service's own manifest ceiling. It is
 // checked here as well so an oversized manifest is refused before it is copied
 // into a payload and shipped across the process, rather than after.
 const maxSkillContentBytes = 64 << 10
+
+// maxSkillIdempotencyKeyLength is the ceiling the other Platform MCP mutations
+// hold their caller-generated idempotency keys to.
+const maxSkillIdempotencyKeyLength = 128
 
 // maxSkillTargetCandidates bounds the distribution targets named back to the
 // caller. Naming every plugin and assistant in a large project would spend the
@@ -63,7 +71,16 @@ type SkillsManagement interface {
 	Get(context.Context, *genskills.GetPayload) (*genskills.GetSkillResult, error)
 	ListDistributions(context.Context, *genskills.ListDistributionsPayload) (*genskills.ListSkillDistributionsResult, error)
 	ListVersions(context.Context, *genskills.ListVersionsPayload) (*genskills.ListSkillVersionsResult, error)
+	ListFeedback(context.Context, *genskills.ListFeedbackPayload) (*genskills.ListSkillFeedbackResult, error)
+	ListSuggestions(context.Context, *genskills.ListSuggestionsPayload) (*genskills.ListSkillSuggestionsResult, error)
+	ListSuggestionFeedback(context.Context, *genskills.ListSuggestionFeedbackPayload) (*genskills.ListSkillSuggestionFeedbackResult, error)
+	ApproveSuggestion(context.Context, *genskills.ApproveSuggestionPayload) (*genskills.ApproveSkillSuggestionResult, error)
+	DismissSuggestion(context.Context, *genskills.DismissSuggestionPayload) (*types.SkillEditSuggestion, error)
 	Distribute(context.Context, *genskills.DistributePayload) (*types.SkillDistribution, error)
+	Undistribute(context.Context, *genskills.UndistributePayload) error
+	Link(context.Context, *genskills.LinkPayload) (*types.SkillLink, error)
+	Unlink(context.Context, *genskills.UnlinkPayload) error
+	ListLinks(context.Context, *genskills.ListLinksPayload) (*genskills.ListSkillLinksResult, error)
 }
 
 // SkillTargetInventory names the plugins and assistants a skill may be
@@ -78,13 +95,19 @@ type SkillTargetInventory interface {
 	SkillTargets(ctx context.Context, organizationID string, projectID uuid.UUID, limitPerKind int) ([]SkillTarget, error)
 }
 
-// GrantPreparer loads the acting user's RBAC grants onto the context.
+// SkillAuthorizer loads the acting user's RBAC grants onto the context and
+// evaluates skill checks against them.
 //
 // Platform MCP does not travel the session middleware that prepares grants for
 // dashboard requests, so it prepares them itself. Without this the skills
-// service's scope checks would find no grants and refuse every call.
-type GrantPreparer interface {
+// service's scope checks would find no grants and refuse every call. The check
+// is here for the one read that names a plugin before it reaches the skills
+// service: authorization has to come before target resolution, or an ungranted
+// caller could tell an existing plugin from a missing one by which refusal it
+// got back.
+type SkillAuthorizer interface {
 	PrepareContext(ctx context.Context) (context.Context, error)
+	RequireAnyUnblocked(ctx context.Context, checks ...authz.Check) error
 }
 
 // SkillProjectResolver turns the project slug a caller names into the project
@@ -125,13 +148,24 @@ type SkillSummary struct {
 	VersionCount    int64    `json:"version_count"`
 	HasValidVersion bool     `json:"has_valid_version"`
 	UpdatedAt       string   `json:"updated_at"`
+	// LastLoadedOverMcpAt is when an agent last loaded the skill over a hosted
+	// MCP server. Absent when it never has, or when the response was built
+	// from a skill write that does not compute it.
+	LastLoadedOverMcpAt *string `json:"last_loaded_over_mcp_at,omitempty" jsonschema:"RFC 3339 time an agent last read this skill over a hosted MCP server; absent when never loaded over MCP, and on results of skill writes, which do not compute it"`
 }
 
 // SkillVersionSummary is one immutable version. Content appears only when the
 // caller opted in.
 type SkillVersionSummary struct {
-	ID               string   `json:"id"`
-	CanonicalSHA256  string   `json:"canonical_sha256"`
+	ID              string `json:"id"`
+	CanonicalSHA256 string `json:"canonical_sha256"`
+	// ServedDigest is the digest an agent sees for this version when a hosted
+	// MCP server serves it: the SHA-256 of the exact SKILL.md bytes as
+	// "sha256:<hex>". Only valid versions are ever served, so it is absent on
+	// an invalid one. Servers also skip a version whose frontmatter name is not
+	// the skill's current name (after a rename, say), so its presence does not
+	// prove the version is served; it identifies the bytes when it is.
+	ServedDigest     string   `json:"served_digest,omitempty" jsonschema:"digest agents see for this version when a hosted MCP server serves it, as sha256:<hex> of the exact SKILL.md bytes; match it against agent logs to tell which version an agent read; absent on invalid versions, which are never served; a version whose frontmatter name differs from the skill's current name (for example after a rename) is not served either, so a digest here does not by itself mean the version is served"`
 	SpecValid        bool     `json:"spec_valid"`
 	ValidationErrors []string `json:"validation_errors,omitempty"`
 	CreatedAt        string   `json:"created_at"`
@@ -163,19 +197,37 @@ type SkillsService struct {
 	skills   SkillsManagement
 	targets  SkillTargetInventory
 	projects SkillProjectResolver
-	grants   GrantPreparer
-	gate     CatalogRegistrationGateChecker
-	budget   OperationBudget
+
+	// mcpTargets resolves the MCP servers and gateways a skill is linked to.
+	// It is taken from targets when that inventory also lists them; without
+	// it the link tools refuse as unavailable.
+	mcpTargets SkillMCPTargetInventory
+
+	grants SkillAuthorizer
+	gate   CatalogRegistrationGateChecker
+	budget OperationBudget
+
+	// insights and insightsBudget back the skill insight tools. Both are attached by
+	// WithInsights; a nil reader keeps those tools registered as stubs.
+	insights       SkillInsightsReader
+	insightsBudget OperationBudget
+
+	now func() time.Time
 }
 
-func NewSkillsService(skills SkillsManagement, targets SkillTargetInventory, projects SkillProjectResolver, grants GrantPreparer, gate CatalogRegistrationGateChecker, budget OperationBudget) *SkillsService {
+func NewSkillsService(skills SkillsManagement, targets SkillTargetInventory, projects SkillProjectResolver, grants SkillAuthorizer, gate CatalogRegistrationGateChecker, budget OperationBudget) *SkillsService {
+	mcpTargets, _ := targets.(SkillMCPTargetInventory)
 	return &SkillsService{
-		skills:   skills,
-		targets:  targets,
-		projects: projects,
-		grants:   grants,
-		gate:     gate,
-		budget:   budget,
+		skills:         skills,
+		targets:        targets,
+		projects:       projects,
+		mcpTargets:     mcpTargets,
+		grants:         grants,
+		gate:           gate,
+		budget:         budget,
+		insights:       nil,
+		insightsBudget: OperationBudget{Connection: nil, Organization: nil},
+		now:            time.Now,
 	}
 }
 
@@ -191,6 +243,14 @@ func (s *SkillsService) valid() bool {
 // so a caller reaches exactly the projects its own grants reach and the audit
 // row names the person, not the surface.
 func (s *SkillsService) begin(ctx context.Context, principal Principal, projectSlug string) (context.Context, ResolvedProject, error) {
+	return s.beginWith(ctx, principal, projectSlug, s.budget)
+}
+
+// beginWith is begin metered on a caller-chosen allowance. Authoring and
+// distribution share the skills budget; a read that is really a telemetry
+// aggregate is charged to the observability lane instead, so neither workflow
+// can spend the other's allowance.
+func (s *SkillsService) beginWith(ctx context.Context, principal Principal, projectSlug string, budget OperationBudget) (context.Context, ResolvedProject, error) {
 	if !s.valid() {
 		return ctx, ResolvedProject{}, ErrSkillsUnavailable
 	}
@@ -204,7 +264,7 @@ func (s *SkillsService) begin(ctx context.Context, principal Principal, projectS
 	if !enabled {
 		return ctx, ResolvedProject{}, ErrSkillsUnavailable
 	}
-	if err := s.budget.Allow(ctx, principal); err != nil {
+	if err := budget.Allow(ctx, principal); err != nil {
 		return ctx, ResolvedProject{}, err
 	}
 	project, err := s.projects.ResolveProject(ctx, principal.OrganizationID, projectSlug)
@@ -221,7 +281,7 @@ func (s *SkillsService) begin(ctx context.Context, principal Principal, projectS
 	if existing, ok := contextvalues.GetAuthContext(ctx); ok && existing != nil {
 		sessionID = existing.SessionID
 	}
-	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID:  principal.OrganizationID,
 		UserID:                principal.UserID,
 		ExternalUserID:        "",
@@ -238,10 +298,10 @@ func (s *SkillsService) begin(ctx context.Context, principal Principal, projectS
 		ProjectSlug:           &project.Slug,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
-	})
+	}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	// Grants are loaded for the acting user, so a connection reaches exactly the
-	// projects that user's own role reaches — the OAuth org-admin check at the
-	// endpoint says who may connect, not what they may write.
+	// projects that user's own role reaches. OAuth rechecks live membership;
+	// each operation's RBAC policy separately decides what the user may do.
 	ctx, err = s.grants.PrepareContext(ctx)
 	if err != nil {
 		return ctx, ResolvedProject{}, err
@@ -555,6 +615,343 @@ type DistributeSkillOutput struct {
 	Message           string      `json:"message"`
 }
 
+type SkillFeedbackSummary struct {
+	ID             string `json:"id"`
+	Source         string `json:"source"`
+	Outcome        string `json:"outcome"`
+	Note           string `json:"note,omitempty"`
+	SkillVersionID string `json:"skill_version_id,omitempty"`
+	ReviewedAt     string `json:"reviewed_at,omitempty"`
+	CreatedAt      string `json:"created_at"`
+}
+
+type SkillFeedbackCounts struct {
+	Total           int64 `json:"total"`
+	Helped          int64 `json:"helped"`
+	PartiallyHelped int64 `json:"partially_helped"`
+	DidNotHelp      int64 `json:"did_not_help"`
+	Misleading      int64 `json:"misleading"`
+	Harmful         int64 `json:"harmful"`
+}
+
+type SkillFeedbackMetrics struct {
+	WindowStart                 string `json:"window_start"`
+	WindowEnd                   string `json:"window_end"`
+	FeedbackInWindow            int64  `json:"feedback_in_window"`
+	ActivationsInWindow         int64  `json:"activations_in_window"`
+	FeedbackActivationsInWindow int64  `json:"feedback_activations_in_window"`
+	Unreviewed                  int64  `json:"unreviewed"`
+	Converted                   int64  `json:"converted"`
+}
+
+type SkillFeedbackTimelinePoint struct {
+	BucketStart   string `json:"bucket_start"`
+	FeedbackCount int64  `json:"feedback_count"`
+}
+
+type ListSkillFeedbackInput struct {
+	ProjectSlug string
+	SkillID     string
+	Cursor      string
+	Limit       int
+}
+
+type ListSkillFeedbackOutput struct {
+	ProjectSlug string                       `json:"project_slug"`
+	SkillID     string                       `json:"skill_id"`
+	Counts      SkillFeedbackCounts          `json:"counts"`
+	Metrics     SkillFeedbackMetrics         `json:"metrics"`
+	Timeline    []SkillFeedbackTimelinePoint `json:"timeline"`
+	Feedback    []SkillFeedbackSummary       `json:"feedback"`
+	NextCursor  string                       `json:"next_cursor,omitempty"`
+}
+
+type SkillSuggestionChange struct {
+	ID                   string `json:"id"`
+	ProposedDiff         string `json:"proposed_diff,omitempty"`
+	Rationale            string `json:"rationale"`
+	AppliesCleanly       bool   `json:"applies_cleanly"`
+	FeedbackCount        int64  `json:"feedback_count"`
+	FeedbackSessionCount int64  `json:"feedback_session_count"`
+	CreatedAt            string `json:"created_at"`
+}
+
+type SkillSuggestionSummary struct {
+	ID                   string                  `json:"id"`
+	SkillID              string                  `json:"skill_id"`
+	SkillName            string                  `json:"skill_name"`
+	SkillDisplayName     string                  `json:"skill_display_name"`
+	BaseVersionID        string                  `json:"base_version_id"`
+	Changes              []SkillSuggestionChange `json:"changes"`
+	ProposedContent      string                  `json:"proposed_content,omitempty"`
+	AppliesCleanly       bool                    `json:"applies_cleanly"`
+	Rationale            string                  `json:"rationale"`
+	Status               string                  `json:"status"`
+	FeedbackCount        int64                   `json:"feedback_count"`
+	FeedbackSessionCount int64                   `json:"feedback_session_count"`
+	ScoredSessionCount   int64                   `json:"scored_session_count"`
+	CreatedAt            string                  `json:"created_at"`
+	UpdatedAt            string                  `json:"updated_at"`
+}
+
+type ListSkillSuggestionsInput struct {
+	ProjectSlug            string
+	SkillID                string
+	IncludeProposedContent bool
+
+	// OmitDiffs leaves each change's proposed diff out, for triaging the queue
+	// from rationale and evidence counts before reading any change in full.
+	OmitDiffs bool
+
+	Cursor string
+	Limit  int
+}
+
+type ListSkillSuggestionsOutput struct {
+	ProjectSlug    string                   `json:"project_slug"`
+	Suggestions    []SkillSuggestionSummary `json:"suggestions"`
+	TotalOpenCount int64                    `json:"total_open_count"`
+	NextCursor     string                   `json:"next_cursor,omitempty"`
+}
+
+type ListSkillSuggestionFeedbackInput struct {
+	ProjectSlug string
+	ChangeID    string
+	Limit       int
+}
+
+type ListSkillSuggestionFeedbackOutput struct {
+	ProjectSlug string                 `json:"project_slug"`
+	ChangeID    string                 `json:"change_id"`
+	Feedback    []SkillFeedbackSummary `json:"feedback"`
+}
+
+func (s *SkillsService) ListSkillFeedback(ctx context.Context, principal Principal, input ListSkillFeedbackInput) (ListSkillFeedbackOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return ListSkillFeedbackOutput{}, err
+	}
+	if _, err := uuid.Parse(input.SkillID); err != nil {
+		return ListSkillFeedbackOutput{}, ErrRegistrationInvalid
+	}
+	result, err := s.skills.ListFeedback(ctx, &genskills.ListFeedbackPayload{ID: input.SkillID, Cursor: optionalString(strings.TrimSpace(input.Cursor)), Limit: boundedSkillInsightLimit(input.Limit), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	if err != nil {
+		return ListSkillFeedbackOutput{}, err
+	}
+	return ListSkillFeedbackOutput{ProjectSlug: project.Slug, SkillID: input.SkillID, Counts: buildSkillFeedbackCounts(result.Counts), Metrics: buildSkillFeedbackMetrics(result.Metrics), Timeline: buildSkillFeedbackTimeline(result.Timeline), Feedback: buildSkillFeedback(result.Feedback), NextCursor: stringOrEmpty(result.NextCursor)}, nil
+}
+
+func (s *SkillsService) ListSkillSuggestions(ctx context.Context, principal Principal, input ListSkillSuggestionsInput) (ListSkillSuggestionsOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return ListSkillSuggestionsOutput{}, err
+	}
+	if input.SkillID != "" {
+		if _, err := uuid.Parse(input.SkillID); err != nil {
+			return ListSkillSuggestionsOutput{}, ErrRegistrationInvalid
+		}
+	}
+	result, err := s.skills.ListSuggestions(ctx, &genskills.ListSuggestionsPayload{SkillID: optionalString(strings.TrimSpace(input.SkillID)), Cursor: optionalString(strings.TrimSpace(input.Cursor)), Limit: boundedSkillInsightLimit(input.Limit), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	if err != nil {
+		return ListSkillSuggestionsOutput{}, err
+	}
+	suggestions := buildSkillSuggestions(result.Suggestions, input.IncludeProposedContent)
+	if input.OmitDiffs {
+		for i := range suggestions {
+			for j := range suggestions[i].Changes {
+				suggestions[i].Changes[j].ProposedDiff = ""
+			}
+		}
+	}
+	return ListSkillSuggestionsOutput{ProjectSlug: project.Slug, Suggestions: suggestions, TotalOpenCount: result.TotalOpenCount, NextCursor: stringOrEmpty(result.NextCursor)}, nil
+}
+
+func (s *SkillsService) ListSkillSuggestionFeedback(ctx context.Context, principal Principal, input ListSkillSuggestionFeedbackInput) (ListSkillSuggestionFeedbackOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return ListSkillSuggestionFeedbackOutput{}, err
+	}
+	if _, err := uuid.Parse(input.ChangeID); err != nil {
+		return ListSkillSuggestionFeedbackOutput{}, ErrRegistrationInvalid
+	}
+	result, err := s.skills.ListSuggestionFeedback(ctx, &genskills.ListSuggestionFeedbackPayload{ID: input.ChangeID, Limit: boundedSkillInsightLimit(input.Limit), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	if err != nil {
+		return ListSkillSuggestionFeedbackOutput{}, err
+	}
+	return ListSkillSuggestionFeedbackOutput{ProjectSlug: project.Slug, ChangeID: input.ChangeID, Feedback: buildSkillFeedback(result.Feedback)}, nil
+}
+
+// SkillSuggestionOutcome is what approving a suggestion did.
+type SkillSuggestionOutcome string
+
+const (
+	// SkillSuggestionApplied recorded a new version and closed the suggestion.
+	SkillSuggestionApplied SkillSuggestionOutcome = "applied"
+
+	// SkillSuggestionPartiallyApplied recorded a new version from the named
+	// changes and left the suggestion open carrying the rest, rebased onto it.
+	SkillSuggestionPartiallyApplied SkillSuggestionOutcome = "partially_applied"
+
+	// SkillSuggestionSuperseded recorded nothing: the skill had moved past the
+	// version the suggestion was written against, so it was closed as stale.
+	SkillSuggestionSuperseded SkillSuggestionOutcome = "superseded"
+)
+
+// ApproveSkillSuggestionInput names exactly what a reviewer is taking from one
+// suggestion. Either ChangeIDs or Content is set, never both.
+type ApproveSkillSuggestionInput struct {
+	// ProjectSlug is the project that owns the suggestion.
+	ProjectSlug string
+
+	// SuggestionID is the suggestion being approved.
+	SuggestionID string
+
+	// ChangeIDs are the reviewed changes to take. Naming every change takes the
+	// whole suggestion; a change proposed after the review is never taken
+	// implicitly, because it is not in the list.
+	ChangeIDs []string
+
+	// Content is a complete edited SKILL.md recorded in place of the proposed
+	// changes, for a reviewer who corrected the suggestion before taking it.
+	Content string
+}
+
+type ApproveSkillSuggestionOutput struct {
+	ProjectSlug string                  `json:"project_slug"`
+	Outcome     SkillSuggestionOutcome  `json:"outcome"`
+	Skill       SkillSummary            `json:"skill"`
+	Version     *SkillVersionSummary    `json:"version,omitempty"`
+	Remaining   *SkillSuggestionSummary `json:"remaining_suggestion,omitempty"`
+	NextAction  string                  `json:"next_action"`
+}
+
+// ApproveSkillSuggestion records a new skill version from a reviewed
+// suggestion through the same service path the dashboard uses, so the stale
+// check, version recording, suggestion state change, and audit event happen
+// in one transaction. The skill is read back afterwards so the result reports
+// the committed latest version rather than echoing the request.
+func (s *SkillsService) ApproveSkillSuggestion(ctx context.Context, principal Principal, input ApproveSkillSuggestionInput) (ApproveSkillSuggestionOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return ApproveSkillSuggestionOutput{}, err
+	}
+	if _, err := uuid.Parse(input.SuggestionID); err != nil {
+		return ApproveSkillSuggestionOutput{}, ErrRegistrationInvalid
+	}
+	hasContent := strings.TrimSpace(input.Content) != ""
+	if (len(input.ChangeIDs) > 0) == hasContent {
+		return ApproveSkillSuggestionOutput{}, ErrRegistrationInvalid
+	}
+	for _, id := range input.ChangeIDs {
+		if _, err := uuid.Parse(id); err != nil {
+			return ApproveSkillSuggestionOutput{}, ErrRegistrationInvalid
+		}
+	}
+	payload := &genskills.ApproveSuggestionPayload{
+		ID:               input.SuggestionID,
+		Content:          nil,
+		ChangeIds:        input.ChangeIDs,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	}
+	if hasContent {
+		if err := checkSkillContent(input.Content); err != nil {
+			return ApproveSkillSuggestionOutput{}, err
+		}
+		payload.Content = &input.Content
+		payload.ChangeIds = nil
+	}
+	result, err := s.skills.ApproveSuggestion(ctx, payload)
+	if err != nil {
+		return ApproveSkillSuggestionOutput{}, err
+	}
+
+	output := ApproveSkillSuggestionOutput{
+		ProjectSlug: project.Slug,
+		Outcome:     SkillSuggestionOutcome(result.Outcome),
+		Skill:       SkillSummary{},
+		Version:     nil,
+		Remaining:   nil,
+		NextAction:  "",
+	}
+	if result.Version != nil {
+		version := buildSkillVersionSummary(result.Version, false)
+		output.Version = &version
+	}
+	switch output.Outcome {
+	case SkillSuggestionApplied:
+		output.NextAction = "The new version is now the skill's latest. Plugins and assistants that already carry this skill and track its latest version pick it up; nobody new receives it."
+	case SkillSuggestionPartiallyApplied:
+		if result.Suggestion != nil {
+			remaining := buildSkillSuggestions([]*types.SkillEditSuggestion{result.Suggestion}, false)
+			output.Remaining = &remaining[0]
+		}
+		output.NextAction = "The changes you named are in the new version. The rest stay proposed against it; review them with list_skill_suggestions, then approve or dismiss them."
+	case SkillSuggestionSuperseded:
+		output.NextAction = "Nothing was recorded. The skill changed after this suggestion was written, so it was closed as out of date. Read the current version with get_skill before proposing the change again."
+	}
+
+	var skillID string
+	switch {
+	case result.Suggestion != nil:
+		skillID = result.Suggestion.SkillID
+	case result.Version != nil:
+		skillID = result.Version.SkillID
+	default:
+		return ApproveSkillSuggestionOutput{}, fmt.Errorf("approve skill suggestion: result names no skill")
+	}
+	current, err := s.skills.Get(ctx, &genskills.GetPayload{
+		ID:               skillID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	if err != nil {
+		return ApproveSkillSuggestionOutput{}, err
+	}
+	output.Skill = buildSkillSummary(current.Skill)
+	return output, nil
+}
+
+type DismissSkillSuggestionInput struct {
+	// ProjectSlug is the project that owns the suggestion.
+	ProjectSlug string
+
+	// SuggestionID is the suggestion being dismissed.
+	SuggestionID string
+}
+
+type DismissSkillSuggestionOutput struct {
+	ProjectSlug string                 `json:"project_slug"`
+	Suggestion  SkillSuggestionSummary `json:"suggestion"`
+}
+
+// DismissSkillSuggestion closes a suggestion without changing the skill. The
+// skills service treats a repeat as a no-op, so a retry is safe.
+func (s *SkillsService) DismissSkillSuggestion(ctx context.Context, principal Principal, input DismissSkillSuggestionInput) (DismissSkillSuggestionOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return DismissSkillSuggestionOutput{}, err
+	}
+	if _, err := uuid.Parse(input.SuggestionID); err != nil {
+		return DismissSkillSuggestionOutput{}, ErrRegistrationInvalid
+	}
+	dismissed, err := s.skills.DismissSuggestion(ctx, &genskills.DismissSuggestionPayload{
+		ID:               input.SuggestionID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	if err != nil {
+		return DismissSkillSuggestionOutput{}, err
+	}
+	return DismissSkillSuggestionOutput{
+		ProjectSlug: project.Slug,
+		Suggestion:  buildSkillSuggestions([]*types.SkillEditSuggestion{dismissed}, false)[0],
+	}, nil
+}
+
 func (s *SkillsService) DistributeSkill(ctx context.Context, principal Principal, input DistributeSkillInput) (DistributeSkillOutput, error) {
 	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
 	if err != nil {
@@ -599,6 +996,243 @@ func (s *SkillsService) DistributeSkill(ctx context.Context, principal Principal
 		DistributionID:    distribution.ID,
 		ResolvedVersionID: distribution.ResolvedVersionID,
 		Message:           fmt.Sprintf("This skill is now part of the %s %q, so agents using it will load it.", target.Kind, target.Name),
+	}, nil
+}
+
+// ListSkillDistributionsInput narrows the listing. A plugin is named on the
+// same terms distribute_skill accepts — id, slug, or exact name — and is
+// resolved to exactly one plugin or refused, so a filter never silently
+// matches a plugin the caller did not mean.
+type ListSkillDistributionsInput struct {
+	ProjectSlug string
+	SkillID     string
+	Plugin      string
+	Cursor      string
+	Limit       int
+}
+
+// SkillDistributionSummary is one active distribution as the caller sees it:
+// which skill reaches which target, and which version it resolves to.
+type SkillDistributionSummary struct {
+	ID               string      `json:"id"`
+	SkillID          string      `json:"skill_id"`
+	SkillName        string      `json:"skill_name"`
+	SkillDisplayName string      `json:"skill_display_name"`
+	Target           SkillTarget `json:"target"`
+
+	// PinnedVersionID is set only when the distribution is held to one version.
+	PinnedVersionID string `json:"pinned_version_id,omitempty"`
+
+	// FollowsLatest is true when nothing is pinned, so the distribution moves
+	// to each newly recorded valid version on its own.
+	FollowsLatest bool `json:"follows_latest"`
+
+	// ResolvedVersionID is the version agents load right now.
+	ResolvedVersionID string `json:"resolved_version_id"`
+	CreatedAt         string `json:"created_at"`
+	UpdatedAt         string `json:"updated_at"`
+
+	// LastLoadedOverMcpAt is when an agent last read this skill over one of
+	// the project's hosted MCP servers. It is a per-skill value, so every
+	// distribution of one skill reports the same time, and it says nothing
+	// about which plugin served the read. Absent when the skill was never
+	// loaded over MCP; loads reported by coding-agent hooks do not move it.
+	LastLoadedOverMcpAt *string `json:"last_loaded_over_mcp_at,omitempty" jsonschema:"RFC 3339 time an agent last read this skill over a hosted MCP server; per skill, so every distribution of the same skill carries the same value; absent when never loaded over MCP"`
+}
+
+type ListSkillDistributionsOutput struct {
+	ProjectSlug   string                     `json:"project_slug"`
+	Distributions []SkillDistributionSummary `json:"distributions"`
+	NextCursor    string                     `json:"next_cursor,omitempty"`
+
+	// ServedBy is the MCP surfaces that serve the listed skill — or every
+	// skill in the project when none is named — over MCP, from the skill's
+	// live links. It is read on the first page only, and is empty when
+	// serving skills over MCP is off for the organization.
+	ServedBy []SkillMCPLinkSummary `json:"served_by"`
+
+	// ServedByTruncated is true when more links exist than ServedBy holds.
+	ServedByTruncated bool `json:"served_by_truncated,omitempty"`
+}
+
+// ListSkillDistributions reads the active plugin distributions in a project.
+// The skills service lists plugin-channel distributions only; whether an
+// assistant carries a skill is reported per skill by GetSkill.
+func (s *SkillsService) ListSkillDistributions(ctx context.Context, principal Principal, input ListSkillDistributionsInput) (ListSkillDistributionsOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return ListSkillDistributionsOutput{}, err
+	}
+	skillID := strings.TrimSpace(input.SkillID)
+	if skillID != "" {
+		if parsed, err := uuid.Parse(skillID); err != nil || parsed == uuid.Nil {
+			return ListSkillDistributionsOutput{}, ErrRegistrationInvalid
+		}
+	}
+	var pluginID *string
+	if strings.TrimSpace(input.Plugin) != "" {
+		// The skills service checks skill read when the listing reaches it,
+		// which is after the plugin name has been resolved. The same check runs
+		// here first, so a caller without skill read is refused the same way
+		// whether or not the plugin it named exists.
+		if err := s.requireSkillRead(ctx, project, skillID); err != nil {
+			return ListSkillDistributionsOutput{}, err
+		}
+		target, err := s.resolveTarget(ctx, principal, project, input.Plugin, "")
+		if err != nil {
+			return ListSkillDistributionsOutput{}, err
+		}
+		pluginID = &target.ID
+	}
+	result, err := s.skills.ListDistributions(ctx, &genskills.ListDistributionsPayload{
+		SkillID:          optionalString(skillID),
+		PluginID:         pluginID,
+		Cursor:           optionalString(strings.TrimSpace(input.Cursor)),
+		Limit:            boundedSkillInsightLimit(input.Limit),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	if err != nil {
+		return ListSkillDistributionsOutput{}, err
+	}
+	distributions := make([]SkillDistributionSummary, 0, len(result.Distributions))
+	for _, row := range result.Distributions {
+		if row == nil {
+			continue
+		}
+		distributions = append(distributions, SkillDistributionSummary{
+			ID:               row.ID,
+			SkillID:          row.SkillID,
+			SkillName:        row.SkillName,
+			SkillDisplayName: row.SkillDisplayName,
+			Target: SkillTarget{
+				Kind:      SkillTargetPlugin,
+				ID:        row.PluginID,
+				Name:      row.PluginName,
+				Slug:      "",
+				IsDefault: false,
+			},
+			PinnedVersionID:     stringOrEmpty(row.PinnedVersionID),
+			FollowsLatest:       row.PinnedVersionID == nil,
+			ResolvedVersionID:   row.ResolvedVersionID,
+			CreatedAt:           row.CreatedAt,
+			UpdatedAt:           row.UpdatedAt,
+			LastLoadedOverMcpAt: row.LastLoadedOverMcpAt,
+		})
+	}
+	servedBy := []SkillMCPLinkSummary{}
+	servedByTruncated := false
+	if strings.TrimSpace(input.Cursor) == "" {
+		servedBy, servedByTruncated, err = s.servedBy(ctx, skillID)
+		if err != nil {
+			return ListSkillDistributionsOutput{}, err
+		}
+	}
+	return ListSkillDistributionsOutput{
+		ProjectSlug:       project.Slug,
+		Distributions:     distributions,
+		NextCursor:        stringOrEmpty(result.NextCursor),
+		ServedBy:          servedBy,
+		ServedByTruncated: servedByTruncated,
+	}, nil
+}
+
+// requireSkillRead is the skills service's own read policy: a skill grant
+// selects either the whole project or the one skill named.
+func (s *SkillsService) requireSkillRead(ctx context.Context, project ResolvedProject, skillID string) error {
+	checks := []authz.Check{authz.Skills(authz.ProjectIDOf(project.ID)).Read()}
+	if skillID != "" {
+		checks = append(checks, authz.Skill(authz.SkillIDFrom(skillID)).Read())
+	}
+	return s.grants.RequireAnyUnblocked(ctx, checks...)
+}
+
+// UndistributeSkillInput names exactly one target on the same terms as
+// DistributeSkillInput. The idempotency key is required so a retry loop is
+// shaped like the other Platform MCP mutations; revocation itself converges,
+// so a repeat with the same key finds nothing left to revoke and reports the
+// same end state.
+type UndistributeSkillInput struct {
+	ProjectSlug    string
+	SkillID        string
+	Plugin         string
+	Assistant      string
+	IdempotencyKey string
+}
+
+// UndistributeSkillOutput is the receipt for a revocation. It mirrors
+// DistributeSkillOutput so a caller reads the same skill and target back from
+// both halves of the operation.
+type UndistributeSkillOutput struct {
+	ProjectSlug string      `json:"project_slug"`
+	SkillID     string      `json:"skill_id"`
+	SkillName   string      `json:"skill_name"`
+	Target      SkillTarget `json:"target"`
+	Message     string      `json:"message"`
+}
+
+// UndistributeSkill takes a skill back from one plugin or assistant. The
+// skills service enforces the write permission the target demands — plugin
+// write for a plugin, project write for an assistant — and treats a
+// distribution that is already gone as a no-op, so the call is safe to repeat.
+func (s *SkillsService) UndistributeSkill(ctx context.Context, principal Principal, input UndistributeSkillInput) (UndistributeSkillOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return UndistributeSkillOutput{}, err
+	}
+	if _, err := uuid.Parse(input.SkillID); err != nil {
+		return UndistributeSkillOutput{}, ErrRegistrationInvalid
+	}
+	if (strings.TrimSpace(input.Plugin) == "") == (strings.TrimSpace(input.Assistant) == "") {
+		return UndistributeSkillOutput{}, ErrRegistrationInvalid
+	}
+	key := strings.TrimSpace(input.IdempotencyKey)
+	if key == "" || len(key) > maxSkillIdempotencyKeyLength {
+		return UndistributeSkillOutput{}, ErrRegistrationInvalid
+	}
+
+	// The revocation returns no body, so the skill is read first: that names
+	// it in the receipt, refuses a skill this project does not have as
+	// not_found before anything is revoked, and — because the read is
+	// authorized by the skills service — refuses a caller without skill access
+	// before any target is resolved, so the refusal does not reveal whether
+	// the named plugin or assistant exists.
+	current, err := s.skills.Get(ctx, &genskills.GetPayload{
+		ID:               input.SkillID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	if err != nil {
+		return UndistributeSkillOutput{}, err
+	}
+	target, err := s.resolveTarget(ctx, principal, project, input.Plugin, input.Assistant)
+	if err != nil {
+		return UndistributeSkillOutput{}, err
+	}
+	payload := &genskills.UndistributePayload{
+		ID:               input.SkillID,
+		PluginID:         nil,
+		AssistantID:      nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	}
+	if target.Kind == SkillTargetPlugin {
+		payload.PluginID = &target.ID
+	} else {
+		payload.AssistantID = &target.ID
+	}
+	if err := s.skills.Undistribute(ctx, payload); err != nil {
+		return UndistributeSkillOutput{}, err
+	}
+	return UndistributeSkillOutput{
+		ProjectSlug: project.Slug,
+		SkillID:     current.Skill.ID,
+		SkillName:   current.Skill.Name,
+		Target:      target,
+		Message:     fmt.Sprintf("This skill is no longer part of the %s %q, so agents using it stop loading it. The skill and its versions are unchanged.", target.Kind, target.Name),
 	}, nil
 }
 
@@ -654,7 +1288,7 @@ func (s *SkillsService) authoringResult(ctx context.Context, principal Principal
 		CreatedSkill:        result.CreatedSkill,
 		CreatedVersion:      result.CreatedVersion,
 		Distributed:         false,
-		InertMessage:        "This skill is saved, but no agent loads it yet. Give it to a plugin or an assistant with distribute_skill for it to take effect.",
+		InertMessage:        "This skill is saved, but no agent loads it yet. Give it to a plugin or an assistant with distribute_skill, or serve it from an MCP server or gateway with link_skill_to_mcp, for it to take effect.",
 		NextAction:          "distribute_skill",
 		DistributionTargets: targets,
 	}
@@ -669,15 +1303,16 @@ func buildSkillSummary(skill *types.Skill) SkillSummary {
 		return SkillSummary{}
 	}
 	return SkillSummary{
-		ID:              skill.ID,
-		Name:            skill.Name,
-		DisplayName:     skill.DisplayName,
-		Summary:         stringOrEmpty(skill.Summary),
-		Tags:            skill.Tags,
-		LatestVersionID: stringOrEmpty(skill.LatestVersionID),
-		VersionCount:    skill.VersionCount,
-		HasValidVersion: skill.HasValidVersion,
-		UpdatedAt:       skill.UpdatedAt,
+		ID:                  skill.ID,
+		Name:                skill.Name,
+		DisplayName:         skill.DisplayName,
+		Summary:             stringOrEmpty(skill.Summary),
+		Tags:                skill.Tags,
+		LatestVersionID:     stringOrEmpty(skill.LatestVersionID),
+		VersionCount:        skill.VersionCount,
+		HasValidVersion:     skill.HasValidVersion,
+		UpdatedAt:           skill.UpdatedAt,
+		LastLoadedOverMcpAt: skill.LastLoadedOverMcpAt,
 	}
 }
 
@@ -688,11 +1323,15 @@ func buildSkillVersionSummary(version *types.SkillVersion, includeContent bool) 
 	summary := SkillVersionSummary{
 		ID:               version.ID,
 		CanonicalSHA256:  version.CanonicalSha256,
+		ServedDigest:     "",
 		SpecValid:        version.SpecValid,
 		ValidationErrors: nil,
 		CreatedAt:        version.CreatedAt,
 		Content:          "",
 		ContentTruncated: false,
+	}
+	if version.SpecValid && version.RawSha256 != "" {
+		summary.ServedDigest = mcpskills.Digest(version.RawSha256)
 	}
 	for _, validationError := range version.ValidationErrors {
 		if validationError == nil {
@@ -723,6 +1362,69 @@ func checkSkillContent(content string) error {
 	return nil
 }
 
+func boundedSkillInsightLimit(limit int) int {
+	if limit <= 0 {
+		return 20
+	}
+	return min(limit, 50)
+}
+
+func buildSkillFeedback(rows []*genskills.SkillFeedback) []SkillFeedbackSummary {
+	feedback := make([]SkillFeedbackSummary, 0, len(rows))
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		feedback = append(feedback, SkillFeedbackSummary{ID: row.ID, Source: string(row.Source), Outcome: string(row.Outcome), Note: stringOrEmpty(row.Note), SkillVersionID: stringOrEmpty(row.SkillVersionID), ReviewedAt: stringOrEmpty(row.ReviewedAt), CreatedAt: row.CreatedAt})
+	}
+	return feedback
+}
+
+func buildSkillFeedbackCounts(counts *genskills.SkillFeedbackCounts) SkillFeedbackCounts {
+	if counts == nil {
+		return SkillFeedbackCounts{}
+	}
+	return SkillFeedbackCounts{Total: counts.Total, Helped: counts.Helped, PartiallyHelped: counts.PartiallyHelped, DidNotHelp: counts.DidNotHelp, Misleading: counts.Misleading, Harmful: counts.Harmful}
+}
+
+func buildSkillFeedbackMetrics(metrics *genskills.SkillFeedbackMetrics) SkillFeedbackMetrics {
+	if metrics == nil {
+		return SkillFeedbackMetrics{}
+	}
+	return SkillFeedbackMetrics{WindowStart: metrics.WindowStart, WindowEnd: metrics.WindowEnd, FeedbackInWindow: metrics.FeedbackInWindow, ActivationsInWindow: metrics.ActivationsInWindow, FeedbackActivationsInWindow: metrics.FeedbackActivationsInWindow, Unreviewed: metrics.Unreviewed, Converted: metrics.Converted}
+}
+
+func buildSkillFeedbackTimeline(rows []*genskills.SkillFeedbackTimelinePoint) []SkillFeedbackTimelinePoint {
+	timeline := make([]SkillFeedbackTimelinePoint, 0, len(rows))
+	for _, row := range rows {
+		if row != nil {
+			timeline = append(timeline, SkillFeedbackTimelinePoint{BucketStart: row.BucketStart, FeedbackCount: row.FeedbackCount})
+		}
+	}
+	return timeline
+}
+
+func buildSkillSuggestions(rows []*types.SkillEditSuggestion, includeProposedContent bool) []SkillSuggestionSummary {
+	suggestions := make([]SkillSuggestionSummary, 0, len(rows))
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		changes := make([]SkillSuggestionChange, 0, len(row.Changes))
+		for _, change := range row.Changes {
+			if change != nil {
+				changes = append(changes, SkillSuggestionChange{ID: change.ID, ProposedDiff: change.ProposedDiff, Rationale: change.Rationale, AppliesCleanly: change.AppliesCleanly, FeedbackCount: change.FeedbackCount, FeedbackSessionCount: change.FeedbackSessionCount, CreatedAt: change.CreatedAt})
+			}
+		}
+		proposedContent := ""
+		if includeProposedContent {
+			proposedContent = row.ProposedContent
+		}
+		suggestions = append(suggestions, SkillSuggestionSummary{ID: row.ID, SkillID: row.SkillID, SkillName: row.SkillName, SkillDisplayName: row.SkillDisplayName, BaseVersionID: row.BaseVersionID, Changes: changes, ProposedContent: proposedContent, AppliesCleanly: row.AppliesCleanly, Rationale: row.Rationale, Status: row.Status, FeedbackCount: row.FeedbackCount, FeedbackSessionCount: row.FeedbackSessionCount, ScoredSessionCount: row.ScoredSessionCount, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+	}
+	return suggestions
+}
+
 func stringOrEmpty(value *string) string {
 	if value == nil {
 		return ""
@@ -747,7 +1449,7 @@ func skillsRefusalCode(err error) (string, string, bool) {
 	case oops.CodeConflict:
 		return "conflict", shareable.Error(), true
 	case oops.CodeUnauthorized, oops.CodeForbidden:
-		return "forbidden", "You are not allowed to write or hand out skills in this project.", true
+		return "forbidden", "You do not have the required skill permission in this project.", true
 	case oops.CodeRateLimitExceeded:
 		return "rate_limited", shareable.Error(), true
 	case oops.CodeFailedPrecondition, oops.CodeInvariantViolation:
@@ -833,7 +1535,7 @@ func adviceTargets(targets []SkillTarget, limit int) []SkillTarget {
 	}
 	perKind := max(limit/2, 1)
 	kept := make([]SkillTarget, 0, limit)
-	counts := map[SkillTargetKind]int{}
+	counts := make(map[SkillTargetKind]int)
 	for _, target := range targets {
 		if len(kept) >= limit {
 			break
@@ -855,13 +1557,13 @@ func adviceTargets(targets []SkillTarget, limit int) []SkillTarget {
 	return kept
 }
 
-// matchesTargetName accepts the id, the slug, or the exact name. Names are
-// compared case-insensitively because a caller reading a name off a dashboard
-// should not have to reproduce its capitalization, but never by prefix or
-// substring: a partial match is what turns "the marketing plugin" into someone
-// else's plugin.
+// matchesTargetName accepts the id, the slug, or the exact name. All three are
+// compared case-insensitively because a caller reading one off a dashboard or
+// another tool should not have to reproduce its capitalization, but never by
+// prefix or substring: a partial match is what turns "the marketing plugin"
+// into someone else's plugin.
 func matchesTargetName(id, slug, name, wanted string) bool {
-	return id == wanted ||
+	return (id != "" && strings.EqualFold(id, wanted)) ||
 		(slug != "" && strings.EqualFold(slug, wanted)) ||
 		strings.EqualFold(name, wanted)
 }

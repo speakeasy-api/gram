@@ -18,17 +18,18 @@ import (
 
 // Server lists the jsonWebKeySets service endpoint HTTP handlers.
 type Server struct {
-	Mounts      []*MountPoint
-	CreateSet   http.Handler
-	UpdateSet   http.Handler
-	ListSets    http.Handler
-	GetSet      http.Handler
-	DeleteSet   http.Handler
-	ListKeys    http.Handler
-	PublishKey  http.Handler
-	ActivateKey http.Handler
-	RetireKey   http.Handler
-	RevokeKey   http.Handler
+	Mounts                []*MountPoint
+	CreateSet             http.Handler
+	UpdateSet             http.Handler
+	ListSets              http.Handler
+	GetSet                http.Handler
+	GetSetDeletePreflight http.Handler
+	DeleteSet             http.Handler
+	ListKeys              http.Handler
+	PublishKey            http.Handler
+	ActivateKey           http.Handler
+	RetireKey             http.Handler
+	RevokeKey             http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -62,6 +63,7 @@ func New(
 			{"UpdateSet", "POST", "/rpc/jsonWebKeySets.update"},
 			{"ListSets", "GET", "/rpc/jsonWebKeySets.list"},
 			{"GetSet", "GET", "/rpc/jsonWebKeySets.get"},
+			{"GetSetDeletePreflight", "GET", "/rpc/jsonWebKeySets.getDeletePreflight"},
 			{"DeleteSet", "DELETE", "/rpc/jsonWebKeySets.delete"},
 			{"ListKeys", "GET", "/rpc/jsonWebKeySets.listKeys"},
 			{"PublishKey", "POST", "/rpc/jsonWebKeySets.publishKey"},
@@ -69,16 +71,17 @@ func New(
 			{"RetireKey", "POST", "/rpc/jsonWebKeySets.retireKey"},
 			{"RevokeKey", "POST", "/rpc/jsonWebKeySets.revokeKey"},
 		},
-		CreateSet:   NewCreateSetHandler(e.CreateSet, mux, decoder, encoder, errhandler, formatter),
-		UpdateSet:   NewUpdateSetHandler(e.UpdateSet, mux, decoder, encoder, errhandler, formatter),
-		ListSets:    NewListSetsHandler(e.ListSets, mux, decoder, encoder, errhandler, formatter),
-		GetSet:      NewGetSetHandler(e.GetSet, mux, decoder, encoder, errhandler, formatter),
-		DeleteSet:   NewDeleteSetHandler(e.DeleteSet, mux, decoder, encoder, errhandler, formatter),
-		ListKeys:    NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
-		PublishKey:  NewPublishKeyHandler(e.PublishKey, mux, decoder, encoder, errhandler, formatter),
-		ActivateKey: NewActivateKeyHandler(e.ActivateKey, mux, decoder, encoder, errhandler, formatter),
-		RetireKey:   NewRetireKeyHandler(e.RetireKey, mux, decoder, encoder, errhandler, formatter),
-		RevokeKey:   NewRevokeKeyHandler(e.RevokeKey, mux, decoder, encoder, errhandler, formatter),
+		CreateSet:             NewCreateSetHandler(e.CreateSet, mux, decoder, encoder, errhandler, formatter),
+		UpdateSet:             NewUpdateSetHandler(e.UpdateSet, mux, decoder, encoder, errhandler, formatter),
+		ListSets:              NewListSetsHandler(e.ListSets, mux, decoder, encoder, errhandler, formatter),
+		GetSet:                NewGetSetHandler(e.GetSet, mux, decoder, encoder, errhandler, formatter),
+		GetSetDeletePreflight: NewGetSetDeletePreflightHandler(e.GetSetDeletePreflight, mux, decoder, encoder, errhandler, formatter),
+		DeleteSet:             NewDeleteSetHandler(e.DeleteSet, mux, decoder, encoder, errhandler, formatter),
+		ListKeys:              NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
+		PublishKey:            NewPublishKeyHandler(e.PublishKey, mux, decoder, encoder, errhandler, formatter),
+		ActivateKey:           NewActivateKeyHandler(e.ActivateKey, mux, decoder, encoder, errhandler, formatter),
+		RetireKey:             NewRetireKeyHandler(e.RetireKey, mux, decoder, encoder, errhandler, formatter),
+		RevokeKey:             NewRevokeKeyHandler(e.RevokeKey, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -91,6 +94,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateSet = m(s.UpdateSet)
 	s.ListSets = m(s.ListSets)
 	s.GetSet = m(s.GetSet)
+	s.GetSetDeletePreflight = m(s.GetSetDeletePreflight)
 	s.DeleteSet = m(s.DeleteSet)
 	s.ListKeys = m(s.ListKeys)
 	s.PublishKey = m(s.PublishKey)
@@ -108,6 +112,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateSetHandler(mux, h.UpdateSet)
 	MountListSetsHandler(mux, h.ListSets)
 	MountGetSetHandler(mux, h.GetSet)
+	MountGetSetDeletePreflightHandler(mux, h.GetSetDeletePreflight)
 	MountDeleteSetHandler(mux, h.DeleteSet)
 	MountListKeysHandler(mux, h.ListKeys)
 	MountPublishKeyHandler(mux, h.PublishKey)
@@ -310,6 +315,60 @@ func NewGetSetHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getSet")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "jsonWebKeySets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSetDeletePreflightHandler configures the mux to serve the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint.
+func MountGetSetDeletePreflightHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/jsonWebKeySets.getDeletePreflight", f)
+}
+
+// NewGetSetDeletePreflightHandler creates a HTTP handler which loads the HTTP
+// request and calls the "jsonWebKeySets" service "getSetDeletePreflight"
+// endpoint.
+func NewGetSetDeletePreflightHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSetDeletePreflightRequest(mux, decoder)
+		encodeResponse = EncodeGetSetDeletePreflightResponse(encoder)
+		encodeError    = EncodeGetSetDeletePreflightError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSetDeletePreflight")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "jsonWebKeySets")
 		payload, err := decodeRequest(r)
 		if err != nil {

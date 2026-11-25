@@ -15,20 +15,38 @@ type RemoteSession struct {
 	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
 	SubjectUrn string
-	// Resolved display name when the subject is a Gram user. Absent for
+	// Resolved display name when the subject is a Speakeasy user. Absent for
 	// apikey/anonymous subjects or unresolved users.
 	SubjectDisplayName *string
-	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
-	// subjects or unresolved users.
+	// Resolved email when the subject is a Speakeasy user. Absent for
+	// apikey/anonymous subjects or unresolved users.
 	SubjectEmail *string
+	// Stored email of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it; never inferred from the Speakeasy
+	// subject.
+	UpstreamEmail *string
+	// Stored display name of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it.
+	UpstreamDisplayName *string
+	// The upstream identity interface that supplied the stored account identity,
+	// such as an ID token or userinfo response. Absent when upstream identity is
+	// unknown.
+	IdentitySource *string
 	// The user_session_issuer this session is bound to.
 	UserSessionIssuerID string
 	// The remote_session_client this session was minted against.
 	RemoteSessionClientID string
-	// Upstream access-token expiry. Independent of refresh_expires_at.
-	AccessExpiresAt string
+	// Upstream access-token expiry. Independent of refresh_expires_at. Omitted
+	// when the upstream reported no expiry, which readers treat as non-expiring.
+	AccessExpiresAt *string
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string
+	// Upstream authorization deadline. When present, the connection cannot be used
+	// or refreshed after this time even if its tokens have later expiries.
+	AuthorizationExpiresAt *string
+	// Last recorded upstream request, accurate to within five minutes. Null means
+	// unknown.
+	LastUsedAt *string
 	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
 	// action; refresh_expires_at is insufficient because an upstream may issue a
 	// non-expiring refresh token. The token itself is never returned.

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,66 +19,31 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func TestServePlatformToolset_ManagedAssistantReachesManagedToolset(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	managedID := createAssistant(t, ti, authCtx, "Managed")
-	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	})
-	require.NoError(t, err)
-
-	token := mintAssistantToken(t, ti, authCtx, managedID)
-	w, err := servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code, "managed assistant must reach the managed toolset: %s", w.Body.String())
-	require.Contains(t, w.Body.String(), platformtools.ToolNameSearchLogs)
-}
-
-// The swap cuts both ways: an org on the platformmcp variant must lose the
-// legacy toolset, not merely gain the platform one.
-func TestServePlatformToolset_ManagedToolsetRejectedOnPlatformMCPVariant(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	managedID := createAssistant(t, ti, authCtx, "Managed")
-	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	})
-	require.NoError(t, err)
-
-	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
-
-	token := mintAssistantToken(t, ti, authCtx, managedID)
-	_, err = servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
-	require.Error(t, err, "the legacy toolset must stay hidden on the platformmcp variant")
-	require.Contains(t, err.Error(), "not found")
+// grantProjectLogRead gives the turn's user log:read on the project. No system
+// role holds it, so the tools that return individual tool calls and raw log
+// records are hidden from the assistant without it.
+func grantProjectLogRead(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext) {
+	t.Helper()
+	seedPrincipalGrant(t, t.Context(), ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeLogRead, authCtx.ProjectID.String())
 }
 
 func TestServePlatformToolset_NonManagedAssistantRejected(t *testing.T) {
@@ -101,9 +67,164 @@ func TestServePlatformToolset_NonManagedAssistantRejected(t *testing.T) {
 	otherID := createAssistant(t, ti, authCtx, "Other")
 	token := mintAssistantToken(t, ti, authCtx, otherID)
 
-	_, err = servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
+	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
 	require.Error(t, err, "a non-managed assistant must be rejected at the entrypoint")
 	require.Contains(t, err.Error(), "not found")
+}
+
+func TestServePlatformToolset_DeniedAndMissingInvalidBodiesMatch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID := createAssistant(t, ti, authCtx, "Managed")
+	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: managedID,
+	})
+	require.NoError(t, err)
+	otherID := createAssistant(t, ti, authCtx, "Other")
+	token := mintAssistantToken(t, ti, authCtx, otherID)
+
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service.Service, nil)
+
+	for _, revision := range []string{"", mcpversions.Version20251125, mcpversions.Version20260728} {
+		for _, tc := range []struct {
+			name   string
+			body   string
+			status int
+			code   oops.MCPCode
+		}{
+			{name: "malformed JSON", body: "{", status: http.StatusBadRequest, code: oops.MCPCodeParseError},
+			{name: "empty body", status: http.StatusBadRequest, code: oops.MCPCodeParseError},
+			{name: "oversized body", body: strings.Repeat(" ", (1<<20)+1), status: http.StatusRequestEntityTooLarge, code: oops.MCPCodeInternalError},
+			{name: "invalid envelope", body: `{"jsonrpc":"1.0","id":0,"method":"tools/list"}`, status: http.StatusBadRequest, code: oops.MCPCodeInvalidRequest},
+			{name: "invalid method type", body: `{"jsonrpc":"2.0","id":0,"method":42}`, status: http.StatusBadRequest, code: oops.MCPCodeInvalidRequest},
+		} {
+			t.Run(revision+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				responses := make([]*httptest.ResponseRecorder, 0, 2)
+				for _, slug := range []string{"missing-platform-toolset", platformtools.PlatformMCPReadToolsetSlug} {
+					req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/platform/mcp/"+slug, strings.NewReader(tc.body))
+					req.Header.Set("Content-Type", "application/json")
+					req.Header.Set("Authorization", "Bearer "+token)
+					req.Header.Set(httpheaders.MethodHeader, mcpversions.MethodToolsList)
+					if revision != "" {
+						req.Header.Set(mcpversions.HTTPHeader, revision)
+					}
+					w := httptest.NewRecorder()
+					router.ServeHTTP(w, req)
+					responses = append(responses, w)
+				}
+
+				missing, denied := responses[0], responses[1]
+				require.Equal(t, missing.Code, denied.Code)
+				require.Equal(t, missing.Header(), denied.Header())
+				require.Equal(t, missing.Body.String(), denied.Body.String())
+
+				wantStatus, wantCode := http.StatusNotFound, oops.MCPCodeResourceNotFound
+				if revision == mcpversions.Version20260728 {
+					wantStatus, wantCode = tc.status, tc.code
+				}
+				require.Equal(t, wantStatus, missing.Code, "body=%s", missing.Body.String())
+				var response struct {
+					Error struct {
+						Code oops.MCPCode `json:"code"`
+					} `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(missing.Body.Bytes(), &response))
+				require.Equal(t, wantCode, response.Error.Code)
+			})
+		}
+	}
+}
+
+func TestServePlatformToolset_UnsupportedVersionPrecedesTokenAuthentication(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	slug := platformtools.PlatformMCPReadToolsetSlug
+	req := httptest.NewRequest(http.MethodPost, "/platform/mcp/"+slug, bytes.NewReader(toolsListBody()))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(mcpversions.HTTPHeader, unservedProtocolVersion)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("toolsetSlug", slug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	err := ti.service.ServePlatformToolset(w, req)
+	require.NoError(t, err)
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedPlatformToolset())
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+}
+
+// Failures that escape the platform handler reach the client as JSON-RPC
+// errors, as on the other MCP surfaces, with the HTTP status the failure
+// carries. A handshake-era revision is declared deliberately to verify that
+// an unknown toolset retains its legacy response without reading the body.
+func TestServePlatformToolset_AttachedFailuresAreJSONRPCErrors(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service.Service, nil)
+
+	for _, tc := range []struct {
+		name   string
+		slug   string
+		status int
+		code   oops.MCPCode
+		id     string
+	}{
+		{name: "missing token", slug: platformtools.PlatformMCPReadToolsetSlug, status: http.StatusUnauthorized, code: oops.MCPCodeUnauthorized, id: `1`},
+		// The slug is resolved before the body is read, so the request id is
+		// not known yet.
+		{name: "unknown toolset", slug: "unknown-platform-toolset", status: http.StatusNotFound, code: oops.MCPCodeResourceNotFound, id: `null`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/platform/mcp/"+tc.slug, bytes.NewReader(toolsListBody()))
+			req.Header.Set("Accept", "application/json")
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set(mcpversions.HTTPHeader, mcpversions.Version20251125)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			require.Equal(t, tc.status, w.Code, "body=%s", w.Body.String())
+			require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+			var response struct {
+				JSONRPC string          `json:"jsonrpc"`
+				ID      json.RawMessage `json:"id"`
+				Error   struct {
+					Code oops.MCPCode `json:"code"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response), "body=%s", w.Body.String())
+			require.Equal(t, "2.0", response.JSONRPC)
+			require.JSONEq(t, tc.id, string(response.ID))
+			require.Equal(t, tc.code, response.Error.Code)
+		})
+	}
+}
+
+func TestServePlatformToolset_EmptyBodyRequiresTokenAuthentication(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	_, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, nil, "")
+	require.Error(t, err)
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
 }
 
 // The research tools are the MCP research runner's, and it holds them
@@ -133,10 +254,14 @@ func TestServePlatformToolset_ResearchToolsetIsNotServed(t *testing.T) {
 	require.Contains(t, err.Error(), "not found")
 }
 
+// platformMCPContextTool is a read-only Platform MCP tool that needs no seeded
+// data, so tool-call plumbing tests can dispatch it.
+const platformMCPContextTool = "get_platform_context"
+
 func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -149,6 +274,7 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	grantLiveOrgAdmin(t, ti, authCtx)
 	token, threadID := mintThreadAssistantToken(t, ti, authCtx, managedID, "audit-test")
 
 	countBefore, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionAssistantToolCall)
@@ -159,7 +285,7 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 		"id":      1,
 		"method":  "tools/call",
 		"params": map[string]any{
-			"name": platformtools.ToolNameSearchLogs,
+			"name": platformMCPContextTool,
 			"arguments": map[string]any{
 				"query":     "errors",
 				"api_token": "super-secret",
@@ -168,7 +294,7 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	w, err := servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, body, token)
+	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "tool call dispatch must succeed: %s", w.Body.String())
 
@@ -179,14 +305,14 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	record, err := audittest.LatestAuditLogByAction(t.Context(), ti.conn, audit.ActionAssistantToolCall)
 	require.NoError(t, err)
 	require.Equal(t, "assistant", record.SubjectType)
-	require.Equal(t, platformtools.ToolNameSearchLogs, record.SubjectDisplay)
-	require.Equal(t, platformtools.ManagedAssistantPlatformToolsetSlug, record.SubjectSlug)
+	require.Equal(t, platformMCPContextTool, record.SubjectDisplay)
+	require.Equal(t, platformtools.PlatformMCPReadToolsetSlug, record.SubjectSlug)
 	require.Equal(t, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, record.ProjectID)
 
 	metadata, err := audittest.DecodeAuditData(record.Metadata)
 	require.NoError(t, err)
-	require.Equal(t, platformtools.ToolNameSearchLogs, metadata["tool_name"])
-	require.Equal(t, platformtools.ManagedAssistantPlatformToolsetSlug, metadata["toolset_slug"])
+	require.Equal(t, platformMCPContextTool, metadata["tool_name"])
+	require.Equal(t, platformtools.PlatformMCPReadToolsetSlug, metadata["toolset_slug"])
 	require.Equal(t, threadID.String(), metadata["thread_id"])
 
 	params, ok := metadata["params"].(map[string]any)
@@ -195,35 +321,53 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	require.Equal(t, "[REDACTED]", params["api_token"], "secret-shaped params must be scrubbed")
 }
 
-func TestServePlatformToolset_PreservesShareableToolError(t *testing.T) {
+func TestServePlatformToolset_RiskScanUsesStableToolsetIdentityAndAnnotations(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
+	scanner := consumeRiskScanPayloads(t, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	grantLiveOrgAdmin(t, ti, authCtx)
 
-	assistantID := createAssistant(t, ti, authCtx, "Feedback")
-	token, _ := mintThreadAssistantToken(t, ti, authCtx, assistantID, "feedback-error")
+	managedID := createAssistant(t, ti, authCtx, "Managed")
+	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: managedID,
+	})
+	require.NoError(t, err)
+
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "tools/call",
 		"params": map[string]any{
-			"name": platformtools.ToolNamePlatformSkillFeedback,
+			"name": platformMCPContextTool,
 			"arguments": map[string]any{
-				"skill":   "missing-skill",
-				"outcome": "did_not_help",
+				"query": "errors",
 			},
 		},
 	})
 	require.NoError(t, err)
 
-	w, err := servePlatformHTTP(t, ti, platformtools.AssistantsPlatformToolsetSlug, body, token)
+	token := mintAssistantToken(t, ti, authCtx, managedID)
+	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "call skills_load for this skill before submitting feedback")
-	require.NotContains(t, w.Body.String(), "Internal error")
+	require.Len(t, scanner.events, 2)
+
+	event := scanner.events[0]
+	require.Equal(t, mcpriskscan.SurfacePlatformMCP, event.Surface)
+	require.Equal(t, platformtools.PlatformToolsetID(platformtools.PlatformMCPReadToolsetSlug).String(), event.ServerID)
+	require.Empty(t, event.ToolsetID, "platform toolsets have no persisted toolset id")
+	require.Equal(t, platformMCPContextTool, event.ToolName)
+	require.NotNil(t, event.ToolAnnotations)
+	require.NotNil(t, event.ToolAnnotations.ReadOnlyHint)
+	require.True(t, *event.ToolAnnotations.ReadOnlyHint)
+	require.Equal(t, mcpriskscan.PhaseRequest, event.Phase())
+	require.Equal(t, mcpriskscan.PhaseResponse, scanner.events[1].Phase())
+	require.Equal(t, event.ExecutionID(), scanner.events[1].ExecutionID())
 }
 
 func createAssistant(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, name string) uuid.UUID {
@@ -245,7 +389,7 @@ func createAssistant(t *testing.T, ti *testInstance, authCtx *contextvalues.Auth
 
 func mintAssistantToken(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID uuid.UUID) string {
 	t.Helper()
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		UserID:      authCtx.UserID,
@@ -278,7 +422,7 @@ func mintThreadAssistantToken(t *testing.T, ti *testInstance, authCtx *contextva
 		SourceRefJson: []byte("{}"),
 	})
 	require.NoError(t, err)
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		UserID:      authCtx.UserID,
@@ -295,13 +439,16 @@ func toolsListBody() []byte {
 	return body
 }
 
-func servePlatformHTTP(t *testing.T, ti *testInstance, slug string, body []byte, token string) (*httptest.ResponseRecorder, error) {
+func servePlatformHTTP(t *testing.T, ti *testInstance, slug string, body []byte, token string, projectSlug ...string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 
 	req := httptest.NewRequest(http.MethodPost, "/platform/mcp/"+slug, bytes.NewReader(body))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
+	if len(projectSlug) > 0 {
+		req.Header.Set("Gram-Project", projectSlug[0])
+	}
 
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("toolsetSlug", slug)
@@ -314,13 +461,11 @@ func servePlatformHTTP(t *testing.T, ti *testInstance, slug string, body []byte,
 	return w, nil
 }
 
-// The Platform MCP read toolset is rollout-gated: the managed assistant
-// reaches it only when the assistant-platform-mcp flag resolves to the
-// platformmcp variant for the org.
+// The managed assistant reaches the Platform MCP read toolset.
 func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -333,12 +478,10 @@ func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
-
 	token := mintAssistantToken(t, ti, authCtx, managedID)
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code, "managed assistant must reach the platform toolset when the flag is on: %s", w.Body.String())
+	require.Equal(t, http.StatusOK, w.Code, "managed assistant must reach the platform toolset: %s", w.Body.String())
 	// Names come through as the catalogue declares them: the assistant is
 	// served that catalogue rather than a parallel platformtools set, so there
 	// is nothing to disambiguate and no platform_ prefix.
@@ -347,7 +490,7 @@ func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	require.Contains(t, body, `"list_projects"`)
 	require.Contains(t, body, `"find_mcp"`)
 	require.Contains(t, body, `"get_mcp"`)
-	require.NotContains(t, body, platformtools.ToolNameListProjects, "the legacy prefixed set must not be served on this variant")
+	require.NotContains(t, body, platformtools.ToolNameListProjects, "the prefixed platformtools names must not be served")
 
 	// The assistant only ever acts in its own project, so the project the
 	// policy supplies is not advertised as an argument for a model to choose.
@@ -359,28 +502,6 @@ func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	var envelope map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
 	requireCacheHints(t, envelope["result"], "private")
-}
-
-func TestServePlatformToolset_PlatformMCPReadLegacyVariantRejected(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	managedID := createAssistant(t, ti, authCtx, "Managed")
-	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	})
-	require.NoError(t, err)
-
-	token := mintAssistantToken(t, ti, authCtx, managedID)
-	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
-	require.Error(t, err, "the platform toolset must stay hidden on the legacy variant")
-	require.Contains(t, err.Error(), "not found")
 }
 
 func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *testing.T) {
@@ -399,22 +520,20 @@ func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *test
 	})
 	require.NoError(t, err)
 
-	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
-
 	otherID := createAssistant(t, ti, authCtx, "Other")
 	token := mintAssistantToken(t, ti, authCtx, otherID)
 
 	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
-	require.Error(t, err, "a non-managed assistant must not reach the platform toolset even on the platformmcp variant")
+	require.Error(t, err, "a non-managed assistant must not reach the platform toolset")
 	require.Contains(t, err.Error(), "not found")
 }
 
 // tools/call must round-trip through the re-served reader against the seeded
-// org: list_projects returns the project the auth context lives in.
+// org: list_projects returns only projects the caller has permission to read.
 func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, recorder := newTestMCPServiceWithPlatformMCPReadTools(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -426,8 +545,6 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 		AssistantID: managedID,
 	})
 	require.NoError(t, err)
-
-	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
 
 	// Assistant calls are authorized live on every request, not carried from
 	// an earlier decision, so the grant has to exist for real.
@@ -449,7 +566,38 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "list_projects call must succeed: %s", w.Body.String())
-	require.Contains(t, w.Body.String(), authCtx.ProjectID.String(), "the caller's project must appear in the listing")
+	require.NotContains(t, w.Body.String(), `"error"`)
+	require.Contains(t, w.Body.String(), `"projects":[]`)
+	require.NotContains(t, w.Body.String(), authCtx.ProjectID.String(), "org:admin alone does not grant project:read")
+
+	require.NoError(t, authz.PatchPrincipalGrants(
+		t.Context(), ti.conn, authCtx.ActiveOrganizationID,
+		urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		[]*authz.RoleGrant{{Scope: string(authz.ScopeProjectRead), Selectors: []authz.Selector{authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String())}}},
+		nil,
+	))
+	w, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "list_projects call must succeed: %s", w.Body.String())
+	require.NotContains(t, w.Body.String(), `"error"`)
+	require.Contains(t, w.Body.String(), authCtx.ProjectID.String(), "the caller's readable project must appear in the listing")
+
+	events := scanAttributes(recorder, mcpriskscan.SurfacePlatformMCP)
+	require.Len(t, events, 4)
+	for _, event := range events {
+		require.Equal(t, authCtx.ActiveOrganizationID, event[attr.OrganizationIDKey])
+		require.Equal(t, authCtx.ProjectID.String(), event[attr.ProjectIDKey])
+		require.Equal(t, "list_projects", event[attr.ToolNameKey])
+		require.Equal(t, platformtools.PlatformToolsetID(platformtools.PlatformMCPReadToolsetSlug).String(), event[attr.McpServerIDKey])
+		require.Empty(t, event[attr.ToolsetIDKey])
+		require.Equal(t, mcpriskscan.MethodToolsCall, event["gram.mcp.risk.scan.method"])
+		require.Equal(t, "false", event["gram.mcp.risk.scan.identity_stamped"], "platform auth does not fabricate MCP principal provenance from AuthContext.UserID")
+	}
+	for i := 0; i < len(events); i += 2 {
+		require.Equal(t, mcpriskscan.PhaseRequest, events[i]["gram.mcp.risk.scan.phase"])
+		require.Equal(t, mcpriskscan.PhaseResponse, events[i+1]["gram.mcp.risk.scan.phase"])
+		require.Equal(t, events[i]["gram.mcp.risk.scan.execution_id"], events[i+1]["gram.mcp.risk.scan.execution_id"])
+	}
 }
 
 // grantLiveOrgAdmin persists an org:admin grant for the auth context's user.

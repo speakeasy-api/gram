@@ -15,6 +15,10 @@ import (
 type RedisClientFunc func(t *testing.T, db int) (*redis.Client, error)
 
 func NewTestRedis(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, error) {
+	if err := ensureDockerReady(ctx); err != nil {
+		return nil, nil, fmt.Errorf("wait for docker: %w", err)
+	}
+
 	container, err := tcr.Run(
 		ctx, "redis:6.2-alpine",
 		testcontainers.WithLogger(NewTestcontainersLogger()),
@@ -23,7 +27,7 @@ func NewTestRedis(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, er
 			wait.ForExec([]string{"redis-cli", "ping"}),
 		),
 		WithPublishedPortWait("6379/tcp"),
-		WithoutPublishedPorts(),
+		WithLoopbackPorts(),
 	)
 
 	if err != nil {

@@ -1,44 +1,45 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ViewOrgSessionsButton } from "./ViewOrgSessionsButton";
 
-const { flagResult, hasAnyScope } = vi.hoisted(() => ({
-  flagResult: vi.fn(),
-  hasAnyScope: vi.fn(),
+const { hasScope, health } = vi.hoisted(() => ({
+  hasScope: vi.fn(),
+  health: vi.fn(),
 }));
 
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => flagResult() as FeatureFlagResult,
+vi.mock("@/pages/mcp-sessions/connection-health/flag", async (original) => ({
+  ...(await original<
+    typeof import("@/pages/mcp-sessions/connection-health/flag")
+  >()),
+  useConnectionHealthFlag: () => health(),
+}));
+
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "project_example" }),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: (scopes: Scope[]) => hasAnyScope(scopes) }),
+  useRBAC: () => ({
+    hasScope: (scope: Scope, resourceId: string) => hasScope(scope, resourceId),
+  }),
 }));
 
-// The route helper resolves :orgSlug from the URL and renders a react-router
-// Link; stubbing it keeps this test off the router.
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    mcpSessions: {
-      Link: ({ children }: { children: React.ReactNode }) => (
-        <a href="/org-slug/mcp-sessions">{children}</a>
-      ),
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org-slug", projectSlug: "project-slug" }),
 }));
 
 function link() {
   return screen.queryByRole("link", {
-    name: /view all organization sessions/i,
+    name: /view all project sessions/i,
   });
 }
 
 describe("ViewOrgSessionsButton", () => {
   beforeEach(() => {
-    flagResult.mockReturnValue({ status: "enabled" });
-    hasAnyScope.mockReturnValue(true);
+    hasScope.mockReturnValue(true);
+    health.mockReturnValue("off");
   });
 
   afterEach(() => {
@@ -46,32 +47,39 @@ describe("ViewOrgSessionsButton", () => {
     vi.clearAllMocks();
   });
 
-  it("links to the org MCP Sessions page when the flag and scopes allow it", () => {
-    render(<ViewOrgSessionsButton />);
+  it("links to the project MCP Sign-in page with read access", () => {
+    render(<ViewOrgSessionsButton />, { wrapper: MemoryRouter });
 
-    expect(link()?.getAttribute("href")).toBe("/org-slug/mcp-sessions");
-    expect(hasAnyScope).toHaveBeenCalledWith(["org:read", "org:admin"]);
+    expect(link()?.getAttribute("href")).toBe(
+      "/org-slug/projects/project-slug/mcp-sessions",
+    );
+    expect(hasScope).toHaveBeenCalledWith("project:read", "project_example");
   });
 
-  // The destination redirects to org home when the flag is off, so the link
-  // has to disappear rather than dead-end.
-  it.each([
-    ["disabled", { status: "disabled" }],
-    ["loading", { status: "loading" }],
-    ["missing", { status: "missing" }],
-    ["error", { status: "error" }],
-  ])("renders nothing when the flag is %s", (_name, result) => {
-    flagResult.mockReturnValue(result);
+  it("opens the sessions list instead of Overview with connection health on", () => {
+    health.mockReturnValue("on");
 
-    render(<ViewOrgSessionsButton />);
+    render(<ViewOrgSessionsButton />, { wrapper: MemoryRouter });
 
-    expect(link()).toBeNull();
+    expect(link()?.getAttribute("href")).toBe(
+      "/org-slug/projects/project-slug/mcp-sessions?view=sessions",
+    );
   });
 
-  it("renders nothing without an org-level scope", () => {
-    hasAnyScope.mockReturnValue(false);
+  it("asks for the sessions list while the flag is still loading", () => {
+    health.mockReturnValue("pending");
 
-    render(<ViewOrgSessionsButton />);
+    render(<ViewOrgSessionsButton />, { wrapper: MemoryRouter });
+
+    expect(link()?.getAttribute("href")).toBe(
+      "/org-slug/projects/project-slug/mcp-sessions?view=sessions",
+    );
+  });
+
+  it("renders nothing without read access to the active project", () => {
+    hasScope.mockReturnValue(false);
+
+    render(<ViewOrgSessionsButton />, { wrapper: MemoryRouter });
 
     expect(link()).toBeNull();
   });

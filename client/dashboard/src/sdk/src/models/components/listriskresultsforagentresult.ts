@@ -22,7 +22,7 @@ export type ListRiskResultsForAgentResult = {
    */
   results: Array<RiskResultRedacted>;
   /**
-   * Total number of findings across all enabled policies.
+   * Total number of findings matching the filters across all non-deleted policies.
    */
   totalCount: number;
 };

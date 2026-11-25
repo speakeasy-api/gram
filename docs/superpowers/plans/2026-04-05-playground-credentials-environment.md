@@ -6,7 +6,7 @@
 
 **Architecture:** A new `usePlaygroundEnvironment` hook manages a lazily-created environment (slug `playground-<userID>-<toolsetSlug>`) using existing `createEnvironment`/`updateEnvironment` SDK mutations. `PlaygroundAuth` uses this hook instead of `useLocalStorageState`. `PlaygroundElements` passes the environment slug via `Gram-Environment` header instead of `MCP-*` headers, letting the server resolve credentials.
 
-**Tech Stack:** React hooks, `@gram/client` SDK mutations, existing Gram environment APIs
+**Tech Stack:** React hooks, `@gram/client` SDK mutations, existing Speakeasy environment APIs
 
 **Skills:** `frontend`
 

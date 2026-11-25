@@ -14,7 +14,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -40,16 +40,28 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, riskScanned.Load(), time.Since(start))
 	}()
+
+	// APIKeyAuth already put the actor on ctx: scope the session ids first.
+	conversationID, conversationChanged := scopedSessionPtr(ctx, payload.ConversationID)
+	sessionID, sessionChanged := scopedSessionPtr(ctx, payload.SessionID)
+	if conversationChanged || sessionChanged {
+		scoped := *payload
+		scoped.ConversationID = conversationID
+		scoped.SessionID = sessionID
+		payload = &scoped
+	}
 
 	logger := s.logger.With(
 		attr.SlogHookSource("cursor"),
 		attr.SlogHookEvent(logHookEventName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
 		attr.SlogGenAIConversationID(conv.PtrValOr(payload.ConversationID, "")),
-		attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")),
 	)
+	if !isAgentActor(ctx) {
+		logger = logger.With(attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")))
+	}
 
 	authCtx, authOK := contextvalues.GetAuthContext(ctx)
 	if !authOK || authCtx == nil || authCtx.ProjectID == nil {
@@ -59,7 +71,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		)
 		return &gen.CursorHookResult{
 			Permission:        new("deny"),
-			UserMessage:       new("Speakeasy hooks: unauthorized — check your Gram API key and project slug."),
+			UserMessage:       new("Speakeasy hooks: unauthorized — check your Speakeasy API key and project slug."),
 			AdditionalContext: nil,
 			AgentMessage:      nil,
 		}, nil
@@ -69,10 +81,15 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
 	userEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
-	if userEmail == "" {
+	actorUserID := ""
+	switch {
+	case isAgentActor(ctx):
+		userEmail = ""
+	case userEmail == "":
 		return nil, oops.E(oops.CodeInvalid, nil, "cursor hook payload missing user_email")
+	default:
+		actorUserID = s.resolveUserByEmail(ctx, userEmail, orgID)
 	}
-	actorUserID := s.resolveUserByEmail(ctx, userEmail, orgID)
 	logger = logger.With(
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),
@@ -140,9 +157,9 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		// Acknowledged warn is excluded from the enforcement block so it falls
 		// through to the shadow-MCP guard below: an ack clears the risk
 		// challenge but must never bypass unapproved-toolset validation.
-		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" ||
+		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && (!scanResult.IsWarnChallenge() ||
 			!s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
-			if scanResult.Action == "warn" {
+			if scanResult.IsWarnChallenge() {
 				if agentReason, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 					blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 					result.Permission = new("deny")
@@ -153,7 +170,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				}
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			userReason := renderUserBlockReason(scanResult, auditReason)
 			blockReason = auditReason
 			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
 				Provider:       "cursor",
@@ -202,7 +219,9 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				ToolName:        toolName,
 				ToolInput:       ev.ToolInput,
 				RiskPolicyID:    policy.ID,
-				PolicyName:      policy.Name,
+				// Cursor sends no MCP server list, so every route is offered.
+				SessionMCPServers: nil,
+				PolicyName:        policy.Name,
 			})
 			blockReason = auditReason
 			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
@@ -249,11 +268,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			break
 		}
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
-			if scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName) {
+			if scanResult.IsWarnChallenge() && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName) {
 				result.Permission = new("allow")
 				break
 			}
-			if scanResult.Action == "warn" {
+			if scanResult.IsWarnChallenge() {
 				if agentReason, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 					blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 					result.Permission = new("deny")
@@ -264,7 +283,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				}
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			userReason := renderUserBlockReason(scanResult, auditReason)
 			blockReason = auditReason
 			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
 				Provider:       "cursor",
@@ -301,9 +320,9 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		// confirmation primitive here, and denying would diverge from the
 		// Claude/Codex prompt paths. Let it through — the follow-on tool call
 		// carrying the match is where a warn is challenged.
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && !scanResult.IsWarnChallenge() {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			userReason := renderUserBlockReason(scanResult, auditReason)
 			blockReason = auditReason
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
@@ -338,6 +357,9 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 	ctx = context.WithoutCancel(ctx)
 
 	userEmail := conv.PtrValOr(payload.UserEmail, "")
+	if isAgentActor(ctx) {
+		userEmail = ""
+	}
 
 	metadata := &SessionMetadata{
 		SessionID:           *payload.ConversationID,
@@ -387,12 +409,12 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 			return
 		}
 		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Cursor conversation event", err)
 		}
 	} else {
 		// Tool call events: ClickHouse + PG
 		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason, hookEvent); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist Cursor tool call event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Cursor tool call event", err)
 		}
 	}
 }
@@ -449,12 +471,13 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 		FunctionID:     nil,
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  s.now(),
 			ToolInfo:   toolInfo,
 			UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
-			Attributes: attrs,
+			Attributes: withAgentActor(ctx, attrs),
 		})
 
 		s.logger.DebugContext(ctx, "Wrote Cursor hook to ClickHouse",
@@ -533,11 +556,12 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 		FunctionID:     nil,
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  s.now(),
 		ToolInfo:   toolInfo,
 		UserInfo:   telemetry.UserInfoByID(userID),
-		Attributes: attrs,
+		Attributes: withAgentActor(ctx, attrs),
 	})
 
 	s.logger.DebugContext(ctx, "Wrote Cursor metrics to ClickHouse",
@@ -786,7 +810,7 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCursorChatTitle)
 }
 
 // writeCursorToolCallResultToPG writes a Cursor tool call result (postToolUse/postToolUseFailure) to PostgreSQL.
@@ -857,7 +881,7 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCursorChatTitle)
 }
 
 // persistCursorAgentResponse writes the assistant's response text to PostgreSQL as a chat message.
@@ -907,7 +931,7 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 		Generation:       0,
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle); err != nil {
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCursorChatTitle); err != nil {
 		return err
 	}
 
@@ -973,5 +997,5 @@ func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.Curs
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, parsedProjectID, msgParams, activities.DefaultCursorChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, parsedProjectID, msgParams, chat.DefaultCursorChatTitle)
 }

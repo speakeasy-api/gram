@@ -55,3 +55,62 @@ func TestSemconvLog(t *testing.T) {
 	require.Equal(t, "gen_ai.response.id", key)
 	require.Equal(t, "response-id", value)
 }
+
+// TestSemconvLogKeepsAClassifiedRecordsBody: the row builder only falls back to
+// the body for records nothing classified, so a record semconv did classify
+// would otherwise lose the words its producer wrote there.
+func TestSemconvLogKeepsAClassifiedRecordsBody(t *testing.T) {
+	t.Parallel()
+
+	classified := withBody((&otelv1.InboundLogRecord_builder{
+		Attributes: []*otelv1.InboundLogRecord_KeyValue{
+			logDialectStringAttribute("gen_ai.operation.name", "chat"),
+		},
+	}).Build(), "the model said something worth keeping")
+
+	key, text, err := SemconvLog{}.Text(classified)
+	require.NoError(t, err)
+	require.Equal(t, "body", key)
+	require.Equal(t, "the model said something worth keeping", text)
+
+	// A record semconv did not classify keeps nothing here. The row builder's
+	// own fallback covers those, and a dialect that claimed one has already
+	// decided what its words are.
+	unclassified := withBody((&otelv1.InboundLogRecord_builder{}).Build(), "hello world")
+	key, text, err = SemconvLog{}.Text(unclassified)
+	require.NoError(t, err)
+	require.Empty(t, key)
+	require.Empty(t, text)
+}
+
+// TestSemconvLogClassifiesEveryStandardOperation: each operation name the
+// GenAI conventions define lands on a canonical type, so none of those rows
+// falls through as unclassified.
+func TestSemconvLogClassifiesEveryStandardOperation(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"chat":             EventTypeAPIRequest,
+		"generate_content": EventTypeAPIRequest,
+		"text_completion":  EventTypeAPIRequest,
+		"embeddings":       EventTypeAPIRequest,
+		"image_generation": EventTypeAPIRequest,
+		"create_agent":     EventTypeAPIRequest,
+		"invoke_agent":     EventTypeAPIRequest,
+		"execute_tool":     EventTypeToolCall,
+		"something_else":   EventTypeUnclassified,
+	}
+	for operation, want := range cases {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			record := (&otelv1.InboundLogRecord_builder{
+				Attributes: []*otelv1.InboundLogRecord_KeyValue{
+					logDialectStringAttribute("gen_ai.operation.name", operation),
+				},
+			}).Build()
+			_, got, err := SemconvLog{}.EventType(record)
+			require.NoError(t, err)
+			require.Equal(t, want, got)
+		})
+	}
+}

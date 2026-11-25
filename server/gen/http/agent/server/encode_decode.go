@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -37,15 +38,21 @@ func DecodeGetPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	return func(r *http.Request) (*agent.GetPluginsPayload, error) {
 		var payload *agent.GetPluginsPayload
 		var (
-			legacyEmail  *string
-			apikeyToken  *string
-			email        *string
-			serialNumber *string
-			hostname     *string
+			legacyEmail      *string
+			deviceAgentToken *string
+			apikeyToken      *string
+			email            *string
+			serialNumber     *string
+			hostname         *string
+			environment      *string
 		)
 		legacyEmailRaw := r.URL.Query().Get("email")
 		if legacyEmailRaw != "" {
 			legacyEmail = &legacyEmailRaw
+		}
+		deviceAgentTokenRaw := r.Header.Get("Authorization")
+		if deviceAgentTokenRaw != "" {
+			deviceAgentToken = &deviceAgentTokenRaw
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -63,7 +70,18 @@ func DecodeGetPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if hostnameRaw != "" {
 			hostname = &hostnameRaw
 		}
-		payload = NewGetPluginsPayload(legacyEmail, apikeyToken, email, serialNumber, hostname)
+		environmentRaw := r.Header.Get("Gram-Device-Environment")
+		if environmentRaw != "" {
+			environment = &environmentRaw
+		}
+		payload = NewGetPluginsPayload(legacyEmail, deviceAgentToken, apikeyToken, email, serialNumber, hostname, environment)
+		if payload.DeviceAgentToken != nil {
+			if strings.Contains(*payload.DeviceAgentToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.DeviceAgentToken, " ", 2)[1]
+				payload.DeviceAgentToken = &cred
+			}
+		}
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -222,6 +240,828 @@ func EncodeGetPluginsError(encoder func(context.Context, http.ResponseWriter) go
 				body = formatter(ctx, res)
 			} else {
 				body = NewGetPluginsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetMyConnectionsResponse returns an encoder for responses returned by
+// the agent getMyConnections endpoint.
+func EncodeGetMyConnectionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*agent.GetMyConnectionsResult)
+		enc := encoder(ctx, w)
+		body := NewGetMyConnectionsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetMyConnectionsRequest returns a decoder for requests sent to the
+// agent getMyConnections endpoint.
+func DecodeGetMyConnectionsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.GetMyConnectionsPayload, error) {
+	return func(r *http.Request) (*agent.GetMyConnectionsPayload, error) {
+		var payload *agent.GetMyConnectionsPayload
+		var (
+			apikeyToken *string
+			email       *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		emailRaw := r.Header.Get("Gram-User-Email")
+		if emailRaw != "" {
+			email = &emailRaw
+		}
+		payload = NewGetMyConnectionsPayload(apikeyToken, email)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetMyConnectionsError returns an encoder for errors returned by the
+// getMyConnections agent endpoint.
+func EncodeGetMyConnectionsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMyConnectionsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMyConnectionsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMyConnectionsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMyConnectionsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMyConnectionsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMyConnectionsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMyConnectionsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMyConnectionsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMyConnectionsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMyConnectionsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetClaudeObservabilityPluginResponse returns an encoder for responses
+// returned by the agent getClaudeObservabilityPlugin endpoint.
+func EncodeGetClaudeObservabilityPluginResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*agent.GetClaudeObservabilityPluginResult)
+		ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/zip")
+		w.Header().Set("Content-Type", res.ContentType)
+		w.Header().Set("Content-Disposition", res.ContentDisposition)
+		w.WriteHeader(http.StatusOK)
+		return nil
+	}
+}
+
+// DecodeGetClaudeObservabilityPluginRequest returns a decoder for requests
+// sent to the agent getClaudeObservabilityPlugin endpoint.
+func DecodeGetClaudeObservabilityPluginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.GetClaudeObservabilityPluginPayload, error) {
+	return func(r *http.Request) (*agent.GetClaudeObservabilityPluginPayload, error) {
+		var payload *agent.GetClaudeObservabilityPluginPayload
+		var (
+			apikeyToken *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		payload = NewGetClaudeObservabilityPluginPayload(apikeyToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetClaudeObservabilityPluginError returns an encoder for errors
+// returned by the getClaudeObservabilityPlugin agent endpoint.
+func EncodeGetClaudeObservabilityPluginError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetClaudeObservabilityPluginUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetClaudeObservabilityPluginForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetClaudeObservabilityPluginBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetClaudeObservabilityPluginNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetClaudeObservabilityPluginConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetClaudeObservabilityPluginUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetClaudeObservabilityPluginInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetClaudeObservabilityPluginInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetClaudeObservabilityPluginUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetClaudeObservabilityPluginGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeHideMcpServerResponse returns an encoder for responses returned by the
+// agent hideMcpServer endpoint.
+func EncodeHideMcpServerResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeHideMcpServerRequest returns a decoder for requests sent to the agent
+// hideMcpServer endpoint.
+func DecodeHideMcpServerRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.HideMcpServerPayload, error) {
+	return func(r *http.Request) (*agent.HideMcpServerPayload, error) {
+		var payload *agent.HideMcpServerPayload
+		var (
+			body HideMcpServerRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateHideMcpServerRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken *string
+			email       *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		emailRaw := r.Header.Get("Gram-User-Email")
+		if emailRaw != "" {
+			email = &emailRaw
+		}
+		payload = NewHideMcpServerPayload(&body, apikeyToken, email)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeHideMcpServerError returns an encoder for errors returned by the
+// hideMcpServer agent endpoint.
+func EncodeHideMcpServerError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewHideMcpServerUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewHideMcpServerForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewHideMcpServerBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewHideMcpServerNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewHideMcpServerConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewHideMcpServerUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewHideMcpServerInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewHideMcpServerInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewHideMcpServerUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewHideMcpServerGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeUnhideMcpServerResponse returns an encoder for responses returned by
+// the agent unhideMcpServer endpoint.
+func EncodeUnhideMcpServerResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeUnhideMcpServerRequest returns a decoder for requests sent to the
+// agent unhideMcpServer endpoint.
+func DecodeUnhideMcpServerRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.UnhideMcpServerPayload, error) {
+	return func(r *http.Request) (*agent.UnhideMcpServerPayload, error) {
+		var payload *agent.UnhideMcpServerPayload
+		var (
+			body UnhideMcpServerRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateUnhideMcpServerRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken *string
+			email       *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		emailRaw := r.Header.Get("Gram-User-Email")
+		if emailRaw != "" {
+			email = &emailRaw
+		}
+		payload = NewUnhideMcpServerPayload(&body, apikeyToken, email)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeUnhideMcpServerError returns an encoder for errors returned by the
+// unhideMcpServer agent endpoint.
+func EncodeUnhideMcpServerError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnhideMcpServerUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnhideMcpServerForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnhideMcpServerBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnhideMcpServerNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnhideMcpServerConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnhideMcpServerUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnhideMcpServerInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnhideMcpServerInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnhideMcpServerUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnhideMcpServerGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -831,6 +1671,625 @@ func EncodeUpdateConfigurationError(encoder func(context.Context, http.ResponseW
 	}
 }
 
+// EncodeListAiScanTargetsResponse returns an encoder for responses returned by
+// the agent listAiScanTargets endpoint.
+func EncodeListAiScanTargetsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*agent.ListAiScanTargetsResult)
+		enc := encoder(ctx, w)
+		body := NewListAiScanTargetsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListAiScanTargetsRequest returns a decoder for requests sent to the
+// agent listAiScanTargets endpoint.
+func DecodeListAiScanTargetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.ListAiScanTargetsPayload, error) {
+	return func(r *http.Request) (*agent.ListAiScanTargetsPayload, error) {
+		var payload *agent.ListAiScanTargetsPayload
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewListAiScanTargetsPayload(sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListAiScanTargetsError returns an encoder for errors returned by the
+// listAiScanTargets agent endpoint.
+func EncodeListAiScanTargetsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListAiScanTargetsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListAiScanTargetsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListAiScanTargetsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListAiScanTargetsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListAiScanTargetsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListAiScanTargetsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListAiScanTargetsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListAiScanTargetsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListAiScanTargetsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListAiScanTargetsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeUpsertAiScanTargetResponse returns an encoder for responses returned
+// by the agent upsertAiScanTarget endpoint.
+func EncodeUpsertAiScanTargetResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*agent.AiScanTargetMutationResult)
+		enc := encoder(ctx, w)
+		body := NewUpsertAiScanTargetResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeUpsertAiScanTargetRequest returns a decoder for requests sent to the
+// agent upsertAiScanTarget endpoint.
+func DecodeUpsertAiScanTargetRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.UpsertAiScanTargetPayload, error) {
+	return func(r *http.Request) (*agent.UpsertAiScanTargetPayload, error) {
+		var payload *agent.UpsertAiScanTargetPayload
+		var (
+			body UpsertAiScanTargetRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateUpsertAiScanTargetRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewUpsertAiScanTargetPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeUpsertAiScanTargetError returns an encoder for errors returned by the
+// upsertAiScanTarget agent endpoint.
+func EncodeUpsertAiScanTargetError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpsertAiScanTargetUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpsertAiScanTargetForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpsertAiScanTargetBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpsertAiScanTargetNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpsertAiScanTargetConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpsertAiScanTargetUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpsertAiScanTargetInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpsertAiScanTargetInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpsertAiScanTargetUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpsertAiScanTargetGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeDeleteAiScanTargetResponse returns an encoder for responses returned
+// by the agent deleteAiScanTarget endpoint.
+func EncodeDeleteAiScanTargetResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*agent.DeleteAiScanTargetResult)
+		enc := encoder(ctx, w)
+		body := NewDeleteAiScanTargetResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeDeleteAiScanTargetRequest returns a decoder for requests sent to the
+// agent deleteAiScanTarget endpoint.
+func DecodeDeleteAiScanTargetRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.DeleteAiScanTargetPayload, error) {
+	return func(r *http.Request) (*agent.DeleteAiScanTargetPayload, error) {
+		var payload *agent.DeleteAiScanTargetPayload
+		var (
+			body DeleteAiScanTargetRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateDeleteAiScanTargetRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewDeleteAiScanTargetPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeDeleteAiScanTargetError returns an encoder for errors returned by the
+// deleteAiScanTarget agent endpoint.
+func EncodeDeleteAiScanTargetError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDeleteAiScanTargetUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDeleteAiScanTargetForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDeleteAiScanTargetBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDeleteAiScanTargetNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDeleteAiScanTargetConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDeleteAiScanTargetUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDeleteAiScanTargetInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDeleteAiScanTargetInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDeleteAiScanTargetUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDeleteAiScanTargetGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGetSessionMetaResponse returns an encoder for responses returned by
 // the agent getSessionMeta endpoint.
 func EncodeGetSessionMetaResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1256,6 +2715,704 @@ func EncodeReportSessionMovedError(encoder func(context.Context, http.ResponseWr
 	}
 }
 
+// EncodeReportAIScanResponse returns an encoder for responses returned by the
+// agent reportAIScan endpoint.
+func EncodeReportAIScanResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusOK)
+		return nil
+	}
+}
+
+// DecodeReportAIScanRequest returns a decoder for requests sent to the agent
+// reportAIScan endpoint.
+func DecodeReportAIScanRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.ReportAIScanPayload, error) {
+	return func(r *http.Request) (*agent.ReportAIScanPayload, error) {
+		var payload *agent.ReportAIScanPayload
+		var (
+			body ReportAIScanRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateReportAIScanRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken  *string
+			email        *string
+			serialNumber *string
+			hostname     *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		emailRaw := r.Header.Get("Gram-User-Email")
+		if emailRaw != "" {
+			email = &emailRaw
+		}
+		serialNumberRaw := r.Header.Get("Gram-Device-Serial")
+		if serialNumberRaw != "" {
+			serialNumber = &serialNumberRaw
+		}
+		hostnameRaw := r.Header.Get("Gram-Device-Hostname")
+		if hostnameRaw != "" {
+			hostname = &hostnameRaw
+		}
+		payload = NewReportAIScanPayload(&body, apikeyToken, email, serialNumber, hostname)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeReportAIScanError returns an encoder for errors returned by the
+// reportAIScan agent endpoint.
+func EncodeReportAIScanError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportAIScanUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportAIScanForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportAIScanBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportAIScanNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportAIScanConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportAIScanUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportAIScanInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportAIScanInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportAIScanUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportAIScanGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeReportStateResponse returns an encoder for responses returned by the
+// agent reportState endpoint.
+func EncodeReportStateResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*agent.ReportStateResult)
+		enc := encoder(ctx, w)
+		body := NewReportStateResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeReportStateRequest returns a decoder for requests sent to the agent
+// reportState endpoint.
+func DecodeReportStateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.ReportStatePayload, error) {
+	return func(r *http.Request) (*agent.ReportStatePayload, error) {
+		var payload *agent.ReportStatePayload
+		var (
+			body ReportStateRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateReportStateRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken  *string
+			email        *string
+			serialNumber *string
+			hostname     *string
+			environment  *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		emailRaw := r.Header.Get("Gram-User-Email")
+		if emailRaw != "" {
+			email = &emailRaw
+		}
+		serialNumberRaw := r.Header.Get("Gram-Device-Serial")
+		if serialNumberRaw != "" {
+			serialNumber = &serialNumberRaw
+		}
+		hostnameRaw := r.Header.Get("Gram-Device-Hostname")
+		if hostnameRaw != "" {
+			hostname = &hostnameRaw
+		}
+		environmentRaw := r.Header.Get("Gram-Device-Environment")
+		if environmentRaw != "" {
+			environment = &environmentRaw
+		}
+		payload = NewReportStatePayload(&body, apikeyToken, email, serialNumber, hostname, environment)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeReportStateError returns an encoder for errors returned by the
+// reportState agent endpoint.
+func EncodeReportStateError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportStateUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportStateForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportStateBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportStateNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportStateConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportStateUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportStateInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportStateInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportStateUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportStateGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeReportCrashResponse returns an encoder for responses returned by the
+// agent reportCrash endpoint.
+func EncodeReportCrashResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*agent.ReportCrashResult)
+		enc := encoder(ctx, w)
+		body := NewReportCrashResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeReportCrashRequest returns a decoder for requests sent to the agent
+// reportCrash endpoint.
+func DecodeReportCrashRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.ReportCrashPayload, error) {
+	return func(r *http.Request) (*agent.ReportCrashPayload, error) {
+		var payload *agent.ReportCrashPayload
+		var (
+			body ReportCrashRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateReportCrashRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			deviceAgentToken *string
+			apikeyToken      *string
+			email            *string
+			serialNumber     *string
+			environment      *string
+		)
+		deviceAgentTokenRaw := r.Header.Get("Authorization")
+		if deviceAgentTokenRaw != "" {
+			deviceAgentToken = &deviceAgentTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		emailRaw := r.Header.Get("Gram-User-Email")
+		if emailRaw != "" {
+			email = &emailRaw
+		}
+		serialNumberRaw := r.Header.Get("Gram-Device-Serial")
+		if serialNumberRaw != "" {
+			serialNumber = &serialNumberRaw
+		}
+		environmentRaw := r.Header.Get("Gram-Device-Environment")
+		if environmentRaw != "" {
+			environment = &environmentRaw
+		}
+		payload = NewReportCrashPayload(&body, deviceAgentToken, apikeyToken, email, serialNumber, environment)
+		if payload.DeviceAgentToken != nil {
+			if strings.Contains(*payload.DeviceAgentToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.DeviceAgentToken, " ", 2)[1]
+				payload.DeviceAgentToken = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeReportCrashError returns an encoder for errors returned by the
+// reportCrash agent endpoint.
+func EncodeReportCrashError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeCreateSessionHandoffResponse returns an encoder for responses returned
 // by the agent createSessionHandoff endpoint.
 func EncodeCreateSessionHandoffResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1479,6 +3636,199 @@ func EncodeCreateSessionHandoffError(encoder func(context.Context, http.Response
 	}
 }
 
+// EncodeListPendingAccessRequestsResponse returns an encoder for responses
+// returned by the agent listPendingAccessRequests endpoint.
+func EncodeListPendingAccessRequestsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*agent.ListPendingAccessRequestsResult)
+		enc := encoder(ctx, w)
+		body := NewListPendingAccessRequestsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListPendingAccessRequestsRequest returns a decoder for requests sent
+// to the agent listPendingAccessRequests endpoint.
+func DecodeListPendingAccessRequestsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.ListPendingAccessRequestsPayload, error) {
+	return func(r *http.Request) (*agent.ListPendingAccessRequestsPayload, error) {
+		var payload *agent.ListPendingAccessRequestsPayload
+		var (
+			apikeyToken *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		payload = NewListPendingAccessRequestsPayload(apikeyToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListPendingAccessRequestsError returns an encoder for errors returned
+// by the listPendingAccessRequests agent endpoint.
+func EncodeListPendingAccessRequestsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListPendingAccessRequestsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListPendingAccessRequestsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListPendingAccessRequestsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListPendingAccessRequestsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListPendingAccessRequestsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListPendingAccessRequestsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListPendingAccessRequestsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListPendingAccessRequestsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListPendingAccessRequestsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListPendingAccessRequestsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalAgentAgentMarketplaceToAgentMarketplaceResponseBody builds a value of
 // type *AgentMarketplaceResponseBody from a value of type
 // *agent.AgentMarketplace.
@@ -1497,6 +3847,35 @@ func marshalAgentAgentPluginToAgentPluginResponseBody(v *agent.AgentPlugin) *Age
 	res := &AgentPluginResponseBody{
 		Slug:            v.Slug,
 		MarketplaceName: v.MarketplaceName,
+		InstallMode:     v.InstallMode,
+		Name:            v.Name,
+		Description:     v.Description,
+	}
+	if v.Servers != nil {
+		res.Servers = make([]*AgentPluginServerResponseBody, len(v.Servers))
+		for i, val := range v.Servers {
+			if val == nil {
+				res.Servers[i] = nil
+				continue
+			}
+			res.Servers[i] = marshalAgentAgentPluginServerToAgentPluginServerResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalAgentAgentPluginServerToAgentPluginServerResponseBody builds a value
+// of type *AgentPluginServerResponseBody from a value of type
+// *agent.AgentPluginServer.
+func marshalAgentAgentPluginServerToAgentPluginServerResponseBody(v *agent.AgentPluginServer) *AgentPluginServerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentPluginServerResponseBody{
+		ID:           v.ID,
+		Name:         v.Name,
+		DashboardURL: v.DashboardURL,
 	}
 
 	return res
@@ -1527,6 +3906,56 @@ func marshalAgentDeviceAgentConfigurationToDeviceAgentConfigurationResponseBody(
 	return res
 }
 
+// marshalAgentAgentPollingPrincipalToAgentPollingPrincipalResponseBody builds
+// a value of type *AgentPollingPrincipalResponseBody from a value of type
+// *agent.AgentPollingPrincipal.
+func marshalAgentAgentPollingPrincipalToAgentPollingPrincipalResponseBody(v *agent.AgentPollingPrincipal) *AgentPollingPrincipalResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentPollingPrincipalResponseBody{
+		Urn:         v.Urn,
+		DisplayName: v.DisplayName,
+	}
+
+	return res
+}
+
+// marshalAgentAgentMCPServerToAgentMCPServerResponseBody builds a value of
+// type *AgentMCPServerResponseBody from a value of type *agent.AgentMCPServer.
+func marshalAgentAgentMCPServerToAgentMCPServerResponseBody(v *agent.AgentMCPServer) *AgentMCPServerResponseBody {
+	res := &AgentMCPServerResponseBody{
+		Name:          v.Name,
+		URL:           v.URL,
+		TokenEndpoint: v.TokenEndpoint,
+		Audience:      v.Audience,
+		Resource:      v.Resource,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalAgentAgentServerConnectionToAgentServerConnectionResponseBody builds
+// a value of type *AgentServerConnectionResponseBody from a value of type
+// *agent.AgentServerConnection.
+func marshalAgentAgentServerConnectionToAgentServerConnectionResponseBody(v *agent.AgentServerConnection) *AgentServerConnectionResponseBody {
+	res := &AgentServerConnectionResponseBody{
+		ID:               v.ID,
+		State:            v.State,
+		ConnectURL:       v.ConnectURL,
+		RequestAccessURL: v.RequestAccessURL,
+		Hidden:           v.Hidden,
+	}
+
+	return res
+}
+
 // marshalAgentSyncedAgentUserToSyncedAgentUserResponseBody builds a value of
 // type *SyncedAgentUserResponseBody from a value of type
 // *agent.SyncedAgentUser.
@@ -1535,6 +3964,172 @@ func marshalAgentSyncedAgentUserToSyncedAgentUserResponseBody(v *agent.SyncedAge
 		Email:       v.Email,
 		FirstSeenAt: v.FirstSeenAt,
 		LastSeenAt:  v.LastSeenAt,
+	}
+
+	return res
+}
+
+// marshalAgentAiScanTargetToAiScanTargetResponseBody builds a value of type
+// *AiScanTargetResponseBody from a value of type *agent.AiScanTarget.
+func marshalAgentAiScanTargetToAiScanTargetResponseBody(v *agent.AiScanTarget) *AiScanTargetResponseBody {
+	res := &AiScanTargetResponseBody{
+		ID:              v.ID,
+		DisplayName:     v.DisplayName,
+		Category:        v.Category,
+		VersionPlistKey: v.VersionPlistKey,
+		Origin:          v.Origin,
+		Customized:      v.Customized,
+		CreatedAt:       v.CreatedAt,
+		UpdatedAt:       v.UpdatedAt,
+	}
+	if v.Signatures != nil {
+		res.Signatures = marshalAgentAiScanTargetSignaturesToAiScanTargetSignaturesResponseBody(v.Signatures)
+	}
+	if v.GatewayClient != nil {
+		res.GatewayClient = marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientResponseBody(v.GatewayClient)
+	}
+	if v.Access != nil {
+		res.Access = marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v.Access)
+	}
+
+	return res
+}
+
+// marshalAgentAiScanTargetSignaturesToAiScanTargetSignaturesResponseBody
+// builds a value of type *AiScanTargetSignaturesResponseBody from a value of
+// type *agent.AiScanTargetSignatures.
+func marshalAgentAiScanTargetSignaturesToAiScanTargetSignaturesResponseBody(v *agent.AiScanTargetSignatures) *AiScanTargetSignaturesResponseBody {
+	res := &AiScanTargetSignaturesResponseBody{}
+	if v.BundleIds != nil {
+		res.BundleIds = make([]string, len(v.BundleIds))
+		for i, val := range v.BundleIds {
+			res.BundleIds[i] = val
+		}
+	} else {
+		res.BundleIds = []string{}
+	}
+	if v.Binaries != nil {
+		res.Binaries = make([]string, len(v.Binaries))
+		for i, val := range v.Binaries {
+			res.Binaries[i] = val
+		}
+	} else {
+		res.Binaries = []string{}
+	}
+	if v.ConfigDirs != nil {
+		res.ConfigDirs = make([]string, len(v.ConfigDirs))
+		for i, val := range v.ConfigDirs {
+			res.ConfigDirs[i] = val
+		}
+	} else {
+		res.ConfigDirs = []string{}
+	}
+	if v.ProcessNames != nil {
+		res.ProcessNames = make([]string, len(v.ProcessNames))
+		for i, val := range v.ProcessNames {
+			res.ProcessNames[i] = val
+		}
+	} else {
+		res.ProcessNames = []string{}
+	}
+
+	return res
+}
+
+// marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientResponseBody
+// builds a value of type *AiScanTargetGatewayClientResponseBody from a value
+// of type *agent.AiScanTargetGatewayClient.
+func marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientResponseBody(v *agent.AiScanTargetGatewayClient) *AiScanTargetGatewayClientResponseBody {
+	res := &AiScanTargetGatewayClientResponseBody{}
+	if v.CimdVendorKeys != nil {
+		res.CimdVendorKeys = make([]string, len(v.CimdVendorKeys))
+		for i, val := range v.CimdVendorKeys {
+			res.CimdVendorKeys[i] = val
+		}
+	} else {
+		res.CimdVendorKeys = []string{}
+	}
+	if v.OauthClientIds != nil {
+		res.OauthClientIds = make([]string, len(v.OauthClientIds))
+		for i, val := range v.OauthClientIds {
+			res.OauthClientIds[i] = val
+		}
+	} else {
+		res.OauthClientIds = []string{}
+	}
+	if v.ClientInfoNames != nil {
+		res.ClientInfoNames = make([]string, len(v.ClientInfoNames))
+		for i, val := range v.ClientInfoNames {
+			res.ClientInfoNames[i] = val
+		}
+	} else {
+		res.ClientInfoNames = []string{}
+	}
+
+	return res
+}
+
+// marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody builds a
+// value of type *AIToolAccessSummaryResponseBody from a value of type
+// *types.AIToolAccessSummary.
+func marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v *types.AIToolAccessSummary) *AIToolAccessSummaryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AIToolAccessSummaryResponseBody{
+		State:       v.State,
+		Decision:    v.Decision,
+		Enforceable: v.Enforceable,
+		Rationale:   v.Rationale,
+	}
+
+	return res
+}
+
+// unmarshalAiScanTargetSignaturesRequestBodyToAgentAiScanTargetSignatures
+// builds a value of type *agent.AiScanTargetSignatures from a value of type
+// *AiScanTargetSignaturesRequestBody.
+func unmarshalAiScanTargetSignaturesRequestBodyToAgentAiScanTargetSignatures(v *AiScanTargetSignaturesRequestBody) *agent.AiScanTargetSignatures {
+	res := &agent.AiScanTargetSignatures{}
+	res.BundleIds = make([]string, len(v.BundleIds))
+	for i, val := range v.BundleIds {
+		res.BundleIds[i] = val
+	}
+	res.Binaries = make([]string, len(v.Binaries))
+	for i, val := range v.Binaries {
+		res.Binaries[i] = val
+	}
+	res.ConfigDirs = make([]string, len(v.ConfigDirs))
+	for i, val := range v.ConfigDirs {
+		res.ConfigDirs[i] = val
+	}
+	res.ProcessNames = make([]string, len(v.ProcessNames))
+	for i, val := range v.ProcessNames {
+		res.ProcessNames[i] = val
+	}
+
+	return res
+}
+
+// unmarshalAiScanTargetGatewayClientRequestBodyToAgentAiScanTargetGatewayClient
+// builds a value of type *agent.AiScanTargetGatewayClient from a value of type
+// *AiScanTargetGatewayClientRequestBody.
+func unmarshalAiScanTargetGatewayClientRequestBodyToAgentAiScanTargetGatewayClient(v *AiScanTargetGatewayClientRequestBody) *agent.AiScanTargetGatewayClient {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AiScanTargetGatewayClient{}
+	res.CimdVendorKeys = make([]string, len(v.CimdVendorKeys))
+	for i, val := range v.CimdVendorKeys {
+		res.CimdVendorKeys[i] = val
+	}
+	res.OauthClientIds = make([]string, len(v.OauthClientIds))
+	for i, val := range v.OauthClientIds {
+		res.OauthClientIds[i] = val
+	}
+	res.ClientInfoNames = make([]string, len(v.ClientInfoNames))
+	for i, val := range v.ClientInfoNames {
+		res.ClientInfoNames[i] = val
 	}
 
 	return res
@@ -1549,6 +4144,221 @@ func marshalAgentAgentSessionMetaToAgentSessionMetaResponseBody(v *agent.AgentSe
 		ChatID:    v.ChatID,
 		Title:     v.Title,
 		UpdatedAt: v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalAIScanMatchRequestBodyToAgentAIScanMatch builds a value of type
+// *agent.AIScanMatch from a value of type *AIScanMatchRequestBody.
+func unmarshalAIScanMatchRequestBodyToAgentAIScanMatch(v *AIScanMatchRequestBody) *agent.AIScanMatch {
+	res := &agent.AIScanMatch{
+		TargetID: *v.TargetID,
+		Category: *v.Category,
+		Signal:   *v.Signal,
+		Version:  v.Version,
+	}
+
+	return res
+}
+
+// unmarshalAgentStateVersionsRequestBodyToAgentAgentStateVersions builds a
+// value of type *agent.AgentStateVersions from a value of type
+// *AgentStateVersionsRequestBody.
+func unmarshalAgentStateVersionsRequestBodyToAgentAgentStateVersions(v *AgentStateVersionsRequestBody) *agent.AgentStateVersions {
+	res := &agent.AgentStateVersions{
+		Speakeasyd:  *v.Speakeasyd,
+		Speakeasy:   v.Speakeasy,
+		SpeakeasyUI: v.SpeakeasyUI,
+		Os:          v.Os,
+		Arch:        v.Arch,
+	}
+
+	return res
+}
+
+// unmarshalAgentStatePolicyRequestBodyToAgentAgentStatePolicy builds a value
+// of type *agent.AgentStatePolicy from a value of type
+// *AgentStatePolicyRequestBody.
+func unmarshalAgentStatePolicyRequestBodyToAgentAgentStatePolicy(v *AgentStatePolicyRequestBody) *agent.AgentStatePolicy {
+	res := &agent.AgentStatePolicy{
+		AppliedEtag:        v.AppliedEtag,
+		AppliedAt:          v.AppliedAt,
+		RemoteConfigEtag:   v.RemoteConfigEtag,
+		RemoteConfigFailed: v.RemoteConfigFailed,
+	}
+	res.WithheldPlugins = make([]*agent.AgentStateWithheldPlugin, len(v.WithheldPlugins))
+	for i, val := range v.WithheldPlugins {
+		if val == nil {
+			res.WithheldPlugins[i] = nil
+			continue
+		}
+		res.WithheldPlugins[i] = unmarshalAgentStateWithheldPluginRequestBodyToAgentAgentStateWithheldPlugin(val)
+	}
+
+	return res
+}
+
+// unmarshalAgentStateWithheldPluginRequestBodyToAgentAgentStateWithheldPlugin
+// builds a value of type *agent.AgentStateWithheldPlugin from a value of type
+// *AgentStateWithheldPluginRequestBody.
+func unmarshalAgentStateWithheldPluginRequestBodyToAgentAgentStateWithheldPlugin(v *AgentStateWithheldPluginRequestBody) *agent.AgentStateWithheldPlugin {
+	res := &agent.AgentStateWithheldPlugin{
+		Marketplace: v.Marketplace,
+		Slug:        *v.Slug,
+		Reason:      *v.Reason,
+	}
+
+	return res
+}
+
+// unmarshalAgentStateToolRequestBodyToAgentAgentStateTool builds a value of
+// type *agent.AgentStateTool from a value of type *AgentStateToolRequestBody.
+func unmarshalAgentStateToolRequestBodyToAgentAgentStateTool(v *AgentStateToolRequestBody) *agent.AgentStateTool {
+	res := &agent.AgentStateTool{
+		Tool:             *v.Tool,
+		Layer:            *v.Layer,
+		Outcome:          *v.Outcome,
+		PendingReason:    v.PendingReason,
+		ErrorKind:        v.ErrorKind,
+		RestartRequired:  v.RestartRequired,
+		ActionRequired:   v.ActionRequired,
+		DriftCorrections: v.DriftCorrections,
+	}
+
+	return res
+}
+
+// unmarshalAgentStateUpdateRequestBodyToAgentAgentStateUpdate builds a value
+// of type *agent.AgentStateUpdate from a value of type
+// *AgentStateUpdateRequestBody.
+func unmarshalAgentStateUpdateRequestBodyToAgentAgentStateUpdate(v *AgentStateUpdateRequestBody) *agent.AgentStateUpdate {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AgentStateUpdate{
+		AutoUpdate:     v.AutoUpdate,
+		Channel:        v.Channel,
+		PinnedTarget:   v.PinnedTarget,
+		CurrentBlocked: v.CurrentBlocked,
+	}
+	if v.LastRollback != nil {
+		res.LastRollback = unmarshalAgentStateRollbackRequestBodyToAgentAgentStateRollback(v.LastRollback)
+	}
+
+	return res
+}
+
+// unmarshalAgentStateRollbackRequestBodyToAgentAgentStateRollback builds a
+// value of type *agent.AgentStateRollback from a value of type
+// *AgentStateRollbackRequestBody.
+func unmarshalAgentStateRollbackRequestBodyToAgentAgentStateRollback(v *AgentStateRollbackRequestBody) *agent.AgentStateRollback {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AgentStateRollback{
+		At:   *v.At,
+		From: v.From,
+		To:   v.To,
+	}
+
+	return res
+}
+
+// unmarshalAgentCrashReportRequestBodyToAgentAgentCrashReport builds a value
+// of type *agent.AgentCrashReport from a value of type
+// *AgentCrashReportRequestBody.
+func unmarshalAgentCrashReportRequestBodyToAgentAgentCrashReport(v *AgentCrashReportRequestBody) *agent.AgentCrashReport {
+	res := &agent.AgentCrashReport{
+		SchemaVersion:   *v.SchemaVersion,
+		ID:              *v.ID,
+		Kind:            *v.Kind,
+		Component:       *v.Component,
+		OccurredAt:      *v.OccurredAt,
+		Count:           *v.Count,
+		Message:         v.Message,
+		PanicType:       v.PanicType,
+		OtherGoroutines: v.OtherGoroutines,
+	}
+	res.Build = unmarshalAgentCrashBuildRequestBodyToAgentAgentCrashBuild(v.Build)
+	if v.Stack != nil {
+		res.Stack = make([]*agent.AgentCrashFrame, len(v.Stack))
+		for i, val := range v.Stack {
+			if val == nil {
+				res.Stack[i] = nil
+				continue
+			}
+			res.Stack[i] = unmarshalAgentCrashFrameRequestBodyToAgentAgentCrashFrame(val)
+		}
+	}
+	if v.Rollback != nil {
+		res.Rollback = unmarshalAgentCrashRollbackRequestBodyToAgentAgentCrashRollback(v.Rollback)
+	}
+
+	return res
+}
+
+// unmarshalAgentCrashBuildRequestBodyToAgentAgentCrashBuild builds a value of
+// type *agent.AgentCrashBuild from a value of type *AgentCrashBuildRequestBody.
+func unmarshalAgentCrashBuildRequestBodyToAgentAgentCrashBuild(v *AgentCrashBuildRequestBody) *agent.AgentCrashBuild {
+	res := &agent.AgentCrashBuild{
+		Binary:    *v.Binary,
+		Version:   *v.Version,
+		Channel:   v.Channel,
+		Os:        v.Os,
+		Arch:      v.Arch,
+		OsVersion: v.OsVersion,
+	}
+
+	return res
+}
+
+// unmarshalAgentCrashFrameRequestBodyToAgentAgentCrashFrame builds a value of
+// type *agent.AgentCrashFrame from a value of type *AgentCrashFrameRequestBody.
+func unmarshalAgentCrashFrameRequestBodyToAgentAgentCrashFrame(v *AgentCrashFrameRequestBody) *agent.AgentCrashFrame {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AgentCrashFrame{
+		Function: *v.Function,
+		File:     v.File,
+		Line:     v.Line,
+	}
+
+	return res
+}
+
+// unmarshalAgentCrashRollbackRequestBodyToAgentAgentCrashRollback builds a
+// value of type *agent.AgentCrashRollback from a value of type
+// *AgentCrashRollbackRequestBody.
+func unmarshalAgentCrashRollbackRequestBodyToAgentAgentCrashRollback(v *AgentCrashRollbackRequestBody) *agent.AgentCrashRollback {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AgentCrashRollback{
+		From: v.From,
+		To:   v.To,
+	}
+
+	return res
+}
+
+// marshalAgentAgentPendingAccessRequestToAgentPendingAccessRequestResponseBody
+// builds a value of type *AgentPendingAccessRequestResponseBody from a value
+// of type *agent.AgentPendingAccessRequest.
+func marshalAgentAgentPendingAccessRequestToAgentPendingAccessRequestResponseBody(v *agent.AgentPendingAccessRequest) *AgentPendingAccessRequestResponseBody {
+	res := &AgentPendingAccessRequestResponseBody{
+		ID:                       v.ID,
+		RequesterDisplayName:     v.RequesterDisplayName,
+		Scope:                    v.Scope,
+		PermissionLabel:          v.PermissionLabel,
+		ResourceName:             v.ResourceName,
+		Message:                  v.Message,
+		RequestedDurationSeconds: v.RequestedDurationSeconds,
+		RequestedUntil:           v.RequestedUntil,
+		CreatedAt:                v.CreatedAt,
+		ExpiresAt:                v.ExpiresAt,
+		DecideURL:                v.DecideURL,
 	}
 
 	return res

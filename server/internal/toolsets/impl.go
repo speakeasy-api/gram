@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
+	temporalSDK "go.temporal.io/sdk/temporal"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -32,39 +33,56 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	networkingressRepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 type Service struct {
-	tracer               trace.Tracer
-	logger               *slog.Logger
-	db                   *pgxpool.Pool
-	repo                 *repo.Queries
-	environmentRepo      *environmentsRepo.Queries
-	auth                 *auth.Auth
-	authz                *authz.Engine
-	toolsets             *Toolsets
-	domainsRepo          *domainsRepo.Queries
-	usageRepo            *usageRepo.Queries
-	oauthRepo            *oauthRepo.Queries
-	mcpmetadataRepo      *mcpmetadataRepo.Queries
-	toolsetCache         cache.TypedCacheObject[mv.ToolsetBaseContents]
-	audit                *audit.Logger
-	temporalEnv          *tenv.Environment
-	pluginsGitHubEnabled bool
+	tracerProvider           trace.TracerProvider
+	tracer                   trace.Tracer
+	logger                   *slog.Logger
+	db                       *pgxpool.Pool
+	policy                   *guardian.Policy
+	repo                     *repo.Queries
+	auth                     *auth.Auth
+	authz                    *authz.Engine
+	toolsets                 *Toolsets
+	domainsRepo              *domainsRepo.Queries
+	usageRepo                *usageRepo.Queries
+	oauthRepo                *oauthRepo.Queries
+	mcpmetadataRepo          *mcpmetadataRepo.Queries
+	toolsetCache             cache.TypedCacheObject[mv.ToolsetBaseContents]
+	audit                    *audit.Logger
+	temporalEnv              *tenv.Environment
+	pluginsGitHubEnabled     bool
+	networkAccessEligibility networkaccess.EligibilityChecker
+	publicationRequests      plugins.PublicationRequests
+	// revoker handles grants orphaned when a deleted hosted server releases its issuer.
+	revoker *remotesessions.UpstreamRevoker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -72,6 +90,7 @@ var _ gen.Service = (*Service)(nil)
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	policy *guardian.Policy,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	cacheAdapter cache.Cache,
@@ -79,37 +98,50 @@ func NewService(
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	pluginsGitHubEnabled bool,
+	revoker *remotesessions.UpstreamRevoker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
-		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
-		logger:               logger,
-		db:                   db,
-		repo:                 repo.New(db),
-		auth:                 auth.New(logger, db, sessions, authzEngine),
-		authz:                authzEngine,
-		environmentRepo:      environmentsRepo.New(db),
-		toolsets:             NewToolsets(db),
-		domainsRepo:          domainsRepo.New(db),
-		usageRepo:            usageRepo.New(db),
-		oauthRepo:            oauthRepo.New(db),
-		mcpmetadataRepo:      mcpmetadataRepo.New(db),
-		toolsetCache:         cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
-		audit:                auditLogger,
-		temporalEnv:          temporalEnv,
-		pluginsGitHubEnabled: pluginsGitHubEnabled,
+		tracerProvider:           tracerProvider,
+		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
+		logger:                   logger,
+		db:                       db,
+		policy:                   policy,
+		repo:                     repo.New(db),
+		auth:                     auth.New(logger, db, sessions, authzEngine),
+		authz:                    authzEngine,
+		toolsets:                 NewToolsets(db),
+		domainsRepo:              domainsRepo.New(db),
+		usageRepo:                usageRepo.New(db),
+		oauthRepo:                oauthRepo.New(db),
+		mcpmetadataRepo:          mcpmetadataRepo.New(db),
+		toolsetCache:             cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		audit:                    auditLogger,
+		temporalEnv:              temporalEnv,
+		pluginsGitHubEnabled:     pluginsGitHubEnabled,
+		networkAccessEligibility: networkaccess.DenyAllChecker{},
+		publicationRequests:      plugins.PublicationRequests{Enabled: false},
+		revoker:                  revoker,
 	}
+}
+
+func (s *Service) WithNetworkAccessEligibility(checker networkaccess.EligibilityChecker) *Service {
+	s.networkAccessEligibility = checker
+	return s
+}
+
+func (s *Service) WithPublicationRequests(enabled bool) *Service {
+	s.publicationRequests.Enabled = enabled
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	srv.Mount(mux, server)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -122,57 +154,11 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
 	logger := s.logger
-
-	slugSuffix, err := conv.GenerateRandomSlug(5)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate random slug").LogError(ctx, logger)
-	}
-
-	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
-
-	enabledServerCount, err := s.usageRepo.GetEnabledServerCount(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		// don't block the user from creating a toolset
-		logger.ErrorContext(ctx, "error getting enabled server count", attr.SlogError(err), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-	}
-
-	createToolParams := repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   payload.Name,
-		Slug:                   conv.ToSlug(payload.Name),
-		Description:            conv.PtrToPGText(payload.Description),
-		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             enabledServerCount == 0, // we automatically enable the first available toolset in an organization as an MCP server
-	}
-
-	if payload.DefaultEnvironmentSlug != nil {
-		_, err := s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
-			Slug:      conv.ToLower(*payload.DefaultEnvironmentSlug),
-			ProjectID: *authCtx.ProjectID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error finding environment")
-		}
-		createToolParams.DefaultEnvironmentSlug = conv.ToPGText(conv.ToLower(*payload.DefaultEnvironmentSlug))
-	} else {
-		environments, err := s.environmentRepo.ListEnvironments(ctx, *authCtx.ProjectID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error listing environments")
-		}
-		for _, environment := range environments {
-			if environment.Slug == "default" { // We will autofill the default environment if one is available
-				createToolParams.DefaultEnvironmentSlug = conv.ToPGText(environment.Slug)
-				break
-			}
-		}
-	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -180,112 +166,185 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	tr := s.repo.WithTx(dbtx)
-
-	createdToolset, err := tr.CreateToolset(ctx, createToolParams)
-	var pgErr *pgconn.PgError
-	if err != nil {
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, nil, "toolset slug already exists")
-		}
-
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create toolset").LogError(ctx, logger)
+	var defaultEnvironmentSlug *string
+	if payload.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug = new(string(*payload.DefaultEnvironmentSlug))
 	}
-
+	var originRegistrySpecifier *string
 	if payload.Origin != nil {
-		_, err = tr.CreateToolsetOrigin(ctx, repo.CreateToolsetOriginParams{
-			OrganizationID:    authCtx.ActiveOrganizationID,
-			ToolsetID:         createdToolset.ID,
-			RegistrySpecifier: payload.Origin.RegistrySpecifier,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to create toolset origin").LogError(ctx, logger)
-		}
+		originRegistrySpecifier = new(payload.Origin.RegistrySpecifier)
 	}
-
-	// Create initial toolset version with tool URNs
-	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, createdToolset.ID, tr)
+	created, err := CreateToolsetInTransaction(ctx, dbtx, logger, s.audit, ToolsetCreateInput{
+		OrganizationID:          authCtx.ActiveOrganizationID,
+		OrganizationSlug:        authCtx.OrganizationSlug,
+		ProjectID:               *authCtx.ProjectID,
+		Authz:                   s.authz,
+		ActorUserID:             authCtx.UserID,
+		ActorEmail:              authCtx.Email,
+		Name:                    payload.Name,
+		Description:             payload.Description,
+		DefaultEnvironmentSlug:  defaultEnvironmentSlug,
+		OriginRegistrySpecifier: originRegistrySpecifier,
+		ToolURNs:                payload.ToolUrns,
+		ResourceURNs:            payload.ResourceUrns,
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	if err := s.audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		ToolsetURN:       urn.NewToolset(createdToolset.ID),
-		ToolsetName:      createdToolset.Name,
-		ToolsetSlug:      createdToolset.Slug,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
-	}
-
-	var pluginCreated bool
-	if createToolParams.McpEnabled {
-		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, createdToolset.ID, createdToolset.Name)
-		if err != nil {
-			return nil, err
-		}
-	}
+	createdToolset := created.Toolset
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving toolset").LogError(ctx, logger)
 	}
 
-	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
+	// Only a toolset that joined the Default plugin changed generated plugin
+	// output, so every other creation must not enqueue a publish.
+	s.triggerPluginPublish(ctx, authCtx, created.AddedToDefaultPlugin, created.PluginCreated)
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug), &s.toolsetCache, nil)
 	if err != nil {
 		return nil, err
 	}
+	s.triggerToolsetIndex(ctx, toolsetDetails)
 
 	return toolsetDetails, nil
 }
 
-// attachToDefaultPlugin adds a newly MCP-enabled toolset to the project's
-// Default plugin so it's included in the auto-published marketplace without
-// a human visiting the Plugins page. No-op if the toolset is already
-// attached. Returns pluginCreated=true if this call lazily created the
-// Default plugin (project predates this feature) — callers should enqueue
-// an initial publish for it, but only after their own transaction commits,
-// since this runs pre-commit and the DB writes could still roll back.
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
-	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
-		McpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		DisplayName:    displayName,
-	})
-	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, s.logger)
-	}
-
-	return pluginCreated, nil
+	return attachToDefaultPluginInTransaction(ctx, dbtx, s.logger, s.audit, authCtx, toolsetID, displayName)
 }
 
-// triggerInitialPublishIfNeeded enqueues the first-time GitHub marketplace
-// publish for a project whose Default plugin was just lazily created. Must
-// only be called after the triggering transaction has committed — enqueuing
-// before commit risks Temporal running against state that a later failure
-// in the same transaction rolls back. Best-effort: a non-cancelable ctx
-// since the request returning shouldn't drop the enqueue.
-func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *contextvalues.AuthContext, pluginCreated bool) {
-	if !pluginCreated || !s.pluginsGitHubEnabled {
+// triggerPluginPublish enqueues the marketplace publish for the project whose
+// Default plugin membership just changed. attached is false when the mutation
+// could not have changed generated plugin output (a Meta-MCP endpoint, a
+// non-MCP toolset, a disabled or endpointless server): those paths must not
+// enqueue at all, since a project with no GitHub connection yet treats any
+// publish as its first and would get a marketplace repo it has no packages
+// for.
+func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalues.AuthContext, attached, pluginCreated bool) {
+	if !attached || !s.pluginsGitHubEnabled {
 		return
 	}
 
-	enqueueCtx := context.WithoutCancel(ctx)
-	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "Initial marketplace publish",
-		SkipIfUnchanged: false,
-	}); err != nil {
-		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
+	background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, *authCtx.ProjectID, authCtx.UserID, pluginCreated)
+}
+
+func (s *Service) triggerToolsetIndex(ctx context.Context, toolset *types.Toolset) {
+	// The dashboard has nowhere to report this: its own response is already
+	// shaped and the change has committed. TriggerToolsetIndex logs every
+	// failure itself, so discarding the outcome here loses nothing.
+	_ = TriggerToolsetIndex(ctx, s.logger, s.db, s.temporalEnv, toolset)
+}
+
+// ErrToolsetIndexNotRequired reports that a toolset correctly needs no search
+// index, so a caller can tell that apart from a rebuild that failed to start.
+//
+// The only such case is a version with no tools, and it is not a gap: dynamic
+// mode's own gate, requireToolSearchIndex, returns early on exactly the same
+// condition and serves the facade tools without consulting the index. The two
+// predicates have to stay identical — if that gate ever starts requiring an
+// index for an empty version, this skip becomes a way to leave a server
+// unable to list its tools.
+var ErrToolsetIndexNotRequired = errors.New("toolset needs no search index")
+
+// ErrToolsetIndexUnavailable reports that no rebuild could even be requested,
+// which for a dynamic-mode server means it cannot list its tools until the
+// periodic sweep reaches it.
+var ErrToolsetIndexUnavailable = errors.New("toolset search index rebuild cannot be scheduled")
+
+// TriggerToolsetIndex schedules the search-index rebuild a new toolset version
+// needs, and is called after the transaction that created that version has
+// committed.
+//
+// This is not cosmetic upkeep. Dynamic-mode `tools/list` refuses to serve a
+// toolset whose current version has no embeddings — `requireToolSearchIndex`
+// returns `errToolSearchIndexUnavailable` and the whole request becomes a
+// JSON-RPC error, rather than an empty list or a fall back to the static tool
+// list. The index is looked up by the *latest* version, read live on every
+// request, so creating a version immediately invalidates it. A writer that
+// bumps the version without scheduling this leaves an otherwise working server
+// unable to list its tools until the five-minute sweep happens to pick it up.
+//
+// It is exported so every caller that creates a toolset version goes through
+// one implementation, and every failure only logs: the caller's change is
+// already committed, the sweep is still the backstop, and failing the call
+// after the fact would misreport a change that did land.
+func TriggerToolsetIndex(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, temporalEnv *tenv.Environment, toolset *types.Toolset) error {
+	if logger == nil || db == nil || toolset == nil {
+		return ErrToolsetIndexUnavailable
 	}
+	// Whether an index is needed is asked BEFORE whether one could be
+	// scheduled, and the order is load-bearing. These two errors mean opposite
+	// things to a caller: "not_required" is a success, while "unavailable"
+	// tells an agent a dynamic-mode server may be unable to list its tools.
+	// Reporting unavailable for a version that needed no index in the first
+	// place sends that agent chasing a failure that did not happen.
+	//
+	// A version with no tools needs no index, and dynamic mode serves it
+	// without one — see ErrToolsetIndexNotRequired. Same for a toolset that is
+	// not MCP-enabled: nothing serves it.
+	if !conv.PtrValOr(toolset.McpEnabled, false) || len(toolset.Tools) == 0 {
+		return ErrToolsetIndexNotRequired
+	}
+	if temporalEnv == nil {
+		logger.ErrorContext(ctx, "no temporal environment to schedule toolset indexing; a dynamic-mode server cannot list its tools until the periodic sweep reaches it")
+		return ErrToolsetIndexUnavailable
+	}
+
+	projectID, err := uuid.Parse(toolset.ProjectID)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to parse project id for toolset indexing", attr.SlogError(err))
+		return fmt.Errorf("parse project id for toolset indexing: %w", err)
+	}
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to parse toolset id for indexing", attr.SlogError(err))
+		return fmt.Errorf("parse toolset id for indexing: %w", err)
+	}
+	deploymentID, err := deploymentsRepo.New(db).GetActiveDeploymentID(ctx, projectID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// No completed deployment means no tool definitions to embed, and the
+		// sweep requires one too, so there is nothing to schedule.
+		return ErrToolsetIndexNotRequired
+	}
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to load active deployment for toolset indexing", attr.SlogError(err))
+		return fmt.Errorf("load active deployment for toolset indexing: %w", err)
+	}
+	_, err = background.ExecuteIndexToolset(ctx, temporalEnv, background.IndexToolsetParams{
+		ProjectID:             projectID,
+		ToolsetID:             toolsetID,
+		ToolsetSlug:           toolset.Slug,
+		ToolsetVersion:        toolset.ToolsetVersion,
+		DeploymentID:          deploymentID,
+		PermanentFailureCount: 0,
+	})
+	if err != nil && !temporalSDK.IsWorkflowExecutionAlreadyStartedError(err) {
+		logger.ErrorContext(ctx, "failed to start toolset indexing workflow", attr.SlogError(err))
+		return fmt.Errorf("start toolset indexing workflow: %w", err)
+	}
+	return nil
+}
+
+// TriggerToolsetIndexForVersion is the entry point for a caller that created a
+// toolset version without holding the toolset view, such as the incremental
+// tool-exposure change. It loads that view by id and then schedules exactly
+// what the dashboard's own update schedules.
+func TriggerToolsetIndexForVersion(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, temporalEnv *tenv.Environment, projectID, toolsetID uuid.UUID) error {
+	if logger == nil || db == nil || projectID == uuid.Nil || toolsetID == uuid.Nil {
+		return ErrToolsetIndexUnavailable
+	}
+	toolset, err := repo.New(db).GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to load toolset for indexing after a tool exposure change", attr.SlogError(err))
+		return fmt.Errorf("load toolset for indexing after a tool exposure change: %w", err)
+	}
+	view, err := mv.DescribeToolset(ctx, logger, db, mv.ProjectID(projectID), mv.ToolsetSlug(toolset.Slug), nil, nil)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to describe toolset for indexing after a tool exposure change", attr.SlogError(err))
+		return fmt.Errorf("describe toolset for indexing after a tool exposure change: %w", err)
+	}
+	return TriggerToolsetIndex(ctx, logger, db, temporalEnv, view)
 }
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
@@ -306,7 +365,7 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 
 	checks := make([]authz.Check, len(toolsetIDs))
 	for i, id := range toolsetIDs {
-		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, id, authCtx.ProjectID.String())
+		checks[i] = authz.MCPServer(authz.MCPServerIDFrom(id), authz.ProjectIDOf(*authCtx.ProjectID)).Read()
 	}
 	allowedIDs, err := s.authz.Filter(ctx, checks)
 	if err != nil {
@@ -341,7 +400,7 @@ func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListTools
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -368,17 +427,32 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
 
+	candidate, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{Slug: conv.ToLower(payload.Slug), ProjectID: *authCtx.ProjectID})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, logger)
+	}
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(candidate.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
+		return nil, err
+	}
+	if fields := deprecatedHostingFields(payload); len(fields) > 0 {
+		logDeprecatedHostingUse(ctx, logger, authCtx, fields)
+		return nil, oops.E(oops.CodeBadRequest, ErrHostingFieldsMoved, "%s cannot be set on a toolset; use mcpServers.update for visibility and network access and mcpEndpoints for addresses", strings.Join(fields, ", "))
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing toolsets").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock project admission")
+	}
+
 	tr := s.repo.WithTx(dbtx)
-	clearedOAuth := false
 
 	// First get the existing toolset
-	existingToolset, err := tr.GetToolset(ctx, repo.GetToolsetParams{
+	existingToolset, err := tr.GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -386,26 +460,26 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, existingToolset.ID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
+	if existingToolset.ID != candidate.ID {
+		return nil, oops.E(oops.CodeConflict, nil, "toolset changed concurrently; retry the request")
 	}
 	existingView, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(existingToolset.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe existing toolset").LogError(ctx, logger)
 	}
 
-	// Convert update params
-	updateParams := repo.UpdateToolsetParams{
+	existingHosting, _, err := hostedmcp.LoadServerState(ctx, dbtx, existingToolset)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load hosted MCP server").LogError(ctx, logger)
+	}
+
+	updateParams := repo.UpdateToolsetDetailsParams{
 		Slug:                   conv.ToLower(payload.Slug),
 		Description:            existingToolset.Description,
 		Name:                   existingToolset.Name,
 		DefaultEnvironmentSlug: existingToolset.DefaultEnvironmentSlug,
 		ProjectID:              *authCtx.ProjectID,
-		McpSlug:                existingToolset.McpSlug,
-		McpEnabled:             existingToolset.McpEnabled,
 		ToolSelectionMode:      existingToolset.ToolSelectionMode,
-		CustomDomainID:         existingToolset.CustomDomainID,
-		McpIsPublic:            existingToolset.McpIsPublic,
 	}
 	if payload.Name != nil {
 		updateParams.Name = *payload.Name
@@ -414,78 +488,14 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.Description = pgtype.Text{String: *payload.Description, Valid: true}
 	}
 
-	if payload.DefaultEnvironmentSlug != nil {
-		_, err := s.environmentRepo.WithTx(dbtx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
-			Slug:      conv.ToLower(*payload.DefaultEnvironmentSlug),
-			ProjectID: *authCtx.ProjectID,
-		})
+	// Changing the default environment takes environment:read on the new one,
+	// as linking does; resubmitting the current one needs nothing more.
+	if payload.DefaultEnvironmentSlug != nil && conv.ToLower(*payload.DefaultEnvironmentSlug) != existingToolset.DefaultEnvironmentSlug.String {
+		environment, err := environments.ResolveReadableEnvironment(ctx, logger, s.authz, dbtx, *authCtx.ProjectID, toolconfig.Slug(string(*payload.DefaultEnvironmentSlug)))
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error finding environment")
+			return nil, err
 		}
-		updateParams.DefaultEnvironmentSlug = conv.ToPGText(conv.ToLower(*payload.DefaultEnvironmentSlug))
-	}
-
-	var activeCustomDomainID *uuid.UUID
-	toolsetDomainID := conv.FromNullableUUID(existingToolset.CustomDomainID)
-	if domain, err := s.domainsRepo.WithTx(dbtx).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID); err == nil && domain.Activated && domain.Verified {
-		activeCustomDomainID = &domain.ID
-	}
-
-	if payload.CustomDomainID != nil && activeCustomDomainID != nil && *payload.CustomDomainID == activeCustomDomainID.String() {
-		updateParams.CustomDomainID = uuid.NullUUID{UUID: *activeCustomDomainID, Valid: true}
-		toolsetDomainID = payload.CustomDomainID
-	}
-
-	if payload.McpSlug != nil && *payload.McpSlug != "" {
-		// Slugs on the platform domain (no custom domain, or free accounts) must be prefixed with the org slug
-		if toolsetDomainID == nil || authCtx.AccountType == "free" {
-			if !strings.HasPrefix(conv.ToLower(*payload.McpSlug), authCtx.OrganizationSlug+"-") {
-				return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug must be prefixed with the org slug for free accounts")
-			}
-
-			// Check slug uniqueness on the platform domain only (no custom domain).
-			// Custom domains have a separate namespace so the same slug can exist on both.
-			mcpToolset, mcpToolsetErr := tr.GetToolsetByPlatformMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
-			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
-				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
-			}
-			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
-		} else {
-			mcpToolset, mcpToolsetErr := tr.GetToolsetByMcpSlugAndCustomDomain(ctx, repo.GetToolsetByMcpSlugAndCustomDomainParams{
-				McpSlug:        conv.ToPGText(conv.ToLower(*payload.McpSlug)),
-				CustomDomainID: uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
-			})
-			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
-				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
-			}
-			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
-		}
-	}
-
-	if payload.McpIsPublic != nil {
-		oAuthIsAttached := existingToolset.ExternalOauthServerID.Valid || existingToolset.OauthProxyServerID.Valid
-		if (existingToolset.McpIsPublic != *payload.McpIsPublic) && oAuthIsAttached {
-			_, err := tr.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
-				ProjectID: existingToolset.ProjectID,
-				Slug:      existingToolset.Slug,
-			})
-
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error clearing oauth configurations").LogError(ctx, logger)
-			}
-
-			clearedOAuth = true
-		}
-
-		updateParams.McpIsPublic = *payload.McpIsPublic
-	}
-
-	if payload.McpEnabled != nil {
-		if *payload.McpEnabled && !existingToolset.McpSlug.Valid && (payload.McpSlug == nil || *payload.McpSlug == "") {
-			return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug is required to set mcp is public")
-		}
-
-		updateParams.McpEnabled = *payload.McpEnabled
+		updateParams.DefaultEnvironmentSlug = conv.ToPGText(environment.Slug)
 	}
 
 	if payload.ToolSelectionMode != nil {
@@ -497,16 +507,29 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, err
 	}
 
-	updatedToolset, err := tr.UpdateToolset(ctx, updateParams)
+	updatedToolset, err := tr.UpdateToolsetDetails(ctx, updateParams)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").LogError(ctx, logger)
 	}
+	if err := hostedmcp.Sync(ctx, dbtx, s.audit, hostedActor(authCtx), updatedToolset); err != nil {
+		return nil, err //nolint:wrapcheck // oops errors pass through.
+	}
 
-	var pluginCreated bool
-	if !existingToolset.McpEnabled && updatedToolset.McpEnabled {
-		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updatedToolset.ID, updatedToolset.Name)
+	var pluginContentsChanged bool
+	if payload.ToolUrns != nil {
+		removed, err := roledelivery.ContentChanged(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, updatedToolset.ID, nil)
 		if err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "update automatic plugin distribution").LogError(ctx, logger)
+		}
+		carried, err := s.toolsetCarriedByPlugin(ctx, dbtx, authCtx, updatedToolset.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
+		}
+		pluginContentsChanged = len(removed) > 0 || carried
+		if pluginContentsChanged {
+			if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "request plugin publication").LogError(ctx, logger)
+			}
 		}
 	}
 
@@ -520,28 +543,6 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	toolsetDetails, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(updatedToolset.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, err
-	}
-
-	if clearedOAuth && existingToolset.ExternalOauthServerID.Valid {
-		var extoauthslug *string
-		if existingView.ExternalOauthServer != nil {
-			extoauthslug = new(string(existingView.ExternalOauthServer.Slug))
-		}
-		if err := s.audit.LogToolsetDetachExternalOAuth(ctx, dbtx, audit.LogToolsetDetachExternalOAuthEvent{
-			OrganizationID:          authCtx.ActiveOrganizationID,
-			ProjectID:               *authCtx.ProjectID,
-			Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName:        authCtx.Email,
-			ActorSlug:               nil,
-			ToolsetURN:              urn.NewToolset(updatedToolset.ID),
-			ToolsetName:             updatedToolset.Name,
-			ToolsetSlug:             updatedToolset.Slug,
-			ToolsetVersionAfter:     toolsetDetails.ToolsetVersion,
-			ExternalOAuthServerID:   new(existingToolset.ExternalOauthServerID.UUID.String()),
-			ExternalOAuthServerSlug: extoauthslug,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset detach external OAuth server audit event").LogError(ctx, logger)
-		}
 	}
 
 	if err := s.audit.LogToolsetUpdate(ctx, dbtx, audit.LogToolsetUpdateEvent{
@@ -564,7 +565,10 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving updated toolset").LogError(ctx, logger)
 	}
 
-	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
+	// An enabled toolset publishes too: a rename moves its entry in the
+	// generated package even though no attach ran.
+	s.triggerPluginPublish(ctx, authCtx, existingHosting.Enabled || pluginContentsChanged, false)
+	s.triggerToolsetIndex(ctx, toolsetDetails)
 
 	return toolsetDetails, nil
 }
@@ -576,6 +580,16 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}
 
 	logger := s.logger
+	candidate, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{Slug: conv.ToLower(payload.Slug), ProjectID: *authCtx.ProjectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
+	}
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(candidate.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
+		return err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -583,6 +597,17 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// The hosted server's associations are pruned before commit, which needs
+	// the project's writer scope ahead of every lock below.
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock upstream client writer scope")
+	}
+	if err := networkingressRepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle")
+	}
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock project admission")
+	}
 	tr := s.repo.WithTx(dbtx)
 
 	toDelete, err := tr.GetToolset(ctx, repo.GetToolsetParams{
@@ -596,8 +621,23 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toDelete.ID.String(), authCtx.ProjectID.String())); err != nil {
-		return err
+	if toDelete.ID != candidate.ID {
+		return oops.E(oops.CodeConflict, nil, "toolset changed concurrently; retry the request")
+	}
+
+	// Only an MCP-enabled toolset is in a generated package, so only its
+	// deletion can change one. Membership is probed before the hosted wrapper
+	// is deleted below, since that deletion detaches wrapper-backed plugins.
+	hosting, _, err := hostedmcp.LoadServerState(ctx, dbtx, toDelete)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load hosted MCP server").LogError(ctx, logger)
+	}
+	carried := false
+	if hosting.Enabled {
+		carried, err = s.toolsetCarriedByPlugin(ctx, dbtx, authCtx, toDelete.ID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
+		}
 	}
 
 	deleted, err := tr.DeleteToolset(ctx, repo.DeleteToolsetParams{
@@ -609,6 +649,21 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return nil
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset").LogError(ctx, logger)
+	}
+
+	hostedDeleted, err := s.deleteHostedServer(ctx, dbtx, authCtx, toDelete)
+	if err != nil {
+		return err
+	}
+	// The tombstoned hosted server's associations go with it, and so do the
+	// typed links derived from them.
+	if err := upstreamclients.ReconcileInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, nil); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "prune deleted hosted server upstream clients").LogError(ctx, logger)
+	}
+	if carried {
+		if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, logger)
+		}
 	}
 
 	if err := s.audit.LogToolsetDelete(ctx, dbtx, audit.LogToolsetDeleteEvent{
@@ -628,7 +683,17 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "error saving toolset deletion").LogError(ctx, logger)
 	}
 
-	return nil
+	if carried {
+		s.publishPluginsAfterToolsetChange(ctx, authCtx)
+	}
+
+	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
+	s.revoker.RevokeAllDetached(ctx, hostedDeleted.OrphanedCredentials)
+
+	resultsCleaner := background.TemporalRiskPolicyResultsCleaner{TemporalEnv: s.temporalEnv, Logger: logger}
+	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, hostedDeleted.DeletedRiskPolicies)
+
+	return s.reconcileCustomDomains(ctx, hostedDeleted.RootDomainIDs)
 }
 
 func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload) (*types.Toolset, error) {
@@ -642,7 +707,7 @@ func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload
 		return nil, err
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, toolset.ID, authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(toolset.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -666,7 +731,7 @@ func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFilt
 		return nil, oops.E(oops.CodeUnexpected, err, "get toolset").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, toolset.ID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -723,10 +788,17 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 
 	if err := s.authz.Require(
 		ctx,
-		authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil},
-		authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: originalToolset.ID.String(), Dimensions: nil},
+		authz.MCPServers(authz.ProjectIDOf(*authCtx.ProjectID)).Write(),
+		authz.MCPServer(authz.MCPServerIDOf(originalToolset.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Read(),
 	); err != nil {
 		return nil, err
+	}
+
+	// The clone's default environment reaches every tool it runs, so it is
+	// copied only for a caller who can read it.
+	defaultEnvironmentSlug, err := readableDefaultEnvironmentSlug(ctx, dbtx, s.authz, *authCtx.ProjectID, originalToolset.DefaultEnvironmentSlug)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize default environment").LogError(ctx, logger)
 	}
 
 	// Generate new slug with _copy suffix
@@ -738,6 +810,9 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	newName := originalToolset.Name + "_copy"
 	newSlug := conv.ToSlug(newName)
 	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
+	if mcpSlug, err = ensureGeneratedMcpSlug(ctx, dbtx, logger, authCtx.OrganizationSlug, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpSlug); err != nil {
+		return nil, err
+	}
 
 	// Prepare base parameters for creating the cloned toolset
 	baseParams := repo.CreateToolsetParams{
@@ -746,9 +821,7 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Description:            originalToolset.Description,
-		DefaultEnvironmentSlug: originalToolset.DefaultEnvironmentSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             false, // Don't auto-enable MCP for cloned toolsets
+		DefaultEnvironmentSlug: defaultEnvironmentSlug,
 	}
 
 	// Try to create the cloned toolset, handling name conflicts.
@@ -804,6 +877,16 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		ToolsetSlug:      clonedToolset.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset create audit event").LogError(ctx, logger)
+	}
+	// Cloned toolsets start disabled.
+	if _, err := hostedmcp.CreateCanonical(ctx, dbtx, s.audit, hostedActor(authCtx), hostedmcp.CreateCanonicalInput{
+		Toolset: clonedToolset, Slug: mcpSlug, Visibility: mcpservers.VisibilityDisabled,
+	}); err != nil {
+		return nil, err //nolint:wrapcheck // oops errors pass through.
+	}
+	clonedToolset, err = tr.GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: clonedToolset.ID, ProjectID: clonedToolset.ProjectID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "reload created toolset").LogError(ctx, logger)
 	}
 
 	// Clone the latest toolset version
@@ -874,9 +957,77 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	return toolsetDetails, nil
 }
 
-func (s *Service) CheckMCPSlugAvailability(ctx context.Context, payload *gen.CheckMCPSlugAvailabilityPayload) (bool, error) {
-	//nolint:wrapcheck // Wrapping adds no value here
-	return s.repo.CheckMCPSlugAvailability(ctx, conv.ToPGText(conv.ToLower(payload.Slug)))
+const (
+	externalOAuthServerSlugMaxLength = 40
+	externalOAuthServerSlugAttempts  = 5
+)
+
+func generatedExternalOAuthServerSlug(toolsetSlug, randomSuffix string) string {
+	suffix := "-oauth"
+	if randomSuffix != "" {
+		suffix += "-" + randomSuffix
+	}
+
+	return toolsetSlug[:min(len(toolsetSlug), externalOAuthServerSlugMaxLength-len(suffix))] + suffix
+}
+
+func createGeneratedExternalOAuthServerMetadata(
+	ctx context.Context,
+	queries *oauthRepo.Queries,
+	projectID uuid.UUID,
+	toolsetSlug string,
+	metadata []byte,
+	authorizationServerIssuer pgtype.Text,
+) (oauthRepo.ExternalOauthServerMetadatum, error) {
+	for attempt := range externalOAuthServerSlugAttempts {
+		randomSuffix := ""
+		if attempt > 0 {
+			var err error
+			randomSuffix, err = conv.GenerateRandomSlug(5)
+			if err != nil {
+				return oauthRepo.ExternalOauthServerMetadatum{}, fmt.Errorf("generate external OAuth server slug suffix: %w", err)
+			}
+		}
+
+		row, err := queries.CreateGeneratedExternalOAuthServerMetadata(ctx, oauthRepo.CreateGeneratedExternalOAuthServerMetadataParams{
+			ProjectID:                 projectID,
+			Slug:                      generatedExternalOAuthServerSlug(toolsetSlug, randomSuffix),
+			Metadata:                  metadata,
+			AuthorizationServerIssuer: authorizationServerIssuer,
+		})
+		if err == nil {
+			return row, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return row, fmt.Errorf("create generated external OAuth server metadata: %w", err)
+		}
+	}
+
+	return oauthRepo.ExternalOauthServerMetadatum{}, fmt.Errorf("generated external OAuth server slug retries exhausted: %w", pgx.ErrNoRows)
+}
+
+func prepareExternalOAuthSource(ctx context.Context, policy *guardian.Policy, metadata any, issuer *string) ([]byte, pgtype.Text, error) {
+	nullIssuer := pgtype.Text{String: "", Valid: false}
+	if (metadata == nil) == (issuer == nil) {
+		return nil, nullIssuer, oops.E(oops.CodeBadRequest, nil, "exactly one of metadata and authorization_server_issuer is required")
+	}
+
+	if issuer != nil {
+		if _, err := wellknown.DiscoverAuthorizationServerMetadata(ctx, policy, *issuer); err != nil {
+			return nil, nullIssuer, oops.E(oops.CodeBadRequest, err, "invalid authorization server issuer")
+		}
+		return nil, conv.ToPGText(*issuer), nil
+	}
+
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, nullIssuer, oops.E(oops.CodeBadRequest, err, "invalid metadata format")
+	}
+	var metadataObject map[string]any
+	if err := json.Unmarshal(metadataBytes, &metadataObject); err != nil || metadataObject == nil {
+		return nil, nullIssuer, oops.E(oops.CodeBadRequest, err, "external OAuth metadata must be a JSON object")
+	}
+	return metadataBytes, nullIssuer, nil
 }
 
 func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddExternalOAuthServerPayload) (*types.Toolset, error) {
@@ -889,20 +1040,12 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.E(oops.CodeForbidden, nil, "free accounts cannot add external OAuth servers").LogError(ctx, s.logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing external oauth server configuration").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	tr := s.repo.WithTx(dbtx)
-
-	existingToolset, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
+	existingToolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: existingToolset.ID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(existingToolset.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -918,19 +1061,61 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.E(oops.CodeBadRequest, nil, "multiple OAuth2 security schemes detected").LogError(ctx, s.logger)
 	}
 
-	// Marshal metadata to JSON bytes
-	metadataBytes, err := json.Marshal(payload.ExternalOauthServer.Metadata)
+	metadataBytes, authorizationServerIssuer, err := prepareExternalOAuthSource(ctx, s.policy, payload.ExternalOauthServer.Metadata, payload.ExternalOauthServer.AuthorizationServerIssuer)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid metadata format").LogError(ctx, s.logger)
+		return nil, err
 	}
 
-	// Create the external OAuth server metadata entry
-	externalOAuthServer, err := s.oauthRepo.WithTx(dbtx).CreateExternalOAuthServerMetadata(ctx, oauthRepo.CreateExternalOAuthServerMetadataParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing external oauth server configuration").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+
+	lockedToolset, err := tr.GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
+		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
-		Slug:      conv.ToLower(payload.ExternalOauthServer.Slug),
-		Metadata:  metadataBytes,
 	})
 	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+	}
+	hosting, _, err := hostedmcp.LoadServerState(ctx, dbtx, lockedToolset)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load hosted MCP server").LogError(ctx, s.logger)
+	}
+	if !hosting.Public {
+		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have external OAuth servers").LogError(ctx, s.logger)
+	}
+	if lockedToolset.ExternalOauthServerID.Valid {
+		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server already exists").LogError(ctx, s.logger)
+	}
+
+	// Create the external OAuth server metadata entry. Generated slugs use a
+	// conflict-safe insert so a collision does not abort the transaction.
+	oauthQueries := s.oauthRepo.WithTx(dbtx)
+	var externalOAuthServer oauthRepo.ExternalOauthServerMetadatum
+	if payload.ExternalOauthServer.Slug == nil {
+		externalOAuthServer, err = createGeneratedExternalOAuthServerMetadata(
+			ctx, oauthQueries, *authCtx.ProjectID, conv.ToLower(payload.Slug), metadataBytes, authorizationServerIssuer,
+		)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "could not generate a unique external OAuth server slug").LogError(ctx, s.logger)
+		}
+	} else {
+		externalOAuthServer, err = oauthQueries.CreateExternalOAuthServerMetadata(ctx, oauthRepo.CreateExternalOAuthServerMetadataParams{
+			ProjectID:                 *authCtx.ProjectID,
+			Slug:                      conv.ToLower(*payload.ExternalOauthServer.Slug),
+			Metadata:                  metadataBytes,
+			AuthorizationServerIssuer: authorizationServerIssuer,
+		})
+	}
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "external OAuth server slug already exists").LogError(ctx, s.logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create external OAuth server").LogError(ctx, s.logger)
 	}
 
@@ -942,7 +1127,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeConflict, err, "external OAuth server already exists").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to associate external OAuth server with toolset").LogError(ctx, s.logger)
 	}
@@ -953,23 +1138,115 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 	}
 
 	if err := s.audit.LogToolsetAttachExternalOAuth(ctx, dbtx, audit.LogToolsetAttachExternalOAuthEvent{
-		OrganizationID:          authCtx.ActiveOrganizationID,
-		ProjectID:               *authCtx.ProjectID,
-		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:        authCtx.Email,
-		ActorSlug:               nil,
-		ToolsetURN:              urn.NewToolset(row.ID),
-		ToolsetName:             existingToolset.Name,
-		ToolsetSlug:             row.Slug,
-		ToolsetVersionAfter:     updatedToolset.ToolsetVersion,
-		ExternalOAuthServerID:   externalOAuthServer.ID.String(),
-		ExternalOAuthServerSlug: externalOAuthServer.Slug,
+		OrganizationID:               authCtx.ActiveOrganizationID,
+		ProjectID:                    *authCtx.ProjectID,
+		Actor:                        urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:             authCtx.Email,
+		ActorSlug:                    nil,
+		ToolsetURN:                   urn.NewToolset(row.ID),
+		ToolsetName:                  existingToolset.Name,
+		ToolsetSlug:                  row.Slug,
+		ToolsetVersionAfter:          updatedToolset.ToolsetVersion,
+		ExternalOAuthServerID:        externalOAuthServer.ID.String(),
+		ExternalOAuthServerSlug:      externalOAuthServer.Slug,
+		AuthorizationServerIssuerSet: authorizationServerIssuer.Valid,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset update").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error adding external OAuth server").LogError(ctx, s.logger)
+	}
+
+	return updatedToolset, nil
+}
+
+func (s *Service) UpdateExternalOAuthServer(ctx context.Context, payload *gen.UpdateExternalOAuthServerPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	toolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, s.logger)
+	case !toolset.ExternalOauthServerID.Valid:
+		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server is not attached").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
+		return nil, err
+	}
+
+	metadataBytes, authorizationServerIssuer, err := prepareExternalOAuthSource(ctx, s.policy, payload.Metadata, payload.AuthorizationServerIssuer)
+	if err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing external OAuth server configuration").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tr := s.repo.WithTx(dbtx)
+	lockedToolset, err := tr.GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, s.logger)
+	case !lockedToolset.ExternalOauthServerID.Valid:
+		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server is not attached").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(lockedToolset.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
+		return nil, err
+	}
+
+	externalOAuthServer, err := s.oauthRepo.WithTx(dbtx).UpdateExternalOAuthServerSource(ctx, oauthRepo.UpdateExternalOAuthServerSourceParams{
+		Metadata:                  metadataBytes,
+		AuthorizationServerIssuer: authorizationServerIssuer,
+		ProjectID:                 *authCtx.ProjectID,
+		ID:                        lockedToolset.ExternalOauthServerID.UUID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeConflict, err, "external OAuth server is not attached").LogError(ctx, s.logger)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update external OAuth server").LogError(ctx, s.logger)
+	}
+
+	updatedToolset, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.audit.LogToolsetUpdateExternalOAuthIssuer(ctx, dbtx, audit.LogToolsetUpdateExternalOAuthIssuerEvent{
+		OrganizationID:               authCtx.ActiveOrganizationID,
+		ProjectID:                    *authCtx.ProjectID,
+		Actor:                        urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:             authCtx.Email,
+		ActorSlug:                    nil,
+		ToolsetURN:                   urn.NewToolset(lockedToolset.ID),
+		ToolsetName:                  lockedToolset.Name,
+		ToolsetSlug:                  lockedToolset.Slug,
+		ToolsetVersionAfter:          updatedToolset.ToolsetVersion,
+		ExternalOAuthServerID:        externalOAuthServer.ID.String(),
+		ExternalOAuthServerSlug:      externalOAuthServer.Slug,
+		AuthorizationServerIssuerSet: authorizationServerIssuer.Valid,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log external OAuth server update").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating external OAuth server").LogError(ctx, s.logger)
 	}
 
 	return updatedToolset, nil
@@ -991,8 +1268,8 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 
 	tr := s.repo.WithTx(dbtx)
 
-	// Get the current toolset to find which OAuth server to remove
-	existingToolset, err := tr.GetToolset(ctx, repo.GetToolsetParams{
+	// Lock the toolset before reading or changing its OAuth association.
+	existingToolset, err := tr.GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -1003,7 +1280,7 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, existingToolset.ID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(existingToolset.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -1075,99 +1352,7 @@ func (s *Service) createToolsetVersion(ctx context.Context, toolUrnStrings []str
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetID(toolsetID.String()))
-
-	// Only create a version if URNs are provided (indicating a change). Check nil (not len==0) so that toolsets can be made empty.
-	if toolUrnStrings == nil && resourceUrnStrings == nil {
-		return nil
-	}
-
-	// Parse tool URNs from payload
-	allToolUrns := []urn.Tool{}
-	for _, urnStr := range toolUrnStrings {
-		var toolUrn urn.Tool
-		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
-			logger.WarnContext(ctx, "invalid tool URN", attr.SlogError(err), attr.SlogToolURN(urnStr))
-			continue
-		}
-		allToolUrns = append(allToolUrns, toolUrn)
-	}
-
-	// Parse resource URNs from payload
-	allResourceUrns := []urn.Resource{}
-	for _, urnStr := range resourceUrnStrings {
-		var resourceUrn urn.Resource
-		if err := resourceUrn.UnmarshalText([]byte(urnStr)); err != nil {
-			logger.WarnContext(ctx, "invalid resource URN", attr.SlogError(err), attr.SlogResourceURN(urnStr))
-			continue
-		}
-		allResourceUrns = append(allResourceUrns, resourceUrn)
-	}
-
-	// Get the latest version to set as predecessor
-	latestVersion, err := tr.GetLatestToolsetVersion(ctx, toolsetID)
-	latestVersionNumber := int64(0)
-	var predecessorID uuid.NullUUID
-	if err == nil {
-		predecessorID = uuid.NullUUID{UUID: latestVersion.ID, Valid: true}
-		latestVersionNumber = latestVersion.Version
-	}
-
-	if toolUrnStrings == nil && len(latestVersion.ToolUrns) > 0 {
-		allToolUrns = append(allToolUrns, latestVersion.ToolUrns...)
-	}
-
-	if resourceUrnStrings == nil && len(latestVersion.ResourceUrns) > 0 {
-		allResourceUrns = append(allResourceUrns, latestVersion.ResourceUrns...)
-	}
-
-	// Check if URNs are different from latest version
-	if err == nil {
-		toolsUnchanged := len(latestVersion.ToolUrns) == len(allToolUrns)
-		if toolsUnchanged {
-			existingToolUrnSet := make(map[string]bool)
-			for _, existingUrn := range latestVersion.ToolUrns {
-				existingToolUrnSet[existingUrn.String()] = true
-			}
-			for _, newUrn := range allToolUrns {
-				if !existingToolUrnSet[newUrn.String()] {
-					toolsUnchanged = false
-					break
-				}
-			}
-		}
-
-		resourcesUnchanged := len(latestVersion.ResourceUrns) == len(allResourceUrns)
-		if resourcesUnchanged {
-			existingResourceUrnSet := make(map[string]bool)
-			for _, existingUrn := range latestVersion.ResourceUrns {
-				existingResourceUrnSet[existingUrn.String()] = true
-			}
-			for _, newUrn := range allResourceUrns {
-				if !existingResourceUrnSet[newUrn.String()] {
-					resourcesUnchanged = false
-					break
-				}
-			}
-		}
-
-		if toolsUnchanged && resourcesUnchanged {
-			return nil // No change needed
-		}
-	}
-
-	_, err = tr.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
-		ToolsetID:     toolsetID,
-		Version:       latestVersionNumber + 1,
-		ToolUrns:      allToolUrns,
-		ResourceUrns:  allResourceUrns,
-		PredecessorID: predecessorID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create toolset version").LogError(ctx, logger)
-	}
-
-	return nil
+	return createToolsetVersionInTransaction(ctx, s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String())), tr, toolsetID, toolUrnStrings, resourceUrnStrings)
 }
 
 // updatePromptTemplates updates the prompt templates for a toolset. NOTE: promptTemplates are NOT tools! These correspond to actual "prompts" in MCP

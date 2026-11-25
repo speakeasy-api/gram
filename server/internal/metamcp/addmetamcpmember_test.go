@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -150,10 +151,8 @@ func TestAddMetaMcpMember_RejectsSecondServerOnSameBackend(t *testing.T) {
 			name:    "tunnel",
 			backend: mcpserversrepo.CreateMCPServerParams{TunneledMcpServerID: conv.ToNullUUID(seedTunnelBackend(t, ctx, ti.conn, *authCtx.ProjectID))},
 		},
-		{
-			name:    "toolset",
-			backend: mcpserversrepo.CreateMCPServerParams{ToolsetID: conv.ToNullUUID(seedToolsetBackend(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID))},
-		},
+		// No toolset case: mcp_servers_toolset_id_key forbids two live wrappers
+		// over one toolset.
 	}
 
 	for _, tt := range tests {
@@ -222,6 +221,36 @@ func TestAddMetaMcpMember_AllowsDistinctBackends(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+}
+
+func TestAddMetaMcpMember_RejectsToolsetCanonicalServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	meta := seedMetaMcpServer(t, ctx, ti, "canonical member host")
+	toolsetID := seedToolsetBackend(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: toolsetID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText("hosted"),
+		Slug: conv.ToPGText("hosted-" + uuid.NewString()[:8]), ToolsetID: conv.ToNullUUID(toolsetID), Visibility: "private",
+	})
+	require.NoError(t, err)
+	member := seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{ToolsetID: conv.ToNullUUID(toolsetID)})
+
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		MetaMcpServerID: meta.ID, McpServerID: toolsetID.String(), SortOrder: nil,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		MetaMcpServerID: meta.ID, McpServerID: member.String(), SortOrder: nil,
+	})
+	require.NoError(t, err)
 }
 
 func TestAddMetaMcpMember_RemovedMemberFreesBackend(t *testing.T) {
@@ -516,6 +545,39 @@ func TestAddMetaMcpMember_RejectsUnproxiedServer(t *testing.T) {
 	require.ErrorContains(t, err, "unproxied")
 }
 
+// A retired approvals server (builtin_backend) stays in mcp_servers until a
+// cleanup migration deletes it, but serves nothing, so a gateway refuses it as
+// it would any server that is not live.
+func TestAddMetaMcpMember_RejectsRetiredApprovalsServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	meta := seedMetaMcpServer(t, ctx, ti, "approvals host")
+
+	serverID, err := uuid.NewV7()
+	require.NoError(t, err)
+	err = testrepo.New(ti.conn).InsertRetiredApprovalsServerFixture(ctx, testrepo.InsertRetiredApprovalsServerFixtureParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+		Slug:      conv.ToPGText("speakeasy-approvals-" + uuid.NewString()[:8]),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		MetaMcpServerID:  meta.ID,
+		McpServerID:      serverID.String(),
+		SortOrder:        nil,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
 // Attaching a member whose upstream identity pieces exist binds the member's
 // OAuth client to the gateway's issuer, so consent offers the provider with
 // no manual attach. A second member on the same upstream is a no-op: one
@@ -563,7 +625,7 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 		return issuer.ID
 	}
 	newClient := func(remoteIssuerID uuid.UUID, externalID string) uuid.UUID {
-		client, err := rsRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		client, err := rsRepo.CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 			ProjectID:               conv.ToNullUUID(projectID),
 			OrganizationID:          conv.ToPGText(authCtx.ActiveOrganizationID),
 			RemoteSessionIssuerID:   remoteIssuerID,
@@ -588,15 +650,16 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 		require.True(t, server.UserSessionIssuerID.Valid)
 		return server.UserSessionIssuerID.UUID
 	}
-	stampAndWire := func(serverID, remoteIssuerID, clientID uuid.UUID) {
+	stampAndWire := func(serverID, clientID uuid.UUID) {
 		require.NoError(t, rsRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
 			RemoteSessionClientID: clientID,
 			UserSessionIssuerID:   memberIssuerOf(serverID),
 		}))
-		stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-			RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
-			ID:                    serverID,
+		stamped, err := testrepo.New(ti.conn).StampMCPServerUpstreamClientFixture(ctx, testrepo.StampMCPServerUpstreamClientFixtureParams{
 			ProjectID:             projectID,
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			McpServerID:           serverID,
+			RemoteSessionClientID: clientID,
 		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), stamped)
@@ -619,7 +682,7 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 
 	remoteIssuerID := newRemoteIssuer()
 	serverID := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWire(serverID, remoteIssuerID, newClient(remoteIssuerID, "auto-attach-client"))
+	stampAndWire(serverID, newClient(remoteIssuerID, "auto-attach-client"))
 
 	_, err := ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
 		SessionToken:     nil,
@@ -636,7 +699,7 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 	// Second member on the same upstream: attach succeeds, binding count for
 	// that upstream stays at one.
 	secondID := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWire(secondID, remoteIssuerID, newClient(remoteIssuerID, "auto-attach-client-2"))
+	stampAndWire(secondID, newClient(remoteIssuerID, "auto-attach-client-2"))
 
 	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
 		SessionToken:     nil,
@@ -649,4 +712,46 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, gatewayClientsForUpstream(remoteIssuerID),
 		"one client per upstream per issuer")
+}
+
+func TestAddMetaMcpMember_RequiresProjectAndGatewayWrite(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"project only", "gateway only", "gateway blocked", "wildcard allowed"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			meta := seedMetaMcpServer(t, ctx, ti, "authorized member host")
+			serverID := seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+
+			grants := []authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, authz.WildcardResource)}
+			switch name {
+			case "project only":
+				grants = []authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, authCtx.ProjectID.String())}
+			case "gateway only":
+				grants = []authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, meta.ID)}
+			case "gateway blocked":
+				grants = append(grants, authz.NewGrant(authz.ScopeMCPBlockedWrite, meta.ID))
+			}
+			restrictedCtx := withExactAuthzGrants(t, ctx, ti.conn, grants...)
+
+			member, err := ti.service.AddMetaMcpMember(restrictedCtx, &gen.AddMetaMcpMemberPayload{
+				SessionToken:     nil,
+				ApikeyToken:      nil,
+				ProjectSlugInput: nil,
+				MetaMcpServerID:  meta.ID,
+				McpServerID:      serverID.String(),
+				SortOrder:        nil,
+			})
+			if name == "wildcard allowed" {
+				require.NoError(t, err)
+				require.Equal(t, serverID.String(), member.McpServerID)
+			} else {
+				requireOopsCode(t, err, oops.CodeForbidden)
+				require.Nil(t, member)
+			}
+		})
+	}
 }

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -22,7 +23,7 @@ export const VerifyCimdURLResultOutcome = {
 /**
  * Why the probe ended as it did.
  */
-export type VerifyCimdURLResultOutcome = ClosedEnum<
+export type VerifyCimdURLResultOutcome = OpenEnum<
   typeof VerifyCimdURLResultOutcome
 >;
 
@@ -38,6 +39,10 @@ export type VerifyCimdURLResult = {
    * Human-readable explanation, safe to display to the operator.
    */
   detail: string;
+  /**
+   * The validated document rendered as JSON, set only when verified. Re-encoded from what Speakeasy parsed rather than echoed from the wire, so it shows what the authorization server will act on.
+   */
+  document?: string | undefined;
   /**
    * Status the document endpoint returned; omitted when no response was received.
    */
@@ -57,9 +62,10 @@ export type VerifyCimdURLResult = {
 };
 
 /** @internal */
-export const VerifyCimdURLResultOutcome$inboundSchema: z.ZodMiniEnum<
-  typeof VerifyCimdURLResultOutcome
-> = z.enum(VerifyCimdURLResultOutcome);
+export const VerifyCimdURLResultOutcome$inboundSchema: z.ZodMiniType<
+  VerifyCimdURLResultOutcome,
+  unknown
+> = openEnums.inboundSchema(VerifyCimdURLResultOutcome);
 
 /** @internal */
 export const VerifyCimdURLResult$inboundSchema: z.ZodMiniType<
@@ -69,6 +75,7 @@ export const VerifyCimdURLResult$inboundSchema: z.ZodMiniType<
   z.object({
     client_name: z.optional(z.string()),
     detail: z.string(),
+    document: z.optional(z.string()),
     http_status: z.optional(z.int()),
     outcome: VerifyCimdURLResultOutcome$inboundSchema,
     reason: z.optional(z.string()),

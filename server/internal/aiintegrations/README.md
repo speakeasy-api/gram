@@ -86,6 +86,10 @@ Coordinator starts one bounded batch, waits for it to complete, then fetches mor
 
 ## Important Invariants
 
+Credentials are verified before they are stored. Any upsert that would start polling on an unanswered credential — a new or changed API key or external scope, or re-enabling an integration — probes every sync schedule the provider runs with the cheapest read that schedule already makes (the upper-bound or first-page fetch, narrowed to one record). A 401/403/404 is the provider refusing the configuration: when every schedule is refused the save fails with the provider's own message and nothing is written, so no config generation exists and the poll loop never starts. Providers entitle their feeds separately (Anthropic's Compliance API and Admin Analytics reports are distinct grants), so a partial refusal still saves; the refused schedules are recorded and paused inside the upsert transaction itself, reaching the same state repeated poll rejections would after `AutoPauseAfterRejectedPolls`, without the polls. Committing the pause with the config is what keeps the refused feed out of the poll loop — both scheduled candidate selection and the post-commit immediate start skip an auto-paused schedule, and there is no window in which the schedule is due but unmarked. Anything else a probe sees — an outage, a timeout, a 429 — says nothing about the credentials and never blocks a save. Probes are bounded by `credentialProbeTimeout` and skipped for saves that change no credential (the enabled toggle off, a billing mode edit), which reuse an answer the provider already gave.
+
+Provider failures do not fail the poll activity. When a poll ends in a provider rejection or a provider outage and that outcome is recorded on the schedule row, `PollAIData` returns success to Temporal: the failure is durable in Postgres, shown in the dashboard, and the schedule owns the retry cadence (backoff, plus auto-pause for rejections), so re-running the activity cannot change the provider's answer. Unrecorded failures and failures that are Speakeasy's own still fail the activity, which keeps activity-failure alerting pointed at unexpected errors instead of at one misconfigured integration's schedules.
+
 Temporal workflow IDs are the per-org/provider mutex for scheduled polling. Each scheduled child workflow uses `v1:ai-usage-poller:{organizationID}:{provider}`. If another coordinator tries to start the same provider/org while a child is already open, Temporal rejects the duplicate start and the coordinator skips that config for the run.
 
 New enabled config generations also start a best-effort immediate child workflow after the upsert transaction commits. That workflow uses `v1:ai-usage-poller:config:{configID}`, so a newly replaced key is not blocked by an older in-flight scheduled poll for the same org/provider. If the immediate start fails, the config remains due and the five-minute coordinator is the fallback.
@@ -106,6 +110,8 @@ Cost fields are intentionally separate. `gen_ai.usage.cost` currently uses `toke
 
 Codex cost data comes from OpenAI's Compliance Logs Platform `COSTS` files. The poller lists `GET /v1/compliance/{organizations|workspaces}/{id}/logs?event_type=COSTS&after=<watermark>`, downloads each returned JSONL file, verifies `file_sha256`, and writes one telemetry row per cost event. The feed mixes product surfaces: only events with `payload.product == "codex"` land under `codex:usage:metrics` (the URN the codex.cost.usd stream and ClickHouse agent-usage predicates match on); ChatGPT, Work, and unknown surfaces land under `chatgpt:usage:metrics`, which the summary MVs admit as agent usage; Work rows carry the `chatgpt-work` hook source (ChatGPT and unknown surfaces carry `chatgpt`) so the per-product split survives summarization — hook_source is a summary GROUP BY dimension while `codex.compliance.product` (the exact raw surface, still stamped on every row) is not, and the summaries outlive the raw-row TTL. Codex rows meter cost only: their token counts are moved off the `gen_ai.usage.*` keys at ingest because the agent-usage predicates would sum them on top of the Codex OTEL stream (the token source of truth), double counting metering for orgs running both feeds. The raw counts are preserved under `codex.compliance.{input,cached_input,output,total}_tokens`, which nothing sums — deliberately, because the COSTS feed also covers Codex surfaces the device OTEL stream never sees (cloud-delegated tasks, GitHub code review; the surface is in `codex.compliance.surface`/`client`), so a later pass can partition metering by surface and promote the counts for OTEL-invisible usage instead of re-deriving them. Non-Codex rows keep `gen_ai.usage.*` token counts since the compliance feed is ChatGPT/Work's only usage source. Each row stores `codex.compliance.event_hash`, derived from the upstream `event_id`, and the importer enforces it: the feed delivers the same `event_id` in more than one log file, so before writing a page it drops events already ingested for the project. An event with no `timestamp` falls back to its payload `day`/`hour` bucket rather than the log file's end time, so that repeated deliveries of one event agree on their event time and the dedupe lookup can find the copy already written. Upstream `CREDITS` billing values are converted to `gen_ai.usage.cost` dollars at `$0.04` per credit while retaining the raw `codex.compliance.cost_unit`. The poll watermark advances to the API's `last_end_time`; empty pages leave the watermark unchanged but still schedule the next attempt from the current poll completion time. The first Codex poll looks back 30 days (`codexComplianceInitialLookback`) rather than the shared 24-hour default: COSTS files are hourly per-user aggregates cheap to backfill, and an org's Codex history usually predates the key being configured.
 
+Claude Chat content comes from Anthropic's Compliance API under the `anthropic_compliance` schedule, which reads two feeds per run. The activity feed is window-polled for `claude_chat_created` between the schedule watermark (less a five-minute overlap) and the run's end time (less the feed's one-minute indexing lag); a created activity carries the actor's user agent, which classifies the chat as Claude web or desktop, and IP address; both are stamped on its messages. The org-wide chat list, ordered by `updated_at` and walked forward from the schedule's `last_cursor_id`, is the only feed that reports a chat receiving new messages: the activity feed has no message-level activity, and `claude_chat_updated` records metadata edits (name, model) only, so it is not read. Every chat either feed yields has its messages fetched past the per-chat message cursor in `ai_integration_config_chats`, and a chat the list yields inherits source, user agent and IP from its newest stored message so one chat never splits across sources. Chats the list returns with `deleted_at` set are skipped; their content is gone. A chat whose messages endpoint answers 404 (content hard-deleted through the Compliance API or by retention, while the activity feed or the chat list can still name it) is skipped and counted as unavailable instead of failing the run, which would otherwise register as a provider rejection and pause the schedule; any other error still fails the run. The stored chat-list cursor carries a `chats:` prefix. A stored value without it is the activity feed token this schedule kept before it walked the chat list; it is treated as no cursor, so the first run after that change restarts from the bounded 24-hour window. Replays are idempotent: chat upserts are keyed by external chat id and messages by `(chat_id, external_message_id)`.
+
 ChatGPT conversation content comes from the same Compliance Logs Platform, but under a different provider (`chatgpt_compliance`) because the scope differs: `CONVERSATION_MESSAGE` files are served per ChatGPT workspace (`GET /v1/compliance/workspaces/{workspace-uuid}/logs`), not per API organization, so the config's `external_organization_id` holds a workspace UUID. The importer reuses the COSTS poller machinery (time-window watermark, `file_sha256` verification, 30-day initial lookback) but sinks into the external chat tables like the Anthropic compliance import: one `UpsertExternalChat` per conversation (title, external id, resolved user) and one `chat_messages` row per user/assistant message event, deduplicated by `(chat_id, external_message_id)` so replayed windows are idempotent. Messages carry source `chatgpt` and the feed's `author.client_type` (e.g. `desktop_web`) in `user_agent`. The old stateful `/workspaces/{id}/conversations` endpoint is deprecated upstream (410) — the log-file feed is the only supported conversation surface.
 
 The API returns poll status derived from sync state, not from a separate column. A config is `pending` before its first success or failure, `success` when `last_poll_success_at` is set without a later failure, and `failed` when failure metadata is present. The dashboard shows this status in the integration card, including the persisted error message for failed polls.
@@ -122,3 +128,97 @@ When adding a provider:
 4. Add provider-specific polling inside the activity layer.
 5. Emit telemetry with the shared `gen_ai.usage.*` attributes where possible.
 6. Store provider-specific fields under a provider namespace, such as `cursor.*`.
+
+## Gemini app compliance import (Google Vault)
+
+`gemini_compliance` imports managed `gemini.google.com` text transcripts through
+Google Vault. It does not import Gemini API/Vertex AI traffic, Workspace side-panel
+conversations, attachments, media, or token/cost estimates.
+
+Setup is two saves. The encrypted `api_key` holds only the Google service
+account JSON key file, unchanged; the non-secret settings live in the config's
+`settings` column so the dashboard can redisplay and edit them without the key.
+
+1. **Credentials.** Save the key file with `delegated_user`, the Workspace admin
+   the service account acts as. Speakeasy checks them with Google and finds or
+   creates its own open Vault matter, `Speakeasy Gemini import`, storing its ID as
+   `external_organization_id` (an explicit matter UUID is still accepted). The
+   connection is saved but held: it cannot sync without an export scope.
+2. **Scope.** `listOrgUnits` returns the organizational units the delegated admin
+   can read, including the root (`/`). Saving one as `org_unit_id` validates it
+   against that list, stores its path, and starts syncing. Select the root for
+   organization-wide coverage: Vault documents `ENTIRE_ORG` as Gmail-only, so the
+   importer uses an explicit `ORG_UNIT` query. Changing the unit restarts the
+   backfill for the new scope.
+
+Enable the Vault API and the Admin SDK API, and authorize the service account's
+client ID for domain-wide delegation with
+`https://www.googleapis.com/auth/ediscovery`,
+`https://www.googleapis.com/auth/devstorage.read_only` and
+`https://www.googleapis.com/auth/admin.directory.orgunit.readonly`. Directory calls
+use a separate token holding only the last scope. The delegated admin needs a
+Vault license, the Manage Matters, Manage Searches and Manage Exports privileges,
+and permission to read organizational units; covered users need Vault licenses.
+`ediscovery` grants all of Vault for every service, so the importer's Gemini-only
+corpus is enforced in code, not by Google; prefer a dedicated delegated admin.
+Saves only call Google when the key, admin, matter or unit changes, or when the
+connection is turned on. Credentials never leave through read APIs or error bodies.
+
+### Export lifecycle and guarantees
+
+- Reuses the existing integration polling workflow, with one hourly activity per
+  connected schedule and no workflows/timers per message. Incremental Temporal cost
+  is approximately 720 child starts + 720 activities/month per enabled organization
+  per namespace, plus retries; no new fleet-wide schedule is introduced.
+- First sync starts 30 UTC days before connection, imports one completed UTC-day
+  window at a time, and includes a 48-hour overlap. Once caught up, each export
+  rechecks the latest two completed days. Current-day chats appear after UTC
+  midnight; Google indexing lag beyond the overlap is not a completeness guarantee.
+- A versioned cursor checkpoints the export ID, exact query window, completed-date
+  watermark, and sequence. Deterministic names recover a lost create response;
+  pending jobs resume across activity retries and process restarts. Export polling
+  is scheduled from wall-clock time, never the historical/pending watermark.
+  A periodic activity heartbeat also covers long downloads and archive parsing.
+- Downloads all returned artifacts through authenticated, fixed-host, bounded
+  requests. ZIP/XML complexity and total expanded size are bounded. Counts and
+  error reports are validated before any transcript callbacks. Empty windows need
+  explicit successful zero-count evidence; unknown or partial content fails closed.
+- Failed jobs and source-reported partial exports are deleted after surfacing an
+  error so retry recreates the same window. Expired jobs are recreated without
+  skipping progress. Local parse/write failures retain the remote export for
+  replay. Successful remote artifacts expire according to Google's 15-day policy.
+- Messages go through `ChatMessageWriter.WriteExternal`, including normal outbox
+  publication. Stable owner/conversation/turn/role identities deduplicate overlaps
+  and replay; unresolved owners preserve their observed email without inventing
+  a connected user. Transcripts carry source `gemini`, provider `google`, model,
+  timestamp, and zero unreported usage. Turn visitation is chronological and
+  archive-order independent; conversation creation uses the earliest observed
+  turn while title/last-activity metadata reflect the latest observed turn.
+  Identical text turns with identical
+  timestamps and no exported request ID cannot be distinguished.
+
+### Export format validation
+
+The conversation parser has been checked locally against a real Google Vault XML
+export. It supports `GeminiUserConversationHistory/User/Email`, conversation and
+turn wrappers, `Prompt/Text`, `PrimaryResponse/{ResponseId,Text}`, request/parent
+IDs, model version, and timestamps. The local input stays outside the repository;
+committed regression fixtures reproduce only its structure with synthetic values.
+Legacy flat element variants remain supported.
+
+Google does not publish an XML schema or concrete XML example on the referenced
+export-contents page. Unknown rich content is rejected without advancing progress.
+Conversation-XML verification is separate from validating a complete export's
+count/error reports and an authenticated API export/download cycle. Unsupported
+layouts require a parser update, not skipping the file.
+
+Sources: [Query](https://developers.google.com/workspace/vault/reference/rest/v1/Query),
+[exports](https://developers.google.com/workspace/vault/guides/exports),
+[Gemini export contents](https://knowledge.workspace.google.com/vault/exports/vault-export-contents).
+
+Platform MCP assessment: no AI integration provider has a Platform MCP tool,
+and Gemini setup needs a service account private key, which agent tools must not
+handle. `listOrgUnits` only serves that setup flow, so it adds no MCP tool either;
+schedule status and pause stay in the shared per-provider schedule API. Command K
+keeps the existing AI Integrations page action; fixed provider entries have no
+separately named resource detail route to index.

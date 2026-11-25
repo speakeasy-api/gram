@@ -2,7 +2,7 @@ import type { UserSessionIssuer } from "@gram/client/models/components/usersessi
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CimdAdmissionModeField } from "./CimdAdmissionModeField";
+import { UserIdentitySessionControls } from "./UserIdentitySessionControls";
 
 const testState = vi.hoisted(() => ({
   hasScope: true,
@@ -61,6 +61,11 @@ vi.mock("@gram/client/react-query/userSessionIssuers.js", () => ({
   invalidateAllUserSessionIssuers: vi.fn(),
 }));
 
+// The allowlist editor has its own queries; this suite covers the mode choice.
+vi.mock("./CimdCustomClientsField", () => ({
+  CimdCustomClientsField: () => null,
+}));
+
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({}),
@@ -79,11 +84,15 @@ function issuer(
 ): UserSessionIssuer {
   return {
     authnChallengeMode: "chain",
+    authorizationServerMode: "endpoint",
     clientIdMetadataAdmissionMode: mode,
     createdAt: new Date(0),
     id: "issuer-1",
+    organizationId: "org-1",
     projectId: "project-1",
     sessionDurationHours: 24,
+    useAuthenticationHost: false,
+    issuerUrlPinned: false,
     slug: "issuer",
     updatedAt: new Date(0),
   };
@@ -118,22 +127,26 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("CimdAdmissionModeField", () => {
+describe("UserIdentitySessionControls client access", () => {
   it("renders the persisted mode as the selected option", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("open")} />);
+    render(<UserIdentitySessionControls userSessionIssuer={issuer("open")} />);
 
     expect(
-      screen.getByRole("radio", { name: "Open" }).getAttribute("aria-checked"),
+      screen
+        .getByRole("radio", { name: "Any client" })
+        .getAttribute("aria-checked"),
     ).toBe("true");
     expect(
       screen
-        .getByRole("radio", { name: "Known clients (recommended)" })
+        .getByRole("radio", { name: "Verified clients" })
         .getAttribute("aria-checked"),
     ).toBe("false");
   });
 
   it("leaves every option unselected while the issuer is unconfigured", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("reporting")} />);
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("reporting")} />,
+    );
 
     for (const radio of screen.getAllByRole("radio")) {
       expect(radio.getAttribute("aria-checked")).toBe("false");
@@ -141,7 +154,9 @@ describe("CimdAdmissionModeField", () => {
   });
 
   it("never renders the read-only reporting mode as a choice", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("reporting")} />);
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("reporting")} />,
+    );
 
     // "reporting" is returned by the read API but is not writable, so it must
     // not reach the control — an operator picking it would 400.
@@ -151,20 +166,26 @@ describe("CimdAdmissionModeField", () => {
   });
 
   it("warns about origin reach when Open is selected", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("presets")} />,
+    );
 
-    expect(screen.queryByText(/any valid CIMD client/i)).toBeNull();
+    expect(screen.queryByText(/Nobody vets it first/i)).toBeNull();
 
-    fireEvent.click(screen.getByRole("radio", { name: "Open" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Any client" }));
 
-    expect(screen.getByText(/any valid CIMD client/i)).toBeDefined();
+    // The caution rides with the option's own explanation, so it appears
+    // only while that option is the selection.
+    expect(screen.getByText(/Nobody vets it first/i)).toBeDefined();
   });
 
   it("saves a mode change directly for an already-configured issuer", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("presets")} />,
+    );
 
-    fireEvent.click(screen.getByRole("radio", { name: "Disabled" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Off" }));
+    fireEvent.click(screen.getByRole("button", { name: /Sav(e|ing)/ }));
 
     expect(testState.mutate).toHaveBeenCalledWith({
       request: {
@@ -177,12 +198,12 @@ describe("CimdAdmissionModeField", () => {
   });
 
   it("saves the first explicit mode directly, with no confirmation step", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("reporting")} />);
-
-    fireEvent.click(
-      screen.getByRole("radio", { name: "Known clients (recommended)" }),
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("reporting")} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    fireEvent.click(screen.getByRole("radio", { name: "Verified clients" }));
+    fireEvent.click(screen.getByRole("button", { name: /Sav(e|ing)/ }));
 
     expect(testState.mutate).toHaveBeenCalledWith({
       request: {
@@ -195,40 +216,69 @@ describe("CimdAdmissionModeField", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("keeps Save inert until the selection differs from the persisted mode", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
-
-    const save = screen.getByRole("button", { name: "Save" });
-    expect(save).toHaveProperty("disabled", true);
-
-    fireEvent.click(screen.getByRole("radio", { name: "Open" }));
-    expect(save).toHaveProperty("disabled", false);
-
-    fireEvent.click(
-      screen.getByRole("radio", { name: "Known clients (recommended)" }),
+  it("keeps Save in the footer, enabled only while the selection differs", () => {
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("presets")} />,
     );
-    expect(save).toHaveProperty("disabled", true);
+
+    // Like every other settings panel: the button holds its place, so a
+    // change doesn't shift the layout, and it is disabled while clean.
+    const save = () => screen.getByRole("button", { name: /Sav(e|ing)/ });
+    expect(save()).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("radio", { name: "Any client" }));
+    expect(save()).toHaveProperty("disabled", false);
+
+    fireEvent.click(screen.getByRole("radio", { name: "Verified clients" }));
+    expect(save()).toHaveProperty("disabled", true);
+  });
+
+  it("saves session length and client access together", () => {
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("presets")} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Session length"), {
+      target: { value: "3" },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "Off" }));
+    fireEvent.click(screen.getByRole("button", { name: /Sav(e|ing)/ }));
+
+    // The issuer loads as 24 hours, which reads as 1 day; 3 days is 72 hours.
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateUserSessionIssuerForm: {
+          id: "issuer-1",
+          sessionDurationHours: 72,
+          clientIdMetadataAdmissionMode: "disabled",
+        },
+      },
+    });
   });
 
   it("disables Save without the project:write scope even when dirty", () => {
     testState.hasScope = false;
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("presets")} />,
+    );
 
     // Dirty the field first: without this the button is disabled anyway and
     // the assertion would pass with no scope gate at all.
-    fireEvent.click(screen.getByRole("radio", { name: "Open" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Any client" }));
 
-    expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+    expect(screen.getByRole("button", { name: /Sav(e|ing)/ })).toHaveProperty(
       "disabled",
       true,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: /Sav(e|ing)/ }));
     expect(testState.mutate).not.toHaveBeenCalled();
   });
 
   it("offers exactly the three writable modes", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("reporting")} />);
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("reporting")} />,
+    );
 
     expect(screen.getAllByRole("radio")).toHaveLength(3);
     expect(screen.queryByRole("radio", { name: /recording/i })).toBeNull();
@@ -236,7 +286,9 @@ describe("CimdAdmissionModeField", () => {
 
   it("shows a save failure inline without a duplicate toast", () => {
     testState.updateError = new Error("issuer is locked");
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("presets")} />,
+    );
 
     expect(screen.getByText("issuer is locked")).toBeDefined();
     expect(toastMock.error).not.toHaveBeenCalled();
@@ -244,91 +296,54 @@ describe("CimdAdmissionModeField", () => {
 
   it("blocks a second submit while the save is in flight", () => {
     testState.updatePending = true;
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("presets")} />,
+    );
 
-    fireEvent.click(screen.getByRole("radio", { name: "Open" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Any client" }));
 
-    expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+    expect(screen.getByRole("button", { name: /Sav(e|ing)/ })).toHaveProperty(
       "disabled",
       true,
     );
   });
 
-  it("lists enabled presets from the API and hides disabled ones", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
+  it("opens the allowed-clients table from the explanation line", () => {
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("presets")} />,
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: /What's included/ }));
+    // The catalog and the project's own URLs are one table inside the modal
+    // now; this field only owns the affordance that opens it.
+    fireEvent.click(
+      screen.getByRole("button", { name: /Manage allowed clients/ }),
+    );
 
-    expect(screen.getByText("Anthropic (Claude)")).toBeDefined();
     expect(
-      screen.getByText("https://claude.ai/oauth/mcp-oauth-client-metadata"),
+      screen.getByRole("dialog", { name: "Allowed clients" }),
     ).toBeDefined();
-    expect(screen.queryByText("Retired Vendor")).toBeNull();
   });
 
-  it("selects a mode when the card body is clicked, not just the radio", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
+  it("does not change the selection when the explainer is opened", () => {
+    render(
+      <UserIdentitySessionControls userSessionIssuer={issuer("disabled")} />,
+    );
 
-    // The description is the largest part of the card and reads as part of
-    // the target, so clicking it must select.
-    fireEvent.click(screen.getByText(/Reject all CIMD clients/));
+    fireEvent.click(screen.getByRole("button", { name: /What is this/ }));
 
+    // The explainer is a modal, so the radios leave the accessible tree
+    // while it is open — query past that to prove reading what the setting
+    // means never arms a different policy.
     expect(
       screen
-        .getByRole("radio", { name: "Disabled" })
+        .getByRole("radio", { name: "Off", hidden: true })
         .getAttribute("aria-checked"),
     ).toBe("true");
-  });
-
-  it("does not select Known clients when opening its presets popover", () => {
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("disabled")} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /What's included/ }));
-
-    // The trigger sits inside the Known clients card; arming that mode as a
-    // side effect of reading the catalog would be a silent policy change.
     expect(
       screen
-        .getByRole("radio", { name: "Known clients (recommended)" })
+        .getByRole("radio", { name: "Verified clients", hidden: true })
         .getAttribute("aria-checked"),
     ).toBe("false");
-    expect(
-      screen
-        .getByRole("radio", { name: "Disabled" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
-  });
-
-  it("reports a loading preset catalog", () => {
-    testState.presetsLoading = true;
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /What's included/ }));
-
-    expect(screen.getByText("Loading verified clients…")).toBeDefined();
-    expect(screen.queryByText("Anthropic (Claude)")).toBeNull();
-  });
-
-  it("reports a failed preset catalog fetch", () => {
-    testState.presetsError = true;
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /What's included/ }));
-
-    expect(
-      screen.getByText("Could not load the verified client list."),
-    ).toBeDefined();
-    expect(screen.queryByText("Anthropic (Claude)")).toBeNull();
-  });
-
-  it("explains an empty preset catalog rather than rendering nothing", () => {
-    testState.presets = [];
-    render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /What's included/ }));
-
-    expect(
-      screen.getByText("No verified clients are currently enabled."),
-    ).toBeDefined();
+    expect(testState.mutate).not.toHaveBeenCalled();
   });
 });

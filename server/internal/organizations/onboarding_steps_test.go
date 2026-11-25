@@ -1,0 +1,67 @@
+package organizations_test
+
+import (
+	"testing"
+
+	admingen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/admin"
+	"github.com/speakeasy-api/gram/server/internal/organizations"
+	"github.com/stretchr/testify/require"
+)
+
+func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	require.NoError(t, admin.SeedSupportMatrix(ctx, ti.conn))
+	require.NoError(t, organizations.SyncOnboardingSteps(ctx, ti.conn))
+	// A second start finds everything in place and changes nothing.
+	require.NoError(t, organizations.SyncOnboardingSteps(ctx, ti.conn))
+
+	steps, err := organizations.ListOnboardingSteps(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Len(t, steps, 17, "fifteen cards and two groups")
+	position := make(map[string]int, len(steps))
+	bySlug := make(map[string]*admingen.AdminOnboardingStep, len(steps))
+	for index, step := range steps {
+		position[step.Slug] = index
+		bySlug[step.Slug] = step
+	}
+
+	group := bySlug["agent-observability"]
+	require.Equal(t, "children", group.Completion)
+	require.Nil(t, group.ParentSlug)
+	require.False(t, group.HiddenByDefault, "visible because a card of its is")
+	require.Empty(t, group.MethodSlugs)
+	require.Less(t, position["agent-observability"], position["instrument-agents"], "a group precedes its cards")
+	require.Nil(t, bySlug["distribute-servers"].ParentSlug, "Distribute MCP servers is a top-level card")
+	require.Empty(t, bySlug["distribute-servers"].Requires, "it publishes the marketplace itself")
+	require.False(t, bySlug["distribute-servers"].HiddenByDefault, "it shows by default")
+	require.Equal(t, "manual", bySlug["distribute-servers"].Completion, "it is still marked done by hand")
+	require.NotContains(t, bySlug, "mcp-distribution")
+	require.NotContains(t, bySlug, "create-marketplace")
+
+	card := bySlug["confirm-traffic"]
+	require.Equal(t, "agent-observability", *card.ParentSlug)
+	require.Equal(t, "manual", card.Completion)
+	require.Equal(t, []string{"instrument-agents"}, card.Requires)
+
+	identity := bySlug["identity-provider"]
+	require.Nil(t, identity.ParentSlug, "one card covers domain, single sign-on and directory sync")
+	require.Equal(t, "fact", identity.Completion)
+	require.Empty(t, identity.Requires)
+
+	require.Equal(t, []string{"inference"}, bySlug["anthropic-observability"].MethodSlugs)
+	require.Equal(t, []string{"settings", "otel"}, bySlug["anthropic-admin-controls"].MethodSlugs, "support matrix order")
+	require.Equal(t, []string{"plugins"}, bySlug["claude-plugin-registration"].MethodSlugs)
+	require.Equal(t, []string{"cowork-org-instructions"}, bySlug["claude-org-instructions"].MethodSlugs, "applies only to stacks with Anthropic")
+	require.Equal(t, []string{"claude-plugin-registration"}, bySlug["claude-org-instructions"].Requires)
+	require.Equal(t, "claude-desktop", *bySlug["claude-org-instructions"].ParentSlug)
+	require.Equal(t, "fact", bySlug["claude-org-instructions"].Completion)
+	require.True(t, bySlug["cursor-admin-controls"].HiddenByDefault, "the device agent covers Cursor by default")
+	require.Equal(t, []string{"cursor-marketplace"}, bySlug["cursor-admin-controls"].MethodSlugs, "applies only to stacks with Cursor")
+	require.Equal(t, []string{"device", "plugins"}, bySlug["distribute-servers"].MethodSlugs, "the device agent installs from the marketplace too")
+	require.Equal(t, []string{"anthropic-api", "cursor-api", "openai-api", "conversations"}, bySlug["additional-agent-config"].MethodSlugs)
+	require.Equal(t, "manual", bySlug["configure-policies"].Completion)
+	require.Empty(t, bySlug["configure-policies"].MethodSlugs, "a step with no method applies to every stack")
+}

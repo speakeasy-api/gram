@@ -3,6 +3,7 @@ package otel
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"log/slog"
 	"slices"
 
@@ -22,9 +23,9 @@ const normalizedLogInstrumentationScopeName = "com.speakeasy.ai.logging"
 
 type LogTransformHandler struct {
 	logger       *slog.Logger
-	metrics      *metrics
+	instruments  *enrich.Instruments
 	logPublisher gcp.Publisher[*otelv1.LogRecord]
-	enrichers    []LogEnricher
+	enrichers    []enrich.LogEnricher
 }
 
 func NewLogTransformHandler(
@@ -36,33 +37,27 @@ func NewLogTransformHandler(
 ) *LogTransformHandler {
 	logger = logger.With(attr.SlogComponent("log-transform-handler"))
 
+	in := enrich.NewInstruments(logger, meterProvider)
+
+	enrichers := []enrich.LogEnricher{
+		enrich.NewLogTenancy(),
+		enrich.NewLogTokens(),
+		enrich.NewLogDirectory(logger, replicaDB, cacheImpl),
+	}
+	enrichers = append(enrichers, enrich.LogAgentAttributes()...)
+
 	return &LogTransformHandler{
 		logger:       logger,
-		metrics:      newMetrics(logger, meterProvider),
+		instruments:  in,
 		logPublisher: logPublisher,
-		enrichers: []LogEnricher{
-			&enrichLogTenancy{},
-			newEnrichLogSpeakeasyTokens(),
-			newEnrichLogDirectory(logger, replicaDB, cacheImpl),
-		},
+		enrichers:    enrichers,
 	}
 }
 
 func (h *LogTransformHandler) Handle(ctx context.Context, record *otelv1.InboundLogRecord, _ gcp.MessageMetadata) error {
-	out, err := logRecordFromInbound(record)
+	out, err := transformInboundLog(ctx, h.instruments, record, h.enrichers)
 	if err != nil {
-		return fmt.Errorf("convert inbound log record: %w", o11y.LogError(ctx, h.logger, err, "failed to convert inbound log record"))
-	}
-	if err := rewriteLogInstrumentationScope(out); err != nil {
-		return fmt.Errorf("rewrite instrumentation scope: %w", err)
-	}
-
-	enrichments, err := enrichLog(ctx, h.metrics, record, h.enrichers)
-	if err != nil {
-		return fmt.Errorf("enrich log record: %w", o11y.LogError(ctx, h.logger, err, "failed to enrich log record"))
-	}
-	if err := applyLogEnrichments(out, enrichments); err != nil {
-		return fmt.Errorf("apply log enrichments: %w", o11y.LogError(ctx, h.logger, err, "failed to apply log enrichments"))
+		return o11y.LogError(ctx, h.logger, err, "failed to transform inbound log record")
 	}
 
 	result := h.logPublisher.Publish(ctx, out)
@@ -71,6 +66,31 @@ func (h *LogTransformHandler) Handle(ctx context.Context, record *otelv1.Inbound
 	}
 
 	return nil
+}
+
+// transformInboundLog turns an inbound record into what every consumer and relay receives.
+func transformInboundLog(ctx context.Context, instruments *enrich.Instruments, record *otelv1.InboundLogRecord, enrichers []enrich.LogEnricher) (*otelv1.LogRecord, error) {
+	out, err := logRecordFromInbound(record)
+	if err != nil {
+		return nil, fmt.Errorf("convert inbound log record: %w", err)
+	}
+	// The producer's copy of anything in the pipeline's namespace goes
+	// before the pipeline writes its own, so the scope rewrite below and
+	// the enrichers after it leave exactly one copy of each key.
+	dropReservedLogAttributes(out)
+	stripLogTestEventMarks(out)
+	if err := rewriteLogInstrumentationScope(out); err != nil {
+		return nil, fmt.Errorf("rewrite instrumentation scope: %w", err)
+	}
+
+	enrichments, err := enrich.Log(ctx, instruments, record, enrichers)
+	if err != nil {
+		return nil, fmt.Errorf("enrich log record: %w", err)
+	}
+	if err := applyLogEnrichments(out, enrichments); err != nil {
+		return nil, fmt.Errorf("apply log enrichments: %w", err)
+	}
+	return out, nil
 }
 
 func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
@@ -91,8 +111,28 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 	}
 
 	return applyLogEnrichments(record, []otelattr.KeyValue{
-		OriginalInstrumentationScopeName(originalName),
+		enrich.OriginalInstrumentationScopeName(originalName),
 	})
+}
+
+// dropReservedLogAttributes removes what a producer sent under the
+// namespaces the pipeline writes, speakeasy and directory. Only the
+// pipeline writes there, and it leaves a key off
+// when a record carries no value for it, so a producer that sends one would
+// otherwise classify its own record, claim another tenant, pose as another
+// producer's scope, or give a person a group or department. The connection
+// recorder keeps speakeasy.mcp_connection; see enrich.IsReservedLogKey. The
+// enrichers read the inbound record, so what they see is unchanged; the
+// outbound record is what every consumer and relay receives.
+func dropReservedLogAttributes(record *otelv1.LogRecord) {
+	source := record.GetProvenance().GetSource()
+	attributes := record.GetAttributes()
+	kept := slices.DeleteFunc(attributes, func(kv *otelv1.LogRecord_KeyValue) bool {
+		return enrich.IsReservedLogKey(source, kv.GetKey())
+	})
+	if len(kept) != len(attributes) {
+		record.SetAttributes(kept)
+	}
 }
 
 func applyLogEnrichments(out *otelv1.LogRecord, enrichments []otelattr.KeyValue) error {
@@ -182,6 +222,20 @@ func logAnyValue(value otelattr.Value) (*otelv1.LogRecord_AnyValue, error) {
 		}
 		return (&otelv1.LogRecord_AnyValue_builder{
 			ArrayValue: (&otelv1.LogRecord_ArrayValue_builder{Values: values}).Build(),
+		}).Build(), nil
+	case otelattr.MAP:
+		input := value.AsMap()
+		values := make([]*otelv1.LogRecord_KeyValue, len(input))
+		for i, item := range input {
+			converted, err := logAnyValue(item.Value)
+			if err != nil {
+				return nil, fmt.Errorf("convert map item %d: %w", i, err)
+			}
+			key := string(item.Key)
+			values[i] = (&otelv1.LogRecord_KeyValue_builder{Key: &key, Value: converted}).Build()
+		}
+		return (&otelv1.LogRecord_AnyValue_builder{
+			KvlistValue: (&otelv1.LogRecord_KeyValueList_builder{Values: values}).Build(),
 		}).Build(), nil
 	case otelattr.EMPTY:
 		return (&otelv1.LogRecord_AnyValue_builder{}).Build(), nil

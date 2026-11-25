@@ -1,0 +1,565 @@
+import { McpServerReadinessBar } from "./mcp-server-readiness-bar";
+import { ConfigProvider } from "@/components/ui/context/ConfigContext";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const state = vi.hoisted(() => ({
+  grants: [] as { scope: string; selectors?: { resourceId: string }[] }[],
+  plugins: vi.fn(() => ({
+    data: {
+      plugins: [
+        {
+          id: "plugin-a",
+          name: "Cached plugin",
+          slug: "cached-plugin",
+          servers: [{ mcpServerId: "server-a" }],
+        },
+      ],
+    },
+  })),
+  publishStatus: vi.fn(() => ({
+    data: {
+      repoOwner: "example",
+      repoName: "plugins",
+      marketplaceUrl:
+        "https://example.test/marketplace?token=synthetic-admin-token",
+    },
+  })),
+  mutation: vi.fn(() => ({ isPending: false, mutateAsync: vi.fn() })),
+  mcpServer: { id: "server-a", name: "Server" } as {
+    id: string;
+    name: string;
+    tunneledMcpServerId?: string;
+    remoteMcpServerId?: string;
+  },
+  tunnelConnections: vi.fn(() => ({
+    data: undefined as unknown,
+    isLoading: false,
+    isError: false,
+  })),
+  skillsOverMcp: false,
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => ({
+    status:
+      flag === "skills-over-mcp" && state.skillsOverMcp
+        ? "enabled"
+        : "disabled",
+  }),
+}));
+vi.mock("./mcp/useMcpServerReachability", () => ({
+  useMcpServerReachability: () => ({ kind: "off" }),
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-a" }),
+  useProject: () => ({ id: "project-a", slug: "project-slug" }),
+  useSession: () => ({ session: "session-a" }),
+  useIsPlatformAdmin: () => false,
+}));
+vi.mock("@gram/client/react-query/grants.js", () => ({
+  useGrants: () => ({ data: { grants: state.grants }, isLoading: false }),
+}));
+vi.mock("@gram/client/react-query/plugins", () => ({
+  usePlugins: state.plugins,
+}));
+vi.mock("@gram/client/react-query/publishStatus", () => ({
+  usePublishStatus: state.publishStatus,
+}));
+vi.mock("@gram/client/react-query/addPluginServer", () => ({
+  useAddPluginServerMutation: state.mutation,
+}));
+vi.mock("@gram/client/react-query/removePluginServer", () => ({
+  useRemovePluginServerMutation: state.mutation,
+}));
+vi.mock("@gram/client/react-query/publishPlugins", () => ({
+  usePublishPluginsMutation: state.mutation,
+}));
+vi.mock("@/contexts/Fetcher", () => ({
+  useFetcher: () => ({ fetch: vi.fn() }),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-slug" }),
+}));
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useParams: () => ({ mcpServerSlug: "server-a" }),
+  useLocation: () => ({ pathname: "/mcp/server-a" }),
+  Link: ({
+    to,
+    children,
+    ...rest
+  }: {
+    to: string;
+    children: ReactNode;
+    "aria-label"?: string;
+    className?: string;
+  }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
+  useGetMcpServer: () => ({ data: state.mcpServer }),
+}));
+vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
+  useGetRemoteMcpServer: () => ({}),
+}));
+vi.mock("@gram/client/react-query/getUnproxiedMcpServer.js", () => ({
+  useGetUnproxiedMcpServer: () => ({}),
+}));
+vi.mock("@gram/client/react-query/mcpEndpoints.js", () => ({
+  useMcpEndpoints: () => ({}),
+}));
+vi.mock("@/hooks/usePrivateMcpServerUrls", () => ({
+  usePrivateMcpServerUrls: () => ({
+    privateMcpUrls: [],
+    privateInstallPageUrls: [],
+  }),
+  mcpServerInstallPageLinks: () => [],
+}));
+vi.mock("@/hooks/useToolsetUrl", () => ({
+  useResolvedMcpServerUrl: () => ({}),
+  platformEndpointSlug: () => undefined,
+  useCustomDomains: () => ({ domains: [], isLoading: false }),
+  useMcpEndpointAddresses: () => [],
+}));
+vi.mock("@/pages/mcp/x/MCPServerDetails", () => ({
+  MCPServerStatusDropdown: () => null,
+  MCPServerAvailabilityToggle: () => null,
+}));
+vi.mock("@/pages/mcp/x/MCPServerDetailsRouting", () => ({
+  activeTabFromPath: () => "overview",
+  mcpServerTabHref: () => "/mcp",
+  standsInForToolset: () => false,
+  isCanonicalHostedWrapper: () => false,
+}));
+vi.mock("@/hooks/toolTypes", () => ({
+  useToolset: () => ({ data: undefined }),
+}));
+vi.mock("@/pages/mcp/x/hosted/useHostedToolset", () => ({
+  useHostedToolset: () => ({
+    toolset: undefined,
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
+vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
+  useListEnvironments: () => ({ data: undefined }),
+}));
+vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
+  useGetMcpMetadata: () => ({ data: undefined }),
+}));
+vi.mock(
+  "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection",
+  () => ({ MCP_AUTHENTICATION_SECTION_ID: "auth" }),
+);
+vi.mock("@/pages/mcp/x/tabs/settings/sections/ServerUrlSection", () => ({
+  MCP_SERVER_URL_SECTION_ID: "url",
+}));
+vi.mock("@/pages/mcp/x/tabs/settings/sections/AgentSetupSection", () => ({
+  MCP_AGENT_SETUP_SECTION_ID: "agent-setup",
+}));
+vi.mock("@/pages/mcp/x/tabs/tunnelStatus", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/pages/mcp/x/tabs/tunnelStatus")>()),
+  useTunneledMcpConnections: state.tunnelConnections,
+}));
+vi.mock("@/lib/remote-identity", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/remote-identity")>()),
+  useAllRemoteSessionClients: () => ({
+    items: [],
+    isLoading: false,
+    isError: false,
+  }),
+  useUpstreamProbe: (remoteMcpServerId: string, enabled: boolean) =>
+    identityGate.probe(remoteMcpServerId, enabled),
+}));
+vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
+  useRemoteMcpServerHeaders: () => ({
+    data: { headers: [] },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+// The typed offer status read by the sidebar's Identity summary.
+const identityGate = vi.hoisted(() => ({
+  authentication: {
+    isPending: false,
+    isError: false,
+    data: { status: "configured", clients: [] } as
+      | { status: string; clients: unknown[] }
+      | undefined,
+  },
+  probe: vi.fn((_remoteMcpServerId: string, _enabled: boolean) => "idle"),
+}));
+vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
+  useMcpServerAuthentication: () => identityGate.authentication,
+}));
+vi.mock("@/components/sources/SourceCard", () => ({
+  SourceMcpIcon: () => null,
+}));
+vi.mock("@/components/setup-guide/useSetupGuide", () => ({
+  useSetupGuide: () => null,
+}));
+vi.mock("@/components/mcp-server-readiness-bar", () => ({
+  McpServerReadinessBar: ({
+    checks,
+  }: {
+    checks: { label: string; ready: boolean; description: string }[];
+  }) => (
+    <>
+      {checks.map((check) => (
+        <span
+          key={check.label}
+          data-ready={String(check.ready)}
+          title={check.description}
+        >
+          {check.label}
+        </span>
+      ))}
+    </>
+  ),
+}));
+vi.mock("@/components/detail/detail-sidebar-nav", () => ({
+  DetailSidebarInfoLabel: () => null,
+}));
+
+import { useMcpServerDetailChrome } from "./mcp/useMcpServerDetailChrome";
+import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
+
+// What the detail frame renders from the chrome: tab titles, the readiness
+// card, and the details popover.
+function DetailChrome() {
+  const chrome = useMcpServerDetailChrome();
+  if (!chrome) return null;
+  return (
+    <>
+      {chrome.items.map((item) => (
+        <span key={item.title}>{item.title}</span>
+      ))}
+      <McpServerReadinessBar checks={chrome.readinessChecks} />
+      {chrome.installLinks.map((link) => (
+        <a key={link.url} href={link.url}>
+          {link.label}
+        </a>
+      ))}
+    </>
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  state.grants = [];
+  state.mcpServer = { id: "server-a", name: "Server" };
+  state.skillsOverMcp = false;
+  state.tunnelConnections.mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  });
+});
+afterEach(cleanup);
+const scope = { gramProject: "project-slug", gramSession: "session-a" };
+function banner() {
+  const client = new QueryClient();
+  const content = () => (
+    <QueryClientProvider client={client}>
+      <TooltipProvider>
+        <ConfigProvider theme="light" setTheme={() => {}}>
+          <PluginStatusBanner
+            server={{
+              kind: "mcp-server",
+              id: "server-a",
+              slug: "server-a",
+              name: "Server",
+            }}
+          />
+        </ConfigProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+  const view = render(content(), { wrapper: MemoryRouter });
+  return { ...view, refresh: () => view.rerender(content()) };
+}
+describe("MCP plugin permission boundaries", () => {
+  it("offers the plugin picker as a Plugins settings section", () => {
+    state.grants = [{ scope: "plugin:write" }];
+    banner();
+    expect(screen.getByRole("heading", { name: "Plugins" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Plugins" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
+  });
+
+  it("lists plugins alphabetically, with a description line when there is one", () => {
+    state.grants = [{ scope: "plugin:write" }];
+    const original = state.plugins.getMockImplementation();
+    state.plugins.mockReturnValue({
+      data: {
+        plugins: [
+          { id: "p-z", name: "zeta", slug: "zeta", servers: [] },
+          {
+            id: "p-a",
+            name: "Alpha",
+            slug: "alpha",
+            description: "For the support team",
+            servers: [],
+          },
+          { id: "p-m", name: "Mid", slug: "mid", servers: [] },
+        ],
+      },
+    } as unknown as ReturnType<typeof state.plugins>);
+    banner();
+    fireEvent.click(screen.getByRole("button", { name: "Plugins" }));
+    const names = screen
+      .getAllByRole("checkbox")
+      .map((box) => box.closest("label")?.textContent);
+    expect(names).toEqual(["AlphaFor the support team", "Mid", "zeta"]);
+    if (original) state.plugins.mockImplementation(original);
+  });
+
+  it.each(["org:read", "plugin:write", "org:admin"])(
+    "scopes detail chrome queries for %s",
+    (grant) => {
+      state.grants = [{ scope: grant }];
+      render(<DetailChrome />, { wrapper: MemoryRouter });
+      expect(screen.getByText("Included in a plugin")).toBeTruthy();
+      expect(state.plugins).toHaveBeenCalledWith(
+        scope,
+        undefined,
+        expect.objectContaining({ enabled: true }),
+      );
+      expect(state.publishStatus).toHaveBeenCalledWith(
+        scope,
+        undefined,
+        expect.objectContaining({ enabled: true }),
+      );
+    },
+  );
+  it.each([false, true])(
+    "disables detail chrome reads and cached plugin content (org block: %s)",
+    (blocked) => {
+      state.grants = blocked
+        ? [
+            { scope: "org:read" },
+            { scope: "org:blocked_read", selectors: [{ resourceId: "org-a" }] },
+          ]
+        : [];
+      render(<DetailChrome />, { wrapper: MemoryRouter });
+      expect(state.plugins).toHaveBeenCalledWith(
+        scope,
+        undefined,
+        expect.objectContaining({ enabled: false }),
+      );
+      expect(state.publishStatus).toHaveBeenCalledWith(
+        scope,
+        undefined,
+        expect.objectContaining({ enabled: false }),
+      );
+      expect(screen.queryByText("Included in a plugin")).toBeNull();
+    },
+  );
+  it("honors org-ID read denial for team access", () => {
+    state.grants = [
+      { scope: "org:read" },
+      { scope: "mcp:read" },
+      { scope: "org:blocked_read", selectors: [{ resourceId: "org-a" }] },
+    ];
+    render(<DetailChrome />, { wrapper: MemoryRouter });
+    expect(screen.queryByText("Team Access")).toBeNull();
+  });
+  it.each([
+    { grants: [] },
+    { grants: [{ scope: "org:read" }] },
+    {
+      grants: [
+        { scope: "plugin:write" },
+        {
+          scope: "plugin:blocked_write",
+          selectors: [{ resourceId: "project-a" }],
+        },
+      ],
+    },
+  ])(
+    "does not mount plugin section queries or mutation controls without write access: %j",
+    ({ grants }) => {
+      state.grants = grants;
+      const view = banner();
+      expect(state.plugins).not.toHaveBeenCalled();
+      expect(state.publishStatus).not.toHaveBeenCalled();
+      expect(state.mutation).not.toHaveBeenCalled();
+      expect(view.container.innerHTML).toBe("");
+    },
+  );
+  it.each(["plugin:write", "org:admin"])(
+    "scopes writer plugin section queries for %s",
+    (grant) => {
+      state.grants = [{ scope: grant }];
+      banner();
+      expect(state.plugins).toHaveBeenCalledWith(
+        scope,
+        undefined,
+        expect.objectContaining({ throwOnError: false }),
+      );
+      expect(state.publishStatus).toHaveBeenCalledWith(
+        scope,
+        undefined,
+        expect.objectContaining({ refetchInterval: 5000 }),
+      );
+      expect(state.mutation).toHaveBeenCalled();
+    },
+  );
+});
+
+describe("remote MCP server Skills tab", () => {
+  const remote = {
+    id: "server-a",
+    name: "Server",
+    remoteMcpServerId: "remote-source-a",
+  };
+
+  it("shows for a remote server with the flag on and project skill read", () => {
+    state.skillsOverMcp = true;
+    state.mcpServer = remote;
+    state.grants = [{ scope: "skill:read" }];
+    render(<DetailChrome />, { wrapper: MemoryRouter });
+    expect(screen.getByText("Skills")).toBeTruthy();
+  });
+
+  it.each([
+    {
+      case: "flag off",
+      flag: false,
+      server: remote,
+      grants: [{ scope: "skill:read" }],
+    },
+    {
+      case: "server not remote-backed",
+      flag: true,
+      server: { id: "server-a", name: "Server", tunneledMcpServerId: "t-1" },
+      grants: [{ scope: "skill:read" }],
+    },
+    { case: "no skill read", flag: true, server: remote, grants: [] },
+    {
+      case: "skill read on another project",
+      flag: true,
+      server: remote,
+      grants: [
+        { scope: "skill:read", selectors: [{ resourceId: "project-b" }] },
+      ],
+    },
+  ])("is hidden with $case", ({ flag, server, grants }) => {
+    state.skillsOverMcp = flag;
+    state.mcpServer = server;
+    state.grants = grants;
+    render(<DetailChrome />, { wrapper: MemoryRouter });
+    expect(screen.queryByText("Skills")).toBeNull();
+  });
+});
+
+describe("MCP server readiness", () => {
+  it("leaves servers without a tunnel unchanged", () => {
+    state.grants = [{ scope: "org:read" }];
+    render(<DetailChrome />, { wrapper: MemoryRouter });
+    for (const label of [
+      "Server URL",
+      "Sign-in",
+      "Source",
+      "Included in a plugin",
+    ]) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+    expect(screen.queryByText("Tunnel agent")).toBeNull();
+    // No tunnel to ask about, so the shared query stays disabled.
+    expect(state.tunnelConnections).toHaveBeenCalledWith("");
+  });
+
+  it("adds the tunnel agent without polling for tunneled servers", () => {
+    state.mcpServer = {
+      id: "server-a",
+      name: "Server",
+      tunneledMcpServerId: "tunnel-a",
+    };
+    state.tunnelConnections.mockReturnValue({
+      data: { activeConnectionCount: 0, connections: [] },
+      isLoading: false,
+      isError: false,
+    });
+    render(<DetailChrome />, { wrapper: MemoryRouter });
+    expect(screen.getByText("Tunnel agent")).toBeTruthy();
+    // The Overview polls; the sidebar reads the same cached snapshot.
+    expect(state.tunnelConnections).toHaveBeenCalledWith("tunnel-a");
+  });
+});
+
+describe("remote MCP server readiness from typed offers", () => {
+  const remote = {
+    id: "server-a",
+    name: "Server",
+    remoteMcpServerId: "remote-source-a",
+  };
+  afterEach(() => {
+    identityGate.authentication = {
+      isPending: false,
+      isError: false,
+      data: { status: "configured", clients: [] },
+    };
+  });
+
+  function authenticationCheck(): HTMLElement {
+    return screen.getByText("Sign-in");
+  }
+
+  it.each([
+    ["configured", "true", "Credentials are set up for the upstream service."],
+    [
+      "setup_incomplete",
+      "false",
+      "Add a credential so Speakeasy can sign in to the upstream service.",
+    ],
+  ])("reads %s from the credentials status", (status, ready, description) => {
+    state.mcpServer = remote;
+    identityGate.authentication = {
+      isPending: false,
+      isError: false,
+      data: { status, clients: [] },
+    };
+    render(<DetailChrome />, { wrapper: MemoryRouter });
+    expect(authenticationCheck().getAttribute("data-ready")).toBe(ready);
+    expect(authenticationCheck().getAttribute("title")).toBe(description);
+  });
+
+  it("does not mark an unknown typed status as an open step", () => {
+    state.mcpServer = remote;
+    identityGate.authentication = {
+      isPending: false,
+      isError: false,
+      data: { status: "future_status", clients: [] },
+    };
+    render(<DetailChrome />, { wrapper: MemoryRouter });
+    expect(authenticationCheck().getAttribute("data-ready")).toBe("null");
+  });
+
+  it("is still checking and does not probe the upstream while typed offers load", () => {
+    state.mcpServer = remote;
+    identityGate.authentication = {
+      isPending: true,
+      isError: false,
+      data: undefined,
+    };
+    render(<DetailChrome />, { wrapper: MemoryRouter });
+    // Undetermined, not a step left, so the header waits for it.
+    expect(authenticationCheck().getAttribute("data-ready")).toBe("null");
+    expect(authenticationCheck().getAttribute("title")).toBe(
+      "Checking how Speakeasy signs in to this server.",
+    );
+    expect(identityGate.probe).not.toHaveBeenCalledWith(
+      "remote-source-a",
+      true,
+    );
+  });
+});

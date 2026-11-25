@@ -2,15 +2,11 @@ package mcp
 
 import (
 	"encoding/json"
-	"errors"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
-)
-
-var (
-	errToolsetNotFound = errors.New("toolset not found")
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
 // ToolMode specifies whether tools should be loaded statically or dynamically.
@@ -80,10 +76,12 @@ func (m *McpInputs) toInternal() *mcpInputs {
 			securityKeys:          ot.SecurityKeys,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			Token:                 ot.Token,
+			shared:                false,
 		}
 	}
 
 	return &mcpInputs{
+		request:          nil,
 		projectID:        m.ProjectID,
 		organizationID:   "",
 		toolset:          m.Toolset,
@@ -101,12 +99,27 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		// variation group, never filter by tag, have no fronting mcp_servers
 		// row to record, and carry no HTTP request to declare a protocol
 		// version, so they resolve to the unversioned default.
-		toolVariationsGroupID:    nil,
-		mcpServerID:              nil,
-		skipProxyTools:           false,
+		toolVariationsGroupID: nil,
+		mcpServerID:           nil,
+		mcpEndpointID:         nil,
+		attributionServerID:   nil,
+		wrapperRBACResourceID: "",
+		wrapperIsPublic:       nil,
+		metaMcpServerID:       "",
+		// An internal caller never handshaked as an MCP client. Scoping it
+		// somewhere no handshake can be stored keeps it from resolving the
+		// record some real client wrote for the same toolset and session,
+		// which would attribute an agent-workflow call to that client.
+		clientInfoScope:          internalClientInfoScope,
+		toolsetID:                uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		toolsetIsPublic:          nil,
 		tags:                     nil,
 		protocolVersion:          mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
 		identityCoverageRecorded: false,
 		toolSelection:            nil,
+		skillsOverMCP:            nil,
+		upstreamRejection:        mcpconnectionattempts.Code{},
+		backendAnswered:          false,
+		resultSucceeded:          false,
 	}
 }

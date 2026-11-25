@@ -3,32 +3,105 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  AgentKeyAuthClientChoice,
+  AgentKeyAuthClientChoice$Outbound,
+  AgentKeyAuthClientChoice$outboundSchema,
+} from "./agentkeyauthclientchoice.js";
+import {
+  AgentPolicyGrantForm,
+  AgentPolicyGrantForm$Outbound,
+  AgentPolicyGrantForm$outboundSchema,
+} from "./agentpolicygrantform.js";
+import {
+  APIKeyPolicyGrant,
+  APIKeyPolicyGrant$Outbound,
+  APIKeyPolicyGrant$outboundSchema,
+} from "./apikeypolicygrant.js";
 
 export type CreateKeyForm = {
+  /**
+   * First-class agent subject. Omit for an ordinary API key.
+   */
+  agentId?: string | undefined;
+  /**
+   * For an agent key: the upstream credential the key uses on each MCP server it names. Where typed upstream authentication is enforced, the key is served on a server with the credential chosen here, checked again on every request. Shared credentials only: an agent reaches a person's own connection when it acts for them.
+   */
+  authClientChoices?: Array<AgentKeyAuthClientChoice> | undefined;
+  /**
+   * Delegated policy format version. Required for agent keys.
+   */
+  delegatedGrantsVersion?: number | undefined;
+  /**
+   * Agent credential expiry; defaults to 90 days and cannot exceed one year
+   */
+  expiresAt?: Date | undefined;
   /**
    * The name of the key
    */
   name: string;
   /**
-   * The scopes of the key that determines its permissions.
+   * Optional policy for an ordinary key: mcp:connect and mcp:auth grants, and mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth client access is evaluated against. Not yet enforced. Requires org admin.
    */
-  scopes: Array<string>;
+  policyGrants?: Array<APIKeyPolicyGrant> | undefined;
+  /**
+   * Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.
+   */
+  projectId?: string | undefined;
+  /**
+   * Exact allow grants approved for an agent credential
+   */
+  requestedGrants?: Array<AgentPolicyGrantForm> | undefined;
+  /**
+   * Legacy transport scopes. Omitted or empty defaults to consumer for ordinary keys; agent keys require no scopes.
+   */
+  scopes?: Array<string> | undefined;
 };
 
 /** @internal */
 export type CreateKeyForm$Outbound = {
+  agent_id?: string | undefined;
+  auth_client_choices?: Array<AgentKeyAuthClientChoice$Outbound> | undefined;
+  delegated_grants_version?: number | undefined;
+  expires_at?: string | undefined;
   name: string;
-  scopes: Array<string>;
+  policy_grants?: Array<APIKeyPolicyGrant$Outbound> | undefined;
+  project_id?: string | undefined;
+  requested_grants?: Array<AgentPolicyGrantForm$Outbound> | undefined;
+  scopes?: Array<string> | undefined;
 };
 
 /** @internal */
 export const CreateKeyForm$outboundSchema: z.ZodMiniType<
   CreateKeyForm$Outbound,
   CreateKeyForm
-> = z.object({
-  name: z.string(),
-  scopes: z.array(z.string()),
-});
+> = z.pipe(
+  z.object({
+    agentId: z.optional(z.string()),
+    authClientChoices: z.optional(
+      z.array(AgentKeyAuthClientChoice$outboundSchema),
+    ),
+    delegatedGrantsVersion: z.optional(z.int()),
+    expiresAt: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    name: z.string(),
+    policyGrants: z.optional(z.array(APIKeyPolicyGrant$outboundSchema)),
+    projectId: z.optional(z.string()),
+    requestedGrants: z.optional(z.array(AgentPolicyGrantForm$outboundSchema)),
+    scopes: z.optional(z.array(z.string())),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      agentId: "agent_id",
+      authClientChoices: "auth_client_choices",
+      delegatedGrantsVersion: "delegated_grants_version",
+      expiresAt: "expires_at",
+      policyGrants: "policy_grants",
+      projectId: "project_id",
+      requestedGrants: "requested_grants",
+    });
+  }),
+);
 
 export function createKeyFormToJSON(createKeyForm: CreateKeyForm): string {
   return JSON.stringify(CreateKeyForm$outboundSchema.parse(createKeyForm));

@@ -5,24 +5,26 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
+ * MCP server activity target type. Only the server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
  */
 export const TargetType = {
   HostedMcpServer: "hosted_mcp_server",
   TunneledMcpServer: "tunneled_mcp_server",
+  MetaMcpServer: "meta_mcp_server",
 } as const;
 /**
- * MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
+ * MCP server activity target type. Only the server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
  */
-export type TargetType = ClosedEnum<typeof TargetType>;
+export type TargetType = OpenEnum<typeof TargetType>;
 
 /**
- * Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers)
+ * Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers, meta MCP server id for gateways)
  */
 export type McpServerActivity = {
   /**
@@ -34,15 +36,15 @@ export type McpServerActivity = {
    */
   recentToolCalls: number;
   /**
-   * Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers
+   * Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers, meta MCP server id for gateways
    */
   targetId: string;
   /**
-   * User-facing label for the target
+   * User-facing label for the target. Gateway rows carry the gateway name, falling back to the meta MCP server id when the gateway no longer exists
    */
   targetLabel: string;
   /**
-   * MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
+   * MCP server activity target type. Only the server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
    */
   targetType: TargetType;
   /**
@@ -52,8 +54,8 @@ export type McpServerActivity = {
 };
 
 /** @internal */
-export const TargetType$inboundSchema: z.ZodMiniEnum<typeof TargetType> = z
-  .enum(TargetType);
+export const TargetType$inboundSchema: z.ZodMiniType<TargetType, unknown> =
+  openEnums.inboundSchema(TargetType);
 
 /** @internal */
 export const McpServerActivity$inboundSchema: z.ZodMiniType<

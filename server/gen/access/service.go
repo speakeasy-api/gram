@@ -10,6 +10,7 @@ package access
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -26,8 +27,69 @@ type Service interface {
 	UpdateRole(context.Context, *UpdateRolePayload) (res *Role, err error)
 	// Delete a custom role (system roles cannot be deleted).
 	DeleteRole(context.Context, *DeleteRolePayload) (err error)
+	// List the organization's directory groups and attribute values, and the roles
+	// mapped to them.
+	ListDirectoryRoleMappings(context.Context, *ListDirectoryRoleMappingsPayload) (res *ListDirectoryRoleMappingsResult, err error)
+	// List every live directory profile in the active organization with its name,
+	// groups and whether it belongs to a member. Requires an authenticated session
+	// authorized for org:admin, because it names people who are not members; API
+	// keys cannot enumerate it. Attribute values are not returned.
+	ListDirectoryPeople(context.Context, *ListDirectoryPeoplePayload) (res *ListDirectoryPeopleResult, err error)
+	// Fetch the organization's directory groups from WorkOS and save any that are
+	// new or changed.
+	SyncDirectoryGroups(context.Context, *SyncDirectoryGroupsPayload) (res *SyncDirectoryGroupsResult, err error)
+	// Deprecated compatibility endpoint for older dashboard clients. Use
+	// setDirectoryRoleMappings. Rejects replacement when the source already grants
+	// multiple roles.
+	SetDirectoryRoleMapping(context.Context, *SetDirectoryRoleMappingPayload) (res *DirectoryRoleMapping, err error)
+	// Replace the full set of roles granted by a directory group or attribute
+	// value. An empty role list removes all mappings for the source.
+	SetDirectoryRoleMappings(context.Context, *SetDirectoryRoleMappingsPayload) (res []*DirectoryRoleMapping, err error)
+	// Remove a directory role mapping.
+	DeleteDirectoryRoleMapping(context.Context, *DeleteDirectoryRoleMappingPayload) (err error)
+	// Propose roles for every live directory group and mappable attribute value,
+	// for bulk setup. An unmapped source is proposed one role: the live role whose
+	// slug matches the source name, or a new role named after the source. A mapped
+	// source is listed with its current roles. Nothing is written. Each item
+	// carries a version that applyDirectoryRoleSetup checks to detect changes
+	// since the preview; the version authorizes nothing.
+	PreviewDirectoryRoleSetup(context.Context, *PreviewDirectoryRoleSetupPayload) (res *DirectoryRoleSetupPreviewResult, err error)
+	// Apply a reviewed bulk setup in one transaction: create the requested new
+	// roles and replace each listed source's role set. New roles get no grants
+	// unless grant_set is given, in which case every new role in the batch gets
+	// exactly that set. If any item's version no longer matches, nothing is
+	// written and the request returns conflict; preview again. WorkOS role sync
+	// for new roles is requested after commit and reported as requested, not done.
+	// Creating roles sets up no plugin distribution.
+	ApplyDirectoryRoleSetup(context.Context, *ApplyDirectoryRoleSetupPayload) (res *ApplyDirectoryRoleSetupResult, err error)
+	// List the directory changes waiting for an admin decision, oldest first: a
+	// directory group first seen after review started, with no mapping; a new
+	// value of an attribute key that already has mappings; and a mapped group or
+	// attribute value that has gone from the directory. Each item carries the same
+	// proposal and version as previewDirectoryRoleSetup, for
+	// resolveDirectoryReviewItem. Nothing is written.
+	ListDirectoryReviewItems(context.Context, *ListDirectoryReviewItemsPayload) (res *ListDirectoryReviewItemsResult, err error)
+	// Decide one pending directory review item. approve on a new group or
+	// attribute value maps it to the given role set, creating new roles as
+	// applyDirectoryRoleSetup does; approve on a missing source removes its
+	// mappings. dismiss leaves a new source unmapped, or keeps a missing source's
+	// mappings. opt_out_key dismisses a new attribute value and stops raising new
+	// values of its key. approve checks version as applyDirectoryRoleSetup does
+	// and returns conflict if the source changed. An item that is no longer
+	// pending returns conflict.
+	ResolveDirectoryReviewItem(context.Context, *ResolveDirectoryReviewItemPayload) (res *ResolveDirectoryReviewItemResult, err error)
+	// Get the organization's directory review settings: whether its admins are
+	// emailed when directory changes are waiting for a decision.
+	GetDirectoryReviewSettings(context.Context, *GetDirectoryReviewSettingsPayload) (res *DirectoryReviewSettings, err error)
+	// Turn the organization's directory review emails on or off. Pending items
+	// stay listed in the dashboard either way, and webhooks are unaffected.
+	UpdateDirectoryReviewSettings(context.Context, *UpdateDirectoryReviewSettingsPayload) (res *DirectoryReviewSettings, err error)
 	// List all available scopes and their resource types.
 	ListScopes(context.Context, *ListScopesPayload) (res *ListScopesResult, err error)
+	// List the scopes an agent policy may hold, as the catalogue describes them.
+	// Needs a session and no organization grant: an owner configuring their own
+	// agent holds no RBAC grant, and the list is product configuration.
+	ListAgentPolicyScopes(context.Context, *ListAgentPolicyScopesPayload) (res *ListAgentPolicyScopesResult, err error)
 	// List all team members with their role assignments.
 	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
 	// List the current user's effective grants, including inherited role grants.
@@ -35,14 +97,34 @@ type Service interface {
 	// Update a team member's role assignments.
 	UpdateMemberRoles(context.Context, *UpdateMemberRolesPayload) (res *AccessMember, err error)
 	// List project-scoped Shadow MCP server inventory composed from observed URLs,
-	// telemetry usage, and policy-bypass state.
+	// telemetry usage, and policy-bypass state. Requires an authenticated session
+	// authorized for org:admin on the active organization.
 	ListShadowMCPInventory(context.Context, *ListShadowMCPInventoryPayload) (res *ListShadowMCPInventoryResult, err error)
 	// Get one project-scoped Shadow MCP server inventory URL with usage and
-	// policy-bypass state.
+	// policy-bypass state. Requires an authenticated session authorized for
+	// org:admin on the active organization.
 	GetShadowMCPInventoryServer(context.Context, *GetShadowMCPInventoryServerPayload) (res *ShadowMCPInventoryServer, err error)
+	// Find the Shadow MCP servers in use whose upstream URL matches one of the
+	// given URLs, for example the endpoints of a server about to be added from the
+	// catalog. URLs match when they name the same upstream (case, default ports
+	// and a trailing slash are ignored). Requires an authenticated session
+	// authorized for org:admin on the active organization.
+	FindShadowMCPInventoryServers(context.Context, *FindShadowMCPInventoryServersPayload) (res *FindShadowMCPInventoryServersResult, err error)
 	// Update or clear the administrator-defined display name for one
 	// project-scoped Shadow MCP inventory server URL.
 	UpdateShadowMCPInventoryServerName(context.Context, *UpdateShadowMCPInventoryServerNamePayload) (err error)
+	// Choose the official version of one project-scoped Shadow MCP server. By
+	// default a project MCP server that proxies to the Shadow MCP server's URL is
+	// made official automatically (the oldest, when several do). While an official
+	// server exists and has an address, direct connections are blocked wherever a
+	// Shadow MCP policy applies and agents are pointed at the official server; an
+	// official server with no address yet leaves direct connections on the
+	// ordinary rules. With mcp_server_id that server is made official instead;
+	// with keep_shadow no server is official, so direct use follows the ordinary
+	// Shadow MCP rules; with neither, the automatic choice applies again. Each
+	// change is recorded in the audit log. Requires an authenticated session
+	// authorized for org:admin on the active organization.
+	SetShadowMCPOfficialServer(context.Context, *SetShadowMCPOfficialServerPayload) (err error)
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
 	// server URL.
 	ListShadowMCPInventoryUsers(context.Context, *ListShadowMCPInventoryUsersPayload) (res *ListShadowMCPInventoryUsersResult, err error)
@@ -53,8 +135,61 @@ type Service interface {
 	// Review the latest pending Shadow MCP URL request and resolve all pending
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
-	// Request access to a scope by sending an email notification to organization
-	// administrators.
+	// List AI tools detected on enrolled devices by device-agent AI scans,
+	// aggregated per detection target across the organization. Org-scoped —
+	// detections attach to devices and enrolled users, not projects. Requires an
+	// authenticated session authorized for org:admin on the active organization.
+	// Each row carries the organization's gateway access decision for that tool.
+	// Display names and categories are decorated from the server's detection
+	// target catalog at read time; targets the catalog does not know are listed
+	// under their raw reported id.
+	ListAIDetections(context.Context, *ListAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
+	// List AI tools detected for one enrolled employee in the active organization.
+	// The employee email is required so project viewers cannot broaden the request
+	// into an organization-wide inventory. Linked alias emails are folded to the
+	// canonical identity. Requires project:read on the active project; the access
+	// decision on each row carries its state but not who recorded it, when, or why.
+	ListEmployeeAIDetections(context.Context, *ListEmployeeAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
+	// List the enrolled users one detected AI tool was found for, each with their
+	// devices, signals, versions and first and last sightings: the evidence
+	// listEmployeeAIDetections gives per tool for one person, expanded the other
+	// way round. Org-scoped like listAIDetections and, like it, requires an
+	// authenticated session authorized for org:admin on the active organization.
+	// Linked alias emails are folded to the canonical identity, so one person is
+	// one row. A target with no detections in the organization is not_found.
+	ListAIDetectionUsers(context.Context, *ListAIDetectionUsersPayload) (res *ListAIDetectionUsersResult, err error)
+	// Record whether a detected AI tool may reach this organization's MCP gateway.
+	// The decision is organization-level and applies to every server: a blocked
+	// tool is refused when it authenticates, so its users see an error their
+	// client cannot recover from. Enforcement needs a credential Speakeasy can
+	// verify, so a tool that carries no verifiable gateway matcher — one linked
+	// only by a self-reported client name, or by nothing at all — cannot be
+	// decided on: the request is rejected with bad_request, nothing is recorded,
+	// and no summary is returned. An id the organization's scan target catalog
+	// does not know is rejected with not_found. Requires an authenticated session
+	// authorized for org:admin on the active organization.
+	SetAIToolDecision(context.Context, *SetAIToolDecisionPayload) (res *SetAIToolDecisionResult, err error)
+	// List who can reach one resource: the principals granted or blocked on it,
+	// and the organization-wide rules they inherit.
+	ListResourceAudience(context.Context, *ListResourceAudiencePayload) (res *ResourceAudienceResult, err error)
+	// Replace the rules that name one resource. Organization-wide rules are left
+	// untouched.
+	SetResourceAudience(context.Context, *SetResourceAudiencePayload) (res *ResourceAudienceResult, err error)
+	// List the principals that can be given access: everyone, roles, people, and
+	// agents.
+	ListAudienceOptions(context.Context, *ListAudienceOptionsPayload) (res *ListAudienceOptionsResult, err error)
+	// Explain whether one organization member can connect to, view, and manage one
+	// resource, and which rules decide it. The decision comes from the same
+	// evaluation as runtime enforcement. A gateway is refused: nothing checks
+	// access on its own id, so check each server it fronts instead. Like
+	// listIdentityAccess it describes one person's access, so it takes a session
+	// only: API keys are not checked against grants and would see any member's
+	// rules.
+	ExplainResourceAccess(context.Context, *ExplainResourceAccessPayload) (res *ExplainResourceAccessResult, err error)
+	// Request access to a scope. Organization administrators are emailed. With the
+	// access requests rollout on, a signed-in member's request is also stored, so
+	// an administrator can approve it as temporary access or deny it from the
+	// dashboard or Slack.
 	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
 	// List authz challenge events from ClickHouse, enriched with resolution state
 	// from PostgreSQL.
@@ -63,9 +198,54 @@ type Service interface {
 	// challenges with the same dimensions within a 10-minute window are collapsed
 	// into a single bucket.
 	ListChallengeBuckets(context.Context, *ListChallengeBucketsPayload) (res *ListChallengeBucketsResult, err error)
-	// Record resolutions for one or more denied authz challenges. The caller is
-	// responsible for assigning the role first.
+	// Dismiss one or more denied authz challenges, or atomically add one custom
+	// role to the denied user before recording the challenges as resolved.
 	ResolveChallenge(context.Context, *ResolveChallengePayload) (res *ResolveChallengesResult, err error)
+	// List the MCP servers and skills an identity is authorized to reach, through
+	// grants on the user or on any role they hold, less any blocking grant that
+	// withdraws the same scope. Authorization only: plugin membership decides what
+	// a resource is distributed through, not who may use it, so it does not widen
+	// this list.
+	ListIdentityAccess(context.Context, *ListIdentityAccessPayload) (res *ListIdentityAccessResult, err error)
+	// Give one principal (a member, role, agent, or everyone) a scope on a
+	// resource or activity boundary until a deadline, without changing role
+	// assignments. Once the deadline passes the grant stops authorizing new
+	// requests, with no role change or sign-out. Fails with a conflict when the
+	// principal already holds the same grant permanently, or temporarily (renew
+	// that one instead). An expired grant for the same boundary is restarted.
+	// Requires org:admin. An administrator may give themselves temporary access;
+	// the audit event records that it was self-granted. Session only: the grant is
+	// attributed to the person who gave it.
+	CreateTemporaryGrant(context.Context, *CreateTemporaryGrantPayload) (res *TemporaryGrant, err error)
+	// List the temporary grants given to one principal, with their boundary,
+	// deadline and remaining time, soonest deadline first. Organization
+	// administrators may list any principal's grants; anyone else may list only
+	// grants given to themselves (their own user:<id>). Each active grant says
+	// which other grants would still give the principal the same access once it
+	// ends. Revoked grants are removed and appear only in the audit log.
+	ListTemporaryGrants(context.Context, *ListTemporaryGrantsPayload) (res *ListTemporaryGrantsResult, err error)
+	// Move an active temporary grant's deadline, earlier or later. The boundary
+	// cannot change: to widen access, give a new grant. An expired grant cannot be
+	// renewed; give it again instead. Requires org:admin.
+	RenewTemporaryGrant(context.Context, *RenewTemporaryGrantPayload) (res *TemporaryGrant, err error)
+	// End an active temporary grant before its deadline. Only this grant ends: a
+	// permanent grant is never removed this way, and the principal's roles and
+	// other grants giving the same access are left alone. Requires org:admin,
+	// except that a member may end a grant given directly to themselves.
+	RevokeTemporaryGrant(context.Context, *RevokeTemporaryGrantPayload) (res *TemporaryGrant, err error)
+	// List access requests in the organization, newest first. Organization
+	// administrators see every request; anyone else sees only their own. Requires
+	// the access requests rollout for the organization.
+	ListAccessRequests(context.Context, *ListAccessRequestsPayload) (res *ListAccessRequestsResult, err error)
+	// Approve or deny a pending access request. Approving gives the requester the
+	// scope as a temporary grant until expires_at, with the same limits as
+	// createTemporaryGrant, and resolves the denials the request covers. Requires
+	// org:admin; the requester cannot decide their own request. Session only: the
+	// decision is attributed to the person who made it.
+	DecideAccessRequest(context.Context, *DecideAccessRequestPayload) (res *AccessRequest, err error)
+	// Withdraw a pending access request you made. Only the requester can withdraw
+	// it.
+	WithdrawAccessRequest(context.Context, *WithdrawAccessRequestPayload) (res *AccessRequest, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -88,7 +268,58 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [19]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [50]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listAgentPolicyScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "findShadowMCPInventoryServers", "updateShadowMCPInventoryServerName", "setShadowMCPOfficialServer", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess", "createTemporaryGrant", "listTemporaryGrants", "renewTemporaryGrant", "revokeTemporaryGrant", "listAccessRequests", "decideAccessRequest", "withdrawAccessRequest"}
+
+// One AI detection target aggregated across an organization's device-agent
+// scan reports.
+type AIDetection struct {
+	// Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).
+	TargetID string
+	// Human-readable name from the server's detection target catalog. Ids the
+	// catalog does not know — agent binaries can ship newer target lists — fall
+	// back to the raw id.
+	DisplayName string
+	// Detection target category: harness (an AI coding tool), assistant (a
+	// general-purpose AI assistant or agent), or local_model (an open model run
+	// locally). From the catalog for ids it knows, otherwise as recorded at
+	// detection time.
+	Category string
+	// Distinct enrolled users this tool was detected for.
+	UserCount int64
+	// Distinct devices, by hardware serial, this tool was detected on. Devices
+	// that report no serial are not counted.
+	DeviceCount int64
+	// Detection signals observed for this target across all reports: installed
+	// and/or running.
+	Signals []string
+	// Unique non-empty detected versions for this target.
+	Versions []string
+	// When this tool was first detected anywhere in the organization.
+	FirstSeen string
+	// When this tool was most recently detected.
+	LastSeen string
+	Access   *types.AIToolAccessSummary
+}
+
+// One enrolled user a detection target was found for, with that user's share
+// of the organization's scan reports: the evidence AIDetection carries for the
+// whole organization, narrowed to one person.
+type AIDetectionUser struct {
+	// Canonical email of the enrolled user the detections are attributed to.
+	// Linked alias emails are folded into it.
+	UserEmail string
+	// Distinct devices, by hardware serial, this tool was detected on for this
+	// user. Devices that report no serial are not counted.
+	DeviceCount int64
+	// Detection signals observed for this user: installed and/or running.
+	Signals []string
+	// Unique non-empty detected versions for this user.
+	Versions []string
+	// When this tool was first detected for this user.
+	FirstSeen string
+	// When this tool was most recently detected for this user.
+	LastSeen string
+}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -103,10 +334,178 @@ type AccessMember struct {
 	Email string
 	// Avatar URL.
 	PhotoURL *string
-	// All role IDs assigned to this member.
+	// Role IDs assigned directly to this member.
 	RoleIds []string
+	// Role IDs this member holds through directory role mappings. They follow the
+	// member's directory groups and attributes, so updating the member's roles
+	// does not change them.
+	DirectoryRoleIds []string
 	// When the member joined the organization.
 	JoinedAt string
+	// Department name as reported by the identity provider.
+	Department *string
+	// Names of the directory groups the member belongs to.
+	Groups []string
+	// The directory groups the member belongs to, by stable ID. Prefer this to
+	// groups when matching a member to a group, since two groups can share a name.
+	DirectoryGroups []*AccessMemberDirectoryGroup
+	// Whether the member has a live profile in the organization's synced
+	// directory. Set by listMembers.
+	InDirectory *bool
+	// Where each role in directory_role_ids comes from: one entry per directory
+	// role mapping that currently gives the member that role, so a role reached
+	// through two groups appears twice. Set by listMembers.
+	DirectoryRoleSources []*AccessMemberDirectoryRoleSource
+}
+
+// A live directory group a member belongs to.
+type AccessMemberDirectoryGroup struct {
+	// Directory group identifier.
+	ID string
+	// Directory group name.
+	Name string
+}
+
+// One directory role mapping that currently gives a member a role. Attribute
+// keys and values are not included: they can carry personal directory data, so
+// admins resolve them through listDirectoryRoleMappings by mapping_id.
+type AccessMemberDirectoryRoleSource struct {
+	// The role the mapping grants.
+	RoleID string
+	// The directory role mapping.
+	MappingID string
+	// What the mapping matches: a directory group or an attribute value.
+	SourceKind string
+	// The mapped directory group. Set when source_kind is group.
+	DirectoryGroupID *string
+}
+
+// AccessRequest is the result type of the access service decideAccessRequest
+// method.
+type AccessRequest struct {
+	// Access request ID.
+	ID string
+	// The member who asked.
+	RequesterUserID string
+	// The requester's display name, or their email when they have none.
+	RequesterName string
+	// The scope asked for.
+	Scope string
+	// The resource or activity boundary asked for.
+	Selector *Selector
+	// Name of the resource, as it was when the request was made.
+	ResourceName *string
+	// The requester's note to the administrators.
+	Message *string
+	// How long the requester asked to have the access, in seconds counted from
+	// approval. A suggestion; the approver picks the window. Absent when none was
+	// asked for.
+	RequestedDurationSeconds *int
+	// When the requester asked to have the access until. A suggestion; the
+	// approver picks the window. Absent when none was asked for.
+	RequestedUntil *string
+	// pending: waiting for a decision. approved: a temporary grant was given.
+	// denied, expired or withdrawn: no access was given.
+	Status string
+	// The administrator who approved or denied the request.
+	DecidedByUserID *string
+	// The deciding administrator's display name, or their email.
+	DecidedByName *string
+	// Where the decision was made: dashboard or slack.
+	DecidedVia *string
+	DecidedAt  *string
+	// The temporary grant an approval gave.
+	TemporaryGrantID *string
+	// When the temporary grant an approval gave stops, or stopped, authorizing
+	// requests.
+	GrantExpiresAt *string
+	// When a pending request lapses.
+	ExpiresAt string
+	CreatedAt string
+	UpdatedAt string
+}
+
+// An MCP server an identity is authorized to reach.
+type AccessibleMCPServer struct {
+	// Unique server identifier.
+	ID string
+	// Display name of the server.
+	Name string
+	// URL-safe server slug.
+	Slug string
+	// Project the server belongs to.
+	ProjectID string
+	// Slug of the project the server belongs to.
+	ProjectSlug string
+}
+
+// A skill an identity is authorized to reach.
+type AccessibleSkill struct {
+	// Unique skill identifier.
+	ID string
+	// Internal name of the skill.
+	Name string
+	// Human-readable display name, when set.
+	DisplayName *string
+	// Project the skill belongs to.
+	ProjectID string
+	// Slug of the project the skill belongs to.
+	ProjectSlug string
+}
+
+type ApplyDirectoryRoleSetupItem struct {
+	Source *DirectoryRoleSetupSource
+	// The item version from previewDirectoryRoleSetup.
+	Version string
+	// The complete role set for the source. Empty removes every mapping for the
+	// source.
+	Roles []*ApplyDirectoryRoleSetupRole
+}
+
+// ApplyDirectoryRoleSetupPayload is the payload type of the access service
+// applyDirectoryRoleSetup method.
+type ApplyDirectoryRoleSetupPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The sources to set up. Each source may appear once.
+	Items []*ApplyDirectoryRoleSetupItem
+	// Optional grants given to every role this request creates. Omit to create
+	// roles with no grants. Existing roles are never changed.
+	GrantSet []*RoleGrant
+}
+
+// ApplyDirectoryRoleSetupResult is the result type of the access service
+// applyDirectoryRoleSetup method.
+type ApplyDirectoryRoleSetupResult struct {
+	// Roles this request created.
+	CreatedRoles []*Role
+	// The resulting mappings of every source in the request.
+	Mappings []*DirectoryRoleMapping
+	// Work requested after commit.
+	SideEffects []*DirectoryRoleSetupSideEffect
+}
+
+// One role in an item's role set: an existing role by principal URN, or a new
+// role by name. Set exactly one.
+type ApplyDirectoryRoleSetupRole struct {
+	// Principal URN of an existing role.
+	RoleUrn *string
+	// Name of a role to create. Items in the batch that name the same new role
+	// share it.
+	CreateName *string
+}
+
+type AudienceOption struct {
+	// Canonical principal URN to grant access to.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// Secondary line: email, member count, or attribute key.
+	Description *string
+	// How many people the principal reaches, when known.
+	MemberCount *int64
 }
 
 type AuthzChallenge struct {
@@ -135,6 +534,9 @@ type AuthzChallenge struct {
 	ResourceKind *string
 	// Resource ID of the check.
 	ResourceID *string
+	// Complete selector captured for the check. Omitted for legacy or malformed
+	// challenge data.
+	Selector map[string]string
 	// Roles the principal had loaded.
 	RoleSlugs []string
 	// Total grants evaluated.
@@ -149,6 +551,8 @@ type AuthzChallenge struct {
 	ResolvedBy *string
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string
+	// The temporary grant given (when resolution_type=temporary_grant).
+	ResolutionTemporaryGrant *ChallengeTemporaryGrant
 }
 
 // A group of consecutive challenges with the same dimensions that occurred
@@ -199,6 +603,8 @@ type ChallengeBucket struct {
 	ResolvedBy *string
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string
+	// The temporary grant given (when resolution_type=temporary_grant).
+	ResolutionTemporaryGrant *ChallengeTemporaryGrant
 }
 
 type ChallengeResolution struct {
@@ -224,6 +630,18 @@ type ChallengeResolution struct {
 	CreatedAt  string
 }
 
+type ChallengeTemporaryGrant struct {
+	// Temporary grant ID.
+	ID string
+	// active: authorizing requests. expired: its deadline passed, or the same
+	// access was given again later as a new grant. revoked: ended early, so the
+	// grant no longer exists.
+	Status string
+	// When the grant stops, or stopped, authorizing new requests. Absent once
+	// revoked, and once the same access was given again later.
+	ExpiresAt *string
+}
+
 // CreateRolePayload is the payload type of the access service createRole
 // method.
 type CreateRolePayload struct {
@@ -237,6 +655,59 @@ type CreateRolePayload struct {
 	Grants []*RoleGrant
 	// Optional member IDs to additionally assign to this role on creation.
 	MemberIds []string
+	// Optional agent IDs to assign to this role on creation. Scopes an agent
+	// cannot hold at runtime are simply not granted to it.
+	AgentIds []string
+}
+
+// CreateTemporaryGrantPayload is the payload type of the access service
+// createTemporaryGrant method.
+type CreateTemporaryGrantPayload struct {
+	SessionToken *string
+	// The principal receiving the access: an organization member (user:<id>),
+	// everyone (user:all), a role (role:organization:<id> or role:global:<id>) or
+	// an active agent (agent:<id>).
+	PrincipalUrn string
+	// The scope to give, e.g. chat:read or log:read. Only scopes that grant access
+	// to read, use or manage resources can be given temporarily; org:admin,
+	// blocklist, auth client, risk policy and machine scopes cannot.
+	Scope string
+	// The resource or activity boundary. Omit to cover every resource of the
+	// scope's kind.
+	Selector *Selector
+	// When the grant stops authorizing new requests. At least five minutes and at
+	// most 24 hours from now.
+	ExpiresAt string
+	// Why the access is needed, recorded in the audit log.
+	Reason *string
+	// Denied authorization challenges this grant answers. Each must be an
+	// unresolved deny of this scope by this principal that the grant's selector
+	// covers and that no exclusion still blocks; they are resolved as
+	// temporary_grant in the same transaction. Only accepted with a grant to one
+	// member (user:<id>).
+	ChallengeIds []string
+}
+
+// DecideAccessRequestPayload is the payload type of the access service
+// decideAccessRequest method.
+type DecideAccessRequestPayload struct {
+	SessionToken *string
+	// The access request to decide.
+	ID string
+	// True gives the access as a temporary grant; false denies the request.
+	Approve bool
+	// When the temporary grant stops authorizing new requests. Required to
+	// approve: at least five minutes and at most 24 hours from now.
+	ExpiresAt *string
+}
+
+// DeleteDirectoryRoleMappingPayload is the payload type of the access service
+// deleteDirectoryRoleMapping method.
+type DeleteDirectoryRoleMappingPayload struct {
+	// The ID of the mapping to remove.
+	ID           string
+	ApikeyToken  *string
+	SessionToken *string
 }
 
 // DeleteRolePayload is the payload type of the access service deleteRole
@@ -244,6 +715,338 @@ type CreateRolePayload struct {
 type DeleteRolePayload struct {
 	// The ID of the role to delete.
 	ID           string
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+type DirectoryAttributeOption struct {
+	// Directory attribute key, e.g. department_name.
+	Key string
+	// Directory attribute value.
+	Value string
+	// Number of directory users with this value.
+	MemberCount int64
+}
+
+type DirectoryGroupOption struct {
+	// Directory group identifier.
+	ID string
+	// Directory group name.
+	Name string
+	// Number of directory users in the group.
+	MemberCount int64
+}
+
+type DirectoryPeopleStateCounts struct {
+	// Profiles in the member state.
+	Member int64
+	// Profiles in the account_not_member state.
+	AccountNotMember int64
+	// Profiles in the not_signed_in state.
+	NotSignedIn int64
+	// Profiles in the ambiguous_email state.
+	AmbiguousEmail int64
+}
+
+type DirectoryPerson struct {
+	// Directory profile ID.
+	ID string
+	// Email the directory reports for the profile. Empty when the directory
+	// reports none.
+	Email string
+	// First name the directory reports, when it reports one.
+	FirstName *string
+	// Last name the directory reports, when it reports one.
+	LastName *string
+	// How the profile relates to Speakeasy accounts. member: linked to, or the
+	// only email match of, a member of this organization. account_not_member: an
+	// account exists but is not a member here. not_signed_in: no matching account.
+	// ambiguous_email: the email matches more than one profile or account, so it
+	// is never matched.
+	State string
+	// The matched Speakeasy user ID. Present only for member and
+	// account_not_member.
+	UserID *string
+	// Live directory groups the profile belongs to.
+	Groups []*DirectoryPersonGroup
+}
+
+type DirectoryPersonGroup struct {
+	// Directory group ID.
+	ID string
+	// Directory group name.
+	Name string
+}
+
+type DirectoryReviewItem struct {
+	// The review item.
+	ID string
+	// new_group: an unmapped group first seen after review started.
+	// new_attribute_value: a new value of an attribute key that has mappings.
+	// source_missing: a mapped group or attribute value that has gone.
+	Kind string
+	// 1 the first time a source is raised for this kind, then one more each time
+	// it recurs.
+	Occurrence int32
+	// When the item was raised.
+	CreatedAt string
+	// The source with its current roles, proposal and version. For a missing
+	// source, directory_people is 0 and proposed_roles are the roles approving
+	// would remove.
+	Item *DirectoryRoleSetupPreviewItem
+}
+
+// DirectoryReviewSettings is the result type of the access service
+// getDirectoryReviewSettings method.
+type DirectoryReviewSettings struct {
+	// Whether organization admins are emailed when directory changes are waiting
+	// for a decision. On by default.
+	EmailsEnabled bool
+}
+
+// DirectoryRoleMapping is the result type of the access service
+// setDirectoryRoleMapping method.
+type DirectoryRoleMapping struct {
+	// Unique mapping identifier.
+	ID string
+	// What the mapping matches: a directory group or an attribute value.
+	SourceKind string
+	// The mapped directory group. Set when source_kind is group.
+	DirectoryGroupID *string
+	// Display name of the mapped directory group.
+	DirectoryGroupName *string
+	// The directory attribute key. Set when source_kind is attribute.
+	AttributeKey *string
+	// The directory attribute value. Set when source_kind is attribute.
+	AttributeValue *string
+	// Whether the mapped source still exists. missing means the group was deleted
+	// from the directory, or no live directory user has the attribute value. A
+	// missing source matches nobody, so the mapping grants nothing until the
+	// source returns.
+	SourceStatus string
+	// Principal URN of the role granted to matching members.
+	RoleUrn   string
+	CreatedAt string
+	UpdatedAt string
+}
+
+type DirectoryRoleSetupHiddenAttributeKey struct {
+	// Directory attribute key with too many distinct values to offer in bulk setup.
+	Key string
+	// Number of distinct values the key has on live directory profiles.
+	ValueCount int64
+}
+
+type DirectoryRoleSetupPreviewItem struct {
+	Source *DirectoryRoleSetupSource
+	// The group name, or key=value for an attribute value.
+	SourceName string
+	// People with a live directory profile that matches the source, counted once
+	// per email address, so someone with profiles in two directories counts once
+	// and a profile with no email is not counted. These are directory people, not
+	// organization members or role members.
+	DirectoryPeople int64
+	// Roles the source already maps to. Empty for an unmapped source.
+	ExistingRoleUrns []string
+	// The suggested role set. For a mapped source this is its current set; for an
+	// unmapped source, one reused or new role.
+	ProposedRoles []*DirectoryRoleSetupProposedRole
+	// Opaque version of the source and its current mappings. Send it back with
+	// applyDirectoryRoleSetup.
+	Version string
+}
+
+// DirectoryRoleSetupPreviewResult is the result type of the access service
+// previewDirectoryRoleSetup method.
+type DirectoryRoleSetupPreviewResult struct {
+	// One item per live directory group and mappable attribute value.
+	Items []*DirectoryRoleSetupPreviewItem
+	// Attribute keys left out of items because they have more than
+	// max_values_per_attribute_key distinct values. Their values can still be
+	// mapped one at a time with setDirectoryRoleMappings.
+	HiddenAttributeKeys []*DirectoryRoleSetupHiddenAttributeKey
+	// The limit on distinct values above which an attribute key is left out.
+	MaxValuesPerAttributeKey int64
+}
+
+type DirectoryRoleSetupProposedRole struct {
+	// reuse an existing role, or create a new one.
+	RoleAction string
+	// The existing role. Set when role_action is reuse.
+	RoleID *string
+	// Principal URN of the existing role. Set when role_action is reuse.
+	RoleUrn *string
+	// The existing role's name, or the name a new role would get.
+	RoleName string
+	// Grants the existing role already has. Applying the proposal approves them
+	// for the source's members. Empty for a new role.
+	CurrentGrants []*RoleGrant
+}
+
+type DirectoryRoleSetupSideEffect struct {
+	// What was requested.
+	Kind string
+	// The role the request is for.
+	RoleID string
+	// Requested work runs after the response and is never reported as done.
+	RequestStatus string
+}
+
+type DirectoryRoleSetupSource struct {
+	// What the source is: a directory group or an attribute value.
+	SourceKind string
+	// The directory group. Set when source_kind is group.
+	DirectoryGroupID *string
+	// The directory attribute key. Set when source_kind is attribute.
+	AttributeKey *string
+	// The directory attribute value. Set when source_kind is attribute.
+	AttributeValue *string
+}
+
+// ExplainResourceAccessPayload is the payload type of the access service
+// explainResourceAccess method.
+type ExplainResourceAccessPayload struct {
+	// The kind of resource to explain.
+	ResourceKind string
+	// The resource to explain.
+	ResourceID string
+	// The organization member whose access to explain.
+	UserID       string
+	SessionToken *string
+}
+
+// ExplainResourceAccessResult is the result type of the access service
+// explainResourceAccess method.
+type ExplainResourceAccessResult struct {
+	// Who may connect without a rule. public: connecting is not checked against
+	// rules. private: rules decide. disabled: nobody can connect.
+	Visibility string
+	// The decision for use, view and manage, in that order.
+	Levels []*ExplainedAccessLevel
+	// For each upstream credential the server offers, whether the member may use
+	// it. A caller needs both use access to the server and one usable credential
+	// to reach an upstream that requires sign-in.
+	Credentials []*ExplainedCredentialAccess
+}
+
+type ExplainedAccessDirectorySource struct {
+	// Whether membership of a directory group or a directory attribute value
+	// mapped the role.
+	SourceKind string
+	// The directory group, for a group mapping.
+	DirectoryGroupName *string
+	// The directory attribute, for an attribute mapping.
+	AttributeKey *string
+	// The attribute value the member's profile matched, for an attribute mapping.
+	AttributeValue *string
+}
+
+type ExplainedAccessLevel struct {
+	// The access being explained.
+	Level string
+	// Whether the rules give the member this access.
+	Allowed bool
+	// For use: whether every tool, only some, or none are reachable.
+	ToolAccess *string
+	// Every rule matching this access, deciding rules first.
+	Rules []*ExplainedAccessRule
+}
+
+type ExplainedAccessRule struct {
+	// Canonical principal URN holding the rule.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// The access the rule gives, or the access a "blocked_" rule takes away. "all"
+	// is a grant covering every permission.
+	Level string
+	// Whether the rule names this resource, every resource in its project, or
+	// every resource of its kind.
+	AppliesTo string
+	// Tool names the rule is narrowed to, when it is not the whole resource.
+	Tools []string
+	// Tool annotations the rule is narrowed to, when it is not the whole resource.
+	Dispositions []string
+	// How the rule shaped the decision. allows: proves the access. overrides: a
+	// rule made directly to the member that proves the access despite a block from
+	// a role or everyone. overridden: a block such a rule overrides. blocks: takes
+	// the access away. blocked: an allow that matches but that a block keeps from
+	// counting. limits: a block taking away some of the resource's tools.
+	Effect string
+	// Why a blocked rule made directly to the member did not override the block.
+	// wildcard_direct_grant: it covers every resource. narrower_direct_grant: it
+	// constrains something the tool does not carry. own_exclusion: the member's
+	// own block applies.
+	Reason *string
+	// Whether the member holds this role only through a directory role mapping.
+	ViaDirectoryMapping bool
+	// The directory role mappings giving the member this role, including when they
+	// also hold it directly. Returned only to organization administrators, because
+	// attribute values can carry personal data.
+	DirectorySources []*ExplainedAccessDirectorySource
+}
+
+type ExplainedCredentialAccess struct {
+	// The credential's auth client ID.
+	AuthClientID string
+	// The credential's name.
+	Name string
+	// The kind of credential.
+	ClientType string
+	// Whether the credential is turned on. A turned-off credential is unusable
+	// whatever the rules say.
+	Enabled bool
+	// Whether the member's rules let them use it, with their own connection for a
+	// personal credential.
+	Allowed bool
+	// Every rule matching this use, deciding rules first.
+	Rules []*ExplainedCredentialRule
+}
+
+type ExplainedCredentialRule struct {
+	// Canonical principal URN holding the rule.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// Whether the rule names this credential (credential), every credential of its
+	// kind (credential_type), or every credential (all_credentials).
+	AppliesTo string
+	// Whether the rule applies only on servers in this server's project.
+	ProjectBound *bool
+	// How the rule shaped the decision: allows, overrides, overridden, blocks or
+	// blocked, with the same meanings as an access rule's effect.
+	Effect string
+	// Why a blocked rule made directly to the member did not override the block:
+	// wildcard_direct_grant, narrower_direct_grant or own_exclusion.
+	Reason *string
+	// Whether the member holds this role only through a directory role mapping.
+	ViaDirectoryMapping bool
+}
+
+// FindShadowMCPInventoryServersPayload is the payload type of the access
+// service findShadowMCPInventoryServers method.
+type FindShadowMCPInventoryServersPayload struct {
+	ProjectID string
+	// The upstream URLs to look for.
+	ServerUrls   []string
+	SessionToken *string
+}
+
+// FindShadowMCPInventoryServersResult is the result type of the access service
+// findShadowMCPInventoryServers method.
+type FindShadowMCPInventoryServersResult struct {
+	// One entry per looked-up URL that matches a Shadow MCP server in use. URLs
+	// without a match are left out.
+	Matches []*ShadowMCPInventoryServerMatch
+}
+
+// GetDirectoryReviewSettingsPayload is the payload type of the access service
+// getDirectoryReviewSettings method.
+type GetDirectoryReviewSettingsPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 }
@@ -263,6 +1066,89 @@ type GetShadowMCPInventoryServerPayload struct {
 	// Shadow MCP server slug to inspect.
 	ServerSlug   string
 	SessionToken *string
+}
+
+// ListAIDetectionUsersPayload is the payload type of the access service
+// listAIDetectionUsers method.
+type ListAIDetectionUsersPayload struct {
+	// Id of the detection target to expand. Accepted exactly as agents report it,
+	// under the same length bound the scan-report ingest stores it with, so every
+	// id in the inventory can be expanded.
+	TargetID     string
+	SessionToken *string
+}
+
+// ListAIDetectionUsersResult is the result type of the access service
+// listAIDetectionUsers method.
+type ListAIDetectionUsersResult struct {
+	// The target as the inventory lists it, so a page reached by link needs no
+	// second read for its name, category and access decision.
+	Detection *AIDetection
+	// Users the target was detected for, most recently seen first.
+	Users []*AIDetectionUser
+}
+
+// ListAIDetectionsPayload is the payload type of the access service
+// listAIDetections method.
+type ListAIDetectionsPayload struct {
+	// Filter to detection targets of one category.
+	Category *string
+	// Filter to detections attributed to active members of this SCIM directory
+	// group. A group with no active members yields an empty list.
+	DirectoryGroupID *string
+	SessionToken     *string
+}
+
+// ListAIDetectionsResult is the result type of the access service
+// listAIDetections method.
+type ListAIDetectionsResult struct {
+	// Detected AI tools aggregated per target, most recently seen first.
+	Detections []*AIDetection
+}
+
+// ListAccessRequestsPayload is the payload type of the access service
+// listAccessRequests method.
+type ListAccessRequestsPayload struct {
+	// Only requests with this status: pending, approved, denied, expired or
+	// withdrawn.
+	Status *string
+	// Only requests made by the signed-in member, even for an administrator.
+	Mine         bool
+	SessionToken *string
+}
+
+// ListAccessRequestsResult is the result type of the access service
+// listAccessRequests method.
+type ListAccessRequestsResult struct {
+	// Access requests, newest first. At most 200 are returned.
+	Requests []*AccessRequest
+}
+
+// ListAgentPolicyScopesPayload is the payload type of the access service
+// listAgentPolicyScopes method.
+type ListAgentPolicyScopesPayload struct {
+	SessionToken *string
+}
+
+// ListAgentPolicyScopesResult is the result type of the access service
+// listAgentPolicyScopes method.
+type ListAgentPolicyScopesResult struct {
+	// The scopes an agent policy may hold, in catalogue order.
+	Scopes []*ScopeDefinition
+}
+
+// ListAudienceOptionsPayload is the payload type of the access service
+// listAudienceOptions method.
+type ListAudienceOptionsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListAudienceOptionsResult is the result type of the access service
+// listAudienceOptions method.
+type ListAudienceOptionsResult struct {
+	// Principals that can be given access.
+	Options []*AudienceOption
 }
 
 // ListChallengeBucketsPayload is the payload type of the access service
@@ -304,6 +1190,8 @@ type ListChallengesPayload struct {
 	PrincipalUrn *string
 	// Filter by scope.
 	Scope *string
+	// Leave out checks of these scopes, from the rows and from the total.
+	ExcludeScopes []string
 	// Filter to a specific project.
 	ProjectID *string
 	// Filter by resolution state. True = only resolved, false = only unresolved.
@@ -311,6 +1199,12 @@ type ListChallengesPayload struct {
 	// Fetch specific challenges by ID. When set, other filters and pagination are
 	// ignored.
 	Ids []string
+	// Inclusive start of the window to list challenges from. Omit for the whole
+	// history.
+	From *string
+	// Exclusive end of the window to list challenges from. Omit for the whole
+	// history.
+	To *string
 	// Maximum number of results to return.
 	Limit int
 	// Number of results to skip.
@@ -328,11 +1222,90 @@ type ListChallengesResult struct {
 	Total int
 }
 
+// ListDirectoryPeoplePayload is the payload type of the access service
+// listDirectoryPeople method.
+type ListDirectoryPeoplePayload struct {
+	// Maximum number of people to return.
+	Limit int
+	// Cursor for the next page of results.
+	Cursor       *string
+	SessionToken *string
+}
+
+// ListDirectoryPeopleResult is the result type of the access service
+// listDirectoryPeople method.
+type ListDirectoryPeopleResult struct {
+	// One page of directory profiles, ordered by profile ID.
+	People []*DirectoryPerson
+	// Profiles per state across the whole organization, not just this page.
+	Counts *DirectoryPeopleStateCounts
+	// Cursor for the next page. Absent on the last page.
+	NextCursor *string
+}
+
+// ListDirectoryReviewItemsPayload is the payload type of the access service
+// listDirectoryReviewItems method.
+type ListDirectoryReviewItemsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListDirectoryReviewItemsResult is the result type of the access service
+// listDirectoryReviewItems method.
+type ListDirectoryReviewItemsResult struct {
+	// Pending items, oldest first.
+	Items []*DirectoryReviewItem
+}
+
+// ListDirectoryRoleMappingsPayload is the payload type of the access service
+// listDirectoryRoleMappings method.
+type ListDirectoryRoleMappingsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListDirectoryRoleMappingsResult is the result type of the access service
+// listDirectoryRoleMappings method.
+type ListDirectoryRoleMappingsResult struct {
+	// Active directory groups in the organization.
+	Groups []*DirectoryGroupOption
+	// Distinct attribute values set on active directory users.
+	Attributes []*DirectoryAttributeOption
+	// Live directory role mappings.
+	Mappings []*DirectoryRoleMapping
+}
+
+// ListEmployeeAIDetectionsPayload is the payload type of the access service
+// listEmployeeAIDetections method.
+type ListEmployeeAIDetectionsPayload struct {
+	// Canonical enrolled-employee email to list detections for.
+	UserEmail        string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // ListGrantsPayload is the payload type of the access service listGrants
 // method.
 type ListGrantsPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+// ListIdentityAccessPayload is the payload type of the access service
+// listIdentityAccess method.
+type ListIdentityAccessPayload struct {
+	// The Speakeasy user ID to look up accessible resources for.
+	UserID       string
+	SessionToken *string
+}
+
+// ListIdentityAccessResult is the result type of the access service
+// listIdentityAccess method.
+type ListIdentityAccessResult struct {
+	// MCP servers accessible to this identity.
+	Servers []*AccessibleMCPServer
+	// Skills accessible to this identity.
+	Skills []*AccessibleSkill
 }
 
 // ListMembersPayload is the payload type of the access service listMembers
@@ -349,6 +1322,17 @@ type ListMembersResult struct {
 	Members []*AccessMember
 }
 
+// ListResourceAudiencePayload is the payload type of the access service
+// listResourceAudience method.
+type ListResourceAudiencePayload struct {
+	// The kind of resource to describe.
+	ResourceKind string
+	// The resource to describe.
+	ResourceID   string
+	ApikeyToken  *string
+	SessionToken *string
+}
+
 type ListRoleGrant struct {
 	// The scope slug this grant applies to.
 	Scope string
@@ -356,6 +1340,12 @@ type ListRoleGrant struct {
 	SubScopes []string
 	// Selector constraints. Null means unrestricted.
 	Selectors []*Selector
+	// The subset of this scope's selectors granted to the calling user by name
+	// rather than through a role or everyone. For allow scopes it holds only
+	// selectors naming a concrete resource, which outrank blocks inherited from
+	// roles or everyone on that resource. For blocked scopes it holds the caller's
+	// own blocks, which always apply. Omitted when empty.
+	DirectSelectors []*Selector
 }
 
 // ListRolesPayload is the payload type of the access service listRoles method.
@@ -381,6 +1371,9 @@ type ListScopesPayload struct {
 type ListScopesResult struct {
 	// The scopes available in access control.
 	Scopes []*ScopeDefinition
+	// Tasks that need more than one scope, so a missing scope can be explained in
+	// context.
+	Tasks []*ScopeTask
 }
 
 // ListShadowMCPInventoryPayload is the payload type of the access service
@@ -407,7 +1400,13 @@ type ListShadowMCPInventoryServersForUserPayload struct {
 	ProjectID string
 	// The identifiers to attribute usage to, matched against the reported email or
 	// user id. Pass every identifier the subject is known by.
-	UserKeys     []string
+	UserKeys []string
+	// Inclusive start of the window to attribute calls from. Omit for the whole
+	// history.
+	From *string
+	// Exclusive end of the window to attribute calls from. Omit for the whole
+	// history.
+	To           *string
 	Limit        int
 	SessionToken *string
 }
@@ -432,11 +1431,47 @@ type ListShadowMCPInventoryUsersResult struct {
 	NextCursor *string
 }
 
+// ListTemporaryGrantsPayload is the payload type of the access service
+// listTemporaryGrants method.
+type ListTemporaryGrantsPayload struct {
+	// The principal whose grants to list, e.g. user:<id>, role:organization:<id>
+	// or agent:<id>. Members who are not organization administrators may only pass
+	// their own user URN.
+	PrincipalUrn string
+	// Include grants whose deadline has passed.
+	IncludeExpired bool
+	SessionToken   *string
+}
+
+// ListTemporaryGrantsResult is the result type of the access service
+// listTemporaryGrants method.
+type ListTemporaryGrantsResult struct {
+	// Temporary grants, soonest deadline first. At most 500 are returned.
+	Grants []*TemporaryGrant
+}
+
 // ListUserGrantsResult is the result type of the access service listGrants
 // method.
 type ListUserGrantsResult struct {
 	// The user's effective grants in this organization.
 	Grants []*ListRoleGrant
+}
+
+// PreviewDirectoryRoleSetupPayload is the payload type of the access service
+// previewDirectoryRoleSetup method.
+type PreviewDirectoryRoleSetupPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// RenewTemporaryGrantPayload is the payload type of the access service
+// renewTemporaryGrant method.
+type RenewTemporaryGrantPayload struct {
+	SessionToken *string
+	// The temporary grant to renew.
+	ID string
+	// The new deadline. At least five minutes and at most 24 hours from now.
+	ExpiresAt string
 }
 
 // RequestAccessPayload is the payload type of the access service requestAccess
@@ -453,13 +1488,28 @@ type RequestAccessPayload struct {
 	ResourceName *string
 	// Optional message from the requester explaining why they need access.
 	Message *string
+	// How long the requester would like the access for, counted from approval: 1h,
+	// 2h or 4h. A suggestion shown to the approver, who still picks the window.
+	// Stored only when the request is stored. Cannot be sent with requested_until.
+	Duration *string
+	// When the requester would like the access until, such as the end of their day
+	// as their own clock reads it. Must be in the future and at most 24 hours
+	// away. A suggestion shown to the approver, who still picks the window. Cannot
+	// be sent with duration.
+	RequestedUntil *string
 }
 
 // RequestAccessResult is the result type of the access service requestAccess
 // method.
 type RequestAccessResult struct {
-	// Number of administrators who were notified.
+	// Number of administrators who were emailed.
 	SentToCount int
+	// The stored request administrators decide, returned when the access requests
+	// rollout is on for the organization and the caller is a signed-in member. API
+	// keys and agents get no stored request. Its id is the request id. Asking
+	// again while a request for the same access is pending returns that request
+	// without notifying anyone again.
+	Request *AccessRequest
 }
 
 // ResolveChallengePayload is the payload type of the access service
@@ -479,8 +1529,12 @@ type ResolveChallengePayload struct {
 	ResourceID *string
 	// How the challenge is being resolved.
 	ResolutionType string
-	// Role slug to assign (required when resolution_type=role_assigned).
+	// Custom role slug to add to the denied user before resolving (required when
+	// resolution_type=role_assigned).
 	RoleSlug *string
+	// Confirms the administrator reviewed and accepts every permission granted by
+	// the complete role. Must be true when resolution_type=role_assigned.
+	RoleAssignmentConfirmed *bool
 }
 
 // ResolveChallengesResult is the result type of the access service
@@ -488,6 +1542,39 @@ type ResolveChallengePayload struct {
 type ResolveChallengesResult struct {
 	// The created resolution records.
 	Resolutions []*ChallengeResolution
+}
+
+// ResolveDirectoryReviewItemPayload is the payload type of the access service
+// resolveDirectoryReviewItem method.
+type ResolveDirectoryReviewItemPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The review item.
+	ID string
+	// approve, dismiss, or opt_out_key (new attribute values only).
+	Decision string
+	// The item version from listDirectoryReviewItems. Required to approve.
+	Version *string
+	// The role set to map a new source to. Required and non-empty to approve a new
+	// source; must be empty or omitted otherwise.
+	Roles []*ApplyDirectoryRoleSetupRole
+	// Optional grants given to every role the approval creates. Existing roles are
+	// never changed.
+	GrantSet []*RoleGrant
+}
+
+// ResolveDirectoryReviewItemResult is the result type of the access service
+// resolveDirectoryReviewItem method.
+type ResolveDirectoryReviewItemResult struct {
+	// The item's state after the decision.
+	State string
+	// Roles the approval created.
+	CreatedRoles []*Role
+	// The mappings an approval of a new source wrote. Empty for every other
+	// decision.
+	Mappings []*DirectoryRoleMapping
+	// Work requested after commit.
+	SideEffects []*DirectoryRoleSetupSideEffect
 }
 
 // ResolveShadowMCPInventoryRequestPayload is the payload type of the access
@@ -498,6 +1585,65 @@ type ResolveShadowMCPInventoryRequestPayload struct {
 	ServerURL    string
 	Decision     ShadowMCPInventoryRequestDecision
 	PolicyIds    []string
+}
+
+type ResourceAudienceEntry struct {
+	// Canonical principal URN this rule belongs to.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// Secondary line: email, member count, or attribute key.
+	Description *string
+	// How many people the principal reaches, when known.
+	MemberCount *int64
+	// Access this principal has on the resource, or the access a rule takes away.
+	Level string
+	// Whether the rule names this resource or every resource of its kind.
+	AppliesTo string
+	// Tool names the rule is narrowed to, when it is not the whole resource.
+	Tools []string
+	// User ids of the organization members this rule currently reaches.
+	MemberIds []string
+	// Ids of the agents this rule currently reaches, whether it names them or a
+	// role they hold.
+	AgentIds []string
+	// Tool annotations the rule is narrowed to, when it is not the whole resource.
+	Dispositions []string
+}
+
+// ResourceAudienceResult is the result type of the access service
+// listResourceAudience method.
+type ResourceAudienceResult struct {
+	// Live plugins containing this resource and assigned to an exact audience
+	// role. Omitted without plugin read and administrator access; not evidence of
+	// authorization or installation.
+	RolePlugins []*ResourceAudienceRolePlugin `json:"role_plugins,omitzero"`
+	// Rules deciding access to this resource, widest first.
+	Entries []*ResourceAudienceEntry
+	// Fingerprint of the rules naming this resource. Send it back when saving so a
+	// change made elsewhere is a conflict rather than a silent overwrite.
+	Version string
+}
+
+type ResourceAudienceRolePlugin struct {
+	// Exact role assigned to the plugin.
+	PrincipalUrn string
+	// Plugin ID.
+	PluginID string
+	// Plugin name.
+	Name string
+	// Plugin slug.
+	Slug string
+}
+
+// RevokeTemporaryGrantPayload is the payload type of the access service
+// revokeTemporaryGrant method.
+type RevokeTemporaryGrantPayload struct {
+	// The temporary grant to end.
+	ID           string
+	SessionToken *string
 }
 
 // Role is the result type of the access service getRole method.
@@ -518,8 +1664,10 @@ type Role struct {
 	Grants []*RoleGrant
 	// Number of members assigned to this role.
 	MemberCount int
-	CreatedAt   string
-	UpdatedAt   string
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string
+	CreatedAt string
+	UpdatedAt string
 }
 
 type RoleGrant struct {
@@ -532,15 +1680,46 @@ type RoleGrant struct {
 type ScopeDefinition struct {
 	// Unique scope identifier.
 	Slug string
-	// What this scope protects.
+	// Short name for the permission as people see it, e.g. "View tool logs".
+	Label string
+	// What a holder of this scope can do and, where it matters, what the scope
+	// does not include.
 	Description string
 	// The type of resource this scope applies to.
 	ResourceType string
+	// How the dashboard groups the permission. Differs from resource_type where
+	// one resource type carries several permission families: plugins and tool logs
+	// are checked against a project but are not project permissions.
+	Category string
+	// Whether granting this scope exposes other members' private activity or
+	// allows destructive administration. Clients warn before granting it.
+	Sensitive bool
+	// Why the scope is sensitive. Absent when sensitive is false.
+	Sensitivity *string
+	// User-visible scopes a grant of this scope also satisfies, one step down:
+	// org:admin also satisfies org:read. Empty when the scope implies nothing else.
+	SubScopes []string
 	// Whether this scope is a first-class permission or an internal
 	// storage/evaluation scope.
 	Visibility string
+	// Whether an agent principal can hold this scope. Roles may carry scopes
+	// agents cannot hold; those are ignored for the role's agent members rather
+	// than granted.
+	AgentEligible bool
+	// Whether an administrator can give this scope for a limited time with
+	// createTemporaryGrant.
+	TemporaryGrantable bool
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string
+}
+
+type ScopeTask struct {
+	// Stable identifier of the task.
+	Slug string
+	// What a person is trying to do.
+	Label string
+	// Every scope the task needs end to end.
+	Scopes []string
 }
 
 // A constraint that narrows which resources a grant applies to.
@@ -549,16 +1728,134 @@ type Selector struct {
 	ResourceKind string
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string
+	// Auth client type filter (mcp:auth and mcp:blocked_auth only).
+	ClientType *string
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth on
+	// remote_session clients only). A user ID, '*', or '$represented_user' for the
+	// user the request acts for. Never lets a caller use another user's connection.
+	ConnectionOwner *string
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
+	UpstreamClient *string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP scopes only). When set with resource_id='*', grants
-	// access to all servers in the project.
+	// Project filter (MCP, environment, assistant, inference, mcp:auth, and
+	// mcp:blocked_auth scopes). When set with resource_id='*', grants access to
+	// every resource of the kind in the project. For mcp:auth and mcp:blocked_auth
+	// it is the project of the server using the client.
 	ProjectID *string
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
 	ServerURL *string
+}
+
+// SetAIToolDecisionPayload is the payload type of the access service
+// setAIToolDecision method.
+type SetAIToolDecisionPayload struct {
+	// Id of the detection target to decide on, as agents report it.
+	TargetID string
+	// The decision to record. unreviewed clears an earlier one.
+	Decision string
+	// Why the decision was made. Shown beside it and carried into the audit trail.
+	Rationale    *string
+	SessionToken *string
+}
+
+// SetAIToolDecisionResult is the result type of the access service
+// setAIToolDecision method.
+type SetAIToolDecisionResult struct {
+	// The detection target the decision was recorded for.
+	TargetID string
+	Access   *types.AIToolAccessSummary
+}
+
+// SetDirectoryRoleMappingPayload is the payload type of the access service
+// setDirectoryRoleMapping method.
+type SetDirectoryRoleMappingPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// What the mapping matches.
+	SourceKind string
+	// Directory group to map. Required when source_kind is group.
+	DirectoryGroupID *string
+	// Attribute key to match. Required when source_kind is attribute.
+	AttributeKey *string
+	// Attribute value to match. Required when source_kind is attribute.
+	AttributeValue *string
+	// Role principal URN to grant.
+	RoleUrn string
+}
+
+// SetDirectoryRoleMappingsPayload is the payload type of the access service
+// setDirectoryRoleMappings method.
+type SetDirectoryRoleMappingsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// What the mapping matches.
+	SourceKind string
+	// Directory group to map. Required when source_kind is group.
+	DirectoryGroupID *string
+	// Attribute key to match. Required when source_kind is attribute.
+	AttributeKey *string
+	// Attribute value to match. Required when source_kind is attribute.
+	AttributeValue *string
+	// Optional compare-and-set precondition. The normalized current role set must
+	// match or the request returns conflict without changes. Omit for
+	// unconditional replacement; an empty array requires an unmapped source.
+	ExpectedRoleUrns []string
+	// The complete set of role principal URNs to grant, from Role.principal_urn.
+	// Empty removes every mapping for the source.
+	RoleUrns []string
+}
+
+type SetResourceAudienceEntry struct {
+	// Principal to grant or block. Use '*' for everyone in the organization.
+	PrincipalUrn string
+	// Access to give the principal on this resource. The "blocked_" levels take
+	// access away, one scope each and nothing else: "blocked" removes connect,
+	// "blocked_view" removes view, "blocked_manage" removes manage. Taking a
+	// principal off a resource entirely means writing all three.
+	Level string
+	// Narrow the access to these tool names. Omit for the whole resource.
+	Tools []string
+	// Narrow the access to tools carrying these annotations. Omit for the whole
+	// resource.
+	Dispositions []string
+}
+
+// SetResourceAudiencePayload is the payload type of the access service
+// setResourceAudience method.
+type SetResourceAudiencePayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The kind of resource being changed.
+	ResourceKind string
+	// The resource being changed.
+	ResourceID string
+	// The complete set of rules that name this resource. Rules covering every
+	// resource are not affected.
+	Entries []*SetResourceAudienceEntry
+	// The version this edit was based on, from the last read. The save is refused
+	// if the rules changed since.
+	ExpectedVersion string
+}
+
+// SetShadowMCPOfficialServerPayload is the payload type of the access service
+// setShadowMCPOfficialServer method.
+type SetShadowMCPOfficialServerPayload struct {
+	SessionToken *string
+	ProjectID    string
+	// The Shadow MCP server's URL.
+	ServerURL string
+	// The MCP server to make the official version. Omit it, with keep_shadow
+	// unset, to go back to the automatic choice.
+	McpServerID *string
+	// Keep using the Shadow MCP server directly: no server is made official, not
+	// even automatically. Cannot be combined with mcp_server_id.
+	KeepShadow *bool
 }
 
 // The enforcement verdict for a shadow MCP server, computed server-side from
@@ -644,8 +1941,15 @@ type ShadowMCPInventoryServer struct {
 	LastSeen         string
 	LastCalled       *string
 	ObservedUseCount int
-	UserCount        int
-	TopUsers         []string
+	// Calls to this server that a Speakeasy hook blocked, within the telemetry
+	// retention window. Included in observed_use_count. Optional for one release
+	// so a dashboard deployed ahead of the server still loads the inventory; the
+	// server always sends it.
+	BlockedCallCount int
+	// Distinct users who reached this server.
+	UserCount int
+	// The users who reached this server most.
+	TopUsers []string
 	// Deprecated: read access_summary.state. Kept one release so older clients
 	// keep rendering, then removed together with making access_summary required.
 	// Note the values themselves are corrected in this release: URLs whose bypass
@@ -664,6 +1968,24 @@ type ShadowMCPInventoryServer struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string
+	// The MCP server that is this Shadow MCP server's official version. While it
+	// is official, direct use is blocked wherever a Shadow MCP policy applies, and
+	// the block points agents here.
+	OfficialServer *ShadowMCPOfficialServer
+	// A project MCP server that proxies to the same upstream URL, offered as the
+	// server to make official. Present only while no official server is set.
+	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServer
+	// True when an administrator chose to keep using the Shadow MCP server
+	// directly, so no official server is chosen automatically.
+	OfficialServerDeclined *bool
+}
+
+// A Shadow MCP server in use whose upstream URL matches one of the URLs looked
+// up.
+type ShadowMCPInventoryServerMatch struct {
+	// The URL that was looked up, exactly as given.
+	ServerURL string
+	Server    *ShadowMCPInventoryServer
 }
 
 // ShadowMCPInventoryURLState is the result type of the access service
@@ -703,6 +2025,92 @@ type ShadowMCPInventoryUserSource struct {
 	ObservedUseCount int
 }
 
+// The official, Speakeasy-served version of a Shadow MCP server: a project MCP
+// server that proxies to its URL, or one an administrator chose.
+type ShadowMCPOfficialServer struct {
+	McpServerID string
+	// The official server's display name.
+	Name string
+	// The official server's slug, when it has one.
+	Slug *string
+	// Where agents connect. A gateway's address when the server is a gateway
+	// member. Absent while the server has no endpoint.
+	URL *string
+	// The gateway that serves the official server, when url is a gateway's address.
+	GatewayName *string
+	// True when the server was made official automatically because the server
+	// proxies to the Shadow MCP server's URL; false when an administrator chose it.
+	Automatic *bool
+	// Deprecated: official servers no longer have an on/off switch, so this is
+	// always false. Kept one release so older dashboards, which require it, keep
+	// rendering, then removed.
+	DirectAccessAllowed *bool
+}
+
+// A project MCP server that already serves a Shadow MCP server's upstream URL
+// and can be made its official version.
+type ShadowMCPSuggestedOfficialServer struct {
+	McpServerID string
+	// The server's display name.
+	Name string
+	// The server's slug, when it has one.
+	Slug *string
+}
+
+// SyncDirectoryGroupsPayload is the payload type of the access service
+// syncDirectoryGroups method.
+type SyncDirectoryGroupsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// SyncDirectoryGroupsResult is the result type of the access service
+// syncDirectoryGroups method.
+type SyncDirectoryGroupsResult struct {
+	// Number of groups WorkOS returned across the organization's directories.
+	GroupCount int
+}
+
+// TemporaryGrant is the result type of the access service createTemporaryGrant
+// method.
+type TemporaryGrant struct {
+	// Temporary grant ID.
+	ID string
+	// Canonical principal URN holding the access.
+	PrincipalUrn string
+	// The scope given.
+	Scope string
+	// The resource or activity boundary.
+	Selector *Selector
+	// When the grant stops, or stopped, authorizing new requests.
+	ExpiresAt string
+	// active: authorizing requests. expired: its deadline passed. revoked: ended
+	// early by this request.
+	Status string
+	// Seconds until the deadline while active; 0 once ended.
+	RemainingSeconds int64
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
+	OtherAccess []string
+	// When the grant was given, or restarted after expiring.
+	CreatedAt string
+	UpdatedAt string
+}
+
+// UpdateDirectoryReviewSettingsPayload is the payload type of the access
+// service updateDirectoryReviewSettings method.
+type UpdateDirectoryReviewSettingsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// Whether organization admins are emailed when directory changes are waiting
+	// for a decision. On by default.
+	EmailsEnabled bool
+}
+
 // UpdateMemberRolesPayload is the payload type of the access service
 // updateMemberRoles method.
 type UpdateMemberRolesPayload struct {
@@ -732,6 +2140,10 @@ type UpdateRolePayload struct {
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string
+	// The complete set of agent IDs assigned to this role. Unlike member_ids this
+	// replaces the role's agent membership, because agents have no other surface
+	// to be removed from a role on. Omit to leave agent membership untouched.
+	AgentIds []string
 }
 
 // UpdateShadowMCPInventoryServerNamePayload is the payload type of the access
@@ -741,6 +2153,14 @@ type UpdateShadowMCPInventoryServerNamePayload struct {
 	ProjectID    string
 	ServerURL    string
 	Name         string
+}
+
+// WithdrawAccessRequestPayload is the payload type of the access service
+// withdrawAccessRequest method.
+type WithdrawAccessRequestPayload struct {
+	// The access request to withdraw.
+	ID           string
+	SessionToken *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

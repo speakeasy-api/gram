@@ -102,6 +102,9 @@ func (e *EmulatedPubSubBroker) reconcileTopic(ctx context.Context, topicName str
 
 func (e *EmulatedPubSubBroker) SubscriberForMessage(ctx context.Context, msg proto.Message, subt proto.Message) (*pubsub.Subscriber, error) {
 	subDescriptor := subt.ProtoReflect().Descriptor()
+	if _, ok := gcp.StorageOptionsFromMessage(subDescriptor); ok {
+		return nil, fmt.Errorf("proto message %s declares a storage subscription; install its generated Go storage runner instead of an application handler", subDescriptor.FullName())
+	}
 
 	subOptions, ok := gcp.SubscriptionOptionsFromMessage(subDescriptor)
 	if !ok {
@@ -134,7 +137,7 @@ func (e *EmulatedPubSubBroker) SubscriberForMessage(ctx context.Context, msg pro
 	return sub, nil
 }
 
-func (e *EmulatedPubSubBroker) reconcileSubscriptions(ctx context.Context, subName string, topicName string, options *pubsubv1.SubscriptionOptions) error {
+func (e *EmulatedPubSubBroker) reconcileSubscriptions(ctx context.Context, subName string, topicName string, options subscriptionTransportOptions) error {
 	qname := fmt.Sprintf("projects/%s/subscriptions/%s", e.projectID, subName)
 	topicName = fmt.Sprintf("projects/%s/topics/%s", e.projectID, topicName)
 

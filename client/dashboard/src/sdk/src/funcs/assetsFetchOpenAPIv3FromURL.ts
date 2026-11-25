@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * fetchOpenAPIv3FromURL assets
  *
  * @remarks
- * Fetch an OpenAPI v3 document from a URL and upload it to Gram.
+ * Fetch an OpenAPI v3 document from a URL and upload it to Speakeasy.
  */
 export function assetsFetchOpenAPIv3FromURL(
   client: GramCore,

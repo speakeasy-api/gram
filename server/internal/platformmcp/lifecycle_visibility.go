@@ -13,9 +13,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
 
 const (
@@ -80,13 +82,34 @@ type LifecycleVisibilityService struct {
 	readiness *ReadinessService
 	key       []byte
 	now       func() time.Time
+	admission *admission.Guard
+	// authorization decides whether the acting user is an organization
+	// administrator, whose re-enabling is recorded as the Shadow MCP approval.
+	authorization *authz.Engine
+}
+
+// WithAdministratorAuthorization lets an organization administrator's
+// re-enabling of a server added by URL stand as the Shadow MCP approval for
+// the audiences it reaches again.
+func (s *LifecycleVisibilityService) WithAdministratorAuthorization(engine *authz.Engine) *LifecycleVisibilityService {
+	if s != nil {
+		s.authorization = engine
+	}
+	return s
 }
 
 func NewLifecycleVisibilityService(db *pgxpool.Pool, auditLogger *audit.Logger, locker LifecycleVisibilityLocker, updater LifecycleVisibilityUpdater, publisher ProjectPublisher, reconcile func(context.Context, []uuid.UUID) error, readiness *ReadinessService, keyMaterial string) (*LifecycleVisibilityService, error) {
 	if db == nil || auditLogger == nil || locker == nil || updater == nil || reconcile == nil || readiness == nil || keyMaterial == "" {
 		return nil, ErrLifecycleVisibilityInvalid
 	}
-	return &LifecycleVisibilityService{db: db, audit: auditLogger, locker: locker, updater: updater, publisher: publisher, reconcile: reconcile, readiness: readiness, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now}, nil
+	return &LifecycleVisibilityService{db: db, audit: auditLogger, locker: locker, updater: updater, publisher: publisher, reconcile: reconcile, readiness: readiness, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now, admission: admission.NewGuard(), authorization: nil}, nil
+}
+
+func (s *LifecycleVisibilityService) WithDistributionAdmission(guard *admission.Guard) *LifecycleVisibilityService {
+	if s != nil {
+		s.admission = guard
+	}
+	return s
 }
 
 func (s *LifecycleVisibilityService) Disable(ctx context.Context, principal Principal, input UpdateMCPVisibilityInput) (UpdateMCPVisibilityResult, error) {
@@ -109,7 +132,7 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityInvalid
 	}
-	store, err := NewRegistrationStore(s.db, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	store, err := NewRegistrationStore(s.db)
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, err
 	}
@@ -122,7 +145,6 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, err
 	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, fmt.Errorf("begin platform mcp visibility update: %w", err)
@@ -163,6 +185,26 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	}
 	if registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) || !registration.McpServerID.Valid || registration.McpServerID.UUID != mcpID {
 		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityUnavailable
+	}
+	if to == "private" {
+		// Only a new enabling write consults the policy, so only it asks who is
+		// acting: turning a server off, and replaying a completed receipt, must
+		// keep working through an authorization outage.
+		admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authorization, principal.OrganizationID)
+		if err != nil {
+			return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
+		}
+		if err := admission.LockProject(ctx, tx, project.ID); err != nil {
+			return UpdateMCPVisibilityResult{}, fmt.Errorf("lock platform mcp visibility admission: %w", err)
+		}
+		if err := s.admission.CheckMCPServerTarget(admissionCtx, tx, principal.OrganizationID, project.ID, mcpID, "", false); err != nil {
+			switch {
+			case errors.Is(err, admission.ErrApprovalRequired):
+				return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionBlockedPendingApproval, err)
+			default:
+				return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
+			}
+		}
 	}
 	if to == "disabled" {
 		if err := s.locker(ctx, tx, principal.OrganizationID, project.ID, mcpID); err != nil {

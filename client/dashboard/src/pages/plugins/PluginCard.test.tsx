@@ -1,5 +1,6 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
   cleanup,
   fireEvent,
@@ -12,9 +13,15 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PluginCard } from "./PluginCard";
 
-const { client, downloadPluginPackage, navigate } = vi.hoisted(() => ({
-  client: {},
-  downloadPluginPackage: vi.fn(),
+const { client, navigate } = vi.hoisted(() => ({
+  client: {
+    plugins: {
+      downloadPluginPackage: vi.fn().mockResolvedValue({
+        headers: {},
+        result: new Uint8Array([0x50, 0x4b]),
+      }),
+    },
+  },
   navigate: vi.fn(),
 }));
 
@@ -44,39 +51,39 @@ vi.mock("@/components/ui/Dropdown", () => ({
     <>{children}</>
   ),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => client }));
+vi.mock("@/components/icon-dither", () => ({
+  useIconDither: () => ({
+    canvasRef: { current: null },
+    start: () => {},
+    stop: () => {},
+  }),
+}));
+
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => client,
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),
   useNavigate: () => navigate,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
-  }),
-}));
-vi.mock("./downloadPluginPackage", () => ({
-  usePluginPackageDownload: (
-    sdkClient: unknown,
-    pluginId: string,
-  ): {
-    isDownloading: boolean;
-    download: (platform: string) => Promise<void>;
-  } => ({
-    isDownloading: false,
-    download: async (platform) => {
-      await downloadPluginPackage(sdkClient, pluginId, platform);
-    },
-  }),
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "project-uuid", slug: "selected-project" }),
+  useSession: () => ({ session: "selected-session" }),
 }));
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 function plugin(agentPluginsV1Compatible: boolean): Plugin {
   return {
     agentPluginsV1Compatible,
+    autoCreated: false,
+    autoSyncEnabled: true,
+    autoAddServersEnabled: false,
     createdAt: new Date("2026-08-07T00:00:00Z"),
     id: "plugin-id",
     name: "Portable plugin",
@@ -85,13 +92,17 @@ function plugin(agentPluginsV1Compatible: boolean): Plugin {
   };
 }
 
-function renderCard(agentPluginsV1Compatible: boolean): void {
+function renderCard(
+  agentPluginsV1Compatible: boolean,
+  overrides: Partial<Plugin> = {},
+  publishStatus?: PublishStatusResult,
+): void {
   render(
     <MemoryRouter>
       <TooltipProvider>
         <PluginCard
-          plugin={plugin(agentPluginsV1Compatible)}
-          publishStatus={undefined}
+          plugin={{ ...plugin(agentPluginsV1Compatible), ...overrides }}
+          publishStatus={publishStatus}
         />
       </TooltipProvider>
     </MemoryRouter>,
@@ -100,6 +111,8 @@ function renderCard(agentPluginsV1Compatible: boolean): void {
 
 describe("PluginCard Agent Plugins actions", () => {
   it("offers the portable ZIP once and requests agent-plugin", async () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:card");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     renderCard(true);
 
     const action = screen.getByRole("button", {
@@ -108,11 +121,12 @@ describe("PluginCard Agent Plugins actions", () => {
     fireEvent.click(action);
 
     await waitFor(() => {
-      expect(downloadPluginPackage).toHaveBeenCalledWith(
-        client,
-        "plugin-id",
-        "agent-plugin",
-      );
+      expect(client.plugins.downloadPluginPackage).toHaveBeenCalledWith({
+        pluginId: "plugin-id",
+        platform: "agent-plugin",
+        gramProject: "selected-project",
+        gramSession: "selected-session",
+      });
     });
     expect(screen.getAllByText("Download Agent Plugins ZIP")).toHaveLength(1);
     const status = screen.getByRole("img", {
@@ -148,5 +162,55 @@ describe("PluginCard Agent Plugins actions", () => {
     expect(tooltip.textContent).toBe(
       "Not Agent Plugin standard compatible. Plugin works normally in our supported harnesses.",
     );
+  });
+});
+
+describe("PluginCard auto sync", () => {
+  it("marks a plugin whose auto sync is off", () => {
+    renderCard(true, { autoSyncEnabled: false });
+    expect(screen.getByText("Auto sync off")).toBeTruthy();
+  });
+
+  it("stays quiet while auto sync is on", () => {
+    renderCard(true);
+    expect(screen.queryByText("Auto sync off")).toBeNull();
+  });
+});
+
+describe("PluginCard sync status", () => {
+  // Another plugin, whose auto sync is off, holds a change: the project is
+  // not up to date, but this plugin is.
+  const heldElsewhere: PublishStatusResult = {
+    configured: true,
+    connected: true,
+    upToDate: false,
+    automaticSyncPending: false,
+    plugins: [
+      { slug: "portable-plugin", upToDate: true, awaitingManualSync: false },
+      { slug: "paused-plugin", upToDate: false, awaitingManualSync: true },
+    ],
+  };
+
+  it("stays quiet when only another plugin needs syncing", () => {
+    renderCard(true, {}, heldElsewhere);
+    expect(screen.queryByText("Needs syncing")).toBeNull();
+  });
+
+  it("marks the plugin whose own package needs syncing", () => {
+    renderCard(
+      true,
+      { slug: "paused-plugin", autoSyncEnabled: false },
+      heldElsewhere,
+    );
+    expect(screen.getByText("Needs syncing")).toBeTruthy();
+  });
+
+  it("falls back to the project's status without per-plugin entries", () => {
+    renderCard(
+      true,
+      {},
+      { configured: true, connected: true, upToDate: false },
+    );
+    expect(screen.getByText("Needs syncing")).toBeTruthy();
   });
 });

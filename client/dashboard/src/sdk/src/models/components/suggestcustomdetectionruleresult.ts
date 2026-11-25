@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -22,7 +23,7 @@ export const SuggestCustomDetectionRuleResultSeverity = {
 /**
  * Suggested severity level.
  */
-export type SuggestCustomDetectionRuleResultSeverity = ClosedEnum<
+export type SuggestCustomDetectionRuleResultSeverity = OpenEnum<
   typeof SuggestCustomDetectionRuleResultSeverity
 >;
 
@@ -55,9 +56,8 @@ export type SuggestCustomDetectionRuleResult = {
 
 /** @internal */
 export const SuggestCustomDetectionRuleResultSeverity$inboundSchema:
-  z.ZodMiniEnum<typeof SuggestCustomDetectionRuleResultSeverity> = z.enum(
-    SuggestCustomDetectionRuleResultSeverity,
-  );
+  z.ZodMiniType<SuggestCustomDetectionRuleResultSeverity, unknown> = openEnums
+    .inboundSchema(SuggestCustomDetectionRuleResultSeverity);
 
 /** @internal */
 export const SuggestCustomDetectionRuleResult$inboundSchema: z.ZodMiniType<

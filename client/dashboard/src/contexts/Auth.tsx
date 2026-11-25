@@ -1,17 +1,11 @@
-import { InfoResponseBody } from "@gram/client/models/components/inforesponsebody.js";
-import { OrganizationEntry } from "@gram/client/models/components/organizationentry.js";
-import { ProjectEntry } from "@gram/client/models/components/projectentry.js";
-import { SessionInfoResponse } from "@gram/client/models/operations/sessioninfo.js";
+import type { InfoResponseBody } from "@gram/client/models/components/inforesponsebody.js";
+import type { OrganizationEntry } from "@gram/client/models/components/organizationentry.js";
+import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
+import type { SessionInfoResponse } from "@gram/client/models/operations/sessioninfo.js";
 import { useSessionInfo } from "@gram/client/react-query/sessionInfo.js";
-import { createContext, useContext, useEffect, useState } from "react";
-import { useLocation } from "react-router";
-import { initializePylon, PYLON_APP_ID } from "@/lib/pylon";
+import { createContext, useContext, useEffect } from "react";
+import { initializePylon, pylonAppId } from "@/lib/pylon";
 import { clearLegacyUserStorage } from "@/lib/logout-storage";
-import {
-  initializeFermat,
-  setFermatProperties,
-  trackFermatEvent,
-} from "@/lib/fermat";
 
 // We don't include accountType here because it is actively confusing. See useProductTier
 type Session = Omit<
@@ -116,7 +110,7 @@ export const useSessionData = (): {
     refetch,
     status,
   } = useSessionInfo(undefined, undefined, {
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     retry: false,
     throwOnError: false,
   });
@@ -181,8 +175,10 @@ const SPEAKEASY_STAFF_KEY = "gram-dev-speakeasy-staff";
 
 // useIsSpeakeasyStaff gates the unproxied MCP server source on the
 // caller's email domain only, unlike useIsPlatformAdmin which also honors a
-// DB admin flag. Mirrors the domain-suffix check the backend enforces in
-// server/internal/unproxiedmcp.
+// DB admin flag. Mirrors access.IsSpeakeasyStaffEmail exactly, including its
+// case-sensitive suffix match: a client that accepted more than the server
+// would let the unproxied delete cascade remove the wrappers and then be
+// refused on the source.
 export const useIsSpeakeasyStaff = (): boolean => {
   const { email } = useUser();
   if (import.meta.env.DEV) {
@@ -194,10 +190,8 @@ export const useIsSpeakeasyStaff = (): boolean => {
       // ignore
     }
   }
-  const normalizedEmail = email.toLowerCase();
   return (
-    normalizedEmail.endsWith("@speakeasy.com") ||
-    normalizedEmail.endsWith("@speakeasyapi.dev")
+    email.endsWith("@speakeasy.com") || email.endsWith("@speakeasyapi.dev")
   );
 };
 
@@ -205,14 +199,15 @@ export function usePylonInAppChat(user: User | undefined): void {
   useEffect(() => {
     clearLegacyUserStorage();
 
-    if (!user || !import.meta.env.PROD) {
+    const appId = pylonAppId();
+    if (!user || !import.meta.env.PROD || !appId) {
       return;
     }
     const email = user.email;
     const displayName = user.displayName || email;
 
     const chatSettings = {
-      app_id: PYLON_APP_ID,
+      app_id: appId,
       email,
       name: displayName,
       avatar_url: user.photoUrl,
@@ -229,54 +224,4 @@ export function usePylonInAppChat(user: User | undefined): void {
     initializePylon(chatSettings);
     window.Pylon?.("setNewIssueCustomFields", { gram: true });
   }, [user]);
-}
-
-/**
- * Boot the Claire de Fermat pixel and emit a `page_view` on each route
- * change. The pixel is gated to production builds so we don't pollute
- * Fermat with local/dev traffic (matching Pylon and PostHog).
- */
-export function useFermatPixel(
-  user: User | undefined,
-  accountId: string,
-): void {
-  const location = useLocation();
-
-  // Fermat requires identifiers (`setProperties`) to be attached before any
-  // `track` event so views are attributed. We can't rely on effect ordering
-  // alone — identifiers hydrate asynchronously — so we gate `page_view` behind
-  // this flag. Flipping it re-runs the page_view effect, flushing the first
-  // view immediately after identification.
-  const [identified, setIdentified] = useState(false);
-
-  // Attach stable identifiers once both the user and their active workspace
-  // are hydrated so Fermat can attribute activity to the user and their
-  // workspace across sessions.
-  useEffect(() => {
-    // Clear identification if the user/workspace goes away so we never emit
-    // a `page_view` attributed to a stale identity.
-    if (!import.meta.env.PROD || !user?.id || !accountId) {
-      setIdentified(false);
-      return;
-    }
-    initializeFermat();
-    setFermatProperties({
-      dashboard_user_id: user.id,
-      account_id: accountId,
-    });
-    setIdentified(true);
-  }, [user?.id, accountId]);
-
-  // Emit a `page_view` on each route change, but only once identifiers have
-  // been attached so `setProperties` is always queued ahead of the event.
-  useEffect(() => {
-    if (!import.meta.env.PROD || !identified) {
-      return;
-    }
-    initializeFermat();
-    trackFermatEvent("page_view", {
-      dashboard_route: location.pathname,
-      page_title: document.title,
-    });
-  }, [location.pathname, identified]);
 }

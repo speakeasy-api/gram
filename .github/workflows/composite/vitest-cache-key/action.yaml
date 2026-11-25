@@ -1,0 +1,27 @@
+name: Vitest module cache key
+description: Shared compatibility boundary for Vitest module cache producers and consumers
+inputs:
+  suite:
+    description: Client suite (dashboard or admin)
+    required: true
+outputs:
+  prefix:
+    description: OS, architecture, Node and dependency/configuration prefix
+    value: ${{ steps.key.outputs.prefix }}
+  legacy-prefix:
+    description: Combined cache compatibility prefix for migration
+    value: ${{ steps.key.outputs.legacy-prefix }}
+runs:
+  using: composite
+  steps:
+    # Suite and legacy fallbacks share this compatibility boundary. Source content
+    # is hashed per module by Vitest; dependency/config changes invalidate the cache.
+    - id: key
+      shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+        CONFIG_HASH: ${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'tsconfig*.json', 'client/*/package.json', 'client/*/tsconfig*.json', 'client/*/vitest.config.*', 'client/*/vite.config.*', 'client/dashboard/dev-slot-plugin.ts') }}
+      run: |
+        compatibility="${RUNNER_OS}-${RUNNER_ARCH}-$(node --version)-${CONFIG_HASH}-"
+        echo "prefix=vitest-modules-blacksmith-v1-${SUITE}-${compatibility}" >> "$GITHUB_OUTPUT"
+        echo "legacy-prefix=vitest-modules-blacksmith-v1-${compatibility}" >> "$GITHUB_OUTPUT"

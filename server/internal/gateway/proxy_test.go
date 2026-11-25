@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -283,6 +286,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				policy,
 				funcs,
 				nil,
+				nil,
 			)
 
 			// Create response recorder
@@ -412,6 +416,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				funcs,
+				nil,
 				nil,
 			)
 
@@ -764,6 +769,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				policy,
 				funcs,
 				nil,
+				nil,
 			)
 
 			// Create response recorder
@@ -984,6 +990,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				funcs,
+				nil,
 				nil,
 			)
 
@@ -1326,6 +1333,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				policy,
 				funcs,
 				nil,
+				nil,
 			)
 
 			// Create response recorder
@@ -1333,7 +1341,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader([]byte(tt.toolCallBody)), toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, strings.NewReader(tt.toolCallBody), toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
 			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
@@ -1375,7 +1383,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 	defer mockServer.Close()
 
 	// Setup test dependencies
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
@@ -1427,6 +1435,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 		nil,
 	)
 
@@ -1522,7 +1531,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	defer mockServer.Close()
 
 	// Setup test dependencies
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
@@ -1545,10 +1554,14 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	}
 	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
 	// Mock the functions.ToolCaller to return our mock server URL
+	var receivedInput json.RawMessage
 	mockFuncCaller := &mockToolCaller{
 		serverURL: mockServer.URL,
 		onCall: func(invID uuid.UUID) {
 			invocationID = invID
+		},
+		onRequest: func(req functions.RunnerToolCallRequest) {
+			receivedInput = req.Input
 		},
 	}
 
@@ -1562,6 +1575,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 		nil,
 	)
 
@@ -1590,6 +1604,9 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{"result": "success"}`, recorder.Body.String())
+	require.JSONEq(t, string(bodyBytes), string(receivedInput))
 
 	// Verify trailers were proxied through
 	result := recorder.Result()
@@ -1653,6 +1670,7 @@ func TestToolProxy_Do_PlatformTool_UsesWrappedBodyPayload(t *testing.T) {
 		policy,
 		funcs,
 		platformExecutor,
+		nil,
 	)
 
 	recorder := httptest.NewRecorder()
@@ -1720,6 +1738,7 @@ func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
 		policy,
 		funcs,
 		platformExecutor,
+		nil,
 	)
 
 	recorder := httptest.NewRecorder()
@@ -1740,7 +1759,7 @@ func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
 func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	recorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, tracerProvider.Shutdown(context.Background())) })
@@ -1769,14 +1788,16 @@ func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T)
 		policy,
 		funcs,
 		platformExecutor,
+		nil,
 	)
 
-	err = proxy.Do(ctx, httptest.NewRecorder(), bytes.NewReader([]byte(`{}`)), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, httptest.NewRecorder(), strings.NewReader(`{}`), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 	require.Error(t, err)
 	require.True(t, oops.IsClientFault(err))
+	require.ErrorIs(t, err, platformExecutor.err)
 	spans := recorder.Ended()
 	require.Len(t, spans, 1)
 	require.Equal(t, codes.Unset, spans[0].Status().Code, "caller faults must not mark gateway spans as errors")
@@ -1853,6 +1874,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 		nil,
 		policy,
 		funcs,
+		nil,
 		nil,
 	)
 
@@ -1939,6 +1961,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		nil,
 		policy,
 		funcs,
+		nil,
 		nil,
 	)
 
@@ -2036,6 +2059,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 		nil,
 	)
 
@@ -2149,6 +2173,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		policy,
 		funcs,
 		nil,
+		nil,
 	)
 
 	// Create response recorder
@@ -2162,7 +2187,6 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
@@ -2233,6 +2257,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 		policy,
 		funcs,
 		nil,
+		nil,
 	)
 
 	recorder := httptest.NewRecorder()
@@ -2245,7 +2270,6 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
@@ -2329,6 +2353,7 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
+		nil,
 	)
 
 	// Create request body
@@ -2358,7 +2383,6 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
@@ -2442,6 +2466,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 		nil,
 		policy,
 		funcs,
+		nil,
 		nil,
 	)
 
@@ -2540,6 +2565,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 		nil,
 	)
 
@@ -2659,6 +2685,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
+		nil,
 	)
 
 	// Create request body
@@ -2771,6 +2798,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 		policy,
 		mockFuncCaller,
 		nil,
+		nil,
 	)
 
 	// Create request body
@@ -2882,6 +2910,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 		nil,
 	)
 
@@ -3001,6 +3030,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 		policy,
 		mockFuncCaller,
 		nil,
+		nil,
 	)
 
 	// Create request body
@@ -3114,6 +3144,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
+		nil,
 	)
 
 	// Create request body
@@ -3148,4 +3179,143 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 
 	// Verify the auth input variable was NOT sent when AuthInput is nil
 	require.NotContains(t, capturedEnvironment, "OAUTH_TOKEN")
+}
+
+func TestToolProxy_Do_HTTPTool_ArgumentVariablesReportedAsCaller(t *testing.T) {
+	t.Parallel()
+
+	var sentKey string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sentKey = r.Header.Get("X-API-Key")
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer mockServer.Close()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	plan := &HTTPToolCallPlan{
+		ServerEnvVar:     "TEST_SERVER_URL",
+		DefaultServerUrl: NullString{Value: mockServer.URL, Valid: true},
+		Security: []*HTTPToolSecurity{
+			{
+				Type:         NullString{Value: "apiKey", Valid: true},
+				Scheme:       NullString{Value: "apiKey", Valid: true},
+				Name:         NullString{Value: "X-API-Key", Valid: true},
+				Placement:    NullString{Value: "header", Valid: true},
+				EnvVariables: []string{"API_KEY"},
+			},
+		},
+		SecurityScopes:     map[string][]string{},
+		Method:             "GET",
+		Path:               "/test",
+		Schema:             []byte{},
+		HeaderParams:       map[string]*HTTPParameter{},
+		QueryParams:        map[string]*HTTPParameter{},
+		PathParams:         map[string]*HTTPParameter{},
+		RequestContentType: NullString{Value: "application/json", Valid: true},
+		ResponseFilter:     nil,
+	}
+
+	bodyBytes, err := json.Marshal(ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 nil,
+		ResponseFilter:       nil,
+		EnvironmentVariables: map[string]string{"api_key": "argument-key"},
+		GramRequestSummary:   "",
+	})
+	require.NoError(t, err)
+
+	proxy := NewToolProxy(logger, tracerProvider, testenv.NewMeterProvider(t), ToolCallSourceDirect, testenv.NewEncryptionClient(t), nil, policy, funcs, nil, nil)
+
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
+	userConfig.Set("API_KEY", "saved-key")
+	report := &toolconfig.CredentialReport{}
+
+	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig:  userConfig,
+		Credentials: report,
+	}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+	require.NoError(t, err)
+
+	require.Equal(t, "argument-key", sentKey)
+	require.Equal(t, []string{"api_key"}, report.CallerVariables)
+	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "API_KEY", System: false, ClientGrant: false, Carrier: "X-Api-Key"}}, report.Sent)
+	require.Empty(t, report.ServerVariable)
+
+	userConfig.Set("TEST_SERVER_URL", mockServer.URL)
+	report = &toolconfig.CredentialReport{}
+	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig:  userConfig,
+		Credentials: report,
+	}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+	require.NoError(t, err)
+	require.Equal(t, "TEST_SERVER_URL", report.ServerVariable)
+}
+
+func TestToolProxy_Do_HTTPTool_RedirectStrippedCredentialNotReported(t *testing.T) {
+	t.Parallel()
+
+	var finalAuthorization atomic.Value
+	final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		finalAuthorization.Store(r.Header.Get("Authorization"))
+		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer final.Close()
+	// localhost is another host than the listener's IP literal, whether IPv4 or [::1].
+	parsed, err := url.Parse(final.URL)
+	require.NoError(t, err)
+	finalURL := "http://" + net.JoinHostPort("localhost", parsed.Port())
+	start := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, finalURL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	defer start.Close()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	plan := &HTTPToolCallPlan{
+		ServerEnvVar:     "TEST_SERVER_URL",
+		DefaultServerUrl: NullString{Value: start.URL, Valid: true},
+		Security: []*HTTPToolSecurity{
+			{
+				Type:         NullString{Value: "http", Valid: true},
+				Scheme:       NullString{Value: "bearer", Valid: true},
+				EnvVariables: []string{"API_TOKEN"},
+			},
+		},
+		SecurityScopes:     map[string][]string{},
+		Method:             "GET",
+		Path:               "/test",
+		Schema:             []byte{},
+		HeaderParams:       map[string]*HTTPParameter{},
+		QueryParams:        map[string]*HTTPParameter{},
+		PathParams:         map[string]*HTTPParameter{},
+		RequestContentType: NullString{Value: "application/json", Valid: true},
+		ResponseFilter:     nil,
+	}
+	bodyBytes, err := json.Marshal(ToolCallBody{})
+	require.NoError(t, err)
+
+	proxy := NewToolProxy(logger, tracerProvider, testenv.NewMeterProvider(t), ToolCallSourceDirect, testenv.NewEncryptionClient(t), nil, policy, funcs, nil, nil)
+	report := &toolconfig.CredentialReport{}
+	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:   toolconfig.CIEnvFrom(map[string]string{"API_TOKEN": "saved-token"}),
+		UserConfig:  toolconfig.NewCaseInsensitiveEnv(),
+		Credentials: report,
+	}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+	require.NoError(t, err)
+
+	require.Empty(t, finalAuthorization.Load(), "the redirect to another host dropped the credential")
+	require.Empty(t, report.Sent, "a credential the final request did not carry is not reported")
+	require.Equal(t, []string{`Bearer error="invalid_token"`}, report.Challenges)
 }

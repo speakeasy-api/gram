@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -26,6 +27,10 @@ var sourceCategories = map[string][]categories.Category{
 	SourceCLIDestructive:            {categories.CategoryCLIDestructive},
 	SourceCustom:                    {categories.CategoryCustom},
 	promptpolicy.Source:             {categories.CategoryPromptPolicy},
+	// The LLM analyzer stands in for gitleaks, presidio, prompt_injection,
+	// destructive_tool and cli_destructive policies, so it can emit any
+	// category those sources' findings resolve to.
+	llmanalyzer.Source: {categories.CategorySecrets, categories.CategoryPII, categories.CategoryPromptInjection, categories.CategoryDestructiveTool, categories.CategoryCLIDestructive},
 }
 
 // SourceCategories returns the categories a detector source can emit.
@@ -45,7 +50,7 @@ type RecommendedSet struct {
 
 // CompileRecommended compiles the centrally maintained category scope registry.
 func CompileRecommended(eng *celenv.Engine) (RecommendedSet, error) {
-	out := RecommendedSet{scopes: map[categories.Category]CompiledScope{}}
+	out := RecommendedSet{scopes: make(map[categories.Category]CompiledScope)}
 	for _, rec := range recommendedscopes.All() {
 		if !rec.Applicable || (rec.ScopeInclude == "" && rec.ScopeExempt == "") {
 			continue
@@ -97,30 +102,22 @@ func effectiveScope(rec RecommendedSet, specified map[categories.Category]Compil
 
 // CategoryScopes is the per-batch composition of per-category detection
 // scopes: policy-specified scopes merged over registry recommendations, with
-// the specified scope winning per category. The legacy policy scope still
-// intersects while `scope_include`/`scope_exempt` remain on policy rows.
-// Nil-safe zero value = policy scope only.
+// the specified scope winning per category. Nil-safe zero value scans
+// everything.
 type CategoryScopes struct {
-	policy    CompiledScope
 	rec       RecommendedSet
 	specified map[categories.Category]CompiledScope
-	enabled   bool
-	metrics   *riskMetrics
 }
 
-// CategoryScopeMasks contains per-message policy and category scope exclusions.
+// CategoryScopeMasks contains the per-message category scope exclusions.
 type CategoryScopeMasks struct {
-	policyOut   []bool
 	categoryOut map[categories.Category][]bool
 }
 
-func NewCategoryScopes(policy CompiledScope, rec RecommendedSet, specified map[categories.Category]CompiledScope, enabled bool, metrics *riskMetrics) CategoryScopes {
+func NewCategoryScopes(rec RecommendedSet, specified map[categories.Category]CompiledScope) CategoryScopes {
 	return CategoryScopes{
-		policy:    policy,
 		rec:       rec,
 		specified: specified,
-		enabled:   enabled,
-		metrics:   metrics,
 	}
 }
 
@@ -128,31 +125,21 @@ func NewCategoryScopes(policy CompiledScope, rec RecommendedSet, specified map[c
 // enforcement: policy-specified detection scopes merged over registry
 // recommendations, specified winning per category.
 type CategoryScope struct {
-	policy    CompiledScope
 	rec       RecommendedSet
 	specified map[categories.Category]CompiledScope
-	enabled   bool
 }
 
-// NewCategoryScope builds a single-message category scope. Its zero value is
-// policy scope only.
-func NewCategoryScope(policy CompiledScope, rec RecommendedSet, specified map[categories.Category]CompiledScope, enabled bool) CategoryScope {
+// NewCategoryScope builds a single-message category scope. Its zero value
+// scans everything.
+func NewCategoryScope(rec RecommendedSet, specified map[categories.Category]CompiledScope) CategoryScope {
 	return CategoryScope{
-		policy:    policy,
 		rec:       rec,
 		specified: specified,
-		enabled:   enabled,
 	}
 }
 
 // InScope reports whether view is in scope for cat.
 func (s CategoryScope) InScope(view MessageView, cat categories.Category) bool {
-	if !s.policyIncludes(view) {
-		return false
-	}
-	if !s.enabled {
-		return true
-	}
 	scope, ok := effectiveScope(s.rec, s.specified, cat)
 	if !ok {
 		return true
@@ -166,7 +153,7 @@ func (s CategoryScope) InScope(view MessageView, cat categories.Category) bool {
 func (s CategoryScope) SourceInScope(view MessageView, source string) bool {
 	cats := SourceCategories(source)
 	if len(cats) == 0 {
-		return s.policyIncludes(view)
+		return true
 	}
 	for _, cat := range cats {
 		if s.InScope(view, cat) {
@@ -190,22 +177,12 @@ func (s CategoryScope) FilterFindings(view MessageView, findings []scanners.Find
 	return out
 }
 
-func (s CategoryScope) policyIncludes(view MessageView) bool {
-	if !s.policy.Active() {
-		return true
-	}
-	return s.policy.Includes(view) && !s.policy.Exempts(view)
-}
-
 // Masks computes the policy-scope mask and per-category detection scope masks
 // for the batch. Identical CEL programs are evaluated once per message and
 // shared by every category using that program.
 func (s CategoryScopes) Masks(_ context.Context, messages []batchMessage) CategoryScopeMasks {
-	masks := CategoryScopeMasks{
-		policyOut:   s.policyExclusions(messages),
-		categoryOut: map[categories.Category][]bool{},
-	}
-	if !s.enabled || (len(s.rec.scopes) == 0 && len(s.specified) == 0) {
+	masks := CategoryScopeMasks{categoryOut: make(map[categories.Category][]bool)}
+	if len(s.rec.scopes) == 0 && len(s.specified) == 0 {
 		return masks
 	}
 
@@ -237,22 +214,7 @@ func (s CategoryScopes) Masks(_ context.Context, messages []batchMessage) Catego
 	return masks
 }
 
-func (s CategoryScopes) policyExclusions(messages []batchMessage) []bool {
-	if !s.policy.Active() {
-		return []bool{}
-	}
-	excluded := make([]bool, len(messages))
-	for i, msg := range messages {
-		view := batchMessageView(msg)
-		excluded[i] = !s.policy.Includes(view) || s.policy.Exempts(view)
-	}
-	return excluded
-}
-
 func (m CategoryScopeMasks) InScope(i int, cat categories.Category) bool {
-	if len(m.policyOut) > 0 && m.policyOut[i] {
-		return false
-	}
 	if categoryOut, ok := m.categoryOut[cat]; ok && categoryOut[i] {
 		return false
 	}
@@ -268,30 +230,18 @@ func (m CategoryScopeMasks) AdmitsAny(i int, cats []categories.Category) bool {
 	return false
 }
 
-func (m CategoryScopeMasks) Subset(messages []batchMessage, contents []string, cats []categories.Category) ([]batchMessage, []string, []int) {
-	if len(messages) == 0 {
-		return nil, nil, nil
-	}
-	// Without category masks the prefilter is a no-op; policy-scope drops stay post-scan.
+// Admitted keeps the messages whose detection scope admits any of cats.
+func (m CategoryScopeMasks) Admitted(messages []batchMessage, cats []categories.Category) []batchMessage {
 	if len(m.categoryOut) == 0 {
-		indices := make([]int, len(messages))
-		for i := range indices {
-			indices[i] = i
-		}
-		return messages, contents, indices
+		return messages
 	}
-	subMessages := make([]batchMessage, 0, len(messages))
-	subContents := make([]string, 0, len(contents))
-	indices := make([]int, 0, len(messages))
+	admitted := make([]batchMessage, 0, len(messages))
 	for i, msg := range messages {
-		if !m.AdmitsAny(i, cats) {
-			continue
+		if m.AdmitsAny(i, cats) {
+			admitted = append(admitted, msg)
 		}
-		subMessages = append(subMessages, msg)
-		subContents = append(subContents, contents[i])
-		indices = append(indices, i)
 	}
-	return subMessages, subContents, indices
+	return admitted
 }
 
 func (m CategoryScopeMasks) RecommendedPrefilteredCount(cats []categories.Category) int {
@@ -307,25 +257,12 @@ func (m CategoryScopeMasks) RecommendedPrefilteredCount(cats []categories.Catego
 
 	skipped := 0
 	for i := range count {
-		if len(m.policyOut) > 0 && m.policyOut[i] {
-			continue
-		}
 		if m.AdmitsAny(i, cats) {
 			continue
 		}
 		skipped++
 	}
 	return skipped
-}
-
-func scatterFindings(n int, indices []int, subset [][]scanners.Finding) [][]scanners.Finding {
-	out := make([][]scanners.Finding, n)
-	for i, idx := range indices {
-		if i < len(subset) {
-			out[idx] = subset[i]
-		}
-	}
-	return out
 }
 
 func categoryForFinding(f scanners.Finding) categories.Category {

@@ -996,6 +996,9 @@ func marshalTypesUserSessionToUserSessionResponseBody(v *types.UserSession) *Use
 	} else {
 		res.Upstreams = []*UserSessionUpstreamResponseBody{}
 	}
+	if v.Workload != nil {
+		res.Workload = marshalTypesUserSessionWorkloadToUserSessionWorkloadResponseBody(v.Workload)
+	}
 
 	return res
 }
@@ -1023,6 +1026,51 @@ func marshalTypesUserSessionUpstreamToUserSessionUpstreamResponseBody(v *types.U
 		}
 	} else {
 		res.Scopes = []string{}
+	}
+
+	return res
+}
+
+// marshalTypesUserSessionWorkloadToUserSessionWorkloadResponseBody builds a
+// value of type *UserSessionWorkloadResponseBody from a value of type
+// *types.UserSessionWorkload.
+func marshalTypesUserSessionWorkloadToUserSessionWorkloadResponseBody(v *types.UserSessionWorkload) *UserSessionWorkloadResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &UserSessionWorkloadResponseBody{
+		WorkloadIssuerID:   v.WorkloadIssuerID,
+		ExternalSubject:    v.ExternalSubject,
+		WorkloadIssuerName: v.WorkloadIssuerName,
+		WorkloadIssuerURL:  v.WorkloadIssuerURL,
+		AgentID:            v.AgentID,
+		AgentName:          v.AgentName,
+		AgentStatus:        v.AgentStatus,
+	}
+	if v.Admissions != nil {
+		res.Admissions = make([]*UserSessionWorkloadAdmissionResponseBody, len(v.Admissions))
+		for i, val := range v.Admissions {
+			if val == nil {
+				res.Admissions[i] = nil
+				continue
+			}
+			res.Admissions[i] = marshalTypesUserSessionWorkloadAdmissionToUserSessionWorkloadAdmissionResponseBody(val)
+		}
+	} else {
+		res.Admissions = []*UserSessionWorkloadAdmissionResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesUserSessionWorkloadAdmissionToUserSessionWorkloadAdmissionResponseBody
+// builds a value of type *UserSessionWorkloadAdmissionResponseBody from a
+// value of type *types.UserSessionWorkloadAdmission.
+func marshalTypesUserSessionWorkloadAdmissionToUserSessionWorkloadAdmissionResponseBody(v *types.UserSessionWorkloadAdmission) *UserSessionWorkloadAdmissionResponseBody {
+	res := &UserSessionWorkloadAdmissionResponseBody{
+		ID:   v.ID,
+		Tier: v.Tier,
+		Name: v.Name,
 	}
 
 	return res

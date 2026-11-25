@@ -271,7 +271,6 @@ func TestDisableOrganization_AgreesWithListGate(t *testing.T) {
 
 	seedOrg(t, ctx, conn, orgFixture{id: "org_gate", name: "Gate Co", slug: "gate-co", whitelisted: true})
 
-	include := true
 	listIDs := func(payload *gen.ListOrganizationsPayload) []string {
 		res, err := svc.ListOrganizations(ctx, payload)
 		require.NoError(t, err)
@@ -282,16 +281,16 @@ func TestDisableOrganization_AgreesWithListGate(t *testing.T) {
 		return ids
 	}
 
-	require.Contains(t, listIDs(&gen.ListOrganizationsPayload{}), "org_gate")
+	require.Contains(t, listIDs(&gen.ListOrganizationsPayload{DisabledStatus: new("active")}), "org_gate")
 
 	_, err := svc.DisableOrganization(ctx, &gen.DisableOrganizationPayload{ID: "org_gate"})
 	require.NoError(t, err)
-	require.NotContains(t, listIDs(&gen.ListOrganizationsPayload{}), "org_gate", "a disabled organization drops out of the default list")
-	require.Contains(t, listIDs(&gen.ListOrganizationsPayload{IncludeDisabled: &include}), "org_gate")
+	require.NotContains(t, listIDs(&gen.ListOrganizationsPayload{DisabledStatus: new("active")}), "org_gate", "a disabled organization drops out of the active list")
+	require.Contains(t, listIDs(&gen.ListOrganizationsPayload{DisabledStatus: new("all")}), "org_gate")
 
 	_, err = svc.EnableOrganization(ctx, &gen.EnableOrganizationPayload{ID: "org_gate"})
 	require.NoError(t, err)
-	require.Contains(t, listIDs(&gen.ListOrganizationsPayload{}), "org_gate", "a re-enabled organization comes back to the default list")
+	require.Contains(t, listIDs(&gen.ListOrganizationsPayload{DisabledStatus: new("active")}), "org_gate", "a re-enabled organization comes back to the default list")
 }
 
 func TestDisableOrganization_UnknownID(t *testing.T) {

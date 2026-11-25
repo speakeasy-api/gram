@@ -577,6 +577,7 @@ func (q *Queries) CountSkillEfficacyVersionLifetimeSpend(ctx context.Context, ar
 
 const countSkillFeedbackOutcomes = `-- name: CountSkillFeedbackOutcomes :one
 SELECT
+  clock_timestamp()::timestamptz AS window_end,
   COUNT(*)::bigint AS total,
   COUNT(*) FILTER (WHERE outcome = 'helped')::bigint AS helped,
   COUNT(*) FILTER (WHERE outcome = 'partially_helped')::bigint AS partially_helped,
@@ -594,6 +595,7 @@ type CountSkillFeedbackOutcomesParams struct {
 }
 
 type CountSkillFeedbackOutcomesRow struct {
+	WindowEnd       pgtype.Timestamptz
 	Total           int64
 	Helped          int64
 	PartiallyHelped int64
@@ -606,6 +608,7 @@ func (q *Queries) CountSkillFeedbackOutcomes(ctx context.Context, arg CountSkill
 	row := q.db.QueryRow(ctx, countSkillFeedbackOutcomes, arg.ProjectID, arg.SkillID)
 	var i CountSkillFeedbackOutcomesRow
 	err := row.Scan(
+		&i.WindowEnd,
 		&i.Total,
 		&i.Helped,
 		&i.PartiallyHelped,
@@ -639,6 +642,12 @@ WHERE project_id = $1
     COALESCE(cardinality($5::text[]), 0) = 0
     OR tags && $5::text[]
   )
+  -- Mirrors the ListSkills restriction so an empty page still counts the same
+  -- set: NULL means unrestricted, an empty array means none.
+  AND (
+    $6::uuid[] IS NULL
+    OR id = ANY($6::uuid[])
+  )
 `
 
 type CountSkillsParams struct {
@@ -647,6 +656,7 @@ type CountSkillsParams struct {
 	SourceKinds     []string
 	Classifications []string
 	Tags            []string
+	SkillIds        []uuid.UUID
 }
 
 // CountSkills handles empty cursor pages. Keep its filters in sync with ListSkills
@@ -658,6 +668,7 @@ func (q *Queries) CountSkills(ctx context.Context, arg CountSkillsParams) (int64
 		arg.SourceKinds,
 		arg.Classifications,
 		arg.Tags,
+		arg.SkillIds,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -1162,6 +1173,7 @@ func (q *Queries) CreateSkillEditSuggestionWatermark(ctx context.Context, arg Cr
 
 const createSkillFeedback = `-- name: CreateSkillFeedback :one
 INSERT INTO skill_feedback (
+  id,
   project_id,
   skill_id,
   skill_version_id,
@@ -1173,21 +1185,25 @@ INSERT INTO skill_feedback (
   user_id,
   user_email
 ) VALUES (
-  $1,
-  $2::uuid,
+  COALESCE($1::uuid, generate_uuidv7()),
+  $2,
   $3::uuid,
-  $4,
+  $4::uuid,
   $5,
   $6,
-  $7::text,
+  $7,
   $8::text,
   $9::text,
-  $10::text
+  $10::text,
+  $11::text
 )
+ON CONFLICT (project_id, id) DO UPDATE
+SET id = EXCLUDED.id
 RETURNING id, project_id, skill_id, skill_version_id, skill_name, source, outcome, note, session_id, user_id, user_email, reviewed_at, created_at
 `
 
 type CreateSkillFeedbackParams struct {
+	ID             uuid.NullUUID
 	ProjectID      uuid.UUID
 	SkillID        uuid.NullUUID
 	SkillVersionID uuid.NullUUID
@@ -1202,6 +1218,7 @@ type CreateSkillFeedbackParams struct {
 
 func (q *Queries) CreateSkillFeedback(ctx context.Context, arg CreateSkillFeedbackParams) (SkillFeedback, error) {
 	row := q.db.QueryRow(ctx, createSkillFeedback,
+		arg.ID,
 		arg.ProjectID,
 		arg.SkillID,
 		arg.SkillVersionID,
@@ -2145,6 +2162,14 @@ SELECT
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
   )::boolean AS has_valid_version,
   (
+    -- Same filter as GetSkillLastLoadedOverMCPAt.
+    SELECT MAX(so.seen_at)
+    FROM skill_observations so
+    WHERE so.project_id = s.project_id
+      AND so.skill_id = s.id
+      AND so.provider = 'mcp'
+  )::timestamptz AS last_loaded_over_mcp_at,
+  (
     SELECT COUNT(*)::bigint
     FROM skill_distributions sd
     JOIN assistants a
@@ -2182,12 +2207,13 @@ type GetSkillDetailsParams struct {
 }
 
 type GetSkillDetailsRow struct {
-	Skill           Skill
-	ShareToken      pgtype.Text
-	LatestVersionID uuid.UUID
-	VersionCount    int64
-	HasValidVersion bool
-	AssistantCount  int64
+	Skill               Skill
+	ShareToken          pgtype.Text
+	LatestVersionID     uuid.UUID
+	VersionCount        int64
+	HasValidVersion     bool
+	LastLoadedOverMcpAt pgtype.Timestamptz
+	AssistantCount      int64
 }
 
 func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams) (GetSkillDetailsRow, error) {
@@ -2212,6 +2238,7 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 		&i.LatestVersionID,
 		&i.VersionCount,
 		&i.HasValidVersion,
+		&i.LastLoadedOverMcpAt,
 		&i.AssistantCount,
 	)
 	return i, err
@@ -2703,6 +2730,29 @@ func (q *Queries) GetSkillForUpdate(ctx context.Context, arg GetSkillForUpdatePa
 	return i, err
 }
 
+const getSkillLastLoadedOverMCPAt = `-- name: GetSkillLastLoadedOverMCPAt :one
+SELECT MAX(so.seen_at)::timestamptz AS last_loaded_over_mcp_at
+FROM skill_observations so
+WHERE so.project_id = $1
+  AND so.skill_id = $2::uuid
+  AND so.provider = 'mcp'
+`
+
+type GetSkillLastLoadedOverMCPAtParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+// The newest activation a Speakeasy-hosted MCP server recorded for one skill,
+// NULL when agents never loaded it over MCP. Same filter as the mcp_loads
+// lateral in ListActiveSkillDistributions.
+func (q *Queries) GetSkillLastLoadedOverMCPAt(ctx context.Context, arg GetSkillLastLoadedOverMCPAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getSkillLastLoadedOverMCPAt, arg.ProjectID, arg.SkillID)
+	var last_loaded_over_mcp_at pgtype.Timestamptz
+	err := row.Scan(&last_loaded_over_mcp_at)
+	return last_loaded_over_mcp_at, err
+}
+
 const getSkillName = `-- name: GetSkillName :one
 SELECT name
 FROM skills
@@ -2943,6 +2993,43 @@ func (q *Queries) GetValidSkillVersion(ctx context.Context, arg GetValidSkillVer
 	return id, err
 }
 
+const hasPublishedPluginDistributionForSkills = `-- name: HasPublishedPluginDistributionForSkills :one
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM skill_distributions sd
+    JOIN plugins p ON p.id = sd.plugin_id AND p.project_id = sd.project_id AND p.deleted IS FALSE
+    WHERE sd.project_id = $1
+      AND sd.skill_id = ANY($2::uuid[])
+      AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
+      AND sd.revoked_at IS NULL
+      AND (NOT $3::bool OR sd.pinned_version_id IS NULL)
+  )
+  AND EXISTS (
+    SELECT 1 FROM plugin_github_connections c WHERE c.project_id = $1
+  )
+)::bool AS published
+`
+
+type HasPublishedPluginDistributionForSkillsParams struct {
+	ProjectID  uuid.UUID
+	SkillIds   []uuid.UUID
+	LatestOnly bool
+}
+
+// Reports whether a change to any of the skills can move a published
+// marketplace package: the project has a marketplace connection and a live
+// plugin carries one of the skills. latest_only narrows the check to
+// distributions that follow the latest valid version, the only ones a new or
+// restored version changes.
+func (q *Queries) HasPublishedPluginDistributionForSkills(ctx context.Context, arg HasPublishedPluginDistributionForSkillsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPublishedPluginDistributionForSkills, arg.ProjectID, arg.SkillIds, arg.LatestOnly)
+	var published bool
+	err := row.Scan(&published)
+	return published, err
+}
+
 const insertCapturedSkillVersionOrigin = `-- name: InsertCapturedSkillVersionOrigin :exec
 INSERT INTO skill_version_origins (skill_version_id, skill_id, project_id, origin)
 SELECT sv.id, sv.skill_id, s.project_id, 'captured'
@@ -3108,7 +3195,8 @@ SELECT
   s.name AS skill_name,
   s.display_name AS skill_display_name,
   pl.name AS plugin_name,
-  resolved.id AS resolved_version_id
+  resolved.id AS resolved_version_id,
+  mcp_loads.last_loaded_over_mcp_at
 FROM skill_distributions sd
 JOIN plugins pl
   ON pl.id = sd.plugin_id
@@ -3131,6 +3219,13 @@ JOIN LATERAL (
   ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
+LEFT JOIN LATERAL (
+  SELECT MAX(so.seen_at)::timestamptz AS last_loaded_over_mcp_at
+  FROM skill_observations so
+  WHERE so.project_id = sd.project_id
+    AND so.skill_id = sd.skill_id
+    AND so.provider = 'mcp'
+) mcp_loads ON TRUE
 WHERE sd.project_id = $1
   AND sd.channel = 'plugin'
   AND sd.plugin_id IS NOT NULL
@@ -3159,13 +3254,19 @@ type ListActiveSkillDistributionsParams struct {
 }
 
 type ListActiveSkillDistributionsRow struct {
-	SkillDistribution SkillDistribution
-	SkillName         string
-	SkillDisplayName  string
-	PluginName        string
-	ResolvedVersionID uuid.UUID
+	SkillDistribution   SkillDistribution
+	SkillName           string
+	SkillDisplayName    string
+	PluginName          string
+	ResolvedVersionID   uuid.UUID
+	LastLoadedOverMcpAt pgtype.Timestamptz
 }
 
+// last_loaded_over_mcp_at is the newest activation a Speakeasy-hosted MCP
+// server recorded for the skill (provider 'mcp', the mcpskills resolver's
+// ObservationProvider). Those rows arrive reconciled with skill_id set, so the
+// provider filter alone tells MCP loads from hook-reported ones, and the
+// partial index on (project_id, skill_id, seen_at DESC) serves the MAX.
 func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActiveSkillDistributionsParams) ([]ListActiveSkillDistributionsRow, error) {
 	rows, err := q.db.Query(ctx, listActiveSkillDistributions,
 		arg.ProjectID,
@@ -3198,6 +3299,7 @@ func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActi
 			&i.SkillDisplayName,
 			&i.PluginName,
 			&i.ResolvedVersionID,
+			&i.LastLoadedOverMcpAt,
 		); err != nil {
 			return nil, err
 		}
@@ -3586,6 +3688,11 @@ WHERE so.project_id = $1
   AND so.efficacy_enqueued_at IS NULL
   AND so.session_id IS NOT NULL
   AND so.skill_version_id IS NOT NULL
+  -- Reads over a hosted MCP server carry the MCP session id, which names no
+  -- chat transcript to score, so they are not efficacy candidates. Belt and
+  -- braces: InsertMCPSkillObservation already stamps efficacy_enqueued_at, so
+  -- such a row never reaches this predicate.
+  AND so.provider <> 'mcp'
   AND (
     $2::timestamptz IS NULL
     OR (so.seen_at, so.id) > ($2::timestamptz, $3::uuid)
@@ -3691,6 +3798,12 @@ WHERE so.project_id = $1
   AND so.session_id IS NOT NULL
   AND so.skill_id IS NOT NULL
   AND so.skill_version_id IS NOT NULL
+  -- A read over a hosted MCP server arrives reconciled with the MCP session
+  -- id, which is neither a dev nor an assistant session: it belongs to no
+  -- surface the attribution join knows, so it never becomes a mapping.
+  -- Belt and braces: InsertMCPSkillObservation already stamps
+  -- metrics_synced_at, so such a row never reaches this predicate.
+  AND so.provider <> 'mcp'
 ORDER BY so.seen_at, so.id
 LIMIT $2
 `
@@ -4876,6 +4989,14 @@ SELECT
     WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
   )::boolean AS has_valid_version,
   (
+    -- Same filter as GetSkillLastLoadedOverMCPAt.
+    SELECT MAX(so.seen_at)
+    FROM skill_observations so
+    WHERE so.project_id = s.project_id
+      AND so.skill_id = s.id
+      AND so.provider = 'mcp'
+  )::timestamptz AS last_loaded_over_mcp_at,
+  (
     SELECT COUNT(*)
     FROM skills counted
     WHERE counted.project_id = $1
@@ -4897,6 +5018,14 @@ SELECT
       AND (
         COALESCE(cardinality($5::text[]), 0) = 0
         OR counted.tags && $5::text[]
+      )
+      -- Restricts the page to an explicit id set (today: the skills one user is
+      -- authorized to reach, resolved by the access service so the RBAC rule
+      -- stays in one place). Callers that want no restriction pass NULL; an
+      -- EMPTY set is a real answer meaning "none", never "all".
+      AND (
+        $6::uuid[] IS NULL
+        OR counted.id = ANY($6::uuid[])
       )
   )::bigint AS total_count
 FROM skills s
@@ -4933,29 +5062,33 @@ WHERE s.project_id = $1
     OR s.tags && $5::text[]
   )
   AND (
+    $6::uuid[] IS NULL
+    OR s.id = ANY($6::uuid[])
+  )
+  AND (
     (
-      COALESCE(NULLIF($6::text, ''), 'name') = 'name'
+      COALESCE(NULLIF($7::text, ''), 'name') = 'name'
       AND (
-        $7::text IS NULL
-        OR s.name > $7::text
+        $8::text IS NULL
+        OR s.name > $8::text
       )
     )
     OR (
-      COALESCE(NULLIF($6::text, ''), 'name') = 'updated'
+      COALESCE(NULLIF($7::text, ''), 'name') = 'updated'
       AND (
-        $8::timestamptz IS NULL
+        $9::timestamptz IS NULL
         OR (s.updated_at, s.id) < (
-          $8::timestamptz,
-          $9::uuid
+          $9::timestamptz,
+          $10::uuid
         )
       )
     )
   )
 ORDER BY
-  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'name' THEN s.name END ASC,
-  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
-  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'updated' THEN s.id END DESC
-LIMIT $10
+  CASE WHEN COALESCE(NULLIF($7::text, ''), 'name') = 'name' THEN s.name END ASC,
+  CASE WHEN COALESCE(NULLIF($7::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
+  CASE WHEN COALESCE(NULLIF($7::text, ''), 'name') = 'updated' THEN s.id END DESC
+LIMIT $11
 `
 
 type ListSkillsParams struct {
@@ -4964,6 +5097,7 @@ type ListSkillsParams struct {
 	SourceKinds     []string
 	Classifications []string
 	Tags            []string
+	SkillIds        []uuid.UUID
 	SortOrder       string
 	CursorName      pgtype.Text
 	CursorUpdatedAt pgtype.Timestamptz
@@ -4972,12 +5106,13 @@ type ListSkillsParams struct {
 }
 
 type ListSkillsRow struct {
-	Skill           Skill
-	ShareToken      pgtype.Text
-	LatestVersionID uuid.UUID
-	VersionCount    int64
-	HasValidVersion bool
-	TotalCount      int64
+	Skill               Skill
+	ShareToken          pgtype.Text
+	LatestVersionID     uuid.UUID
+	VersionCount        int64
+	HasValidVersion     bool
+	LastLoadedOverMcpAt pgtype.Timestamptz
+	TotalCount          int64
 }
 
 func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListSkillsRow, error) {
@@ -4987,6 +5122,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 		arg.SourceKinds,
 		arg.Classifications,
 		arg.Tags,
+		arg.SkillIds,
 		arg.SortOrder,
 		arg.CursorName,
 		arg.CursorUpdatedAt,
@@ -5019,6 +5155,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 			&i.LatestVersionID,
 			&i.VersionCount,
 			&i.HasValidVersion,
+			&i.LastLoadedOverMcpAt,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

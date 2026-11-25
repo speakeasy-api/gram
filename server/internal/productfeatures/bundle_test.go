@@ -11,6 +11,183 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
+func TestSeedOrganizationDefaultsTx_EnablesLoggingBundle(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	q := featurerepo.New(ti.conn)
+	for _, feature := range productfeatures.OrganizationDefaultFeatures {
+		enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		require.Truef(t, enabled, "feature %s should be enabled for a new organization", feature)
+	}
+}
+
+func TestSeedNewOrganizationDefaultsTx_EnablesEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedNewOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	q := featurerepo.New(ti.conn)
+	for _, feature := range slices.Concat(productfeatures.OrganizationDefaultFeatures, productfeatures.NewOrganizationFeatures) {
+		enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		require.Truef(t, enabled, "feature %s should be enabled for a new organization", feature)
+	}
+	require.Contains(t, productfeatures.NewOrganizationFeatures, productfeatures.FeatureUpstreamAuthEnforced)
+}
+
+func TestSeedOrganizationDefaultsTx_LeavesEnforcementOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	enabled, err := featurerepo.New(ti.conn).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "seeding defaults onto an existing organization must not enable enforcement")
+}
+
+func TestSeedNewOrganizationDefaultsTx_LeavesDisabledEnforcementDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedNewOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	q := featurerepo.New(ti.conn)
+	_, err := q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+
+	tx = testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedNewOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "replaying new organization defaults must not undo an enforcement rollback")
+}
+
+func TestSeedOrganizationDefaultsTx_LeavesADisabledDefaultDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	q := featurerepo.New(ti.conn)
+	_, err := q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeaturePlatformMCP),
+	})
+	require.NoError(t, err)
+
+	tx = testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeaturePlatformMCP),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "replaying default entitlements must not undo an administrator disable")
+}
+
+func TestOrganizationDefaultFailOpenCanBeDisabled(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+	q := featurerepo.New(ti.conn)
+	params := featurerepo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)}
+	enabled, err := q.IsFeatureEnabled(ctx, params)
+	require.NoError(t, err)
+	require.True(t, enabled)
+	_, err = q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)})
+	require.NoError(t, err)
+	tx = testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+	enabled, err = q.IsFeatureEnabled(ctx, params)
+	require.NoError(t, err)
+	require.False(t, enabled, "trial provisioning must preserve an explicit fail-closed choice")
+}
+
+func TestSeedEnterpriseTrialBundleTx_LeavesADisabledBundleFeatureDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	q := featurerepo.New(ti.conn)
+	_, err := q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureLogs),
+	})
+	require.NoError(t, err)
+
+	tx = testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureLogs),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "a later trial must not undo an administrator disable")
+}
+
 func TestSeedEnterpriseTrialBundleTx_Idempotent(t *testing.T) {
 	t.Parallel()
 
@@ -27,7 +204,7 @@ func TestSeedEnterpriseTrialBundleTx_Idempotent(t *testing.T) {
 	// Skills sits outside the bundle: EnableSkillsTx enables it alongside the
 	// role grants it needs. slices.Concat rather than append, so this never
 	// writes into spare capacity the exported bundle might grow.
-	entitlements := slices.Concat(productfeatures.EnterpriseTrialBundle, []productfeatures.Feature{productfeatures.FeatureSkills})
+	entitlements := slices.Concat(productfeatures.EnterpriseAccessBundle, []productfeatures.Feature{productfeatures.FeatureSkills})
 
 	poolRepo := featurerepo.New(ti.conn)
 	for _, feature := range entitlements {
@@ -69,6 +246,17 @@ func TestSetTrialRuntimeFeaturesTx_TogglesOnlyRuntimeFeatures(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.True(t, ssoEnabled)
+		for _, feature := range productfeatures.OrganizationDefaultFeatures {
+			if feature == productfeatures.FeaturePlatformMCP {
+				continue
+			}
+			defaultEnabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+				OrganizationID: organizationID,
+				FeatureName:    string(feature),
+			})
+			require.NoError(t, err)
+			require.Truef(t, defaultEnabled, "default feature %s should survive trial runtime toggles", feature)
+		}
 	}
 
 	for range 2 {
@@ -81,7 +269,7 @@ func TestSetTrialRuntimeFeaturesTx_TogglesOnlyRuntimeFeatures(t *testing.T) {
 	}
 }
 
-func TestSeedPaygEntitlementsTxPreservesExplicitDisable(t *testing.T) {
+func TestSeedEnterpriseAccessEntitlementsTxPreservesExplicitDisable(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProductFeaturesService(t)
@@ -101,7 +289,7 @@ func TestSeedPaygEntitlementsTxPreservesExplicitDisable(t *testing.T) {
 	require.NoError(t, err)
 
 	tx := testenv.BeginTx(t, ctx, ti.conn)
-	enabled, err := productfeatures.SeedPaygEntitlementsTx(ctx, tx, organizationID)
+	enabled, err := productfeatures.SeedEnterpriseAccessEntitlementsTx(ctx, tx, organizationID)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 	require.NotContains(t, enabled, productfeatures.FeatureSSO)
@@ -115,7 +303,7 @@ func TestSeedPaygEntitlementsTxPreservesExplicitDisable(t *testing.T) {
 
 	for _, feature := range slices.Concat(
 		[]productfeatures.Feature{productfeatures.FeaturePlatformMCP},
-		productfeatures.EnterpriseTrialBundle,
+		productfeatures.EnterpriseAccessBundle,
 		[]productfeatures.Feature{productfeatures.FeatureSkills},
 	) {
 		if feature == productfeatures.FeatureSSO {

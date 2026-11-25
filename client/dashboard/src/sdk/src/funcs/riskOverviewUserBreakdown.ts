@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getRiskUserBreakdown risk
  *
  * @remarks
- * Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
+ * Per-user breakdowns of findings by category and by rule_id within a time window. Powers the risk panels on identity pages.
  */
 export function riskOverviewUserBreakdown(
   client: GramCore,

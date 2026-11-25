@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const HookStatus = {
 /**
  * Hook execution status
  */
-export type HookStatus = ClosedEnum<typeof HookStatus>;
+export type HookStatus = OpenEnum<typeof HookStatus>;
 
 /**
  * Summary information for a hook trace
@@ -36,7 +37,7 @@ export type HookTraceSummary = {
    */
   eventSource?: string | undefined;
   /**
-   * Gram URN associated with this hook trace
+   * Speakeasy URN associated with this hook trace
    */
   gramUrn: string;
   /**
@@ -78,8 +79,8 @@ export type HookTraceSummary = {
 };
 
 /** @internal */
-export const HookStatus$inboundSchema: z.ZodMiniEnum<typeof HookStatus> = z
-  .enum(HookStatus);
+export const HookStatus$inboundSchema: z.ZodMiniType<HookStatus, unknown> =
+  openEnums.inboundSchema(HookStatus);
 
 /** @internal */
 export const HookTraceSummary$inboundSchema: z.ZodMiniType<

@@ -1,0 +1,47 @@
+import { renderHook } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+const location = vi.hoisted(() => ({ pathname: "/", search: "" }));
+vi.mock("react-router", () => ({
+  useLocation: () => location,
+}));
+
+import { useNavArea } from "./useNavArea";
+
+function areaAt(path: string) {
+  const url = new URL(path, "https://example.test");
+  location.pathname = url.pathname;
+  location.search = url.search;
+  return renderHook(() => useNavArea()).result.current;
+}
+
+describe("useNavArea", () => {
+  // The detail page's own segment sits below the page slug, so the group the
+  // reader came from has to stay open while they are on it.
+  it.each([
+    "/org/projects/proj/identities",
+    "/org/projects/proj/identities/user%3A1/overview",
+    "/org/projects/proj/agent-management",
+    "/org/projects/proj/mcp-sessions",
+    "/org/projects/proj/remote-identity-providers/provider/clients/client/sessions",
+  ])("puts %s in Identity", (path) => {
+    expect(areaAt(path)).toBe("Identity");
+  });
+
+  it("keeps Channels in the MCP Gateway area, including a selected thread", () => {
+    expect(areaAt("/org/projects/proj/channels")).toBe("MCP Gateway");
+    expect(areaAt("/org/projects/proj/channels?thread=thread-1")).toBe(
+      "MCP Gateway",
+    );
+  });
+
+  it("keeps intent policies in the Security and Policy area", () => {
+    expect(areaAt("/org/projects/proj/security/intent-policies")).toBe(
+      "Security and Policy",
+    );
+  });
+
+  it("leaves ungrouped project pages without an area", () => {
+    expect(areaAt("/org/projects/proj")).toBeUndefined();
+  });
+});

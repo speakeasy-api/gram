@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -9,14 +10,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
@@ -28,6 +37,37 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 	projectID, assistantID, chatID, threadID := insertAssistantFixture(t, conn)
 
 	ctx := t.Context()
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID:   "org-test",
+		Name: "Test organization",
+		Slug: "org-test",
+	})
+	require.NoError(t, err)
+	ownerUserID := "owner-" + uuid.NewString()
+	require.NoError(t, assistantsrepo.New(conn).UpsertAssistantChat(t.Context(), assistantsrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      projectID,
+		OrganizationID: "org-test",
+		UserID:         conv.ToPGText(ownerUserID),
+		Title:          pgtype.Text{},
+	}))
+	account, err := hooksrepo.New(conn).UpsertUserAccount(t.Context(), hooksrepo.UpsertUserAccountParams{
+		OrganizationID:      "org-test",
+		Provider:            "anthropic",
+		ExternalAccountUuid: uuid.NewString(),
+		UserID:              pgtype.Text{},
+		ExternalOrgID:       pgtype.Text{},
+		ExternalAccountID:   pgtype.Text{},
+		Email:               conv.ToPGText("self-heal@example.test"),
+		AccountType:         conv.ToPGText("personal"),
+	})
+	require.NoError(t, err)
+	_, err = hooksrepo.New(conn).LinkChatUserAccount(t.Context(), hooksrepo.LinkChatUserAccountParams{
+		UserAccountID: uuid.NullUUID{UUID: account.ID, Valid: true},
+		ID:            chatID,
+		ProjectID:     projectID,
+	})
+	require.NoError(t, err)
 
 	// Seed eight chronological user messages plus some assistant/tool noise
 	// that should NOT carry over after self-heal trims to user-only.
@@ -63,14 +103,14 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
-	corruption := fmt.Errorf("%w: execute fly turn request: status=400 body=provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	corruption := fmt.Errorf("%w: execute gke turn request: status=400 body=provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
 	backend := testRuntimeBackend{
-		backend:    runtimeBackendFlyIO,
+		backend:    runtimeBackendGKE,
 		runTurnErr: corruption,
 		stopCalls:  &stopCalls,
 	}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil, newTestAuditLogger())
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
 	core.SetChatMessageWriter(chatWriter)
@@ -117,6 +157,33 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 			require.Equal(t, want, row.Content.Text(), "trimmed tail must preserve recent user prompts verbatim")
 		}
 	}
+
+	outboxRows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	outboxRows = slices.DeleteFunc(outboxRows, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&meteringv1.MeterReading{}))
+	})
+	require.Len(t, outboxRows, selfHealUserMessageCap+1)
+	for _, row := range outboxRows {
+		reading := &meteringv1.MeterReading{}
+		require.NoError(t, proto.Unmarshal(row.Message, reading))
+		require.Equal(t, "personal", reading.GetAttributes()[metering.AttributeAccountType])
+		require.Equal(t, ownerUserID, reading.GetAttributes()[metering.AttributeBillingUserID])
+		require.Equal(t, assistantID.String(), reading.GetAttributes()[metering.AttributeAssistantID])
+		require.Equal(t, string(metering.WorkloadSourceAssistant), reading.GetAttributes()[metering.AttributeWorkloadSource])
+	}
+	before, err := q.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.NoError(t, core.selfHealCorruptHistory(ctx, chatID, projectID, assistantID))
+	after, err := q.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Len(t, after, len(before))
+	for i := 1; i < len(after); i++ {
+		require.True(t, before[i].OriginalMessageID.Valid)
+		require.Equal(t, before[i].OriginalMessageID, after[i].OriginalMessageID)
+		require.Equal(t, chat.CaptureSynthetic, before[i].CaptureKind.String)
+		require.Equal(t, chat.CaptureSynthetic, after[i].CaptureKind.String)
+	}
 }
 
 func TestServiceCoreSkipsSelfHealAfterFirstRetry(t *testing.T) {
@@ -161,14 +228,14 @@ func TestServiceCoreSkipsSelfHealAfterFirstRetry(t *testing.T) {
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	corruption := fmt.Errorf("%w: provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
 	backend := testRuntimeBackend{
-		backend:    runtimeBackendFlyIO,
+		backend:    runtimeBackendGKE,
 		runTurnErr: corruption,
 		stopCalls:  &stopCalls,
 	}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil, newTestAuditLogger())
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
 	core.SetChatMessageWriter(chatWriter)

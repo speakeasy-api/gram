@@ -1,0 +1,25 @@
+package metamcp
+
+// DiscoveryMode controls the tool catalog exposed by a stored gateway.
+type DiscoveryMode string
+
+const (
+	DiscoveryModeProgressive DiscoveryMode = "progressive"
+	DiscoveryModeDirect      DiscoveryMode = "direct"
+	// DiscoveryModeCode exposes one Python execute tool over a scoped host bridge.
+	DiscoveryModeCode DiscoveryMode = "code_mode"
+)
+
+// Valid reports whether the mode is supported.
+func (m DiscoveryMode) Valid() bool {
+	return m == DiscoveryModeProgressive || m == DiscoveryModeDirect || m == DiscoveryModeCode
+}
+
+// ResolveDiscoveryMode serves modes this build does not support, such as one
+// stored by a newer release before a rollback, as Progressive.
+func ResolveDiscoveryMode(value string) DiscoveryMode {
+	if !DiscoveryMode(value).Valid() {
+		return DiscoveryModeProgressive
+	}
+	return DiscoveryMode(value)
+}

@@ -1,12 +1,17 @@
 package mv
 
 import (
+	"math"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/publiclimits"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/tunnel/route"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 type TunneledMcpConnectionCache = route.Connection
@@ -22,20 +27,27 @@ func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []Tun
 		lastSeenAt = latestConnectionHeartbeat(connections)
 	}
 
+	effectiveRate, effectiveBurst := publiclimits.Effective(server.PublicRequestRatePerSecond, server.PublicRequestBurst)
+
 	return &types.TunneledMcpServer{
-		ID:                         server.ID.String(),
-		ProjectID:                  server.ProjectID.String(),
-		Name:                       server.Name,
-		KeyPrefix:                  server.KeyPrefix,
-		Status:                     types.TunneledMcpLifecycleStatus(server.Status),
-		ConnectionStatus:           tunneledMcpConnectionStatus(server, connections),
-		AllowPublic:                server.AllowPublic,
-		AgentVersion:               agentVersion,
-		LastSeenAt:                 lastSeenAt,
-		ActiveConnectionCount:      len(connections),
-		ActiveConsumerSessionCount: activeConsumerSessionCount(connections),
-		CreatedAt:                  server.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                  server.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                                  server.ID.String(),
+		ProjectID:                           server.ProjectID.String(),
+		Name:                                server.Name,
+		KeyPrefix:                           server.KeyPrefix,
+		Status:                              types.TunneledMcpLifecycleStatus(server.Status),
+		ConnectionStatus:                    tunneledMcpConnectionStatus(server, connections),
+		AllowPublic:                         server.AllowPublic,
+		AgentVersion:                        agentVersion,
+		ResourceIdentifier:                  conv.FromPGText[string](server.ResourceIdentifier),
+		PublicRequestRatePerSecond:          optionalInt(server.PublicRequestRatePerSecond),
+		PublicRequestBurst:                  optionalInt(server.PublicRequestBurst),
+		EffectivePublicRequestRatePerSecond: effectiveRate,
+		EffectivePublicRequestBurst:         effectiveBurst,
+		LastSeenAt:                          lastSeenAt,
+		ActiveConnectionCount:               len(connections),
+		ActiveConsumerSessionCount:          activeConsumerSessionCount(connections),
+		CreatedAt:                           server.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                           server.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
@@ -50,6 +62,8 @@ func BuildTunneledMcpServerListView(servers []repo.TunneledMcpServer, connection
 func BuildTunneledMcpServerConnectionsView(connections []TunneledMcpConnectionCache) *types.TunneledMcpServerConnections {
 	return &types.TunneledMcpServerConnections{
 		Connections:                buildTunneledMcpConnectionViews(connections),
+		CollectionState:            new("available"),
+		ObservedAt:                 new(time.Now().UTC().Format(time.RFC3339)),
 		ActiveConnectionCount:      len(connections),
 		ActiveConsumerSessionCount: activeConsumerSessionCount(connections),
 	}
@@ -70,6 +84,8 @@ func buildTunneledMcpConnectionViews(connections []TunneledMcpConnectionCache) [
 	for _, connection := range connections {
 		result = append(result, &types.TunneledMcpConnection{
 			GatewaySessionID:       connection.GatewaySessionID,
+			TargetDisplay:          conv.PtrEmpty(wire.TargetDisplay(connection.TargetDisplay)),
+			Diagnostics:            buildTunnelDiagnostics(connection.Diagnostics, time.Now()),
 			ServiceVersion:         connection.ServiceVersion,
 			AgentVersion:           conv.PtrEmpty(connection.AgentVersion),
 			ConnectedAt:            connection.ConnectedAt.Format(time.RFC3339),
@@ -139,4 +155,58 @@ func connectionMetadata(metadata map[string]string) map[string]string {
 		result[key] = value
 	}
 	return result
+}
+
+// optionalInt maps a nullable integer column to the view's optional int.
+func optionalInt(v pgtype.Int4) *int {
+	if !v.Valid {
+		return nil
+	}
+	n := int(v.Int32)
+	return &n
+}
+
+func buildTunnelDiagnostics(status *route.Diagnostics, now time.Time) *types.TunnelDiagnostics {
+	if status == nil {
+		return nil
+	}
+	view := &types.TunnelDiagnostics{HTTPProgress: nil, State: status.State, ReceivedAt: nil, SampleAgeMs: nil, TargetState: nil, ConsecutiveFailures: nil, DNS: nil, TCP: nil, TLS: nil, RequestsTotal: nil, TransportErrorsTotal: nil, LastHTTPStatus: nil, LastHTTPResponseAgeMs: nil, LastTransportError: nil, LastTransportErrorAgeMs: nil}
+	if status.Report == nil {
+		return view
+	}
+	r := status.Report
+	elapsed := max(now.Sub(status.ReceivedAt).Milliseconds(), 0)
+	age := func(value int64) *int64 {
+		if value < 0 {
+			return new(int64(-1))
+		}
+		return new(value + elapsed)
+	}
+	view.ReceivedAt = new(status.ReceivedAt.Format(time.RFC3339))
+	view.SampleAgeMs = age(r.SampleAgeMillis)
+	if status.State == "available" && (elapsed > wire.DiagnosticsFreshness.Milliseconds() || (r.SampleAgeMillis >= 0 && *view.SampleAgeMs > wire.DiagnosticsFreshness.Milliseconds())) {
+		view.State = "stale"
+	}
+	view.TargetState = new(r.TargetState)
+	if r.TargetState == "unreachable" && r.ConsecutiveFailures < 2 {
+		view.TargetState = new("unknown")
+	}
+	view.ConsecutiveFailures = new(int64(r.ConsecutiveFailures))
+	step := func(s wire.DiagnosticStep) *types.TunnelDiagnosticStep {
+		return &types.TunnelDiagnosticStep{State: s.State, DurationMs: s.DurationMillis, Failure: s.Failure}
+	}
+	view.DNS, view.TCP, view.TLS = step(r.DNS), step(r.TCP), step(r.TLS)
+	if r.HTTPProgress != nil {
+		view.HTTPProgress = &types.TunnelHTTPProgress{
+			WaitingHeaders: int64(min(r.HTTPProgress.WaitingHeaders, math.MaxInt64)),
+			OpenResponses:  int64(min(r.HTTPProgress.OpenResponses, math.MaxInt64)),
+		}
+	}
+	view.RequestsTotal = new(int64(min(r.RequestsTotal, math.MaxInt64)))
+	view.TransportErrorsTotal = new(int64(min(r.TransportErrorsTotal, math.MaxInt64)))
+	view.LastHTTPStatus = new(r.LastHTTPStatus)
+	view.LastHTTPResponseAgeMs = age(r.LastHTTPResponseAgeMillis)
+	view.LastTransportError = new(r.LastTransportError)
+	view.LastTransportErrorAgeMs = age(r.LastTransportErrorAgeMillis)
+	return view
 }

@@ -233,14 +233,7 @@ func TestSkillSuggestionBaseLockSerializesVersionCreation(t *testing.T) {
 		finished <- addVersionResult{result: result, err: addErr}
 	}()
 
-	require.Never(t, func() bool {
-		select {
-		case <-finished:
-			return true
-		default:
-			return false
-		}
-	}, 100*time.Millisecond, 10*time.Millisecond)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(lockTx), 1)
 	require.NoError(t, lockTx.Commit(ctx))
 
 	var completed addVersionResult

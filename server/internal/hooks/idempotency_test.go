@@ -128,6 +128,22 @@ func TestClaimBlockedPromptTelemetryDedupesSessionPrompt(t *testing.T) {
 	}), "missing session fails open")
 }
 
+// A late prompt block for an event already answered as a pass-through writes
+// no telemetry, so it leaves the dedupe key for a later block of the prompt.
+func TestClaimBlockedPromptTelemetry_SupersededVerdictKeepsKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	payload := &gen.ClaudePayload{
+		SessionID: new(uuid.NewString()),
+		Prompt:    new("please do the blocked thing"),
+	}
+
+	supersededCtx, superseded := withVerdictSupersededFlag(ctx)
+	superseded.Store(true)
+	require.False(t, ti.service.claimBlockedPromptTelemetry(supersededCtx, payload), "a superseded verdict writes no telemetry")
+	require.True(t, ti.service.claimBlockedPromptTelemetry(ctx, payload), "a later block of the same prompt still writes telemetry")
+}
+
 // TestHookDuplicateContextFlag verifies the flag that gates the block-path
 // write side-effects (block-reason telemetry, shadow-MCP findings) on a
 // redelivery: untagged contexts are live, tagged ones are duplicates.

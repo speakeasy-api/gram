@@ -2,30 +2,53 @@ import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
   // Vite entry (index.html → src/main.tsx) is auto-detected.
-  // theme-init.ts is emitted programmatically by themeInitPlugin, and the
-  // consent island entry lives in vite.consent.config.ts, a non-default
-  // config filename — Knip cannot infer either.
-  entry: ["src/theme-init.ts", "src/consent-tools/main.tsx"],
+  // theme-init.ts is emitted programmatically by themeInitPlugin, and the two
+  // consent entries live in vite.consent.config.ts and
+  // vite.consent-page.config.ts, non-default config filenames — Knip cannot
+  // infer any of them. The consent page's entry is the stylesheet itself: that
+  // build emits CSS for the server-rendered page and has no JS.
+  entry: [
+    // Invoked by the Go registry HTTP integration test, outside Knip's import graph.
+    "scripts/registry-discovery-wire.ts",
+    // Spawned as a child process by src/test/chatTestServerProcess.ts.
+    "src/test/chatTestServerMain.ts",
+    "src/theme-init.ts",
+    "src/consent-tools/main.tsx",
+    "src/consent-page/consent-page.css",
+  ],
   // Vitest, ESLint, Tailwind, and TypeScript plugins are auto-enabled.
+  ignoreDependencies: [
+    // Launched by .mise-tasks/start/agentation.sh, outside the import graph.
+    "agentation-mcp",
+    // oxlint spawns its tsrs-lint binary for --type-aware; nothing imports it.
+    "tsrs",
+  ],
   ignoreBinaries: [
     // The package manager itself, used to chain scripts and to reach the
     // workspace-root oxfmt binary; not on the dep tree.
     "aube",
     // Invoked from the prebuild script to build cel.wasm; not on the dep tree.
     "mise",
+    // System interpreter the Cursor install-command test spawns; not on the dep tree.
+    "python3",
   ],
   ignore: [
     // Global ambient declarations (FIXME<M> escape-hatch + JSX namespace
     // re-export). No import sites by design.
     "src/lib.d.ts",
     "src/sdk/**/*",
-    // Inlined Gram Elements library (formerly @gram-ai/elements). Its public
+    // Inlined Speakeasy Elements library (formerly @gram-ai/elements). Its public
     // surface is wider than what the dashboard consumes today.
     "src/elements/**/*",
     // Internalised design system. Same reasoning: a component library exposes
     // its full API (Badge.Text, DropdownMenuSub, …) whether or not the app
     // happens to use every part of it today.
     "src/components/ui/**/*",
+    // Dev-only brand-row corner. Most of it is imported normally; what is not
+    // is the seam it holds open for a developer's gitignored slot.local.tsx,
+    // absent in every stock checkout — so the exports meant for that file read
+    // as dead code here.
+    "src/dev/**/*",
     // Page-template layer + its composite widgets: a shared page-shape library
     // (all templates + widgets) whose full API is exposed whether or not every
     // page has migrated onto it yet — same rationale as components/ui above.

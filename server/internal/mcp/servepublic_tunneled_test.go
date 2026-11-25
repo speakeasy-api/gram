@@ -3,7 +3,10 @@ package mcp_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -16,22 +19,53 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 // fakeTunnelGateway emulates the tunnel gateway's forward listener fronting a
 // customer MCP backend: it enforces exact-target semantics, reports the agent
 // session it served, and captures forwarded headers for assertions.
+// requestID echoes the JSON-RPC id of a request body, as a real backend does; 1 when it carries none.
+func requestID(body string) string {
+	var req struct {
+		ID json.RawMessage `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(body), &req); err != nil || len(req.ID) == 0 {
+		return "1"
+	}
+	return string(req.ID)
+}
+
+// requestMethod reads the JSON-RPC method so a tool name or argument that
+// mentions another method cannot select the wrong fake response.
+func requestMethod(body string) string {
+	var req struct {
+		Method string `json:"method"`
+	}
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		return ""
+	}
+	return req.Method
+}
+
 type fakeTunnelGateway struct {
+	toolNames      []string
 	t              *testing.T
 	agentSessionID string
 	// backendSessionID is the Mcp-Session-Id the fake customer backend mints
@@ -44,8 +78,10 @@ type fakeTunnelGateway struct {
 	// dead simulates the agent session being gone: every forward answers
 	// no-live-session.
 	dead bool
+	// busy simulates a live gateway that cannot accept another backend request.
+	busy bool
 	// challenge, when set, is emitted as WWW-Authenticate on every backend
-	// response to prove Gram strips it for anonymous callers.
+	// response to prove Speakeasy strips it for anonymous callers.
 	challenge string
 
 	mu       sync.Mutex
@@ -89,6 +125,11 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	g.forwards = append(g.forwards, r.Header.Clone())
 	g.forwardBodies = append(g.forwardBodies, buf.String())
 	g.mu.Unlock()
+	if g.busy {
+		w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorTunnelBusy)
+		http.Error(w, "MCP server is temporarily unavailable", http.StatusBadGateway)
+		return
+	}
 
 	exact := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelAgentSession))
 	if g.dead || (exact != "" && exact != g.agentSessionID) {
@@ -114,25 +155,43 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	case http.MethodPost:
-		if strings.Contains(buf.String(), `"initialize"`) {
+		method := requestMethod(buf.String())
+		if method == "server/discover" {
+			http.Error(w, "method not found", http.StatusNotFound)
+			return
+		}
+		if method == "notifications/initialized" {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		if method == "initialize" {
 			if g.backendSessionID != "" {
 				w.Header().Set("Mcp-Session-Id", g.backendSessionID)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{},"serverInfo":{"name":"fake-tunnel-backend","version":"1.0.0"}}}`)
+			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":`+requestID(buf.String())+`,"result":{"protocolVersion":"2025-03-26","capabilities":{},"serverInfo":{"name":"fake-tunnel-backend","version":"1.0.0"}}}`)
 			return
 		}
 		if g.backendSessionID != "" && r.Header.Get("Mcp-Session-Id") != g.backendSessionID {
 			http.Error(w, "unknown session", http.StatusNotFound)
 			return
 		}
-		if strings.Contains(buf.String(), `"tools/call"`) {
+		if g.toolNames != nil && method == "tools/list" {
+			tools := make([]map[string]any, 0, len(g.toolNames))
+			for _, name := range g.toolNames {
+				tools = append(tools, map[string]any{"name": name, "inputSchema": map[string]any{"type": "object"}})
+			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":"gram-gateway-tools/call","result":{"content":[{"type":"text","text":"pong through the tunnel"}],"isError":false}}`)
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(requestID(buf.String())), "result": map[string]any{"tools": tools}})
+			return
+		}
+		if method == "tools/call" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":`+requestID(buf.String())+`,"result":{"content":[{"type":"text","text":"pong through the tunnel"}],"isError":false}}`)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}`)
+		_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":`+requestID(buf.String())+`,"result":{"tools":[]}}`)
 		return
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -140,9 +199,12 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type publicTunnelFixture struct {
-	endpointSlug string
-	tunnelID     uuid.UUID
-	gateway      *fakeTunnelGateway
+	issuerID      uuid.UUID
+	server        mcpserversrepo.McpServer
+	endpointSlug  string
+	tunnelID      uuid.UUID
+	gateway       *fakeTunnelGateway
+	gatewayServer *httptest.Server
 }
 
 func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance, gateway *fakeTunnelGateway, allowPublic bool) publicTunnelFixture {
@@ -155,17 +217,18 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	tunneledID, err := uuid.NewV7()
 	require.NoError(t, err)
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        tunneledID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      "public-tunnel-" + uuid.NewString()[:8],
-		KeyHash:   uuid.NewString(),
-		KeyPrefix: "gram_tunnel_test",
+		ID:                 tunneledID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "public-tunnel-" + uuid.NewString()[:8],
+		KeyHash:            uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
 	if allowPublic {
 		_, err = tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
-			Name:        tunneledServer.Name,
+			Name:        conv.ToPGText(tunneledServer.Name),
 			AllowPublic: pgtype.Bool{Bool: true, Valid: true},
 			ID:          tunneledServer.ID,
 			ProjectID:   *authCtx.ProjectID,
@@ -204,15 +267,19 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunneledServer.ID.String(), gatewayServer.URL, time.Hour))
 
 	return publicTunnelFixture{
-		endpointSlug: endpointSlug,
-		tunnelID:     tunneledServer.ID,
-		gateway:      gateway,
+		issuerID:      issuerID,
+		server:        mcpServer,
+		endpointSlug:  endpointSlug,
+		tunnelID:      tunneledServer.ID,
+		gateway:       gateway,
+		gatewayServer: gatewayServer,
 	}
 }
 
-func serveTunneledPublicRequest(t *testing.T, ti *testInstance, slug, method string, body []byte, sessionID string) (*httptest.ResponseRecorder, error) {
-	t.Helper()
-
+// newTunneledPublicRequest builds a public MCP request for slug the way the
+// router would deliver it, so both the direct ServePublic call and the mounted
+// error-handling wrapper can serve it.
+func newTunneledPublicRequest(slug, method string, body []byte, sessionID string) *http.Request {
 	var reader *bytes.Reader
 	if body == nil {
 		reader = bytes.NewReader(nil)
@@ -228,8 +295,13 @@ func serveTunneledPublicRequest(t *testing.T, ti *testInstance, slug, method str
 
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", slug)
-	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+	return req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+}
 
+func serveTunneledPublicRequest(t *testing.T, ti *testInstance, slug, method string, body []byte, sessionID string) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+
+	req := newTunneledPublicRequest(slug, method, body, sessionID)
 	w := httptest.NewRecorder()
 	if err := ti.service.ServePublic(w, req); err != nil {
 		return w, fmt.Errorf("serve public: %w", err)
@@ -244,7 +316,7 @@ func initializeTunneledPublicSession(t *testing.T, ti *testInstance, fixture pub
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "initialize response: %s", w.Body.String())
 	sid := w.Header().Get("Mcp-Session-Id")
-	require.True(t, strings.HasPrefix(sid, "gsid_"), "expected Gram-owned session id, got %q", sid)
+	require.True(t, strings.HasPrefix(sid, "gsid_"), "expected Speakeasy-owned session id, got %q", sid)
 	return sid
 }
 
@@ -252,22 +324,81 @@ func TestServePublic_Tunneled_AnonymousInitializeMintsGramSession(t *testing.T) 
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	sid := initializeTunneledPublicSession(t, ti, fixture)
 	require.NotEqual(t, "backend-secret-session", sid)
 
 	forwarded := gateway.lastForward()
-	require.Empty(t, forwarded.Get("Authorization"), "Gram credentials must never reach the tunnel")
+	require.Empty(t, forwarded.Get("Authorization"), "Speakeasy credentials must never reach the tunnel")
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelAgentSession), "initialize must not pin an exact target")
+}
+
+func TestServePublic_Tunneled_AnonymousToolCallRecordsTelemetry(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		stateful bool
+	}{
+		{name: "stateless", stateful: false},
+		{name: "stateful", stateful: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1"}
+			if tc.stateful {
+				gateway.backendSessionID = "backend-session"
+			}
+			fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+			sessionID := ""
+			if tc.stateful {
+				sessionID = initializeTunneledPublicSession(t, ti, fixture)
+			}
+			w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost,
+				[]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping","arguments":{}}}`), sessionID)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Contains(t, w.Body.String(), "pong through the tunnel")
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			requireTelemetryRowCount(t, "gram_project_id = ? AND toString(attributes.gram.tunneled_mcp_server.id) = ? AND tool_name = ? AND user_id = ''", 1, authCtx.ProjectID.String(), fixture.tunnelID.String(), "ping")
+		})
+	}
+}
+
+func TestServePublic_Tunneled_BusyGatewayReturnsGenericJSONRPCError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: "", busy: true}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Empty(t, w.Header().Get(wire.HeaderTunnelError))
+	require.JSONEq(t, `{
+		"jsonrpc": "2.0",
+		"id": 1,
+		"error": {
+			"code": -32000,
+			"message": "The MCP server is temporarily unavailable. Please retry.",
+			"data": {
+				"code": "service_unavailable",
+				"retryable": true
+			}
+		}
+	}`, w.Body.String())
 }
 
 func TestServePublic_Tunneled_SessionRequestPinsExactTarget(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	sid := initializeTunneledPublicSession(t, ti, fixture)
@@ -282,13 +413,50 @@ func TestServePublic_Tunneled_SessionRequestPinsExactTarget(t *testing.T) {
 	require.NotEmpty(t, forwarded.Get(wire.HeaderTunnelConsumerSession))
 }
 
-// Session ids that are not Gram-minted, or valid-shaped but unknown, must
+// Node-based clients send a generic User-Agent, so activity metrics attribute
+// the session to the client its initialize reported, on every later request.
+func TestServePublic_Tunneled_MetricsAttributeSessionToReportedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	collector := metrics.New()
+	ti.remoteProxyManager.TunnelMetrics = collector
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-session"}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	serve := func(body []byte, sessionID string) *httptest.ResponseRecorder {
+		req := newTunneledPublicRequest(fixture.endpointSlug, http.MethodPost, body, sessionID)
+		req.Header.Set("User-Agent", "node")
+		w := httptest.NewRecorder()
+		require.NoError(t, ti.service.ServePublic(w, req))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		return w
+	}
+	sid := serve(makeInitializeBodyWithClientInfo(t, "cursor-vscode", "1.0"), "").Header().Get("Mcp-Session-Id")
+	require.NotEmpty(t, sid)
+	serve([]byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}`), sid)
+
+	// Flush publishes from concurrent workers, so the callback must lock.
+	var mu sync.Mutex
+	families := map[string]string{}
+	collector.Flush(t.Context(), func(_ context.Context, s metrics.Snapshot) error {
+		if s.Kind == "requests" {
+			mu.Lock()
+			families[s.Method] = s.ClientFamily
+			mu.Unlock()
+		}
+		return nil
+	})
+	require.Equal(t, map[string]string{"initialize": "cursor", "tools/call": "cursor"}, families)
+}
+
+// Session ids that are not Speakeasy-minted, or valid-shaped but unknown, must
 // never be forwarded into the tunnel.
 func TestServePublic_Tunneled_UnknownOrMalformedSessionIs404(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	for _, sid := range []string{
@@ -305,24 +473,31 @@ func TestServePublic_Tunneled_UnknownOrMalformedSessionIs404(t *testing.T) {
 }
 
 // An offline tunnel (no live route) means the user's tunnel client is not
-// running — that is not a platform fault, so it must surface as 404 rather
-// than polluting the platform 5xx error budget with 502s. The public message
-// must stay generic: tunnel internals are not exposed to callers.
-func TestServePublic_Tunneled_OfflineTunnelIs404(t *testing.T) {
+// running. It clears on its own, so it surfaces as a retryable 503 rather than
+// a 404 clients read as a lost session. The public message must stay generic:
+// tunnel internals are not exposed to callers.
+func TestServePublic_Tunneled_OfflineTunnelIsRetryable(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	require.NoError(t, ti.tunnelRoutes.Delete(ctx, fixture.tunnelID.String()))
 
-	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
+	w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
-	require.Equal(t, "not found", oopsErr.Error(), "public message must not expose tunnel internals")
+	require.Equal(t, oops.CodeUnavailable, oopsErr.Code)
+	require.NotEmpty(t, w.Header().Get("Retry-After"))
+	require.Equal(t, "1", w.Header().Get(constants.HeaderProxiedResponse), "the customer's tunnel being down doesn't alert on-call")
+	require.NotContains(t, oopsErr.Error(), "tunnel", "public message must not expose tunnel internals")
+	require.Contains(t, oopsErr.Error(), "Retry shortly")
+
+	answered := httptest.NewRecorder()
+	oops.MCPErrHandle(testenv.NewLogger(t), ti.service.ServePublic).ServeHTTP(answered, newTunneledPublicRequest(fixture.endpointSlug, http.MethodPost, makeInitializeBody(), ""))
+	require.Equal(t, http.StatusServiceUnavailable, answered.Code, answered.Body.String())
 	require.Zero(t, gateway.forwardCount(), "an offline tunnel has nothing to forward to")
 }
 
@@ -332,7 +507,7 @@ func TestServePublic_Tunneled_DeadAgentSessionTranslatesTo404(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	sid := initializeTunneledPublicSession(t, ti, fixture)
@@ -355,11 +530,43 @@ func TestServePublic_Tunneled_DeadAgentSessionTranslatesTo404(t *testing.T) {
 	require.Equal(t, before, gateway.forwardCount(), "dropped session must not be re-forwarded")
 }
 
+func TestServePublic_Tunneled_DeadGatewayDialDropsSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	sid := initializeTunneledPublicSession(t, ti, fixture)
+	addr := fixture.gatewayServer.Listener.Addr().String()
+	fixture.gatewayServer.Close()
+
+	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), sid)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+
+	listener, err := net.Listen("tcp", addr)
+	require.NoError(t, err)
+	replacementGateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
+	replacementServer := httptest.NewUnstartedServer(replacementGateway)
+	replacementServer.Listener = listener
+	replacementServer.Start()
+	t.Cleanup(replacementServer.Close)
+
+	_, err = serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), sid)
+	require.Error(t, err)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Zero(t, replacementGateway.forwardCount(), "dropped session must not reach a replacement gateway")
+}
+
 func TestServePublic_Tunneled_DeleteTerminatesSession(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	sid := initializeTunneledPublicSession(t, ti, fixture)
@@ -377,12 +584,12 @@ func TestServePublic_Tunneled_DeleteTerminatesSession(t *testing.T) {
 }
 
 // A backend that returns no Mcp-Session-Id is sessionless per the MCP spec;
-// Gram must not synthesize a session header the backend did not produce.
+// Speakeasy must not synthesize a session header the backend did not produce.
 func TestServePublic_Tunneled_SessionlessBackendGetsNoSyntheticSession(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "", legacy: false, dead: false, challenge: ""}
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "", legacy: false, dead: false, busy: false, challenge: ""}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
@@ -402,14 +609,14 @@ func TestServePublic_Tunneled_LegacyGatewayFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: true, dead: false, challenge: ""}
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: true, dead: false, busy: false, challenge: ""}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	// A gateway that cannot pin the session is a Gram-side availability
+	// A gateway that cannot pin the session is a Speakeasy-side availability
 	// failure (503), not an upstream fault.
 	require.Equal(t, oops.CodeUnavailable, oopsErr.Code)
 }
@@ -421,15 +628,15 @@ func TestServePublic_Tunneled_StripsBackendChallenge(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: `Bearer resource_metadata="http://internal.example/.well-known"`}
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: `Bearer resource_metadata="http://internal.example/.well-known"`}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
-	require.Empty(t, w.Header().Get("Set-Cookie"), "backend cookies must not reach the Gram origin")
-	require.Empty(t, w.Header().Get("Clear-Site-Data"), "backend must not wipe state on the Gram origin")
+	require.Empty(t, w.Header().Get("Set-Cookie"), "backend cookies must not reach the Speakeasy origin")
+	require.Empty(t, w.Header().Get("Clear-Site-Data"), "backend must not wipe state on the Speakeasy origin")
 	require.Empty(t, w.Header().Get(wire.HeaderTunnelAgentSession), "internal tunnel headers must not leak")
 }
 
@@ -443,7 +650,7 @@ func TestServePublic_Tunneled_LiveSessionCapRejectsInitialize(t *testing.T) {
 		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		MaxRequestLifetime: 0,
 	})
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	initializeTunneledPublicSession(t, ti, fixture)
@@ -466,7 +673,7 @@ func TestServePublic_Tunneled_OAuthSurfaceIs404(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	logger := ti.logger
@@ -508,15 +715,16 @@ func TestServePublic_Tunneled_PrivateVisibilityUnaffected(t *testing.T) {
 	tunneledID, err := uuid.NewV7()
 	require.NoError(t, err)
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        tunneledID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      "private-tunnel-" + uuid.NewString()[:8],
-		KeyHash:   uuid.NewString(),
-		KeyPrefix: "gram_tunnel_test",
+		ID:                 tunneledID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "private-tunnel-" + uuid.NewString()[:8],
+		KeyHash:            uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 	_, err = tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
-		Name:        tunneledServer.Name,
+		Name:        conv.ToPGText(tunneledServer.Name),
 		AllowPublic: pgtype.Bool{Bool: true, Valid: true},
 		ID:          tunneledServer.ID,
 		ProjectID:   *authCtx.ProjectID,
@@ -557,4 +765,172 @@ func TestServePublic_Tunneled_PrivateVisibilityUnaffected(t *testing.T) {
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	}
+}
+
+// The all-request limiter runs before initialize admission, so an exhausted
+// per-tunnel bucket is a real HTTP 429 with Retry-After that never reaches the
+// backend, and it is counted on mcp.tunnel_public.rejected by endpoint and
+// reason.
+func TestServePublic_Tunneled_RequestRateLimitRejects(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 1, Interval: time.Hour, Burst: 1},
+		MaxRequestLifetime: 0,
+	}, nil)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	// The single token admits the first request.
+	initializeTunneledPublicSession(t, ti, fixture)
+	forwardsAfterFirst := gateway.forwardCount()
+
+	// Through the mounted error handler the rejection is a real HTTP 429 with
+	// Retry-After, not a JSON-RPC 200 envelope.
+	w := httptest.NewRecorder()
+	oops.ErrHandle(ti.logger, ti.service.ServePublic).ServeHTTP(w, newTunneledPublicRequest(fixture.endpointSlug, http.MethodPost, makeInitializeBody(), ""))
+	require.Equal(t, http.StatusTooManyRequests, w.Code)
+	require.NotEmpty(t, w.Header().Get("Retry-After"))
+	require.Equal(t, forwardsAfterFirst, gateway.forwardCount(), "rate limit rejection must not reach the backend")
+
+	// The direct call surfaces the typed error the handler mapped.
+	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeRateLimitExceeded, oopsErr.Code)
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(ctx, &rm))
+	var rejected int64
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != "mcp.tunnel_public.rejected" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "mcp.tunnel_public.rejected must be an int64 sum")
+			for _, dp := range sum.DataPoints {
+				reason, ok := dp.Attributes.Value(attr.TunnelPublicRejectionReasonKey)
+				require.True(t, ok)
+				require.Equal(t, "request_rate", reason.AsString())
+				slug, ok := dp.Attributes.Value(attr.ToolsetMCPSlugKey)
+				require.True(t, ok)
+				require.Equal(t, fixture.endpointSlug, slug.AsString())
+				rejected += dp.Value
+			}
+		}
+	}
+	require.Equal(t, int64(2), rejected, "both rejected requests are counted")
+}
+
+// A tunnel's stored public limits replace the deployment-wide pair. With the
+// deployment default exhausted after a single request, a row that stores
+// 1000/s keeps serving; clearing the row (0) returns the tunnel to the
+// default limiter, which starts a fresh bucket on the plain tunnel key.
+func TestServePublic_Tunneled_StoredRateLimitsOverrideDefaults(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfig(t, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 1, Interval: time.Hour, Burst: 1},
+		MaxRequestLifetime: 0,
+	})
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	unset := pgtype.Int4{Int32: 0, Valid: false}
+	storeLimits := func(requestRate pgtype.Int4) {
+		_, err := tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
+			ID:                         fixture.tunnelID,
+			ProjectID:                  *authCtx.ProjectID,
+			Name:                       pgtype.Text{String: "", Valid: false},
+			AllowPublic:                pgtype.Bool{Bool: false, Valid: false},
+			ResourceIdentifier:         pgtype.Text{String: "", Valid: false},
+			PublicRequestRatePerSecond: requestRate,
+			PublicRequestBurst:         unset,
+		})
+		require.NoError(t, err)
+	}
+	storeLimits(pgtype.Int4{Int32: 1000, Valid: true})
+
+	for range 3 {
+		w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+	}
+
+	storeLimits(pgtype.Int4{Int32: 0, Valid: true})
+
+	w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
+	require.NoError(t, err, "the default bucket is fresh: its single token admits one request")
+	require.Equal(t, http.StatusOK, w.Code)
+
+	_, err = serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeRateLimitExceeded, oopsErr.Code)
+}
+
+// The authenticated path answers a down tunnel the same way, and a session
+// started before the outage keeps working once the tunnel is back.
+func TestServePublic_Tunneled_AuthenticatedOfflineTunnelKeepsTheSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, false)
+	_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		ID: fixture.server.ID, ProjectID: fixture.server.ProjectID,
+		Name: fixture.server.Name, Slug: fixture.server.Slug,
+		TunneledMcpServerID: fixture.server.TunneledMcpServerID, Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	subject := createTestUser(t, ctx, ti, "offline-tunnel-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, fixture.endpointSlug, fixture.issuerID, subject)
+
+	post := func(body []byte, sessionID string) *httptest.ResponseRecorder {
+		req := newTunneledPublicRequest(fixture.endpointSlug, http.MethodPost, body, sessionID)
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		w := httptest.NewRecorder()
+		oops.MCPErrHandle(testenv.NewLogger(t), ti.service.ServePublic).ServeHTTP(w, req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, chi.RouteContext(req.Context()))))
+		return w
+	}
+	initialized := post(makeInitializeBody(), "")
+	require.Equal(t, http.StatusOK, initialized.Code, initialized.Body.String())
+	sessionID := initialized.Header().Get("Mcp-Session-Id")
+	require.NotEmpty(t, sessionID)
+
+	require.NoError(t, ti.tunnelRoutes.Delete(ctx, fixture.tunnelID.String()))
+	down := post(makeToolsListBody(), sessionID)
+	require.Equal(t, http.StatusServiceUnavailable, down.Code, down.Body.String())
+	require.NotEmpty(t, down.Header().Get("Retry-After"))
+	require.Equal(t, "1", down.Header().Get(constants.HeaderProxiedResponse))
+
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, fixture.tunnelID.String(), fixture.gatewayServer.URL, time.Hour))
+	up := post(makeToolsListBody(), sessionID)
+	require.Equal(t, http.StatusOK, up.Code, up.Body.String())
+}
+
+func TestTagTunnelOutage(t *testing.T) {
+	t.Parallel()
+
+	down := httptest.NewRecorder()
+	mcp.TagTunnelOutage(down, fmt.Errorf("build proxy: %w", mcp.ErrTunnelNoRoute))
+	require.NotEmpty(t, down.Header().Get("Retry-After"))
+	require.Equal(t, "1", down.Header().Get(constants.HeaderProxiedResponse))
+
+	other := httptest.NewRecorder()
+	mcp.TagTunnelOutage(other, errors.New("tunnel route is invalid"))
+	require.Empty(t, other.Header().Get("Retry-After"))
+	require.Empty(t, other.Header().Get(constants.HeaderProxiedResponse), "a fault on our side stays counted")
 }

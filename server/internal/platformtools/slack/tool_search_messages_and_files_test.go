@@ -24,7 +24,6 @@ func TestSearchMessagesAndFilesTool_RequiresUserToken(t *testing.T) {
 	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.CIEnvFrom(map[string]string{slackBotTokenEnvVar: "xoxb-bot-only"}),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"roadmap"}`), io.Discard)
@@ -61,7 +60,6 @@ func TestSearchMessagesAndFilesTool_CallsSearchAllWithUserToken(t *testing.T) {
 	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.CIEnvFrom(map[string]string{slackUserTokenEnvVar: "xoxp-user-token"}),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"launch plan","limit":25,"sort":"timestamp"}`), io.Discard)

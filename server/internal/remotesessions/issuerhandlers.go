@@ -1,20 +1,25 @@
 package remotesessions
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -25,8 +30,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -38,22 +45,29 @@ import (
 // the request handler.
 const discoveryHTTPTimeout = 10 * time.Second
 
-// rfc8414Document is the subset of the RFC 8414 / OpenID Connect Discovery
-// metadata document Gram cares about for hydrating a draft.
+// maxDiscoveryBodyBytes caps discovery documents at 1 MiB: ample room for
+// provider metadata while bounding memory consumed by an untrusted response.
+const maxDiscoveryBodyBytes = 1 << 20
+
+// rfc8414Document is a discovery document as Speakeasy reads it: the RFC 8414
+// members, the OpenID Connect Discovery members it enriches sessions with,
+// and the served (or merged) document verbatim, from which every typed field
+// is derived.
 type rfc8414Document struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	RevocationEndpoint                string   `json:"revocation_endpoint"`
-	RegistrationEndpoint              string   `json:"registration_endpoint"`
-	JwksURI                           string   `json:"jwks_uri"`
-	ServiceDocumentation              string   `json:"service_documentation"`
-	OpPolicyURI                       string   `json:"op_policy_uri"`
-	OpTosURI                          string   `json:"op_tos_uri"`
-	ScopesSupported                   []string `json:"scopes_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	Issuer                              string   `json:"issuer"`
+	AuthorizationEndpoint               string   `json:"authorization_endpoint"`
+	TokenEndpoint                       string   `json:"token_endpoint"`
+	RevocationEndpoint                  string   `json:"revocation_endpoint"`
+	RegistrationEndpoint                string   `json:"registration_endpoint"`
+	JwksURI                             string   `json:"jwks_uri"`
+	ServiceDocumentation                string   `json:"service_documentation"`
+	OpPolicyURI                         string   `json:"op_policy_uri"`
+	OpTosURI                            string   `json:"op_tos_uri"`
+	ScopesSupported                     []string `json:"scopes_supported"`
+	GrantTypesSupported                 []string `json:"grant_types_supported"`
+	AuthorizationGrantProfilesSupported []string `json:"authorization_grant_profiles_supported"`
+	ResponseTypesSupported              []string `json:"response_types_supported"`
+	TokenEndpointAuthMethodsSupported   []string `json:"token_endpoint_auth_methods_supported"`
 
 	// CodeChallengeMethodsSupported stays nil when the document omits the
 	// field, and only here: persistence collapses it to an empty array
@@ -68,6 +82,134 @@ type rfc8414Document struct {
 	// the issuer accepts a Client ID Metadata Document URL as client_id. Used to
 	// pre-flight outbound CIMD opt-in.
 	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
+
+	// UserinfoEndpoint is the OpenID Connect Discovery userinfo endpoint.
+	UserinfoEndpoint string `json:"userinfo_endpoint"`
+
+	// IntrospectionEndpoint is the RFC 7662 token introspection endpoint.
+	IntrospectionEndpoint string `json:"introspection_endpoint"`
+
+	// IntrospectionEndpointAuthMethodsSupported lists the client
+	// authentication methods the introspection endpoint accepts. Nil when
+	// the document omits the field.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+
+	// IDTokenSigningAlgValuesSupported lists the JWS algorithms the issuer
+	// signs ID tokens with. Nil when the document omits the field.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+
+	// ClaimsSupported lists the claims the issuer can return in ID tokens and
+	// from the userinfo endpoint. Nil when the document omits the field.
+	ClaimsSupported []string `json:"claims_supported"`
+
+	// BackchannelLogoutSupported reports whether the issuer supports OpenID
+	// Connect Back-Channel Logout.
+	BackchannelLogoutSupported bool `json:"backchannel_logout_supported"`
+
+	// AuthorizationResponseIssParameterSupported is RFC 9207 support: the
+	// issuer includes iss in authorization responses.
+	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
+
+	// raw is the document as the issuer served it, or, when discovery merged
+	// several, the union of their members re-serialized. The typed fields
+	// above are always derived from it, and it is persisted so fields they
+	// omit are not lost.
+	raw json.RawMessage
+
+	// dropped names the members sanitizeIssuerDocument blanked because Speakeasy
+	// would not act on their values, so warnings can say what was not
+	// captured. raw still carries the members as served.
+	dropped []string
+}
+
+// discoveryResult is what one discovery run produced: the merged document,
+// the advisory warnings about it, and which candidate the run could not read.
+type discoveryResult struct {
+	doc      rfc8414Document
+	warnings []string
+	// unreadable identifies a transiently failed well-known candidate for
+	// incomplete-discovery diagnostics; "" when every candidate answered
+	// definitively. Refresh persists only fresh discovery evidence.
+	unreadable string
+	// unreadableErr retains the upstream status and cause for refresh failures.
+	unreadableErr *discoveryError
+	// originFallback reports that an origin-root candidate supplied any adopted member.
+	originFallback bool
+}
+
+// metadataFamily is the discovery specification a well-known URL follows.
+type metadataFamily int
+
+const (
+	familyOAuthAuthorizationServer metadataFamily = iota
+	familyOpenIDConfiguration
+)
+
+// other returns the family that is not f. Discovery probes exactly two, so
+// after a primary is found the other one is the only one left to merge.
+func (f metadataFamily) other() metadataFamily {
+	switch f {
+	case familyOAuthAuthorizationServer:
+		return familyOpenIDConfiguration
+	case familyOpenIDConfiguration:
+		return familyOAuthAuthorizationServer
+	default:
+		return f
+	}
+}
+
+// issuerProbeCandidate is one well-known URL to probe and the family it
+// follows, so the discovery loop never has to infer the family from the URL.
+type issuerProbeCandidate struct {
+	url    string
+	family metadataFamily
+	// fallback marks an origin-root location probed only because the
+	// path-form issuer's own locations had no document. Such a document may
+	// describe the whole host rather than this issuer, so it is adopted only
+	// when every path-form candidate answered definitively.
+	fallback bool
+}
+
+// resolveIssuerTunnelBinding validates a non-empty issuer tunnel binding. The
+// binding is platform-admin-only and both resources must belong to the same
+// project. An absent or empty value resolves to no binding so create callers
+// can use it directly; update callers enforce authorization before treating an
+// empty value as the clear sentinel.
+func resolveIssuerTunnelBinding(ctx context.Context, logger *slog.Logger, q *repo.Queries, authCtx *contextvalues.AuthContext, projectID uuid.NullUUID, raw *string) (uuid.NullUUID, error) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	raw = normalizeOptionalTunnelBinding(raw)
+	if raw == nil || *raw == "" {
+		return none, nil
+	}
+	if !authCtx.IsAdmin {
+		return none, oops.E(oops.CodeForbidden, nil, "binding an identity provider to an MCP tunnel requires a platform admin").LogError(ctx, logger)
+	}
+	if !projectID.Valid {
+		return none, oops.E(oops.CodeBadRequest, nil, "an organization-level identity provider cannot be bound to a project tunnel").LogError(ctx, logger)
+	}
+	tunnelID, err := uuid.Parse(*raw)
+	if err != nil {
+		return none, oops.E(oops.CodeBadRequest, err, "invalid tunneled_mcp_server_id").LogError(ctx, logger)
+	}
+	if _, err := q.GetTunneledMcpServerBinding(ctx, repo.GetTunneledMcpServerBindingParams{
+		ID:             tunnelID,
+		ProjectID:      projectID.UUID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return none, oops.E(oops.CodeNotFound, err, "tunneled MCP server not found in this project").LogError(ctx, logger)
+		}
+		return none, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, logger)
+	}
+	return uuid.NullUUID{UUID: tunnelID, Valid: true}, nil
+}
+
+func normalizeOptionalTunnelBinding(raw *string) *string {
+	if raw == nil {
+		return nil
+	}
+	normalized := strings.TrimSpace(*raw)
+	return &normalized
 }
 
 // FetchRemoteSessionIssuerMetadata fetches the upstream issuer's RFC 8414
@@ -87,6 +229,8 @@ func (s *Service) FetchRemoteSessionIssuerMetadata(ctx context.Context, payload 
 	// the doc comment above). There is no project resource here to gate.
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
+	// Only surrounding operator-entered whitespace is a supported input convenience.
+	// Paths, escaping, case, ports, and trailing slashes are issuer identity.
 	issuerURL := strings.TrimSpace(payload.Issuer)
 	if issuerURL == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
@@ -96,12 +240,12 @@ func (s *Service) FetchRemoteSessionIssuerMetadata(ctx context.Context, payload 
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
 	}
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	discovered, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
 	}
 
-	return buildIssuerDraft(doc, issuerURL, warnings), nil
+	return buildIssuerDraft(discovered.doc, issuerURL, discovered.warnings), nil
 }
 
 // RefreshRemoteSessionIssuerMetadata re-reads a project-owned issuer's RFC 8414
@@ -126,7 +270,7 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 	}
 
 	// project:write, not project:read: this persists.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -146,9 +290,9 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
 	}
 
-	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, s.tunnels, existing)
 	if err != nil {
-		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
+		return nil, s.recordIssuerDiscoveryFailure(ctx, logger, existing, err)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -158,6 +302,9 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer configuration").LogError(ctx, logger)
+	}
 
 	// Re-read under a row lock rather than reusing the pre-discovery read: an
 	// updateIssuer that committed while discovery ran would otherwise land in
@@ -174,8 +321,15 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer").LogError(ctx, logger)
 	}
+	if !sameMetadataRefreshSnapshot(locked, existing) {
+		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
+	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(locked)
+
+	if err := guardEMAEndpointRefresh(ctx, txRepo, locked, params); err != nil {
+		return nil, err
+	}
 
 	updated, err := txRepo.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	if err != nil {
@@ -218,7 +372,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -229,6 +383,18 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 	}
 	if strings.TrimSpace(payload.Issuer) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
+	}
+	trimmedIssuer := strings.TrimSpace(payload.Issuer)
+	if err := validateRemoteSessionProviderURLs(trimmedIssuer, remoteSessionProviderEndpoints{
+		authorizationEndpoint: payload.AuthorizationEndpoint,
+		tokenEndpoint:         payload.TokenEndpoint,
+		revocationEndpoint:    payload.RevocationEndpoint,
+		registrationEndpoint:  payload.RegistrationEndpoint,
+		jwksURI:               payload.JwksURI,
+		userinfoEndpoint:      payload.UserinfoEndpoint,
+		introspectionEndpoint: payload.IntrospectionEndpoint,
+	}); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider URL").LogError(ctx, logger)
 	}
 
 	// Operator-supplied and later rendered as a link, so it is validated here.
@@ -242,11 +408,9 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
 	}
 
-	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
-	// never crosses a network: tokens are sensitive credentials that must not
-	// be transmitted in plaintext. An empty value stays legal.
-	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
+	tunnelID, err := resolveIssuerTunnelBinding(ctx, logger, repo.New(s.db), authCtx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, payload.TunneledMcpServerID)
+	if err != nil {
+		return nil, err
 	}
 
 	// Discovery drops malformed documentation URLs, but a caller holding the write
@@ -263,6 +427,54 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
+	params := repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID:                      conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                                payload.Slug,
+		Issuer:                              trimmedIssuer,
+		Name:                                conv.PtrToPGTextTrimmed(payload.Name),
+		LogoAssetID:                         logoAssetID,
+		ClientSetupDocumentationUrl:         conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
+		AuthorizationEndpoint:               conv.PtrToPGText(payload.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                  conv.PtrToPGText(payload.RevocationEndpoint),
+		RegistrationEndpoint:                conv.PtrToPGText(payload.RegistrationEndpoint),
+		JwksUri:                             conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:                conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
+		OpPolicyUri:                         conv.PtrToPGTextEmpty(payload.OpPolicyURI),
+		OpTosUri:                            conv.PtrToPGTextEmpty(payload.OpTosURI),
+		ScopesSupported:                     orEmptySlice(payload.ScopesSupported),
+		GrantTypesSupported:                 orEmptySlice(payload.GrantTypesSupported),
+		ResponseTypesSupported:              orEmptySlice(payload.ResponseTypesSupported),
+		TokenEndpointAuthMethodsSupported:   orEmptySlice(payload.TokenEndpointAuthMethodsSupported),
+		CodeChallengeMethodsSupported:       payload.CodeChallengeMethodsSupported,
+		ClientIDMetadataDocumentSupported:   conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
+		Oidc:                                conv.PtrValOr(payload.Oidc, false),
+		Passthrough:                         conv.PtrValOr(payload.Passthrough, false),
+		TunneledMcpServerID:                 tunnelID,
+		AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported,
+		// Discovered fields forwarded from the draft. Omitted fields store NULL
+		// ("not captured"), like code_challenge_methods_supported above.
+		UserinfoEndpoint:                           conv.PtrToPGTextEmpty(payload.UserinfoEndpoint),
+		IntrospectionEndpoint:                      conv.PtrToPGTextEmpty(payload.IntrospectionEndpoint),
+		IntrospectionEndpointAuthMethodsSupported:  payload.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           payload.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            payload.ClaimsSupported,
+		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
+		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
+		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Metadata:                                   nil,
+		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataLastError:                          "",
+		MetadataLastErrorUrl:                       "",
+	}
+	if err := s.preflightCreateDiscoverySlug(ctx, logger, &params); err != nil {
+		return nil, err
+	}
+	s.recordCreateDiscovery(ctx, logger, tunnelID, &params, time.Now())
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -271,31 +483,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
-	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
-		Slug:                              payload.Slug,
-		Issuer:                            payload.Issuer,
-		Name:                              conv.PtrToPGTextTrimmed(payload.Name),
-		LogoAssetID:                       logoAssetID,
-		ClientSetupDocumentationUrl:       conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
-		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
-		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
-		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
-		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
-		OpPolicyUri:                       conv.PtrToPGTextEmpty(payload.OpPolicyURI),
-		OpTosUri:                          conv.PtrToPGTextEmpty(payload.OpTosURI),
-		ScopesSupported:                   payload.ScopesSupported,
-		GrantTypesSupported:               payload.GrantTypesSupported,
-		ResponseTypesSupported:            payload.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
-		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
-		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
-		Oidc:                              conv.PtrValOr(payload.Oidc, false),
-		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
-	})
+	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, params)
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) {
 			return nil, oops.E(oops.CodeConflict, err, "an issuer with this slug already exists").LogError(ctx, logger)
@@ -372,15 +560,24 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	// documentation columns, but applying that to slug/issuer would violate the
 	// constraint, so reject empty here with an actionable error before the
 	// query runs.
-	if payload.Slug != nil && *payload.Slug == "" {
+	if payload.Slug != nil && strings.TrimSpace(*payload.Slug) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "slug cannot be set to empty").LogError(ctx, logger)
 	}
-	if payload.Issuer != nil && *payload.Issuer == "" {
+	if payload.Issuer != nil && strings.TrimSpace(*payload.Issuer) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").LogError(ctx, logger)
 	}
+	tunneledMcpServerID := normalizeOptionalTunnelBinding(payload.TunneledMcpServerID)
+	if tunneledMcpServerID != nil && !authCtx.IsAdmin {
+		return nil, oops.E(oops.CodeForbidden, nil, "changing an identity provider's MCP tunnel binding requires a platform admin").LogError(ctx, logger)
+	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
+	}
+	if v := conv.PtrValOr(tunneledMcpServerID, ""); v != "" {
+		if _, err := resolveIssuerTunnelBinding(ctx, logger, repo.New(s.db), authCtx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, tunneledMcpServerID); err != nil {
+			return nil, err
+		}
 	}
 
 	// Operator-supplied and later rendered as a link, so it is validated here.
@@ -400,13 +597,6 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		}
 	}
 
-	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
-	// never crosses a network: tokens are sensitive credentials that must not
-	// be transmitted in plaintext. An empty value stays legal.
-	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
-	}
-
 	// Discovery drops malformed documentation URLs, but a caller holding the write
 	// scope can POST them without ever calling discover, and they are persisted
 	// and later rendered as links. An empty value stays legal: the update queries
@@ -421,6 +611,18 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
+	if err := validateRemoteSessionProviderURLChanges(payload.Issuer, remoteSessionProviderEndpoints{
+		authorizationEndpoint: payload.AuthorizationEndpoint,
+		tokenEndpoint:         payload.TokenEndpoint,
+		revocationEndpoint:    payload.RevocationEndpoint,
+		registrationEndpoint:  payload.RegistrationEndpoint,
+		jwksURI:               payload.JwksURI,
+		userinfoEndpoint:      payload.UserinfoEndpoint,
+		introspectionEndpoint: payload.IntrospectionEndpoint,
+	}); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider URL").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -428,18 +630,18 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer configuration").LogError(ctx, logger)
+	}
 
 	// Keep the pre-update lookup strictly project-scoped: organization-level
 	// issuers are edited via the organizationRemoteSessionIssuers service,
 	// platform issuers only by platform admins, and the project-scoped
 	// UpdateRemoteSessionIssuer below cannot modify either. Both inherited arms
 	// stay off (IncludeOrganizational and IncludeGlobal false).
-	existing, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:                    issuerID,
-		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
-		IncludeOrganizational: false,
-		IncludeGlobal:         false,
+	existing, err := txRepo.GetRemoteSessionIssuerByIDForUpdate(ctx, repo.GetRemoteSessionIssuerByIDForUpdateParams{
+		ID:        issuerID,
+		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -451,35 +653,57 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)
 
 	updated, err := txRepo.UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
-		Slug:                              conv.PtrToPGText(payload.Slug),
-		Issuer:                            conv.PtrToPGText(payload.Issuer),
-		Name:                              conv.PtrToPGText(payload.Name),
-		LogoAssetID:                       conv.PtrToPGText(payload.LogoAssetID),
-		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
-		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
-		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
-		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
-		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ServiceDocumentation:              conv.PtrToPGText(payload.ServiceDocumentation),
-		OpPolicyUri:                       conv.PtrToPGText(payload.OpPolicyURI),
-		OpTosUri:                          conv.PtrToPGText(payload.OpTosURI),
-		ScopesSupported:                   payload.ScopesSupported,
-		GrantTypesSupported:               payload.GrantTypesSupported,
-		ResponseTypesSupported:            payload.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
-		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
-		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
-		Oidc:                              conv.PtrToPGBool(payload.Oidc),
-		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
-		ID:                                issuerID,
-		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Slug:                                conv.PtrToPGText(payload.Slug),
+		Issuer:                              conv.PtrToPGTextTrimmed(payload.Issuer),
+		Name:                                conv.PtrToPGText(payload.Name),
+		LogoAssetID:                         conv.PtrToPGText(payload.LogoAssetID),
+		ClientSetupDocumentationUrl:         conv.PtrToPGText(payload.ClientSetupDocumentationURL),
+		AuthorizationEndpoint:               conv.PtrToPGText(payload.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                  conv.PtrToPGText(payload.RevocationEndpoint),
+		RegistrationEndpoint:                conv.PtrToPGText(payload.RegistrationEndpoint),
+		JwksUri:                             conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:                conv.PtrToPGText(payload.ServiceDocumentation),
+		OpPolicyUri:                         conv.PtrToPGText(payload.OpPolicyURI),
+		OpTosUri:                            conv.PtrToPGText(payload.OpTosURI),
+		ScopesSupported:                     payload.ScopesSupported,
+		GrantTypesSupported:                 payload.GrantTypesSupported,
+		ResponseTypesSupported:              payload.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported:   payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:       payload.CodeChallengeMethodsSupported,
+		ClientIDMetadataDocumentSupported:   conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
+		TunneledMcpServerID:                 conv.PtrToPGText(tunneledMcpServerID),
+		UserinfoEndpoint:                    conv.PtrToPGText(payload.UserinfoEndpoint),
+		IntrospectionEndpoint:               conv.PtrToPGText(payload.IntrospectionEndpoint),
+		AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported,
+		IntrospectionEndpointAuthMethodsSupported:  payload.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           payload.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            payload.ClaimsSupported,
+		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
+		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
+		ScopeOverride:                              payload.ScopeOverride,
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
+		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),
+		ID:                                         issuerID,
+		ProjectID:                                  uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote session issuer").LogError(ctx, logger)
+	}
+
+	if issuerBindingConfigurationChanged(existing, updated) {
+		if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := requireIssuerTokenEndpointForSelfClients(ctx, logger, txRepo, updated); err != nil {
+		return nil, err
 	}
 
 	afterView := mv.BuildRemoteSessionIssuerView(updated)
@@ -513,7 +737,7 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.Lis
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -522,12 +746,21 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.Lis
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
+	hosts, err := upstreamHostCandidates(conv.PtrValOr(payload.UpstreamHost, ""))
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid upstream_host")
+	}
+	// Goa validates the enum; empty means every tier.
+	tier := conv.PtrValOr(payload.Tier, "")
 
 	rows, err := repo.New(s.db).ListRemoteSessionIssuersByProjectID(ctx, repo.ListRemoteSessionIssuersByProjectIDParams{
 		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
-		IncludeOrganizational: true,
-		IncludeGlobal:         true,
+		IncludeProject:        tier == "" || tier == "project",
+		IncludeOrganizational: tier == "" || tier == "organization",
+		IncludeGlobal:         tier == "" || tier == "platform",
+		Search:                containsPattern(conv.PtrValOr(payload.Search, "")),
+		Hosts:                 hosts,
 		Cursor:                cursor,
 		LimitValue:            limit,
 	})
@@ -583,7 +816,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 		}
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 			return nil, err
 		}
 		issuer, err = repo.New(s.db).GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
@@ -600,11 +833,11 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 			return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
 		}
 	case hasIssuer:
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 			return nil, err
 		}
 
-		canonical, err := parseCanonicalIssuerURL(*payload.Issuer)
+		canonical, err := issuerurl.Parse(*payload.Issuer)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, logger)
 		}
@@ -613,7 +846,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		// issuer describing this upstream is one the project may attach its own
 		// client to, so it counts as found.
 		candidates, err := repo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, repo.ListRemoteSessionIssuersByIssuerURLParams{
-			Issuers:               canonical.matchCandidates(),
+			Issuers:               canonical.MatchCandidates(),
 			ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 			IncludeOrganizational: true,
 			OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -632,7 +865,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		}
 		issuer = match
 	default: // hasSlug
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 			return nil, err
 		}
 		var err error
@@ -665,13 +898,13 @@ func (s *Service) GetRemoteSessionIssuerDuplicatePreflight(ctx context.Context, 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	canonical, err := issuerurl.Parse(conv.PtrValOrEmpty(payload.Issuer, ""))
 	if err != nil {
 		return emptyIssuerDuplicatePreflight(), nil
 	}
@@ -681,7 +914,7 @@ func (s *Service) GetRemoteSessionIssuerDuplicatePreflight(ctx context.Context, 
 	// no LIMIT, because precedence resolution needs the whole candidate set;
 	// buildIssuerDuplicatePreflight truncates the response instead.
 	candidates, err := repo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, repo.ListRemoteSessionIssuersByIssuerURLParams{
-		Issuers:               canonical.matchCandidates(),
+		Issuers:               canonical.MatchCandidates(),
 		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		IncludeOrganizational: true,
 		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -716,7 +949,7 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -767,6 +1000,17 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 	if clientCount > 0 {
 		return oops.E(oops.CodeConflict, nil, "remote session issuer has active clients; delete the clients first").LogError(ctx, logger)
 	}
+	trustedCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, issuerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "count user session issuers that trust issuer").LogError(ctx, logger)
+	}
+	if trustedCount > 0 {
+		return oops.E(oops.CodeConflict, nil, "remote session issuer is trusted by active user session issuers; unlink them first").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
+		return err
+	}
 
 	deleted, err := txRepo.DeleteRemoteSessionIssuer(ctx, repo.DeleteRemoteSessionIssuerParams{
 		ID:        issuerID,
@@ -808,7 +1052,20 @@ type discoveryError struct {
 	WellKnownURL string
 	Status       int
 	cause        error
+
+	// definitive marks a refusal Speakeasy itself made (a candidate or redirect
+	// target outside the URL policy), which says as much about the
+	// candidate as a 404 would and must not be mistaken for an outage.
+	definitive bool
 }
+
+// errDiscoveryRedirectRefused is the CheckRedirect refusal, unwrapped from
+// the transport's url.Error so a probe can tell it from a network failure.
+var errDiscoveryRedirectRefused = errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
+
+// Distinguish a fully received but invalid document from a transport/body-read
+// failure without changing the shared probe fallback policy.
+var errInvalidDiscoveryDocument = errors.New("invalid issuer discovery document")
 
 func (e *discoveryError) Error() string {
 	switch {
@@ -821,7 +1078,9 @@ func (e *discoveryError) Error() string {
 	}
 }
 
-func (e *discoveryError) Unwrap() error { return e.cause }
+func (e *discoveryError) Unwrap() error {
+	return e.cause
+}
 
 // UserMessage produces the public, user-facing summary surfaced through the
 // management API. Callers wrap it in an oops.E to attach the gateway error
@@ -842,34 +1101,22 @@ func (e *discoveryError) UserMessage() string {
 	}
 }
 
-// discoverIssuerMetadata fetches and parses an issuer's RFC 8414 / OpenID
-// Connect Discovery metadata document, returning the parsed body and any
-// deviations from the spec callers should be aware of. The supplied
-// guardian.Policy gates the outbound dial.
-//
-// It probes the well-known locations returned by IssuerMetadataProbeCandidates in
-// order, returning the first that yields a usable document — one carrying both
-// an authorization_endpoint and a token_endpoint. A 200 that parses but lacks
-// those endpoints is almost always a SPA/gateway catch-all answering our
-// speculative candidate rather than real metadata, so it is skipped in favor of
-// a later candidate (e.g. the origin-style fallback); it is surfaced only as a
-// last resort when no candidate yields a usable document. When every probe
-// fails the first (canonical RFC 8414) candidate's error is surfaced, wrapped
-// in a *discoveryError so the handler can attach the upstream URL and status to
-// the user-facing error.
-// DiscoveredIssuerMetadata is the server-owned subset of RFC 8414 metadata
-// required to register Gram as an OAuth client. It is deliberately an internal
-// application return type rather than an API payload: callers must not reflect
-// upstream endpoints or registration material to untrusted clients.
+// DiscoveredIssuerMetadata is the whole discovery document as Speakeasy persists
+// it: the OAuth core, the OpenID Connect session-enrichment members, the
+// merged document verbatim, and which candidate the run could not read. It is
+// deliberately an internal application return type rather than an API
+// payload: callers must not reflect upstream endpoints or registration
+// material to untrusted clients.
 type DiscoveredIssuerMetadata struct {
-	Issuer                            string
-	AuthorizationEndpoint             string
-	TokenEndpoint                     string
-	RegistrationEndpoint              string
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
+	Issuer                              string
+	AuthorizationEndpoint               string
+	TokenEndpoint                       string
+	RegistrationEndpoint                string
+	ScopesSupported                     []string
+	GrantTypesSupported                 []string
+	AuthorizationGrantProfilesSupported []string
+	ResponseTypesSupported              []string
+	TokenEndpointAuthMethodsSupported   []string
 
 	// CodeChallengeMethodsSupported is never nil: discovery ran, so a document
 	// that omits the field yields an empty slice — the persisted
@@ -878,6 +1125,47 @@ type DiscoveredIssuerMetadata struct {
 	CodeChallengeMethodsSupported []string
 
 	ClientIDMetadataDocumentSupported bool
+
+	// UserinfoEndpoint is the OpenID Connect userinfo endpoint, or "" when
+	// the issuer advertises none or advertises one that is not HTTPS.
+	UserinfoEndpoint string
+
+	// IntrospectionEndpoint is the RFC 7662 introspection endpoint, or ""
+	// when the issuer advertises none or advertises one that is not HTTPS.
+	IntrospectionEndpoint string
+
+	// IntrospectionEndpointAuthMethodsSupported is never nil: discovery ran,
+	// so an omitted field yields an empty slice, the persisted "captured;
+	// the upstream advertises nothing" state.
+	IntrospectionEndpointAuthMethodsSupported []string
+
+	// IDTokenSigningAlgValuesSupported is never nil, for the same reason.
+	IDTokenSigningAlgValuesSupported []string
+
+	// ClaimsSupported is never nil, for the same reason.
+	ClaimsSupported []string
+
+	// BackchannelLogoutSupported is false when the document omits the field,
+	// which is the value OpenID Back-Channel Logout defines for absence.
+	BackchannelLogoutSupported bool
+
+	// AuthorizationResponseIssParameterSupported is false when the document
+	// omits the field, which is the value RFC 9207 defines for absence.
+	AuthorizationResponseIssParameterSupported bool
+
+	// Metadata is the merged discovery document for the issuer's metadata
+	// column: the primary document's members plus any a same-issuer document
+	// added.
+	Metadata []byte
+
+	// UnreadableURL is the well-known URL of a candidate discovery could not
+	// read, for the issuer's metadata_last_error_url column; "" when every
+	// candidate answered definitively.
+	UnreadableURL string
+
+	// UnreadableMessage is the public-safe text for the metadata_last_error
+	// column when UnreadableURL is set; "" otherwise.
+	UnreadableMessage string
 }
 
 // DiscoverIssuerMetadata performs issuer metadata discovery through Guardian's
@@ -885,63 +1173,151 @@ type DiscoveredIssuerMetadata struct {
 // Platform MCP provider attachment; browser and MCP callers must never supply
 // an issuer URL to it.
 func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (DiscoveredIssuerMetadata, error) {
-	doc, _, err := discoverIssuerMetadata(ctx, policy, issuerURL)
+	discovered, err := discoverIssuerMetadata(ctx, policy, issuerURL)
 	if err != nil {
 		return DiscoveredIssuerMetadata{}, err
 	}
+	doc := discovered.doc
 	return DiscoveredIssuerMetadata{
-		Issuer:                            doc.Issuer,
-		AuthorizationEndpoint:             doc.AuthorizationEndpoint,
-		TokenEndpoint:                     doc.TokenEndpoint,
-		RegistrationEndpoint:              doc.RegistrationEndpoint,
-		ScopesSupported:                   append([]string(nil), doc.ScopesSupported...),
-		GrantTypesSupported:               append([]string(nil), doc.GrantTypesSupported...),
-		ResponseTypesSupported:            append([]string(nil), doc.ResponseTypesSupported...),
-		TokenEndpointAuthMethodsSupported: append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),
+		Issuer:                              doc.Issuer,
+		AuthorizationEndpoint:               doc.AuthorizationEndpoint,
+		TokenEndpoint:                       doc.TokenEndpoint,
+		RegistrationEndpoint:                doc.RegistrationEndpoint,
+		ScopesSupported:                     append([]string(nil), doc.ScopesSupported...),
+		GrantTypesSupported:                 slices.Clone(doc.GrantTypesSupported),
+		AuthorizationGrantProfilesSupported: orEmptySlice(slices.Clone(doc.AuthorizationGrantProfilesSupported)),
+		ResponseTypesSupported:              append([]string(nil), doc.ResponseTypesSupported...),
+		TokenEndpointAuthMethodsSupported:   append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),
 
 		// An empty advertised list must survive as empty here, because nil and
 		// empty persist differently for this field (NULL "never captured" vs
-		// {} "captured, advertises nothing"). The plain append copy used by
-		// the sibling fields collapses an empty slice to nil, so it gets an
-		// orEmptySlice on top.
-		CodeChallengeMethodsSupported: orEmptySlice(append([]string(nil), doc.CodeChallengeMethodsSupported...)),
+		// {} "captured, advertises nothing"); slices.Clone preserves that and
+		// orEmptySlice turns omission into the captured-empty state.
+		CodeChallengeMethodsSupported: orEmptySlice(slices.Clone(doc.CodeChallengeMethodsSupported)),
 
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
+
+		UserinfoEndpoint:                           doc.UserinfoEndpoint,
+		IntrospectionEndpoint:                      doc.IntrospectionEndpoint,
+		IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(slices.Clone(doc.IntrospectionEndpointAuthMethodsSupported)),
+		IDTokenSigningAlgValuesSupported:           orEmptySlice(slices.Clone(doc.IDTokenSigningAlgValuesSupported)),
+		ClaimsSupported:                            orEmptySlice(slices.Clone(doc.ClaimsSupported)),
+		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
+		Metadata:          retainableDocument(doc.raw),
+		UnreadableURL:     discovered.unreadable,
+		UnreadableMessage: unreadableCandidateMessage(discovered.unreadable, discovered.unreadableErr),
 	}, nil
 }
 
-func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
-	candidates, err := IssuerMetadataProbeCandidates(issuerURL)
+// discoverIssuerMetadata fetches an issuer's RFC 8414 and OpenID Connect
+// Discovery documents and merges them into one, reporting the advisory
+// warnings about the result and the candidate it could not read. The
+// supplied guardian.Policy gates the outbound dial.
+//
+// It probes the well-known locations from issuerProbeCandidates in order. The
+// first document carrying both an authorization_endpoint and a token_endpoint
+// is the primary; one same-issuer document of the other family then fills in
+// the members the primary omits, except RFC 9207 iss support, which only the
+// primary decides. A 200 that parses but lacks those endpoints
+// is almost always a catch-all answering a speculative candidate, so it is
+// returned only when no candidate yields a usable document. A candidate that
+// fails transiently is unreadable: the run still succeeds when another
+// candidate was usable and names the URL without borrowing stored
+// members from earlier discovery, but an origin-root fallback is never adopted and an
+// endpoint-less document is never returned while one is unreadable, since
+// the outage may be hiding the real document. When nothing usable was read
+// the error is a *discoveryError naming the failed URL and upstream status.
+func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (discoveryResult, error) {
+	return discoverIssuerMetadataWithDoer(ctx, issuerDiscoveryHTTPClient(policy), issuerURL)
+}
+
+func issuerDiscoveryHTTPClient(policy *guardian.Policy) *guardian.HTTPClient {
+	client := policy.Client()
+	// Guardian owns the transport and its SSRF protections. Keep redirect policy
+	// narrow here without changing TLS verification or the transport itself.
+	client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+		if !validIssuerDiscoveryURL(req.URL) {
+			return errDiscoveryRedirectRefused
+		}
+		return nil
+	}
+	return client
+}
+
+// discoverIssuerMetadataWithDoer is discoverIssuerMetadata over an explicit
+// transport, so an issuer bound to an MCP tunnel can be probed through it.
+func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuerURL string) (discoveryResult, error) {
+	candidates, err := issuerProbeCandidates(issuerURL)
 	if err != nil {
-		return rfc8414Document{}, nil, &discoveryError{
+		return discoveryResult{}, &discoveryError{
 			WellKnownURL: "",
 			Status:       0,
 			cause:        fmt.Errorf("compute well-known url: %w", err),
+			definitive:   false,
 		}
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, discoveryHTTPTimeout)
 	defer cancel()
 
-	client := policy.Client()
-	// Guardian owns the transport and its SSRF protections. Keep redirect policy
-	// narrow here without changing TLS verification or the transport itself.
-	client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
-		if !validIssuerDiscoveryURL(req.URL) {
-			return errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
-		}
-		return nil
-	}
-
+	// The first usable document is the primary and wins every member it
+	// states. RFC 8414 and OpenID Connect Discovery serve overlapping
+	// documents, and several providers publish jwks_uri, claims_supported, and
+	// the ID token signing algorithms only in the OpenID one, so after the
+	// primary the other family is probed and one same-issuer document fills
+	// in what the primary left out, except RFC 9207 iss support. There are
+	// only two families, so the loop ends as soon as the second has contributed.
 	var firstErr *discoveryError
-	var fallbackDoc rfc8414Document
-	haveFallback := false
-	for _, wellKnown := range candidates {
-		doc, attemptErr := attemptIssuerProbe(reqCtx, client, wellKnown)
+	var untrustedErr *untrustedDocumentError
+	var primary, fallback *rfc8414Document
+	var primaryFamily metadataFamily
+	originFallback, fallbackFromOrigin := false, false
+	// unreadable records, per family, the first candidate that could not be
+	// read at all rather than one that definitively has no document. Such a
+	// candidate may be hiding fields the merge would have captured, whichever
+	// order the probes ran in and even when a later candidate of its family
+	// merged, and a refresh must not mistake their absence for withdrawal.
+	unreadable := make(map[metadataFamily]*discoveryError, 2)
+	// unreadableErr is the first transient failure, returned whenever an
+	// unreadable candidate leaves the run unable to say what the issuer
+	// serves: the caller must retry rather than act on a guess.
+	var unreadableErr *discoveryError
+	for _, candidate := range candidates {
+		if primary != nil && candidate.family == primaryFamily {
+			continue
+		}
+		// An origin-root document may describe a sibling tenant or the whole
+		// host. While one of the issuer's own locations is unreadable it is
+		// not known to be the issuer's document, so it must not become the
+		// primary; only definitive misses on the path candidates reach it.
+		if candidate.fallback && primary == nil && unreadableErr != nil {
+			return discoveryResult{}, unreadableErr
+		}
+		doc, attemptErr := attemptIssuerProbe(reqCtx, client, candidate.url)
 		if attemptErr != nil {
 			if firstErr == nil {
 				firstErr = attemptErr
 			}
+			if attemptErr.transient() {
+				if unreadableErr == nil {
+					unreadableErr = attemptErr
+				}
+				if _, seen := unreadable[candidate.family]; !seen {
+					unreadable[candidate.family] = attemptErr
+				}
+			}
+			continue
+		}
+
+		// Discovery location is not issuer identity. Even an origin fallback
+		// must name the requested issuer byte-for-byte.
+		if doc.Issuer == "" {
+			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuerURL)}
+			continue
+		}
+		if doc.Issuer != issuerURL {
+			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises issuer %q, but the requested issuer is %q; refusing to adopt another authorization server's metadata; verify the configured issuer exactly, including its path and trailing slash", truncateForMessage(doc.Issuer), issuerURL)}
 			continue
 		}
 
@@ -950,33 +1326,180 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		// metadata. Remember the first such document but keep probing — a later
 		// candidate (e.g. the origin-style fallback) may carry the real one.
 		if doc.AuthorizationEndpoint == "" || doc.TokenEndpoint == "" {
-			if !haveFallback {
-				fallbackDoc = doc
-				haveFallback = true
+			if primary == nil && fallback == nil {
+				fallback = &doc
+				fallbackFromOrigin = candidate.fallback
 			}
 			continue
 		}
 
-		return doc, collectDiscoveryWarnings(issuerURL, doc), nil
+		if primary == nil {
+			primary = &doc
+			primaryFamily = candidate.family
+			originFallback = candidate.fallback
+			continue
+		}
+		// Only a document naming the same issuer may contribute: an
+		// origin-root fallback on a multi-tenant host can describe a sibling
+		// tenant, and one naming no issuer cannot be tied to this one.
+		if doc.Issuer != "" && doc.Issuer == primary.Issuer {
+			union := mergeIssuerMetadata(*primary, doc)
+			originFallback = originFallback || (candidate.fallback && !bytes.Equal(union.raw, primary.raw))
+			primary = &union
+			break
+		}
 	}
 
-	if haveFallback {
-		return fallbackDoc, collectDiscoveryWarnings(issuerURL, fallbackDoc), nil
+	if primary != nil {
+		partialErr := unreadable[primaryFamily.other()]
+		if partialErr == nil {
+			partialErr = unreadable[primaryFamily]
+		}
+		partialURL := ""
+		if partialErr != nil {
+			partialURL = partialErr.WellKnownURL
+		}
+		result := discoveryResult{
+			doc:            *primary,
+			warnings:       collectDiscoveryWarnings(issuerURL, *primary),
+			unreadable:     partialURL,
+			unreadableErr:  partialErr,
+			originFallback: originFallback,
+		}
+		if result.unreadable != "" {
+			result.warnings = append(result.warnings, unreadableCandidateMessage(result.unreadable, result.unreadableErr))
+		}
+		return result, nil
 	}
 
-	return rfc8414Document{}, nil, firstErr
+	// Reject unusable identity evidence only after every candidate was tried.
+	// An unread candidate still takes transient precedence so it can be retried.
+	if untrustedErr != nil && unreadableErr == nil {
+		return discoveryResult{}, untrustedErr
+	}
+
+	// An endpoint-less document is only worth returning when it is all the
+	// issuer has. With a candidate unread, the real document may be behind
+	// the outage, so the run is transient rather than a verdict on the issuer.
+	if fallback != nil && unreadableErr == nil {
+		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: "", unreadableErr: nil, originFallback: fallbackFromOrigin}, nil
+	}
+	if unreadableErr != nil {
+		return discoveryResult{}, unreadableErr
+	}
+
+	return discoveryResult{}, firstErr
+}
+
+// mergeIssuerMetadata returns base with every top-level member of extra's
+// document that base's document does not state, then re-derives the typed
+// fields from the union so the two never disagree. A member base states,
+// even as false or empty, is kept: the primary document is authoritative for
+// flags such as CIMD support that Speakeasy acts on. Either side without a JSON
+// object leaves base unchanged.
+//
+// RFC 9207 iss support never comes from extra. A primary document that omits it
+// declares no support (RFC 9207 §3), and turning the flag on makes the login
+// callback reject every response without iss, so another document's claim
+// cannot enable that check.
+func mergeIssuerMetadata(base, extra rfc8414Document) rfc8414Document {
+	var baseMembers, extraMembers map[string]json.RawMessage
+	if err := json.Unmarshal(base.raw, &baseMembers); err != nil || baseMembers == nil {
+		return base
+	}
+	if err := json.Unmarshal(extra.raw, &extraMembers); err != nil || extraMembers == nil {
+		return base
+	}
+	merged := maps.Clone(extraMembers)
+	delete(merged, oauthwire.MetadataAuthorizationResponseIssParameterSupported)
+	maps.Copy(merged, baseMembers)
+	if len(merged) == len(baseMembers) {
+		return base
+	}
+	raw, err := json.Marshal(merged)
+	if err != nil {
+		return base
+	}
+	out := base
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return base
+	}
+	out.raw = raw
+	out.dropped = sanitizeIssuerDocument(&out)
+	return out
+}
+
+// documentFromRaw wraps a stored discovery document so it can be merged; the
+// typed fields stay unset because a merge derives them from raw.
+func documentFromRaw(raw []byte) rfc8414Document {
+	var doc rfc8414Document
+	doc.raw = raw
+	return doc
+}
+
+// unreadableCandidateMessage is the public-safe statement, for warnings and
+// the metadata_last_error column, that a well-known candidate could not be
+// read; "" when url is empty.
+func unreadableCandidateMessage(url string, discoveryErr *discoveryError) string {
+	if url == "" {
+		return ""
+	}
+	message := fmt.Sprintf("metadata document at %s was unreadable; members only it advertises were not merged", url)
+	if discoveryErr != nil && discoveryErr.WellKnownURL == url {
+		// UserMessage preserves status without exposing response bodies or causes.
+		message += "; " + discoveryErr.UserMessage()
+	}
+	return message
+}
+
+// rawDocumentIssuer reads the issuer member of a stored discovery document,
+// or "" when the document has none or cannot be read.
+func rawDocumentIssuer(raw []byte) string {
+	var doc struct {
+		Issuer string `json:"issuer"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return ""
+	}
+	return doc.Issuer
+}
+
+// maxRetainedDocumentBytes caps the discovery document a row keeps verbatim.
+// Larger documents are still projected onto the typed columns.
+const maxRetainedDocumentBytes = 256 << 10
+
+// retainableDocument returns raw when a jsonb column can hold it: within the
+// size cap, valid UTF-8, and free of the \u0000 escape Go's decoder accepts
+// and Postgres rejects. Otherwise nil, which the writes store as NULL.
+func retainableDocument(raw []byte) []byte {
+	if len(raw) == 0 || len(raw) > maxRetainedDocumentBytes || !utf8.Valid(raw) || bytes.Contains(raw, []byte(`\u0000`)) {
+		return nil
+	}
+	return raw
+}
+
+// transient reports whether the probe failed in a way that says nothing about
+// whether a document exists there: no answer at all, a server error, or rate
+// limiting. A 4xx is a definitive miss, and a document that parsed but was
+// rejected keeps its 200 status and is definitive too.
+func (e *discoveryError) transient() bool {
+	if e.definitive {
+		return false
+	}
+	return e.Status == 0 || e.Status >= http.StatusInternalServerError || e.Status == http.StatusTooManyRequests
 }
 
 // attemptIssuerProbe issues a single GET against an issuer well-known URL and
 // returns either the parsed RFC 8414 / OIDC document or a typed error annotated
 // with the probed URL and upstream status.
-func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKnown string) (rfc8414Document, *discoveryError) {
+func attemptIssuerProbe(ctx context.Context, client httpDoer, wellKnown string) (rfc8414Document, *discoveryError) {
 	requestURL, err := url.Parse(wellKnown)
 	if err != nil || !validIssuerDiscoveryURL(requestURL) {
 		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        errors.New("issuer discovery URL must use HTTPS outside local loopback"),
+			definitive:   true,
 		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
@@ -985,6 +1508,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        fmt.Errorf("build discovery request: %w", err),
+			definitive:   true,
 		}
 	}
 	req.Header.Set("Accept", "application/json")
@@ -995,43 +1519,97 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        fmt.Errorf("fetch discovery document: %w", err),
+			definitive:   errors.Is(err, errDiscoveryRedirectRefused),
 		}
 	}
-	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+	defer o11y.NoLogDefer(func() error {
+		return resp.Body.Close()
+	})
 
 	if resp.StatusCode != http.StatusOK {
 		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("discovery returned status %d", resp.StatusCode),
+			definitive:   false,
 		}
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	// Some providers serve valid JSON with missing or inaccurate media types.
+	// Validate the bounded body itself rather than trusting Content-Type.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiscoveryBodyBytes+1))
+	if len(body) > maxDiscoveryBodyBytes {
+		return rfc8414Document{}, &discoveryError{WellKnownURL: wellKnown, Status: resp.StatusCode, cause: errors.New("discovery document exceeds body limit"), definitive: true}
+	}
 	if err != nil {
 		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("read discovery body: %w", err),
+			definitive:   false,
 		}
 	}
 
+	doc, err := decodeIssuerDocument(body, requestURL)
+	if err != nil {
+		return rfc8414Document{}, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       resp.StatusCode,
+			cause:        errors.Join(errInvalidDiscoveryDocument, err),
+			definitive:   false,
+		}
+	}
+
+	return doc, nil
+}
+
+// decodeIssuerDocument projects a discovery document body onto its typed
+// fields: it rejects endpoints that would weaken the transport guarantee,
+// keeps the body verbatim as raw, and blanks the members Speakeasy would not act
+// on. requested is the well-known URL the body came from, which is what the
+// loopback exception for endpoints is measured against. A stored document is
+// re-projected the same way, without a fetch.
+func decodeIssuerDocument(body []byte, requested *url.URL) (rfc8414Document, error) {
+	return decodeIssuerDocumentWithLegacyNulls(body, requested, false)
+}
+
+// Stored documents captured before strict array validation may contain null
+// arrays. Treat those as absent during reprojection, without relaxing discovery.
+func decodeIssuerDocumentWithLegacyNulls(body []byte, requested *url.URL, legacyNulls bool) (rfc8414Document, error) {
+	// JSON null is accepted by Go's []string decoder, even as an element.
+	// Metadata arrays must actually be arrays containing only strings.
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(body, &members); err != nil || members == nil {
+		return rfc8414Document{}, errors.New("discovery document must be a JSON object")
+	}
+	for _, name := range []string{"scopes_supported", "grant_types_supported", "authorization_grant_profiles_supported", "response_types_supported", "token_endpoint_auth_methods_supported", "code_challenge_methods_supported", "introspection_endpoint_auth_methods_supported", "id_token_signing_alg_values_supported", "claims_supported"} {
+		raw, present := members[name]
+		if !present || (legacyNulls && bytes.Equal(bytes.TrimSpace(raw), []byte("null"))) {
+			continue
+		}
+		var values []json.RawMessage
+		if err := json.Unmarshal(raw, &values); err != nil || values == nil {
+			return rfc8414Document{}, fmt.Errorf("%s must be an array of strings", name)
+		}
+		for _, value := range values {
+			var entry any
+			if err := json.Unmarshal(value, &entry); err != nil {
+				return rfc8414Document{}, fmt.Errorf("decode %s entry: %w", name, err)
+			}
+			if _, ok := entry.(string); !ok {
+				return rfc8414Document{}, fmt.Errorf("%s must contain only strings", name)
+			}
+		}
+	}
 	var doc rfc8414Document
 	if err := json.Unmarshal(body, &doc); err != nil {
-		return rfc8414Document{}, &discoveryError{
-			WellKnownURL: wellKnown,
-			Status:       resp.StatusCode,
-			cause:        fmt.Errorf("decode discovery document: %w", err),
-		}
+		return rfc8414Document{}, fmt.Errorf("decode discovery document: %w", err)
 	}
-	if err := validateIssuerMetadataEndpoints(doc, requestURL); err != nil {
-		return rfc8414Document{}, &discoveryError{
-			WellKnownURL: wellKnown,
-			Status:       resp.StatusCode,
-			cause:        err,
-		}
+	if err := validateIssuerMetadataEndpoints(doc, requested); err != nil {
+		return rfc8414Document{}, err
 	}
-
+	doc.raw = body
+	doc.dropped = sanitizeIssuerDocument(&doc)
 	return doc, nil
 }
 
@@ -1048,6 +1626,21 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 // some gateways and SPA catch-alls serve metadata at the root regardless of the
 // issuer path. Duplicate URLs (e.g. when the issuer has no path) are collapsed.
 func IssuerMetadataProbeCandidates(issuerURL string) ([]string, error) {
+	candidates, err := issuerProbeCandidates(issuerURL)
+	if err != nil {
+		return nil, err
+	}
+	urls := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		urls = append(urls, candidate.url)
+	}
+	return urls, nil
+}
+
+// issuerProbeCandidates lists the well-known URLs to probe for an issuer,
+// each tagged by the discovery family it follows. IssuerMetadataProbeCandidates
+// is its URL-only projection.
+func issuerProbeCandidates(issuerURL string) ([]issuerProbeCandidate, error) {
 	u, err := url.Parse(issuerURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse issuer url: %w", err)
@@ -1060,26 +1653,26 @@ func IssuerMetadataProbeCandidates(issuerURL string) ([]string, error) {
 	path := strings.TrimSuffix(u.Path, "/")
 
 	seen := make(map[string]struct{})
-	candidates := make([]string, 0, 5)
-	add := func(raw string) {
+	candidates := make([]issuerProbeCandidate, 0, 5)
+	add := func(raw string, family metadataFamily, fallback bool) {
 		if _, ok := seen[raw]; ok {
 			return
 		}
 		seen[raw] = struct{}{}
-		candidates = append(candidates, raw)
+		candidates = append(candidates, issuerProbeCandidate{url: raw, family: family, fallback: fallback})
 	}
 
 	// RFC 8414 §3: well-known inserted between host and issuer path.
-	add(origin + "/.well-known/oauth-authorization-server" + path)
+	add(origin+"/.well-known/oauth-authorization-server"+path, familyOAuthAuthorizationServer, false)
 	// RFC 8414 §3.1 OIDC-compatible form: openid-configuration inserted between
 	// host and issuer path.
-	add(origin + "/.well-known/openid-configuration" + path)
+	add(origin+"/.well-known/openid-configuration"+path, familyOpenIDConfiguration, false)
 	if path != "" {
 		// OpenID Connect Discovery: well-known appended after the issuer path.
-		add(origin + path + "/.well-known/openid-configuration")
+		add(origin+path+"/.well-known/openid-configuration", familyOpenIDConfiguration, false)
 		// Origin-style fallback: strip the issuer path entirely.
-		add(origin + "/.well-known/oauth-authorization-server")
-		add(origin + "/.well-known/openid-configuration")
+		add(origin+"/.well-known/oauth-authorization-server", familyOAuthAuthorizationServer, true)
+		add(origin+"/.well-known/openid-configuration", familyOpenIDConfiguration, true)
 	}
 
 	return candidates, nil
@@ -1137,6 +1730,32 @@ func validateIssuerMetadataEndpoints(doc rfc8414Document, requestedIssuer *url.U
 	return nil
 }
 
+// sanitizeIssuerDocument blanks the advertised URLs that Speakeasy never dials
+// during discovery but would render or send a token to later, when they are
+// not acceptable: the revocation, userinfo, and introspection endpoints must
+// be HTTPS or local loopback, and the documentation, policy, and terms links
+// must be absolute http(s) URLs. Dropping rather than rejecting keeps an
+// otherwise usable document usable. raw keeps the original members. It
+// returns the JSON names of the members it blanked, in document order.
+func sanitizeIssuerDocument(doc *rfc8414Document) []string {
+	var dropped []string
+	sanitize := func(name string, field *string, accept func(string) string) {
+		if *field == "" {
+			return
+		}
+		if *field = accept(*field); *field == "" {
+			dropped = append(dropped, name)
+		}
+	}
+	sanitize("revocation_endpoint", &doc.RevocationEndpoint, urls.HTTPSOrLoopbackOrEmpty)
+	sanitize("userinfo_endpoint", &doc.UserinfoEndpoint, urls.HTTPSOrLoopbackOrEmpty)
+	sanitize("introspection_endpoint", &doc.IntrospectionEndpoint, urls.HTTPSOrLoopbackOrEmpty)
+	sanitize("service_documentation", &doc.ServiceDocumentation, urls.HTTPOrEmpty)
+	sanitize("op_policy_uri", &doc.OpPolicyURI, urls.HTTPOrEmpty)
+	sanitize("op_tos_uri", &doc.OpTosURI, urls.HTTPOrEmpty)
+	return dropped
+}
+
 func validIssuerMetadataEndpointURL(parsed, requestedIssuer *url.URL, requireHTTPS bool) bool {
 	if parsed == nil || !parsed.IsAbs() || parsed.User != nil || parsed.Host == "" {
 		return false
@@ -1156,8 +1775,8 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	warnings := []string{}
 	if doc.Issuer == "" {
 		warnings = append(warnings, "issuer field missing from discovery document")
-	} else if !issuerURLsEqual(doc.Issuer, requestedIssuer) {
-		warnings = append(warnings, fmt.Sprintf("discovery issuer %q does not match requested %q", doc.Issuer, requestedIssuer))
+	} else if doc.Issuer != requestedIssuer {
+		warnings = append(warnings, fmt.Sprintf("discovery issuer %q does not match requested %q", truncateForMessage(doc.Issuer), requestedIssuer))
 	}
 	if doc.AuthorizationEndpoint == "" {
 		warnings = append(warnings, "authorization_endpoint missing from discovery document")
@@ -1167,6 +1786,17 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	}
 	if doc.JwksURI == "" {
 		warnings = append(warnings, "jwks_uri missing from discovery document")
+	}
+	for _, member := range doc.dropped {
+		switch member {
+		case "service_documentation", "op_policy_uri", "op_tos_uri":
+			warnings = append(warnings, fmt.Sprintf("%s is not an absolute http(s) URL and was not captured", member))
+		default:
+			warnings = append(warnings, fmt.Sprintf("%s is not an https URL and was not captured", member))
+		}
+	}
+	if len(doc.raw) > 0 && retainableDocument(doc.raw) == nil {
+		warnings = append(warnings, "discovery document could not be retained verbatim (size or encoding); typed fields were still captured")
 	}
 	// Advisory rather than a defect report: RFC 8414 makes the field OPTIONAL,
 	// but MCP requires clients to refuse authorization servers that do not
@@ -1182,9 +1812,27 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	return warnings
 }
 
-// issuerURLsEqual compares two issuer URLs ignoring trailing slashes.
-func issuerURLsEqual(a, b string) bool {
-	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
+// IssuerURLsEqual compares issuer identifiers byte-for-byte, as discovery and
+// token validation require. A trailing slash is significant, not URL decoration.
+func IssuerURLsEqual(a, b string) bool {
+	return a == b
+}
+
+// maxMessageValueBytes caps an upstream-controlled string quoted in a warning
+// or error, so a hostile document cannot pad what is stored and shown.
+const maxMessageValueBytes = 200
+
+// truncateForMessage shortens s to maxMessageValueBytes on a rune boundary,
+// marking the cut with an ellipsis.
+func truncateForMessage(s string) string {
+	if len(s) <= maxMessageValueBytes {
+		return s
+	}
+	cut := maxMessageValueBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…"
 }
 
 // pageLimit clamps the user-supplied limit into the documented range and
@@ -1204,6 +1852,61 @@ func pageLimit(in *int) int32 {
 	return int32(limit)
 }
 
+// containsPattern turns free text into a LIKE pattern matching it anywhere,
+// with LIKE's own wildcards escaped so "50%" or "my_idp" match literally. Blank
+// text is NULL: no filter.
+func containsPattern(text string) pgtype.Text {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	escaped := strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(text)
+	return pgtype.Text{String: "%" + escaped + "%", Valid: true}
+}
+
+// upstreamHostCandidates expands an upstream host into the issuer hosts that
+// may sign users in to it: the host itself and each parent domain of at least
+// two labels, so mcp.linear.app yields mcp.linear.app and linear.app but never
+// the bare "app". A port other than 443 or 80 is kept on every candidate; those
+// two are dropped, matching the listing query's normalization of stored issuer
+// URLs. IP addresses have no parent domains. Blank input yields no candidates,
+// which the query reads as no filter.
+func upstreamHostCandidates(raw string) ([]string, error) {
+	host := strings.ToLower(strings.TrimSpace(raw))
+	if host == "" {
+		return []string{}, nil
+	}
+	if strings.ContainsAny(host, "/?#@ ") {
+		return nil, fmt.Errorf("upstream host %q must be a bare host, without scheme, path or credentials", raw)
+	}
+
+	port := ""
+	if h, p, err := net.SplitHostPort(host); err == nil {
+		host = h
+		if p != "443" && p != "80" {
+			port = ":" + p
+		}
+	}
+	host = strings.TrimSuffix(host, ".")
+	if host == "" {
+		return nil, fmt.Errorf("upstream host %q has no host name", raw)
+	}
+
+	if net.ParseIP(host) != nil {
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
+		return []string{host + port}, nil
+	}
+
+	labels := strings.Split(host, ".")
+	candidates := []string{host + port}
+	for i := 1; i < len(labels)-1; i++ {
+		candidates = append(candidates, strings.Join(labels[i:], ".")+port)
+	}
+	return candidates, nil
+}
+
 // parseCursor decodes a list cursor. Cursors are the id of the last row
 // on the previous page; an empty/nil cursor means "start of list".
 func parseCursor(cursor *string) (uuid.NullUUID, error) {
@@ -1215,4 +1918,20 @@ func parseCursor(cursor *string) (uuid.NullUUID, error) {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("parse cursor: %w", err)
 	}
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
+}
+
+// issuerBindingConfigurationChanged compares the effective persisted values, so
+// omitted fields, no-op patches, and presentation-only edits do not require an
+// unlink. Callers keep the issuer advisory lock through update, guard and commit;
+// a rejected configuration update is rolled back with the transaction.
+func issuerBindingConfigurationChanged(before, after repo.RemoteSessionIssuer) bool {
+	return before.Issuer != after.Issuer ||
+		before.AuthorizationEndpoint.String != after.AuthorizationEndpoint.String ||
+		before.TokenEndpoint.String != after.TokenEndpoint.String ||
+		before.RevocationEndpoint.String != after.RevocationEndpoint.String ||
+		before.RegistrationEndpoint.String != after.RegistrationEndpoint.String ||
+		before.JwksUri.String != after.JwksUri.String ||
+		before.UserinfoEndpoint.String != after.UserinfoEndpoint.String ||
+		before.IntrospectionEndpoint.String != after.IntrospectionEndpoint.String ||
+		before.TunneledMcpServerID != after.TunneledMcpServerID
 }

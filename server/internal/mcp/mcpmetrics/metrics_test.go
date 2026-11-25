@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -13,7 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 )
 
 func TestNewMetrics(t *testing.T) {
@@ -28,6 +31,7 @@ func TestNewMetrics(t *testing.T) {
 		require.NotNil(t, m)
 		require.NotNil(t, m.mcpToolCallCounter)
 		require.NotNil(t, m.mcpRequestDuration)
+		require.NotNil(t, m.mcpProtocolVersionRejectedCounter)
 		require.NotNil(t, m.identityCoverage)
 	})
 }
@@ -42,7 +46,7 @@ func TestMetrics_RecordMCPToolCall(t *testing.T) {
 		m := NewMetrics(meter, logger)
 
 		// Should not panic
-		m.RecordMCPToolCall(context.Background(), "org-123", "https://mcp.example.com", "test-tool")
+		m.RecordMCPToolCall(context.Background(), "org-123", "https://mcp.example.com", "", "test-tool")
 	})
 
 	t.Run("handles_nil_counter_gracefully", func(t *testing.T) {
@@ -52,7 +56,7 @@ func TestMetrics_RecordMCPToolCall(t *testing.T) {
 		}
 
 		// Should not panic when counter is nil
-		m.RecordMCPToolCall(context.Background(), "org-123", "https://mcp.example.com", "test-tool")
+		m.RecordMCPToolCall(context.Background(), "org-123", "https://mcp.example.com", "", "test-tool")
 	})
 }
 
@@ -66,7 +70,7 @@ func TestMetrics_RecordMCPRequestDuration(t *testing.T) {
 		m := NewMetrics(meter, logger)
 
 		// Should not panic
-		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", 100*time.Millisecond)
+		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", "", 100*time.Millisecond)
 	})
 
 	t.Run("handles_nil_histogram_gracefully", func(t *testing.T) {
@@ -76,7 +80,7 @@ func TestMetrics_RecordMCPRequestDuration(t *testing.T) {
 		}
 
 		// Should not panic when histogram is nil
-		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", 100*time.Millisecond)
+		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", "", 100*time.Millisecond)
 	})
 }
 
@@ -130,6 +134,15 @@ func TestMetrics_RecordOAuthFlowDeclined(t *testing.T) {
 	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageConsent)
 }
 
+func TestMetrics_RecordOAuthAuthorityUnavailable(t *testing.T) {
+	t.Parallel()
+
+	meter := testenv.NewMeterProvider(t).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+
+	m.RecordOAuthAuthorityUnavailable(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageToken)
+}
+
 func TestMetrics_RecordOAuthRefreshTokenReplayServed(t *testing.T) {
 	t.Parallel()
 
@@ -149,6 +162,7 @@ func TestMetrics_RecordOAuthFlow_NilCountersDoNotPanic(t *testing.T) {
 	m.RecordOAuthFlowCompleted(t.Context(), "issuer-1", "mcp-slug-1")
 	m.RecordOAuthFlowFailed(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageConsent)
 	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageIDPCallback)
+	m.RecordOAuthAuthorityUnavailable(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageToken)
 	m.RecordOAuthRefreshTokenReplayServed(t.Context(), "issuer-1", "mcp-slug-1")
 }
 
@@ -185,6 +199,50 @@ func TestMetricsRecordMCPRequest_ForwardsToCensus(t *testing.T) {
 	nilMetrics.RecordMCPRequest(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
 }
 
+func TestRecordMCPProtocolVersionRejected_PinsInstrumentAndDimensions(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordMCPProtocolVersionRejected(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceMeta)
+
+	got := collectMetric(t, reader, InstrumentMCPProtocolVersionRejected)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Version20260728),
+		attr.McpMethod("tools/list"),
+		attr.McpSurface(string(SurfaceMeta)),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(1), sum.DataPoints[0].Value)
+}
+
+func TestRecordMCPProtocolVersionRejected_ClampsAndIsNilSafe(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordMCPProtocolVersionRejected(t.Context(), "2031-01-01", "extension/unbounded", SurfaceHosting)
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, InstrumentMCPProtocolVersionRejected),
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Other),
+		attr.McpMethod(mcprequests.MethodOther),
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+
+	var nilMetrics *Metrics
+	nilMetrics.RecordMCPProtocolVersionRejected(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
+	empty := &Metrics{}
+	empty.RecordMCPProtocolVersionRejected(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
+}
+
 // TestRequestCounterRecord_PinsInstrumentAndDimensions pins the census wiring
 // a noop meter cannot see: the instrument name, the three attribute keys, and
 // that a known version passes through the clamp intact.
@@ -201,6 +259,7 @@ func TestRequestCounterRecord_PinsInstrumentAndDimensions(t *testing.T) {
 		attr.MCPNegotiatedProtocolVersion(mcpversions.Version20260728),
 		attr.McpMethod("tools/list"),
 		attr.McpSurface(string(SurfaceHosting)),
+		attr.NetworkSurface(NetworkSurfacePublic),
 	)
 }
 
@@ -221,6 +280,29 @@ func TestRequestCounterRecord_ClampsAtRecordSite(t *testing.T) {
 		attr.MCPNegotiatedProtocolVersion(mcpversions.Other),
 		attr.McpMethod(mcprequests.MethodOther),
 		attr.McpSurface(string(SurfacePlatform)),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+}
+
+func TestRequestCounterRecordUsesTrustedPrivateOrigin(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{
+		Surface:          requestorigin.SurfacePrivateNetwork,
+		BaseURL:          "https://private.example",
+		OrganizationID:   "<ORG_ID>",
+		NetworkIngressID: uuid.New(),
+	})
+
+	NewRequestCounter(meter, testenv.NewLogger(t)).Record(ctx, mcpversions.Version20260728, "tools/list", SurfaceHosting)
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, InstrumentMCPRequest),
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Version20260728),
+		attr.McpMethod("tools/list"),
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.NetworkSurface(NetworkSurfacePrivate),
 	)
 }
 
@@ -233,11 +315,72 @@ func TestRecordMCPRequestDuration_ClampsMethodLabel(t *testing.T) {
 	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
 
 	m := NewMetrics(meter, testenv.NewLogger(t))
-	m.RecordMCPRequestDuration(t.Context(), "rpc.discover", "mcp.example.com/mcp/demo", 100*time.Millisecond)
+	m.RecordMCPRequestDuration(t.Context(), "rpc.discover", "mcp.example.com/mcp/demo", "", 100*time.Millisecond)
 
 	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, "mcp.request.duration"),
 		attr.McpMethod(mcprequests.MethodOther),
 		attr.McpURL("mcp.example.com/mcp/demo"),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+}
+
+func TestRecordMCPServerID_OnlyWhenKnown(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	serverID := uuid.NewString()
+
+	m.RecordMCPToolCall(t.Context(), "org-123", "mcp.example.com/mcp/demo", serverID, "test-tool")
+	m.RecordMCPRequestDuration(t.Context(), "tools/call", "mcp.example.com/mcp/demo", serverID, 100*time.Millisecond)
+	m.RecordMCPToolCall(t.Context(), "org-123", "mcp.example.com/mcp/legacy", "", "test-tool")
+	m.RecordMCPRequestDuration(t.Context(), "tools/call", "mcp.example.com/mcp/legacy", "", 100*time.Millisecond)
+
+	durations, ok := collectMetric(t, reader, "mcp.request.duration").Data.(metricdata.Histogram[float64])
+	require.True(t, ok)
+	require.Len(t, durations.DataPoints, 2)
+	for _, dp := range durations.DataPoints {
+		url, _ := dp.Attributes.Value(attr.McpURLKey)
+		got, has := dp.Attributes.Value(attr.McpServerIDKey)
+		if url.AsString() == "mcp.example.com/mcp/legacy" {
+			require.False(t, has)
+			continue
+		}
+		require.True(t, has)
+		require.Equal(t, serverID, got.AsString())
+	}
+
+	toolCalls, ok := collectMetric(t, reader, "mcp.tool.call").Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, toolCalls.DataPoints, 2)
+	for _, dp := range toolCalls.DataPoints {
+		url, _ := dp.Attributes.Value(attr.McpURLKey)
+		got, has := dp.Attributes.Value(attr.McpServerIDKey)
+		if url.AsString() == "mcp.example.com/mcp/legacy" {
+			require.False(t, has)
+			continue
+		}
+		require.True(t, has)
+		require.Equal(t, serverID, got.AsString())
+	}
+}
+
+func TestRecordMCPRequestDuration_TracksPrivateTraffic(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{
+		Surface: requestorigin.SurfacePrivateNetwork,
+		BaseURL: "https://private.example",
+	})
+	m.RecordMCPRequestDuration(ctx, "tools/call", "mcp.example.com/mcp/demo", "", 100*time.Millisecond)
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, "mcp.request.duration"),
+		attr.McpURL("mcp.example.com/mcp/demo"),
+		attr.NetworkSurface(NetworkSurfacePrivate),
 	)
 }
 
@@ -255,6 +398,7 @@ func TestRecordMCPRequestRejected_PinsInstrumentAndDimensions(t *testing.T) {
 
 	got := collectMetric(t, reader, InstrumentMCPRequestRejected)
 	metricdatatest.AssertHasAttributes(t, got,
+		attr.McpRejectionReason(RequestRejectionReasonAuthentication),
 		attr.OAuthFailureReason("invalid_remote_session"),
 		attr.McpURL("mcp.example.com/mcp/demo"),
 		attr.McpSurface(string(SurfaceMeta)),
@@ -264,6 +408,33 @@ func TestRecordMCPRequestRejected_PinsInstrumentAndDimensions(t *testing.T) {
 	require.True(t, ok, "rejected instrument must be an int64 counter")
 	require.Len(t, sum.DataPoints, 1)
 	require.Equal(t, int64(1), sum.DataPoints[0].Value)
+}
+
+// TestRecordMCPRequestValidationRejected_SharesRejectedInstrument pins that
+// request validation failures land on the same instrument as authentication
+// rejections, distinguished by gram.mcp.rejection_reason alone.
+func TestRecordMCPRequestValidationRejected_SharesRejectedInstrument(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordMCPRequestValidationRejected(t.Context(), RequestRejectionReasonHeaderMismatch, "mcp.example.com/mcp/demo", SurfaceHosting)
+
+	got := collectMetric(t, reader, InstrumentMCPRequestRejected)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.McpRejectionReason(RequestRejectionReasonHeaderMismatch),
+		attr.McpURL("mcp.example.com/mcp/demo"),
+		attr.McpSurface(string(SurfaceHosting)),
+	)
+
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok, "rejected instrument must be an int64 counter")
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(1), sum.DataPoints[0].Value)
+	_, hasOAuthReason := sum.DataPoints[0].Attributes.Value(attr.OAuthFailureReasonKey)
+	require.False(t, hasOAuthReason, "validation rejections carry no OAuth failure reason")
 }
 
 // TestRecordMCPRequestRejected_NilSafe pins the documented contract that a
@@ -295,4 +466,132 @@ func collectMetric(t *testing.T, reader *sdkmetric.ManualReader, name string) me
 	}
 	t.Fatalf("metric %q not found", name)
 	return metricdata.Metrics{}
+}
+
+func TestRecordIDJAGExchange_PinsInstrumentAndDimensions(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	issuerID := uuid.NewString()
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeRejected, IDJAGRejectionFromValidator(idjag.ReasonNotProvisioned))
+	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeAccepted, IDJAGRejectionNone)
+
+	got := collectMetric(t, reader, InstrumentOAuthIDJAGExchange)
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok, "exchange instrument must be an int64 counter")
+	require.Len(t, sum.DataPoints, 2)
+	for _, point := range sum.DataPoints {
+		require.Equal(t, int64(1), point.Value)
+		issuer, _ := point.Attributes.Value(attr.UserSessionIssuerIDKey)
+		require.Equal(t, issuerID, issuer.AsString())
+		_, hasClient := point.Attributes.Value(attr.OAuthClientIDKey)
+		require.False(t, hasClient, "client ids are unbounded and never a dimension")
+		outcome, _ := point.Attributes.Value(attr.OAuthIDJAGOutcomeKey)
+		reason, hasReason := point.Attributes.Value(attr.OAuthIDJAGRejectionReasonKey)
+		switch IDJAGExchangeOutcome(outcome.AsString()) {
+		case IDJAGExchangeRejected:
+			require.True(t, hasReason)
+			require.Equal(t, "subject_not_provisioned", reason.AsString())
+		case IDJAGExchangeAccepted:
+			require.False(t, hasReason, "accepted exchanges carry no rejection reason")
+		case IDJAGExchangeError:
+			t.Fatal("no exchange failed")
+		default:
+			t.Fatalf("unexpected outcome %q", outcome.AsString())
+		}
+	}
+}
+
+func TestRecordIDJAGExchange_NilSafe(t *testing.T) {
+	t.Parallel()
+
+	var nilMetrics *Metrics
+	nilMetrics.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeRejected, IDJAGRejectionInvalidRequest)
+
+	empty := &Metrics{}
+	empty.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeError, IDJAGRejectionNone)
+}
+
+func TestIDJAGRejectionFromValidator_MapsUnknownReasonsGenerically(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, IDJAGRejectionReason(idjag.ReasonAudienceMismatch), IDJAGRejectionFromValidator(idjag.ReasonAudienceMismatch))
+	require.Equal(t, IDJAGRejectionReason(idjag.ReasonResourceNotIndicated), IDJAGRejectionFromValidator(idjag.ReasonResourceNotIndicated))
+	require.Equal(t, IDJAGRejectionAssertionOther, IDJAGRejectionFromValidator(idjag.Reason("a_reason_added_later")))
+	require.Equal(t, IDJAGRejectionAssertionOther, IDJAGRejectionFromValidator(""))
+}
+
+// TestRecordSkillRead_PinsInstrumentAndDimensions pins the wiring a noop
+// meter cannot see: the instrument name and the three bounded attribute keys.
+func TestRecordSkillRead_PinsInstrumentAndDimensions(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	require.NotNil(t, m.mcpSkillReadCounter)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+
+	got := collectMetric(t, reader, InstrumentMCPSkillRead)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.McpSkillOrigin(SkillOriginDistribution),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(2), sum.DataPoints[0].Value)
+}
+
+func TestRecordSkillRead_SeparatesSurfaceAndOrigin(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginEmbedded)
+	m.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded)
+
+	sum, ok := collectMetric(t, reader, InstrumentMCPSkillRead).Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 3)
+}
+
+func TestRecordSkillRead_UsesTrustedPrivateOrigin(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{
+		Surface:          requestorigin.SurfacePrivateNetwork,
+		BaseURL:          "https://private.example",
+		OrganizationID:   "<ORG_ID>",
+		NetworkIngressID: uuid.New(),
+	})
+
+	NewMetrics(meter, testenv.NewLogger(t)).RecordSkillRead(ctx, SurfaceHosting, SkillOriginDistribution)
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, InstrumentMCPSkillRead),
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.McpSkillOrigin(SkillOriginDistribution),
+		attr.NetworkSurface(NetworkSurfacePrivate),
+	)
+}
+
+func TestRecordSkillRead_IsNilSafe(t *testing.T) {
+	t.Parallel()
+
+	var nilMetrics *Metrics
+	nilMetrics.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	empty := &Metrics{}
+	empty.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded)
 }

@@ -215,7 +215,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
-	// A stub resolver, not gcpauth.NewResolver: minting resolves Gram's own
+	// A stub resolver, not gcpauth.NewResolver: minting resolves Speakeasy's own
 	// identity to screen the impersonation target, so the real resolver would
 	// make this package depend on ambient cloud credentials. All three services
 	// share one identity, as they do in production.
@@ -287,7 +287,7 @@ func createGcpIamCredential(t *testing.T, ctx context.Context, ti *testInstance,
 }
 
 // gramProjectServiceAccount builds a service account address inside the same
-// project the stub resolver reports as Gram's own, which is what the
+// project the stub resolver reports as Speakeasy's own, which is what the
 // impersonation screening refuses. Derived from the stub's constant so these
 // tests cannot drift from it.
 func gramProjectServiceAccount(name string) string {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -15,8 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -24,11 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
-	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
-	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type toolsListResult = result[toolsListResultTools]
@@ -38,29 +33,31 @@ type toolsListResultTools struct {
 }
 
 type toolListEntry struct {
-	Name        string                       `json:"name"`
-	Description string                       `json:"description"`
-	InputSchema json.RawMessage              `json:"inputSchema,omitempty,omitzero"`
-	Annotations *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
-	Meta        map[string]any               `json:"_meta,omitempty"`
+	Title        string                       `json:"title,omitempty"`
+	OutputSchema json.RawMessage              `json:"outputSchema,omitempty"`
+	Icons        json.RawMessage              `json:"icons,omitempty"`
+	Execution    json.RawMessage              `json:"execution,omitempty"`
+	Name         string                       `json:"name"`
+	Description  string                       `json:"description"`
+	InputSchema  json.RawMessage              `json:"inputSchema,omitempty,omitzero"`
+	Annotations  *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
+	Meta         map[string]any               `json:"_meta,omitempty"`
 }
 
 func handleToolsList(
 	ctx context.Context,
 	logger *slog.Logger,
 	authzEngine *authz.Engine,
-	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
-	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
 	req *rawRequest,
 	productMetrics *posthog.Posthog,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporalEnv *temporal.Environment,
 	shadowMCPClient *shadowmcp.Client,
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
+	local hostedLocalTools,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -104,7 +101,7 @@ func handleToolsList(
 			protocolVersion = storedProtocolVersion
 		}
 
-		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, map[string]any{
+		props := map[string]any{
 			"project_id":           payload.projectID.String(),
 			"organization_id":      toolset.OrganizationID,
 			"authenticated":        payload.authenticated,
@@ -120,7 +117,9 @@ func handleToolsList(
 			"client_name":          conv.PtrEmpty(identity.Name),
 			"client_version":       conv.PtrEmpty(identity.Version),
 			"capabilities":         reqMeta.CapabilityKeys,
-		}); err != nil {
+		}
+		payload.recordServingAnalytics(props)
+		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, props); err != nil {
 			logger.ErrorContext(ctx, "failed to capture mcp_server_count event", attr.SlogError(err))
 		}
 	}
@@ -136,40 +135,29 @@ func handleToolsList(
 	var tools []*toolListEntry
 	switch mode {
 	case ToolModeDynamic:
-		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore, temporalEnv)
+		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore)
 		if err != nil {
+			if errors.Is(err, errToolSearchIndexUnavailable) {
+				return nil, oops.E(oops.CodeUnavailable, err, "tool search is temporarily unavailable; try again later").LogError(ctx, logger)
+			}
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build dynamic session tools").LogError(ctx, logger)
 		}
 	case ToolModeStatic:
 		fallthrough
 	default:
-		tools, err = buildToolListEntries(ctx, logger, guardianPolicy, db, env, payload, toolset, platformExtras)
-		if err != nil {
-			return nil, err
-		}
+		tools = buildToolListEntries(toolset)
 	}
 
 	// Filter tools by RBAC grants. Private authenticated MCPs enforce
 	// per-tool mcp:connect checks — the same dimensions used by tools/call.
 	// Public MCPs skip this (open to everyone, matching the connection guard).
-	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
-		allowed := make([]*toolListEntry, 0, len(tools))
-		for _, t := range tools {
-			disposition := dispositionFromAnnotations(t.Annotations)
-			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
-				Tool:        t.Name,
-				Disposition: disposition,
-				ProjectID:   payload.projectID.String(),
-			})); err != nil {
-				var oopsErr *oops.ShareableError
-				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-					continue
-				}
-				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
-			}
-			allowed = append(allowed, t)
+	// Both the privacy read and the resource id follow the wrapper when one
+	// fronts the request.
+	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
+		tools, err = filterToolsByMCPConnect(ctx, logger, authzEngine, payload.mcpConnectResourceID(toolset.ID), payload.projectID.String(), tools)
+		if err != nil {
+			return nil, err
 		}
-		tools = allowed
 	}
 
 	toolsetProjectID, err := uuid.Parse(toolset.ProjectID)
@@ -186,20 +174,28 @@ func handleToolsList(
 		}
 	}
 
+	if local != nil {
+		tools = withLocalTools(tools, local(ctx, logger, toolset.OrganizationID, payload))
+	}
+
+	// An empty toolset must list [] rather than null: some clients reject a
+	// null tools array during startup.
+	if tools == nil {
+		tools = []*toolListEntry{}
+	}
+
 	result := &toolsListResult{
 		ID: req.ID,
 		Result: toolsListResultTools{
 			Tools: tools,
 		},
 		serverIdentity: serverInfoHostedToolset,
-		// Caller-varying unconditionally, on five independent axes: the
+		// Caller-varying unconditionally, on four independent axes: the
 		// per-tool authorization filter above, the Gram-Mode header selecting
 		// static or dynamic tools, the session's consent-screen tool
-		// selection, the ?tags= filter, and — for toolsets holding external
-		// MCP proxy tools — the upstream listing buildToolListEntries makes
-		// with the caller's own MCP-* header configuration and OAuth token.
-		// Only the first is gated on server visibility, so a public server is
-		// no more shareable than a private one.
+		// selection, and the ?tags= filter. Only the first is gated on server
+		// visibility, so a public server is no more shareable than a private
+		// one.
 		cacheHints: cacheHintsCallerVarying,
 	}
 
@@ -211,85 +207,19 @@ func handleToolsList(
 	return bs, nil
 }
 
-func buildToolListEntries(
-	ctx context.Context,
-	logger *slog.Logger,
-	guardianPolicy *guardian.Policy,
-	db *pgxpool.Pool,
-	envLoader toolconfig.EnvironmentLoader,
-	payload *mcpInputs,
-	toolset *types.Toolset,
-	platformExtras []platformtools.ExternalTool,
-) ([]*toolListEntry, error) {
-	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
-
-	toolsetID, err := uuid.Parse(toolset.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse toolset ID").LogError(ctx, logger)
-	}
-
-	userConfig := toolconfig.CIEnvFrom(payload.mcpEnvVariables)
-
-	// Extract general OAuth token (no security-key binding)
-	var oauthToken string
-	for _, t := range payload.oauthTokenInputs {
-		if len(t.securityKeys) == 0 && t.Token != "" {
-			oauthToken = t.Token
-			break
-		}
-	}
-
+func buildToolListEntries(toolset *types.Toolset) []*toolListEntry {
 	var tools []*toolListEntry
-
-	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)
-	if executor.HasEntries() {
-		resolve := func(ctx context.Context, toolURN urn.Tool, projectID uuid.UUID) (*externalmcp.ToolCallPlan, error) {
-			plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, projectID)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool call plan by URN")
-			}
-			if plan.Kind != gateway.ToolKindExternalMCP || plan.ExternalMCP == nil {
-				return nil, oops.E(oops.CodeUnexpected, nil, "expected external MCP plan for proxy tool")
-			}
-			return plan.ExternalMCP, nil
-		}
-
-		loadSystemEnv := func(ctx context.Context, toolURN urn.Tool) (*toolconfig.CaseInsensitiveEnv, error) {
-			return envLoader.LoadSystemEnv(ctx, payload.projectID, toolsetID, string(toolURN.Kind), toolURN.Source)
-		}
-
-		proxyTools, err := executor.DoList(ctx, payload.projectID, userConfig, oauthToken, loadSystemEnv, resolve)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list proxy tools").LogError(ctx, logger)
-		}
-
-		for _, extTool := range proxyTools {
-			tools = append(tools, &toolListEntry{
-				Name:        extTool.Name,
-				Description: extTool.Description,
-				InputSchema: extTool.Schema,
-				Annotations: extTool.Annotations,
-				Meta:        nil,
-			})
-		}
-	}
 	for _, tool := range toolset.Tools {
-		if !conv.IsProxyTool(tool) {
-			if entry := toolToListEntry(tool); entry != nil {
-				tools = append(tools, entry)
-			}
+		if entry := toolToListEntry(tool); entry != nil {
+			tools = append(tools, entry)
 		}
 	}
 
-	return tools, nil
+	return tools
 }
 
 func toolToListEntry(tool *types.Tool) *toolListEntry {
 	if tool == nil {
-		return nil
-	}
-
-	if conv.IsProxyTool(tool) {
 		return nil
 	}
 
@@ -299,6 +229,7 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 	}
 
 	return &toolListEntry{
+		Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
 		Name:        toolEntry.Name,
 		Description: toolEntry.Description,
 		InputSchema: toolEntry.InputSchema,
@@ -324,18 +255,45 @@ func convertConvAnnotations(c *conv.ToolAnnotations) *externalmcp.ToolAnnotation
 // dispositionFromAnnotations derives a disposition string from tool annotations.
 func dispositionFromAnnotations(a *externalmcp.ToolAnnotations) string {
 	if a == nil {
-		return ""
+		disposition, _ := authz.DispositionFromHints(nil, nil, nil, nil)
+		return disposition
 	}
-	switch {
-	case a.ReadOnlyHint != nil && *a.ReadOnlyHint:
-		return "read_only"
-	case a.DestructiveHint != nil && *a.DestructiveHint:
-		return "destructive"
-	case a.IdempotentHint != nil && *a.IdempotentHint:
-		return "idempotent"
-	case a.OpenWorldHint != nil && *a.OpenWorldHint:
-		return "open_world"
-	default:
-		return ""
+	disposition, _ := authz.DispositionFromHints(a.ReadOnlyHint, a.DestructiveHint, a.IdempotentHint, a.OpenWorldHint)
+	return disposition
+}
+
+// toolDisposition classifies a tool about to be called and logs a tool that
+// says it is both read-only and destructive.
+func toolDisposition(ctx context.Context, logger *slog.Logger, toolName string, a *types.ToolAnnotations) string {
+	if a == nil {
+		disposition, _ := authz.DispositionFromHints(nil, nil, nil, nil)
+		return disposition
 	}
+	disposition, conflicting := authz.DispositionFromHints(a.ReadOnlyHint, a.DestructiveHint, a.IdempotentHint, a.OpenWorldHint)
+	if conflicting {
+		logger.WarnContext(ctx, "tool says it is both read-only and destructive; treating it as destructive", attr.SlogToolName(toolName))
+	}
+	return disposition
+}
+
+// filterToolsByMCPConnect keeps the tools the caller may connect to and stops
+// once the request is canceled. Listing records no authorization check per
+// tool: the caller asked for a list, not for any one tool, and the call that
+// names a tool records its own.
+func filterToolsByMCPConnect(ctx context.Context, logger *slog.Logger, authzEngine *authz.Engine, resourceID string, projectID string, tools []*toolListEntry) ([]*toolListEntry, error) {
+	allowed := make([]*toolListEntry, 0, len(tools))
+	for _, t := range tools {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("filter tools by authz: %w", err)
+		}
+		if err := authzEngine.Require(authz.WithoutChallenges(ctx), authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(projectID)).ToolCall(t.Name, dispositionFromAnnotations(t.Annotations))); err != nil {
+			var oopsErr *oops.ShareableError
+			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+				continue
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
+		}
+		allowed = append(allowed, t)
+	}
+	return allowed, nil
 }

@@ -365,7 +365,7 @@ func (b *botFrameworkAuthenticator) authenticate(ctx context.Context, body []byt
 		return err
 	}
 
-	verifier := oidc.NewVerifier(b.issuer, keySet, &oidc.Config{ //nolint:exhaustruct // third-party struct; remaining fields keep default verification behavior
+	verifier := oidc.NewVerifier(b.issuer, keySet, &oidc.Config{ //nolint:exhaustruct_v5 // third-party struct; remaining fields keep default verification behavior
 		ClientID:             appID,
 		SupportedSigningAlgs: []string{"RS256"},
 	})
@@ -412,7 +412,7 @@ func newMSTeamsDefinition() Definition {
 	vendor := WebhookVendor{
 		Slug:        DefinitionSlugMSTeams,
 		Title:       "Microsoft Teams",
-		Description: "Receive Bot Framework activities from Microsoft Teams and map them to Gram trigger events.",
+		Description: "Receive Bot Framework activities from Microsoft Teams and map them to Speakeasy trigger events.",
 		EventType:   reflect.TypeFor[msteamsTriggerEvent](),
 		EnvRequirements: []EnvRequirement{{
 			Name:        msteamsAppIDEnv,
@@ -431,7 +431,7 @@ func newMSTeamsDefinition() Definition {
 			return authenticator.authenticate(ctx, body, headers, appID)
 		},
 		SupportedEventTypes: supportedMSTeamsEventTypes,
-		PreVerify:           nil,
+		Handshake:           nil,
 		Ingest:              msteamsIngest,
 	}
 	return NewWebhookDefinition(vendor, schema, compiled, func(raw map[string]any) (Config, error) {

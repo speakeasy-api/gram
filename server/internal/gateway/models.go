@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -151,14 +150,6 @@ type PlatformToolCallPlan struct {
 	Executor PlatformDirectExecutor `json:"-" yaml:"-"`
 }
 
-// ExternalMCPToolCallPlan is an alias for externalmcp.ToolCallPlan.
-// Kept for backwards compatibility with existing code.
-type ExternalMCPToolCallPlan = externalmcp.ToolCallPlan
-
-// ExternalMCPHeaderDef is an alias for externalmcp.HeaderDefinition.
-// Kept for backwards compatibility with existing code.
-type ExternalMCPHeaderDef = externalmcp.HeaderDefinition
-
 type ResourceFunctionCallPlan struct {
 	FunctionID        string   `json:"function_id" yaml:"function_id"`
 	FunctionsAccessID string   `json:"functions_access_id" yaml:"functions_access_id"`
@@ -171,11 +162,10 @@ type ResourceFunctionCallPlan struct {
 type ToolKind string
 
 const (
-	ToolKindHTTP        ToolKind = "http"
-	ToolKindFunction    ToolKind = "function"
-	ToolKindPrompt      ToolKind = "prompt"
-	ToolKindPlatform    ToolKind = "platform"
-	ToolKindExternalMCP ToolKind = "external_mcp"
+	ToolKindHTTP     ToolKind = "http"
+	ToolKindFunction ToolKind = "function"
+	ToolKindPrompt   ToolKind = "prompt"
+	ToolKindPlatform ToolKind = "platform"
 )
 
 type ResourceKind string
@@ -191,11 +181,10 @@ type ToolCallPlan struct {
 	BillingType billing.ToolCallType
 	Descriptor  *ToolDescriptor
 
-	HTTP        *HTTPToolCallPlan
-	Function    *FunctionToolCallPlan
-	Prompt      *PromptToolCallPlan
-	Platform    *PlatformToolCallPlan
-	ExternalMCP *ExternalMCPToolCallPlan
+	HTTP     *HTTPToolCallPlan
+	Function *FunctionToolCallPlan
+	Prompt   *PromptToolCallPlan
+	Platform *PlatformToolCallPlan
 }
 
 // NewHTTPToolCallPlan creates a new Tool wrapping an HTTPTool.
@@ -208,7 +197,6 @@ func NewHTTPToolCallPlan(tool *ToolDescriptor, plan *HTTPToolCallPlan) *ToolCall
 		Function:    nil,
 		Prompt:      nil,
 		Platform:    nil,
-		ExternalMCP: nil,
 	}
 }
 
@@ -222,7 +210,6 @@ func NewFunctionToolCallPlan(tool *ToolDescriptor, plan *FunctionToolCallPlan) *
 		Function:    plan,
 		Prompt:      nil,
 		Platform:    nil,
-		ExternalMCP: nil,
 	}
 }
 
@@ -236,7 +223,6 @@ func NewPromptToolCallPlan(tool *ToolDescriptor, plan *PromptToolCallPlan) *Tool
 		Function:    nil,
 		Prompt:      plan,
 		Platform:    nil,
-		ExternalMCP: nil,
 	}
 }
 
@@ -249,21 +235,6 @@ func NewPlatformToolCallPlan(tool *ToolDescriptor, plan *PlatformToolCallPlan) *
 		Function:    nil,
 		Prompt:      nil,
 		Platform:    plan,
-		ExternalMCP: nil,
-	}
-}
-
-// NewExternalMCPToolCallPlan creates a new Tool wrapping an ExternalMCPTool.
-func NewExternalMCPToolCallPlan(tool *ToolDescriptor, plan *ExternalMCPToolCallPlan) *ToolCallPlan {
-	return &ToolCallPlan{
-		Kind:        ToolKindExternalMCP,
-		BillingType: billing.ToolCallTypeExternalMCP,
-		Descriptor:  tool,
-		HTTP:        nil,
-		Function:    nil,
-		Prompt:      nil,
-		Platform:    nil,
-		ExternalMCP: plan,
 	}
 }
 

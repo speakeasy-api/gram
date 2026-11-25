@@ -1,10 +1,5 @@
-import {
-  cleanup,
-  render,
-  renderHook,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { cleanup, render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,10 +22,13 @@ vi.mock("@/contexts/Sdk.tsx", () => ({
   }),
 }));
 
+import {
+  restoreLocation,
+  stubLocationReplace,
+} from "@/lib/stub-location-replace";
+
 import { ImpersonationBanner, LoginCheck } from "./app-layout";
 import { useShowsImpersonationBanner } from "./impersonation-banner-state";
-
-let originalLocation: Location | undefined;
 
 const baseSession = {
   impersonatorEmail: undefined,
@@ -55,13 +53,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  if (originalLocation) {
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: originalLocation,
-    });
-    originalLocation = undefined;
-  }
+  restoreLocation();
 });
 
 describe("trusted support banner", () => {
@@ -94,20 +86,7 @@ describe("trusted support banner", () => {
       ...baseSession,
       organizationOverride: true,
     });
-    originalLocation = window.location;
-    const hrefSetter = vi.fn();
-    // @ts-expect-error happy-dom-compatible location replacement for redirect assertion
-    delete window.location;
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: {
-        // oxlint-disable-next-line typescript/no-misused-spread -- happy-dom Location is plain enough for tests
-        ...originalLocation,
-        set href(value: string) {
-          hrefSetter(value);
-        },
-      },
-    });
+    const replace = stubLocationReplace();
 
     render(<ImpersonationBanner />);
     await userEvent.click(
@@ -116,7 +95,7 @@ describe("trusted support banner", () => {
 
     await waitFor(() => {
       expect(mocks.logout).toHaveBeenCalledOnce();
-      expect(hrefSetter).toHaveBeenCalledWith("/login");
+      expect(replace).toHaveBeenCalledWith("/login");
     });
   });
 
@@ -159,6 +138,45 @@ describe("trusted support banner", () => {
 });
 
 describe("LoginCheck", () => {
+  it.each(["/org/setup?task=enable-logging", "/org/setup/enable-logging"])(
+    "preserves unauthenticated setup destination %s through login",
+    (destination) => {
+      mocks.useSession.mockReturnValue({ ...baseSession, session: "" });
+      render(
+        <MemoryRouter initialEntries={[destination]}>
+          <Routes>
+            <Route element={<LoginCheck />}>
+              <Route path="/org/setup" element={<div>setup</div>} />
+              <Route path="/org/setup/:taskSlug" element={<div>setup</div>} />
+            </Route>
+            <Route path="/login" element={<CurrentLocation />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByTestId("location").textContent).toBe(
+        `/login?redirect=${encodeURIComponent(destination)}`,
+      );
+      expect(screen.queryByText("setup")).toBeNull();
+    },
+  );
+
+  it("lifts signin_error out of the destination onto the login page", () => {
+    mocks.useSession.mockReturnValue({ ...baseSession, session: "" });
+    render(
+      <MemoryRouter initialEntries={["/?signin_error=sign_in_revoked"]}>
+        <Routes>
+          <Route element={<LoginCheck />}>
+            <Route path="/" element={<div>home</div>} />
+          </Route>
+          <Route path="/login" element={<CurrentLocation />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/login?redirect=%2F&signin_error=sign_in_revoked",
+    );
+  });
+
   it("sends authenticated zero-org sessions to sign-up with their destination", () => {
     mocks.useSession.mockReturnValue({
       ...baseSession,

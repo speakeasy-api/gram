@@ -27,12 +27,13 @@ type LogRiskExclusionCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskExclusionID uuid.UUID //nolint:glint // matches risk_policy precedent; URN migration tracked in AGE-1954
+	RiskExclusionID uuid.UUID //nolint:glint // auditeventurnnaming: matches risk_policy precedent; URN migration tracked in AGE-1954
 	DisplayName     string
 }
 
 func (l *Logger) LogRiskExclusionCreate(ctx context.Context, dbtx repo.DBTX, event LogRiskExclusionCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -64,7 +65,7 @@ type LogRiskExclusionUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskExclusionID uuid.UUID //nolint:glint // matches risk_policy precedent; URN migration tracked in AGE-1954
+	RiskExclusionID uuid.UUID //nolint:glint // auditeventurnnaming: matches risk_policy precedent; URN migration tracked in AGE-1954
 	DisplayName     string
 
 	SnapshotBefore *types.RiskExclusion
@@ -85,6 +86,7 @@ func (l *Logger) LogRiskExclusionUpdate(ctx context.Context, dbtx repo.DBTX, eve
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -116,12 +118,13 @@ type LogRiskExclusionDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskExclusionID uuid.UUID //nolint:glint // matches risk_policy precedent; URN migration tracked in AGE-1954
+	RiskExclusionID uuid.UUID //nolint:glint // auditeventurnnaming: matches risk_policy precedent; URN migration tracked in AGE-1954
 	DisplayName     string
 }
 
 func (l *Logger) LogRiskExclusionDelete(ctx context.Context, dbtx repo.DBTX, event LogRiskExclusionDeleteEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

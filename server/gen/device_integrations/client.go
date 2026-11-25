@@ -25,11 +25,13 @@ type Client struct {
 	RetryScheduleEndpoint      goa.Endpoint
 	ListManagedDevicesEndpoint goa.Endpoint
 	GetCoverageEndpoint        goa.Endpoint
+	ListFleetDevicesEndpoint   goa.Endpoint
+	GetFleetCoverageEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "deviceIntegrations" service client given the
 // endpoints.
-func NewClient(listProviders, getConfig, upsertConfig, deleteConfig, testConnection, listSchedules, setScheduleEnabled, retrySchedule, listManagedDevices, getCoverage goa.Endpoint) *Client {
+func NewClient(listProviders, getConfig, upsertConfig, deleteConfig, testConnection, listSchedules, setScheduleEnabled, retrySchedule, listManagedDevices, getCoverage, listFleetDevices, getFleetCoverage goa.Endpoint) *Client {
 	return &Client{
 		ListProvidersEndpoint:      listProviders,
 		GetConfigEndpoint:          getConfig,
@@ -41,6 +43,8 @@ func NewClient(listProviders, getConfig, upsertConfig, deleteConfig, testConnect
 		RetryScheduleEndpoint:      retrySchedule,
 		ListManagedDevicesEndpoint: listManagedDevices,
 		GetCoverageEndpoint:        getCoverage,
+		ListFleetDevicesEndpoint:   listFleetDevices,
+		GetFleetCoverageEndpoint:   getFleetCoverage,
 	}
 }
 
@@ -267,4 +271,50 @@ func (c *Client) GetCoverage(ctx context.Context, p *GetCoveragePayload) (res *D
 		return
 	}
 	return ires.(*DeviceIntegrationCoverage), nil
+}
+
+// ListFleetDevices calls the "listFleetDevices" endpoint of the
+// "deviceIntegrations" service.
+// ListFleetDevices may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListFleetDevices(ctx context.Context, p *ListFleetDevicesPayload) (res *ListFleetDevicesResult, err error) {
+	var ires any
+	ires, err = c.ListFleetDevicesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListFleetDevicesResult), nil
+}
+
+// GetFleetCoverage calls the "getFleetCoverage" endpoint of the
+// "deviceIntegrations" service.
+// GetFleetCoverage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetFleetCoverage(ctx context.Context, p *GetFleetCoveragePayload) (res *FleetCoverage, err error) {
+	var ires any
+	ires, err = c.GetFleetCoverageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*FleetCoverage), nil
 }

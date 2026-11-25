@@ -1,7 +1,7 @@
 // extractStreamError pulls a human-readable message out of an error surfaced
 // by the AI SDK stream. Handles three response shapes:
 //   1. OpenRouter:        { error: { message: ..., metadata?: { raw } } }
-//   2. Gram (goa):        { name, message, ... } — top-level (e.g. 402 insufficient_credits)
+//   2. Speakeasy (goa):        { name, message, ... } — top-level (e.g. 402 insufficient_credits)
 //   3. Plain Error:       error.message
 export const extractStreamError = (event: {
   error: unknown;

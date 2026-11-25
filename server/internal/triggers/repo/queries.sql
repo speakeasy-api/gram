@@ -52,6 +52,46 @@ ON CONFLICT (project_id, target_ref)
 DO NOTHING
 RETURNING *;
 
+-- name: CreateSpeakeasySlackTriggerInstance :one
+INSERT INTO trigger_instances (
+    organization_id,
+    project_id,
+    definition_slug,
+    name,
+    environment_id,
+    target_kind,
+    target_ref,
+    target_display,
+    config_json,
+    status
+) VALUES (
+    @organization_id,
+    @project_id,
+    'speakeasy_slack',
+    @name,
+    NULL,
+    @target_kind,
+    @target_ref,
+    @target_display,
+    @config_json,
+    'active'
+)
+ON CONFLICT (project_id, target_ref)
+  WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE
+DO NOTHING
+RETURNING *;
+
+-- name: GetSpeakeasySlackTriggerInstance :one
+SELECT *
+FROM trigger_instances
+WHERE project_id = @project_id
+  AND definition_slug = 'speakeasy_slack'
+  AND target_kind = @target_kind
+  AND target_ref = @target_ref
+  AND status = 'active'
+  AND deleted IS FALSE
+LIMIT 1;
+
 -- name: ListTriggerInstances :many
 SELECT *
 FROM trigger_instances ti
@@ -65,6 +105,14 @@ FROM trigger_instances ti
 WHERE ti.id = @id
   AND ti.project_id = @project_id
   AND ti.deleted IS FALSE;
+
+-- name: GetTriggerInstanceByIDForUpdate :one
+SELECT *
+FROM trigger_instances ti
+WHERE ti.id = @id
+  AND ti.project_id = @project_id
+  AND ti.deleted IS FALSE
+FOR UPDATE;
 
 -- name: GetTriggerInstanceByIDPublic :one
 SELECT *
@@ -162,3 +210,110 @@ WHERE project_id = @project_id
   AND target_ref = @target_ref
   AND definition_slug <> @excluded_definition_slug
   AND deleted IS FALSE;
+
+-- name: GetTriggerThreadRoute :one
+SELECT *
+FROM trigger_thread_routes
+WHERE project_id = @project_id
+  AND target_kind = @target_kind
+  AND target_ref = @target_ref
+  AND correlation_id = @correlation_id
+  AND deleted IS FALSE;
+
+-- name: UpsertTriggerThreadRouteState :one
+-- Cursors are compared in byte order, so a cursor only moves forward when the
+-- source's cursors sort lexically (Slack message timestamps do).
+INSERT INTO trigger_thread_routes (
+    project_id,
+    target_kind,
+    target_ref,
+    correlation_id,
+    state,
+    last_seen_cursor
+) VALUES (
+    @project_id,
+    @target_kind,
+    @target_ref,
+    @correlation_id,
+    @state,
+    sqlc.narg('last_seen_cursor')
+)
+ON CONFLICT (project_id, target_kind, target_ref, correlation_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    state = EXCLUDED.state,
+    last_seen_cursor = CASE
+        WHEN EXCLUDED.last_seen_cursor IS NULL THEN trigger_thread_routes.last_seen_cursor
+        WHEN trigger_thread_routes.last_seen_cursor IS NULL THEN EXCLUDED.last_seen_cursor
+        WHEN EXCLUDED.last_seen_cursor COLLATE "C" > trigger_thread_routes.last_seen_cursor COLLATE "C" THEN EXCLUDED.last_seen_cursor
+        ELSE trigger_thread_routes.last_seen_cursor
+    END,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: RouteTriggerThread :one
+INSERT INTO trigger_thread_routes (
+    project_id,
+    target_kind,
+    target_ref,
+    correlation_id,
+    route_to_correlation_id,
+    state,
+    last_seen_cursor
+) VALUES (
+    @project_id,
+    @target_kind,
+    @target_ref,
+    @correlation_id,
+    @route_to_correlation_id,
+    @state,
+    sqlc.narg('last_seen_cursor')
+)
+ON CONFLICT (project_id, target_kind, target_ref, correlation_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    route_to_correlation_id = EXCLUDED.route_to_correlation_id,
+    state = EXCLUDED.state,
+    last_seen_cursor = CASE
+        WHEN EXCLUDED.last_seen_cursor IS NULL THEN trigger_thread_routes.last_seen_cursor
+        WHEN trigger_thread_routes.last_seen_cursor IS NULL THEN EXCLUDED.last_seen_cursor
+        WHEN EXCLUDED.last_seen_cursor COLLATE "C" > trigger_thread_routes.last_seen_cursor COLLATE "C" THEN EXCLUDED.last_seen_cursor
+        ELSE trigger_thread_routes.last_seen_cursor
+    END,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: SetTriggerThreadRoutesStateForTarget :execrows
+-- Sets the state of every conversation delivered under @correlation_id: the
+-- conversation itself and every conversation routed to it.
+UPDATE trigger_thread_routes
+SET state = @state,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND target_kind = @target_kind
+  AND target_ref = @target_ref
+  AND (correlation_id = @correlation_id OR route_to_correlation_id = @correlation_id)
+  AND deleted IS FALSE;
+
+-- name: AdvanceTriggerThreadRouteCursor :exec
+-- Moves the cursor forward without touching state, so a delivery racing an
+-- unsubscribe cannot subscribe the target again.
+UPDATE trigger_thread_routes
+SET last_seen_cursor = CASE
+        WHEN last_seen_cursor IS NULL THEN sqlc.arg(last_seen_cursor)::text
+        WHEN sqlc.arg(last_seen_cursor)::text COLLATE "C" > last_seen_cursor COLLATE "C" THEN sqlc.arg(last_seen_cursor)::text
+        ELSE last_seen_cursor
+    END,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND target_kind = @target_kind
+  AND target_ref = @target_ref
+  AND correlation_id = @correlation_id
+  AND deleted IS FALSE;
+
+-- name: GetWakeWorkloadSession :one
+-- Recheck the authenticated session inside the wake transaction.
+SELECT id
+FROM user_sessions
+WHERE jti = @jti AND subject_urn = @subject_urn
+  AND organization_id = @organization_id
+  AND (project_id = @project_id OR project_id IS NULL)
+  AND deleted IS FALSE AND expires_at > clock_timestamp();

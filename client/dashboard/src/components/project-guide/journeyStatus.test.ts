@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
@@ -5,7 +6,7 @@ import type { PluginServer } from "@gram/client/models/components/pluginserver.j
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import { DETECTION_RULES } from "@/pages/security/policy-data";
 import { describe, expect, it } from "vitest";
 import {
@@ -39,7 +40,7 @@ function remote(overrides: Partial<RemoteMcpServer> = {}): RemoteMcpServer {
   };
 }
 
-function catalogServer(url = "https://catalog.example/mcp/"): PulseMCPServer {
+function catalogServer(url = "https://catalog.example/mcp/"): CatalogServer {
   return {
     description: "Catalog server",
     isReadOnly: true,
@@ -173,7 +174,12 @@ describe("hasBlockingSecretsPolicy", () => {
         policy({
           action: "block",
           sources: ["gitleaks"],
-          messageTypes: ["tool_request", "tool_response"],
+          detectionScopes: [
+            {
+              category: "secrets",
+              scopeInclude: 'kind in ["tool_request","tool_response"]',
+            },
+          ],
         }),
       ]),
     ).toBe(true);
@@ -184,15 +190,15 @@ describe("hasBlockingSecretsPolicy", () => {
     overrides: Partial<RiskPolicy>;
   }>([
     {
-      name: "an omitted message type list",
+      name: "an omitted detection scope",
       overrides: { action: "block", sources: ["gitleaks"] },
     },
     {
-      name: "an empty message type list",
+      name: "an empty detection scope list",
       overrides: {
         action: "block",
         sources: ["gitleaks"],
-        messageTypes: [],
+        detectionScopes: [],
       },
     },
     {
@@ -201,7 +207,12 @@ describe("hasBlockingSecretsPolicy", () => {
         action: "block",
         audienceType: "targeted",
         sources: ["gitleaks"],
-        messageTypes: ["tool_request", "tool_response"],
+        detectionScopes: [
+          {
+            category: "secrets",
+            scopeInclude: 'kind in ["tool_request","tool_response"]',
+          },
+        ],
       },
     },
     {
@@ -210,7 +221,12 @@ describe("hasBlockingSecretsPolicy", () => {
         action: "block",
         policyType: "prompt_based",
         sources: ["gitleaks"],
-        messageTypes: ["tool_request", "tool_response"],
+        detectionScopes: [
+          {
+            category: "secrets",
+            scopeInclude: 'kind in ["tool_request","tool_response"]',
+          },
+        ],
       },
     },
     {
@@ -218,25 +234,27 @@ describe("hasBlockingSecretsPolicy", () => {
       overrides: {
         action: "block",
         sources: ["gitleaks"],
-        messageTypes: ["tool_request", "tool_response"],
+        detectionScopes: [
+          {
+            category: "secrets",
+            scopeInclude: 'kind in ["tool_request","tool_response"]',
+          },
+        ],
         disabledRules: DETECTION_RULES.secrets.map((rule) => rule.id),
       },
     },
     {
-      name: "a policy scoped away from the whole project",
+      name: "a scope wider than the guide's two kinds",
       overrides: {
         action: "block",
         sources: ["gitleaks"],
-        messageTypes: ["tool_request", "tool_response"],
-        scopeInclude: "user:admin",
-      },
-    },
-    {
-      name: "extra message types outside the standard tool surfaces",
-      overrides: {
-        action: "block",
-        sources: ["gitleaks"],
-        messageTypes: ["tool_request", "tool_response", "user_message"],
+        detectionScopes: [
+          {
+            category: "secrets",
+            scopeInclude:
+              'kind in ["tool_request","tool_response","user_message"]',
+          },
+        ],
       },
     },
     {
@@ -244,7 +262,12 @@ describe("hasBlockingSecretsPolicy", () => {
       overrides: {
         action: "block",
         sources: ["gitleaks", "prompt_injection"],
-        messageTypes: ["tool_request", "tool_response"],
+        detectionScopes: [
+          {
+            category: "secrets",
+            scopeInclude: 'kind in ["tool_request","tool_response"]',
+          },
+        ],
       },
     },
     {
@@ -252,7 +275,9 @@ describe("hasBlockingSecretsPolicy", () => {
       overrides: {
         action: "block",
         sources: ["gitleaks"],
-        messageTypes: ["user_message"],
+        detectionScopes: [
+          { category: "secrets", scopeInclude: 'kind in ["user_message"]' },
+        ],
       },
     },
     {
@@ -273,6 +298,58 @@ describe("hasBlockingSecretsPolicy", () => {
 
   it("handles an unread list", () => {
     expect(hasBlockingSecretsPolicy(undefined)).toBe(false);
+  });
+
+  // The guide scopes its policy with a `secrets` category scope now. Failing
+  // to recognize that shape makes the guide create a second policy on every
+  // reload, so this is the shape it actually writes.
+  it("matches the category-scoped policy the guide writes today", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          detectionScopes: [
+            {
+              category: "secrets",
+              scopeInclude: 'kind in ["tool_request","tool_response"]',
+            },
+          ],
+        }),
+      ]),
+    ).toBe(true);
+  });
+
+  it("rejects a secrets scope narrowed to different kinds", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          detectionScopes: [
+            { category: "secrets", scopeInclude: 'kind in ["user_message"]' },
+          ],
+        }),
+      ]),
+    ).toBe(false);
+  });
+
+  it("rejects a secrets scope carrying an exemption", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          detectionScopes: [
+            {
+              category: "secrets",
+              scopeInclude: 'kind in ["tool_request","tool_response"]',
+              scopeExempt: 'kind == "assistant_message"',
+            },
+          ],
+        }),
+      ]),
+    ).toBe(false);
   });
 });
 

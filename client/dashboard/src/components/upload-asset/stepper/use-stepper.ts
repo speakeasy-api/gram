@@ -5,12 +5,23 @@ import React from "react";
 
 type StepperSubscriber = (cb: (step: number) => void) => () => void;
 
-type StepperContextApiMeta = {
+/**
+ * A document already in the project that the upload replaces. Set from the
+ * start, before any step runs, when the flow was opened to upload a new
+ * version rather than to add a source.
+ */
+export type ExistingDocument = {
+  name: string;
+  slug: string;
+};
+
+export type StepperContextApiMeta = {
   file: File | null;
   uploadResult: UploadOpenAPIv3Result | null;
   assetName: string | null;
   deployment: Deployment | null;
   toolset: Toolset | null;
+  existingDocument: ExistingDocument | null;
 };
 
 type StepperContextApi = {

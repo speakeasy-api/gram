@@ -1,0 +1,247 @@
+package otelpub
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math"
+	"reflect"
+	"time"
+
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
+	"go.opentelemetry.io/otel/trace"
+)
+
+// maxValueDepth bounds how deeply nested a log value may be. Real records
+// nest two or three levels; the bound stops a self-referential value from
+// recursing without end.
+const maxValueDepth = 32
+
+// inboundFromRecord converts a log record, with its resource, instrumentation
+// scope and the trace context in ctx, leaving record id, observed time and
+// provenance to the caller.
+func inboundFromRecord(ctx context.Context, record *log.Record, res *resource.Resource, scope string) (*otelv1.InboundLogRecord, error) {
+	var body *otelv1.InboundLogRecord_AnyValue
+	if !record.Body().Empty() {
+		converted, err := anyValue(record.Body(), 0)
+		if err != nil {
+			return nil, fmt.Errorf("convert body: %w", err)
+		}
+		body = converted
+	}
+
+	attributes := make([]*otelv1.InboundLogRecord_KeyValue, 0, record.AttributesLen())
+	var walkErr error
+	record.WalkAttributes(func(kv log.KeyValue) bool {
+		value, err := anyValue(kv.Value, 0)
+		if err != nil {
+			walkErr = fmt.Errorf("convert attribute %q: %w", kv.Key, err)
+			return false
+		}
+		key := kv.Key
+		attributes = append(attributes, (&otelv1.InboundLogRecord_KeyValue_builder{Key: &key, Value: value}).Build())
+		return true
+	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
+	attributes = append(attributes, exceptionAttributes(record.Err(), attributes)...)
+
+	span := trace.SpanContextFromContext(ctx)
+	severity := severityNumber(record.Severity())
+	severityText := record.SeverityText()
+	timestamp := unixNano(record.Timestamp())
+	flags := uint32(span.TraceFlags())
+	builder := &otelv1.InboundLogRecord_builder{
+		TimeUnixNano:   &timestamp,
+		SeverityNumber: &severity,
+		SeverityText:   &severityText,
+		Body:           body,
+		Attributes:     attributes,
+		Flags:          &flags,
+	}
+	if name := record.EventName(); name != "" {
+		builder.EventName = &name
+	}
+	if traceID := span.TraceID(); traceID.IsValid() {
+		builder.TraceId = traceID[:]
+	}
+	if spanID := span.SpanID(); spanID.IsValid() {
+		builder.SpanId = spanID[:]
+	}
+
+	if res != nil {
+		resourceAttributes, err := attributeKeyValues(res.Attributes())
+		if err != nil {
+			return nil, fmt.Errorf("convert resource: %w", err)
+		}
+		builder.Resource = (&otelv1.InboundLogRecord_Resource_builder{Attributes: resourceAttributes}).Build()
+		if url := res.SchemaURL(); url != "" {
+			builder.ResourceSchemaUrl = &url
+		}
+	}
+
+	builder.Scope = (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: &scope}).Build()
+
+	return builder.Build(), nil
+}
+
+// severityNumber maps the log API's severity onto OTLP's, which share one
+// numbering from 1 (trace) to 24 (fatal4); anything outside it is unset.
+func severityNumber(severity log.Severity) otelv1.InboundLogRecord_SeverityNumber {
+	if severity < log.SeverityTrace1 || severity > log.SeverityFatal4 {
+		return otelv1.InboundLogRecord_SEVERITY_NUMBER_UNSPECIFIED
+	}
+	return otelv1.InboundLogRecord_SeverityNumber(severity)
+}
+
+// unixNano converts a time to OTLP's unsigned nanoseconds; the zero time and
+// anything before the epoch are "not stated". It works from seconds rather
+// than time.UnixNano, whose int64 result is undefined after the year 2262,
+// and saturates at the largest value OTLP can carry.
+func unixNano(t time.Time) uint64 {
+	if t.IsZero() {
+		return 0
+	}
+	seconds := t.Unix()
+	if seconds < 0 {
+		return 0
+	}
+	// Nanosecond is always in [0, 1e9); the guard makes that visible.
+	var nanos uint64
+	if n := t.Nanosecond(); n > 0 {
+		nanos = uint64(n)
+	}
+	const nanosPerSecond = uint64(time.Second)
+	if uint64(seconds) > (math.MaxUint64-nanos)/nanosPerSecond {
+		return math.MaxUint64
+	}
+	return uint64(seconds)*nanosPerSecond + nanos
+}
+
+func anyValue(value log.Value, depth int) (*otelv1.InboundLogRecord_AnyValue, error) {
+	if depth > maxValueDepth {
+		return nil, fmt.Errorf("value nested deeper than %d levels", maxValueDepth)
+	}
+	switch value.Kind() {
+	case log.KindEmpty:
+		// A non-nil empty value, so an empty element of a slice or map never
+		// becomes a nil message, which protobuf refuses to marshal.
+		return (&otelv1.InboundLogRecord_AnyValue_builder{}).Build(), nil
+	case log.KindBool:
+		v := value.AsBool()
+		return (&otelv1.InboundLogRecord_AnyValue_builder{BoolValue: &v}).Build(), nil
+	case log.KindInt64:
+		v := value.AsInt64()
+		return (&otelv1.InboundLogRecord_AnyValue_builder{IntValue: &v}).Build(), nil
+	case log.KindFloat64:
+		v := value.AsFloat64()
+		return (&otelv1.InboundLogRecord_AnyValue_builder{DoubleValue: &v}).Build(), nil
+	case log.KindString:
+		v := value.AsString()
+		return (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &v}).Build(), nil
+	case log.KindBytes:
+		// A nil slice would leave the oneof unset and lose the value's kind.
+		bytes := value.AsBytes()
+		if bytes == nil {
+			bytes = []byte{}
+		}
+		return (&otelv1.InboundLogRecord_AnyValue_builder{BytesValue: bytes}).Build(), nil
+	case log.KindSlice:
+		items := value.AsSlice()
+		values := make([]*otelv1.InboundLogRecord_AnyValue, 0, len(items))
+		for _, item := range items {
+			converted, err := anyValue(item, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, converted)
+		}
+		return (&otelv1.InboundLogRecord_AnyValue_builder{
+			ArrayValue: (&otelv1.InboundLogRecord_ArrayValue_builder{Values: values}).Build(),
+		}).Build(), nil
+	case log.KindMap:
+		entries := value.AsMap()
+		values := make([]*otelv1.InboundLogRecord_KeyValue, 0, len(entries))
+		for _, entry := range entries {
+			converted, err := anyValue(entry.Value, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			key := entry.Key
+			values = append(values, (&otelv1.InboundLogRecord_KeyValue_builder{Key: &key, Value: converted}).Build())
+		}
+		return (&otelv1.InboundLogRecord_AnyValue_builder{
+			KvlistValue: (&otelv1.InboundLogRecord_KeyValueList_builder{Values: values}).Build(),
+		}).Build(), nil
+	default:
+		return nil, fmt.Errorf("unsupported log value kind %s", value.Kind())
+	}
+}
+
+// attributeKeyValues converts resource attributes, which are attribute.KeyValue rather than log.KeyValue.
+func attributeKeyValues(attrs []attribute.KeyValue) ([]*otelv1.InboundLogRecord_KeyValue, error) {
+	out := make([]*otelv1.InboundLogRecord_KeyValue, 0, len(attrs))
+	for _, kv := range attrs {
+		converted, err := anyValue(log.ValueFromAttribute(kv.Value), 0)
+		if err != nil {
+			return nil, fmt.Errorf("convert attribute %q: %w", kv.Key, err)
+		}
+		key := string(kv.Key)
+		out = append(out, (&otelv1.InboundLogRecord_KeyValue_builder{Key: &key, Value: converted}).Build())
+	}
+	return out, nil
+}
+
+// exceptionAttributes maps a record's error the way the OTel SDK does,
+// unless the record already states an exception.
+func exceptionAttributes(err error, attributes []*otelv1.InboundLogRecord_KeyValue) []*otelv1.InboundLogRecord_KeyValue {
+	if err == nil {
+		return nil
+	}
+	for _, kv := range attributes {
+		switch kv.GetKey() {
+		case string(semconv.ExceptionTypeKey), string(semconv.ExceptionMessageKey), string(semconv.ExceptionStacktraceKey):
+			return nil
+		}
+	}
+	var out []*otelv1.InboundLogRecord_KeyValue
+	for _, kv := range []attribute.KeyValue{
+		semconv.ExceptionMessage(err.Error()),
+		semconv.ExceptionTypeKey.String(errorType(err)),
+	} {
+		if v := kv.Value.AsString(); v != "" {
+			key := string(kv.Key)
+			out = append(out, (&otelv1.InboundLogRecord_KeyValue_builder{
+				Key:   &key,
+				Value: (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &v}).Build(),
+			}).Build())
+		}
+	}
+	return out
+}
+
+var fmtWrapErrorType = reflect.TypeOf(fmt.Errorf("wrapped: %w", errors.New("err")))
+
+// errorType names an error's type as the OTel SDK does, looking through fmt.Errorf wrapping.
+func errorType(err error) string {
+	for {
+		if et, ok := err.(interface{ ErrorType() string }); ok && et.ErrorType() != "" {
+			return et.ErrorType()
+		}
+		inner := errors.Unwrap(err)
+		if reflect.TypeOf(err) != fmtWrapErrorType || inner == nil {
+			break
+		}
+		err = inner
+	}
+	t := reflect.TypeOf(err)
+	if t.PkgPath() != "" && t.Name() != "" {
+		return t.PkgPath() + "." + t.Name()
+	}
+	return t.String()
+}

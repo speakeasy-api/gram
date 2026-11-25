@@ -21,7 +21,7 @@ export type UpdateUserSessionIssuerFormAuthnChallengeMode = ClosedEnum<
 >;
 
 /**
- * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
+ * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
  */
 export const UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode = {
   Disabled: "disabled",
@@ -29,7 +29,7 @@ export const UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode = {
   Open: "open",
 } as const;
 /**
- * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
+ * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
  */
 export type UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode =
   ClosedEnum<typeof UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode>;
@@ -45,7 +45,7 @@ export type UpdateUserSessionIssuerForm = {
     | UpdateUserSessionIssuerFormAuthnChallengeMode
     | undefined;
   /**
-   * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
+   * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
    */
   clientIdMetadataAdmissionMode?:
     | UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode

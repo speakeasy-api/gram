@@ -34,6 +34,7 @@ type LogRemoteMcpServerCreateEvent struct {
 func (l *Logger) LogRemoteMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogRemoteMcpServerCreateEvent) error {
 	action := ActionRemoteMcpServerCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -85,6 +86,7 @@ func (l *Logger) LogRemoteMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, e
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -123,6 +125,7 @@ type LogRemoteMcpServerDeleteEvent struct {
 func (l *Logger) LogRemoteMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteMcpServerDeleteEvent) error {
 	action := ActionRemoteMcpServerDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

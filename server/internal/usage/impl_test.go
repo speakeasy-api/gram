@@ -10,23 +10,29 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -99,10 +105,6 @@ func (m *mockBillingRepo) GetCustomerTier(ctx context.Context, orgID string) (*b
 	return tier, args.Bool(1), args.Error(2)
 }
 
-func (m *mockBillingRepo) CreateCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
-	return "", fmt.Errorf("not implemented")
-}
-
 func (m *mockBillingRepo) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
 	args := m.Called(ctx, orgID, serverURL, successURL)
 	return args.String(0), args.Error(1)
@@ -164,6 +166,14 @@ func (p *recordingOpenRouterProvisioner) RefreshAPIKeyLimitWithDB(ctx context.Co
 	return p.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
 }
 
+func (*recordingOpenRouterProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{}, nil
+}
+
+func (*recordingOpenRouterProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, nil
+}
+
 func (*recordingOpenRouterProvisioner) DisableAPIKey(context.Context, string, openrouter.KeyType) error {
 	return fmt.Errorf("not implemented")
 }
@@ -201,6 +211,8 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 	tp := testenv.NewTracerProvider(t)
 	db, err := infra.CloneTestDatabase(t, "usage")
 	require.NoError(t, err)
+	meterReadConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
 	seedEnabledToolsets(t, db, orgID, serverCount)
 
 	authzEngine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
@@ -213,11 +225,13 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 		repo:          repo.New(db),
 		billingRepo:   billingRepo,
 		orgRepo:       orgRepo.New(db),
+		meterReadConn: meterReadConn,
 		posthogClient: posthog.New(t.Context(), logger, "", "", ""),
 		openRouter:    openrouter.NewDevelopment(""),
 		stripeClient:  nil,
 		stripeHandler: nil,
 		trial:         trialemails.NoopNotifier{},
+		now:           time.Now,
 	}
 }
 
@@ -237,23 +251,33 @@ func (f *fakeTrialNotifier) TrialInactive(_ context.Context, organizationID stri
 	return f.inactiveErr
 }
 
-func seedEnabledToolsets(t *testing.T, db repo.DBTX, orgID string, serverCount int) {
+func seedEnabledToolsets(t *testing.T, db *pgxpool.Pool, orgID string, serverCount int) {
 	t.Helper()
 	ctx := t.Context()
-	projectID := uuid.New()
-	_, err := db.Exec(ctx, `
-		INSERT INTO projects (id, organization_id, name, slug)
-		VALUES ($1, $2, 'Usage Test Project', $3)
-	`, projectID, orgID, "usage-"+projectID.String()[:8])
+	project, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Usage Test Project",
+		Slug:           "usage-" + uuid.NewString()[:8],
+		OrganizationID: orgID,
+	})
 	require.NoError(t, err)
 
 	for i := range serverCount {
-		toolsetID := uuid.New()
-		_, err = db.Exec(ctx, `
-			INSERT INTO toolsets (id, organization_id, project_id, name, slug, mcp_enabled)
-			VALUES ($1, $2, $3, $4, $5, TRUE)
-		`, toolsetID, orgID, projectID, "Enabled Server", fmt.Sprintf("enabled-%d-%s", i, toolsetID.String()[:8]))
+		slug := fmt.Sprintf("enabled-%d-%s", i, uuid.NewString()[:8])
+		toolset, err := toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+			OrganizationID:         orgID,
+			ProjectID:              project.ID,
+			Name:                   "Enabled Server",
+			Slug:                   slug,
+			Description:            pgtype.Text{},
+			DefaultEnvironmentSlug: pgtype.Text{},
+		})
 		require.NoError(t, err)
+		tx := testenv.BeginTx(t, ctx, db)
+		_, err = hostedmcp.CreateCanonical(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), hostedmcp.CreateCanonicalInput{
+			Toolset: toolset, Slug: slug, Visibility: "private",
+		})
+		require.NoError(t, err)
+		require.NoError(t, tx.Commit(ctx))
 	}
 }
 

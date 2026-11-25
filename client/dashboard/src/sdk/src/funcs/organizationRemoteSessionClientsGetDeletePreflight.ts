@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getClientDeletePreflight organizationRemoteSessionClients
  *
  * @remarks
- * Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.
+ * Authoritative impact summary for deleting a remote_session_client: associated session count, affected MCP server names, and trusted identity-provider login references that must be explicitly unlinked before deletion. Requires org:read.
  */
 export function organizationRemoteSessionClientsGetDeletePreflight(
   client: GramCore,

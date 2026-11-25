@@ -1,10 +1,6 @@
 package platformmcp
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -19,22 +15,21 @@ type distributionVersionToken struct {
 }
 
 type distributionVersionTokenCodec struct {
-	key []byte
+	key signedCursorKey
 }
 
 func newDistributionVersionTokenCodec(keyMaterial string) (*distributionVersionTokenCodec, error) {
 	if keyMaterial == "" {
 		return nil, ErrDistributionVersionTokenInvalid
 	}
-	key := sha256.Sum256([]byte("platform-mcp-distribution-version:" + keyMaterial))
-	return &distributionVersionTokenCodec{key: key[:]}, nil
+	return &distributionVersionTokenCodec{key: newSignedCursorKey("platform-mcp-distribution-version", keyMaterial)}, nil
 }
 
 func (c *distributionVersionTokenCodec) Encode(principal Principal, projectSlug string, version int64) (string, error) {
 	if c == nil || len(c.key) == 0 || principal.OrganizationID == "" || principal.UserID == "" || projectSlug == "" || version < 0 {
 		return "", ErrDistributionVersionTokenInvalid
 	}
-	payload, err := json.Marshal(distributionVersionToken{
+	token, err := sealCursor(c.key, distributionVersionToken{
 		OrganizationID: principal.OrganizationID,
 		UserID:         principal.UserID,
 		ProjectSlug:    projectSlug,
@@ -43,30 +38,15 @@ func (c *distributionVersionTokenCodec) Encode(principal Principal, projectSlug 
 	if err != nil {
 		return "", fmt.Errorf("encode platform mcp distribution version token: %w", err)
 	}
-	mac := hmac.New(sha256.New, c.key)
-	_, _ = mac.Write(payload)
-	token := make([]byte, 0, len(payload)+sha256.Size)
-	token = append(token, payload...)
-	token = append(token, mac.Sum(nil)...)
-	return base64.RawURLEncoding.EncodeToString(token), nil
+	return token, nil
 }
 
 func (c *distributionVersionTokenCodec) Decode(value string, principal Principal, projectSlug string) (int64, error) {
 	if c == nil || len(c.key) == 0 || value == "" || principal.OrganizationID == "" || principal.UserID == "" || projectSlug == "" {
 		return 0, ErrDistributionVersionTokenInvalid
 	}
-	token, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || len(token) <= sha256.Size {
-		return 0, ErrDistributionVersionTokenInvalid
-	}
-	payload, signature := token[:len(token)-sha256.Size], token[len(token)-sha256.Size:]
-	mac := hmac.New(sha256.New, c.key)
-	_, _ = mac.Write(payload)
-	if !hmac.Equal(signature, mac.Sum(nil)) {
-		return 0, ErrDistributionVersionTokenInvalid
-	}
-	var decoded distributionVersionToken
-	if err := json.Unmarshal(payload, &decoded); err != nil || decoded.Version < 0 || decoded.OrganizationID != principal.OrganizationID || decoded.UserID != principal.UserID || decoded.ProjectSlug != projectSlug {
+	decoded, ok := openCursor[distributionVersionToken](c.key, value)
+	if !ok || decoded.Version < 0 || decoded.OrganizationID != principal.OrganizationID || decoded.UserID != principal.UserID || decoded.ProjectSlug != projectSlug {
 		return 0, ErrDistributionVersionTokenInvalid
 	}
 	return decoded.Version, nil

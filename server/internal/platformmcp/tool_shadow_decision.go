@@ -1,0 +1,55 @@
+//nolint:exhaustruct_v5 // MCP manifests intentionally rely on optional zero values.
+package platformmcp
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+func registerShadowDecisionTool(reg *Registrar, service *ShadowDecisionService) {
+	description := "Record and enforce an allow or deny decision for one Shadow MCP target after reviewing it. Requires the current opaque decision version, a stable idempotency key, and explicit confirmation. Allow requires one or more opaque audience references from list_plugin_assignments, including the explicit Everyone reference for organization-wide access. Deny blocks everyone when it names no audience, or only the roles or groups whose references it names; a project that blocks servers by default for everyone accepts only a deny for everyone. The committed decision, frozen evidence, enforcement grants, legacy-request drain, audit, and receipt are atomic."
+	if service == nil || !service.valid() {
+		description = "Decide one Shadow MCP access review. This is not switched on for your organization yet."
+		addTool(reg, &mcp.Tool{Name: operationDecideShadowMCPAccess, Title: "Allow or Block a Shadow MCP Server", Description: description, Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true, OpenWorldHint: new(false)}}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableShadowDecisionTool)
+		return
+	}
+	addTool(reg, &mcp.Tool{Name: operationDecideShadowMCPAccess, Title: "Allow or Block a Shadow MCP Server", Description: description, Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true, OpenWorldHint: new(false)}}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input DecideShadowMCPAccessInput) (*mcp.CallToolResult, DecideShadowMCPAccessOutput, error) {
+		principal, err := principalFromToolContext(ctx)
+		if err != nil {
+			return nil, DecideShadowMCPAccessOutput{}, err
+		}
+		output, err := service.Decide(ctx, principal, input)
+		if err == nil {
+			return nil, output, nil
+		}
+		if result, ok := shadowDecisionToolResult(err); ok {
+			return result, DecideShadowMCPAccessOutput{}, nil
+		}
+		return nil, DecideShadowMCPAccessOutput{}, err
+	})
+}
+
+func unavailableShadowDecisionTool(_ context.Context, _ *mcp.CallToolRequest, _ DecideShadowMCPAccessInput) (*mcp.CallToolResult, DecideShadowMCPAccessOutput, error) {
+	result, ok := shadowDecisionToolResult(shadowDecisionUnavailable(nil))
+	if !ok {
+		return nil, DecideShadowMCPAccessOutput{}, ErrShadowDecisionUnavailable
+	}
+	return result, DecideShadowMCPAccessOutput{}, nil
+}
+
+func shadowDecisionToolResult(err error) (*mcp.CallToolResult, bool) {
+	if mutation, ok := errors.AsType[*ShadowDecisionError](err); ok {
+		payload, marshalErr := json.Marshal(featureUnavailableResult{Code: mutation.Code, Feature: "shadow_mcp_decisions", Message: mutation.Message})
+		if marshalErr != nil {
+			return nil, false
+		}
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, true
+	}
+	if budget, ok := operationBudgetToolResult(err); ok {
+		return budget, true
+	}
+	return nil, false
+}

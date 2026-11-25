@@ -1,6 +1,7 @@
 import { getPresetRange, type DateRangePreset } from "@/elements";
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 import type { TypesToInclude } from "@gram/client/models/components/gethookssummarypayload.js";
+import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";
@@ -13,6 +14,7 @@ import {
   safeBase64Encode,
 } from "./observeFilterUtils";
 import { DEFAULT_HOOK_TYPES, VALID_HOOK_TYPES } from "./observeFilterConstants";
+import { minuteAlignedRange } from "./useDateRangeFilter";
 import type {
   ObserveStatusFilterValue,
   ObserveTypeFilterValue,
@@ -180,12 +182,40 @@ function useObserveFiltersImpl<
     [updateSearchParams],
   );
 
+  // The calendar hands back the final day's midnight, which as a `to` drops
+  // that whole day: "Nov 16 – Nov 17" would list Nov 16 alone. Run the range
+  // to the last instant of the final day instead, or to now when that day is
+  // today, so the window is the days the picker names.
+  const setCalendarRangeParam = useCallback(
+    (from: Date, lastDay: Date) => {
+      const nextDay = new Date(lastDay);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const to = new Date(Math.min(nextDay.getTime() - 1, Date.now()));
+      setCustomRangeParam(from, to);
+    },
+    [setCustomRangeParam],
+  );
+
+  // Dragging across a chart is the same act as picking a custom range, and
+  // both observe surfaces do it, so the label formatting lives here rather
+  // than being written out again next to each chart.
+  const setRangeFromBrush = useCallback(
+    (from: Date, to: Date) => {
+      setCustomRangeParam(from, to, formatChartZoomRangeLabel(from, to));
+    },
+    [setCustomRangeParam],
+  );
+
   const clearCustomRange = useCallback(() => {
     updateSearchParams({ from: null, to: null, label: null });
   }, [updateSearchParams]);
 
+  // A preset range is anchored at `now`, which is a different millisecond on
+  // every mount — and therefore a different react-query key, so a drill-down
+  // from Insights into Logs would refetch what the other page already holds.
+  // Quantizing to the minute is what makes the two pages agree.
   const { from, to } = useMemo(
-    () => customRange ?? getPresetRange(dateRange),
+    () => customRange ?? minuteAlignedRange(getPresetRange(dateRange)),
     [customRange, dateRange],
   );
 
@@ -456,6 +486,8 @@ function useObserveFiltersImpl<
     handleHookTypesChange,
     setDateRangeParam,
     setCustomRangeParam,
+    setCalendarRangeParam,
+    setRangeFromBrush,
     clearCustomRange,
     selectedRoleIds,
     roleOptions,

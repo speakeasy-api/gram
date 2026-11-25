@@ -1,0 +1,42 @@
+{
+  "mcp:auth": {
+    "requested": [
+      {
+        "scope": "mcp:auth",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp_auth_client"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "mcp:auth",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp_auth_client"
+        }
+      }
+    ]
+  },
+  "mcp:blocked_auth": {
+    "requested": [
+      {
+        "scope": "mcp:blocked_auth",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp_auth_client"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "mcp:blocked_auth",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "mcp_auth_client"
+        }
+      }
+    ]
+  }
+}

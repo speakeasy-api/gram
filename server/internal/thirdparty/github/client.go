@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -24,6 +25,7 @@ import (
 type Client struct {
 	appID       int64
 	privateKey  *rsa.PrivateKey
+	tracer      trace.Tracer
 	httpClient  *guardian.HTTPClient
 	mu          sync.Mutex
 	tokens      map[int64]cachedToken
@@ -36,7 +38,7 @@ type cachedToken struct {
 }
 
 // NewClient creates a GitHub App client from the app ID and PEM-encoded private key.
-func NewClient(appID int64, privateKeyPEM []byte, httpClient *guardian.HTTPClient) (*Client, error) {
+func NewClient(appID int64, privateKeyPEM []byte, httpClient *guardian.HTTPClient, tracerProvider trace.TracerProvider) (*Client, error) {
 	block, _ := pem.Decode(privateKeyPEM)
 	if block == nil {
 		return nil, fmt.Errorf("decode PEM block: no valid PEM data found")
@@ -59,6 +61,7 @@ func NewClient(appID int64, privateKeyPEM []byte, httpClient *guardian.HTTPClien
 		appID:       appID,
 		privateKey:  key,
 		httpClient:  httpClient,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/github"),
 		mu:          sync.Mutex{},
 		tokens:      make(map[int64]cachedToken),
 		tokenFlight: singleflight.Group{},

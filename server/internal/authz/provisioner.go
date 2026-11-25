@@ -30,8 +30,6 @@ func NewProvisioner(db *pgxpool.Pool) *Provisioner {
 	return &Provisioner{db: db}
 }
 
-// ProvisionOrganizationAdmin seeds the built-in roles and grants, then assigns
-// the organization creator to the admin role in the same transaction.
 func (p *Provisioner) ProvisionOrganizationAdmin(ctx context.Context, organizationID string, admin InitialOrganizationAdmin) error {
 	if admin.WorkOSUserID == "" {
 		return errInitialAdminWorkOSUserIDRequired
@@ -54,14 +52,17 @@ func (p *Provisioner) ProvisionOrganizationAdmin(ctx context.Context, organizati
 	return nil
 }
 
-// ProvisionOrganizationAdminTx seeds the built-in roles and grants, then
-// assigns the organization creator using a caller-owned transaction.
 func (p *Provisioner) ProvisionOrganizationAdminTx(ctx context.Context, tx pgx.Tx, organizationID string, admin InitialOrganizationAdmin) error {
 	if admin.WorkOSUserID == "" {
 		return errInitialAdminWorkOSUserIDRequired
 	}
 
 	if err := SeedSystemRoleGrantsTx(ctx, tx, organizationID); err != nil {
+		return err
+	}
+	// Only at creation: reconciling an existing organization must never
+	// restore a default its admins removed.
+	if err := SeedPersonalAuthClientDefaultTx(ctx, tx, organizationID); err != nil {
 		return err
 	}
 

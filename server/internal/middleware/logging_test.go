@@ -2,12 +2,14 @@ package middleware
 
 import (
 	"bytes"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -30,6 +32,11 @@ func TestLogSafeURL(t *testing.T) {
 			name: "token query parameter redacted",
 			in:   "/rpc/skills.getShared?token=supersecret",
 			want: "/rpc/skills.getShared?token=REDACTED",
+		},
+		{
+			name: "staff OAuth query credentials redacted",
+			in:   "/admin-mcp/authorize?code=secret&state=secret&code_verifier=secret&return_to=secret&client_id=client_123",
+			want: "/admin-mcp/authorize?code=REDACTED&state=REDACTED&code_verifier=REDACTED&return_to=REDACTED&client_id=client_123",
 		},
 		{
 			name: "support handoff query parameter redacted",
@@ -102,6 +109,11 @@ func TestLogSafeURL(t *testing.T) {
 			want: "/rpc/chat.listChats?search=REDACTED&limit=10",
 		},
 		{
+			name: "command resource query redacted",
+			in:   "/rpc/commandSearch.search?q=sensitive-resource",
+			want: "/rpc/commandSearch.search?q=REDACTED",
+		},
+		{
 			name: "credential and personal data redacted together",
 			in:   "/rpc/auth.login?email=dev%40acme.corp&token=supersecret",
 			want: "/rpc/auth.login?email=REDACTED&token=REDACTED",
@@ -110,6 +122,11 @@ func TestLogSafeURL(t *testing.T) {
 			name: "empty email query parameter still redacted",
 			in:   "/rpc/auth.login?email=",
 			want: "/rpc/auth.login?email=REDACTED",
+		},
+		{
+			name: "login analytics session id redacted, utm params kept",
+			in:   "/rpc/auth.login?utm_source=linkedin&analytics_session_id=sess-123",
+			want: "/rpc/auth.login?utm_source=linkedin&analytics_session_id=REDACTED",
 		},
 		{
 			name: "unlisted parameter carrying an address untouched",
@@ -224,6 +241,72 @@ func TestHTTPLoggingMiddlewareKeepsPersonalDataOutOfLogs(t *testing.T) {
 	}
 	require.NotContains(t, logs, "supersecret", "token reached the logs")
 	require.Contains(t, logs, "REDACTED")
+}
+
+func TestHTTPLoggingMiddlewarePropagatesPanics(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHTTPLoggingMiddleware(testenv.NewLogger(t))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("boom")
+	}))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	require.PanicsWithValue(t, "boom", func() {
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+	})
+}
+
+func TestHTTPLoggingMiddlewarePreservesAbortHandlerPanic(t *testing.T) {
+	t.Parallel()
+
+	logger := testenv.NewLogger(t)
+	handler := NewHTTPLoggingMiddleware(logger)(NewRecovery(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic(http.ErrAbortHandler)
+	})))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	require.PanicsWithValue(t, http.ErrAbortHandler, func() {
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+	})
+}
+
+func TestHTTPLoggingMiddlewareOmitsEmptyOptionalAttributes(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	handler := NewHTTPLoggingMiddleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	logs := buf.String()
+	require.NotEmpty(t, logs)
+	require.NotContains(t, logs, string(attr.HTTPRouteKey))
+	require.NotContains(t, logs, string(attr.HTTPRequestIDKey))
+	require.NotContains(t, logs, string(attr.HTTPRequestHeaderRefererKey))
+	require.NotContains(t, logs, string(attr.HTTPRequestHeaderUserAgentKey))
+	require.NotContains(t, logs, string(attr.HTTPRefererHostKey))
+}
+
+func TestHTTPLoggingMiddlewareNormalizesRoutePattern(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	handler := NewHTTPLoggingMiddleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/rpc/widgets.list", nil)
+	req.Pattern = "POST /rpc/widgets.list"
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	var event map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &event))
+	require.Equal(t, "/rpc/widgets.list", event[string(attr.HTTPRouteKey)])
 }
 
 // The request context is the second sink: every downstream handler that logs

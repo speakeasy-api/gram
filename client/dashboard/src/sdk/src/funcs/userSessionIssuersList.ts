@@ -120,6 +120,7 @@ async function $do(
   const query = encodeFormQuery({
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "mcp_resource_id": payload?.mcp_resource_id,
   });
 
   const headers = new Headers(compactMap({

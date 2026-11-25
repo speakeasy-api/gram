@@ -7,14 +7,19 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpdateMarketplaceSettingsRequestBody = {
   /**
-   * Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string or omit to clear the override and fall back to the default.
+   * Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string to clear the override and fall back to the default. Omit to leave the current override unchanged.
    */
   marketplaceName?: string | undefined;
+  /**
+   * Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Omit to leave the current value unchanged.
+   */
+  observabilityEnabled?: boolean | undefined;
 };
 
 /** @internal */
 export type UpdateMarketplaceSettingsRequestBody$Outbound = {
   marketplace_name?: string | undefined;
+  observability_enabled?: boolean | undefined;
 };
 
 /** @internal */
@@ -24,10 +29,12 @@ export const UpdateMarketplaceSettingsRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     marketplaceName: z.optional(z.string()),
+    observabilityEnabled: z.optional(z.boolean()),
   }),
   z.transform((v) => {
     return remap$(v, {
       marketplaceName: "marketplace_name",
+      observabilityEnabled: "observability_enabled",
     });
   }),
 );

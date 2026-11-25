@@ -12,7 +12,6 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidiotest"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/stretchr/testify/require"
@@ -36,7 +35,7 @@ type Environment struct {
 	NewRedisClient      RedisClientFunc
 	NewClickhouseClient ClickhouseClientFunc
 	NewTemporalEnv      func(t *testing.T) (env *temporal.Environment, server *testsuite.DevServer)
-	NewPresidioClient   PresidioClientFunc
+	PresidioURL         func(t *testing.T) string
 }
 
 func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error, error) {
@@ -58,7 +57,7 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 		NewRedisClient:      unsupportedRedisClientFunc(),
 		NewClickhouseClient: unsupportedClickhouseClientFunc(),
 		NewTemporalEnv:      unsupportedTemporalEnvFunc(),
-		NewPresidioClient:   unsupportedPresidioClientFunc(),
+		PresidioURL:         unsupportedPresidioURLFunc(),
 	}
 
 	var launchEg errgroup.Group
@@ -102,9 +101,12 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 	if opts.Presidio {
 		// In-process mock — no goroutine needed. The mock starts an
 		// httptest.Server synchronously and never fails.
-		server, pcFactory := NewTestPresidio()
+		server := presidiotest.NewMockServer(nil)
 		presidioserver = server
-		res.NewPresidioClient = pcFactory
+		res.PresidioURL = func(t *testing.T) string {
+			t.Helper()
+			return server.URL()
+		}
 	}
 
 	if err := launchEg.Wait(); err != nil {
@@ -215,11 +217,11 @@ func unsupportedClickhouseClientFunc() ClickhouseClientFunc {
 	}
 }
 
-func unsupportedPresidioClientFunc() PresidioClientFunc {
-	return func(t *testing.T) *risk_analysis.PresidioClient {
+func unsupportedPresidioURLFunc() func(t *testing.T) string {
+	return func(t *testing.T) string {
 		t.Helper()
-		t.Fatal(fmt.Errorf("new presidio client: %w", errCapabilityNotEnabled))
-		return nil
+		t.Fatal(fmt.Errorf("presidio URL: %w", errCapabilityNotEnabled))
+		return ""
 	}
 }
 

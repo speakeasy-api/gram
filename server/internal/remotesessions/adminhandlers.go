@@ -3,7 +3,10 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,9 +17,10 @@ import (
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -46,16 +50,24 @@ func orEmptySlice(s []string) []string {
 	return s
 }
 
+// scopeOverride stores omitted and empty alike as NULL; an empty override is never meant.
+func scopeOverride(s []string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	return s
+}
+
 // logGlobalMutation records a structured-log audit line (actor, action,
 // subject) for a global mutation, standing in for the auditlogs rows globals
 // can't have. Call it only after the transaction commits so the log never
 // claims a mutation that rolled back.
-func logGlobalMutation(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, action, subject, subjectID string) {
+func logGlobalMutation(ctx context.Context, logger *slog.Logger, authCtx globalActor, action, subject, subjectID string) {
 	logger.InfoContext(ctx, "global remote session "+subject+" "+action,
 		attr.SlogAuditAction(action),
 		attr.SlogAuditSubject(subject),
 		attr.SlogAuditSubjectID(subjectID),
-		attr.SlogAuthUserEmail(conv.PtrValOrEmpty(authCtx.Email, "")),
+		attr.SlogAuthUserEmail(authCtx.email),
 	)
 }
 
@@ -64,7 +76,11 @@ func logGlobalMutation(ctx context.Context, logger *slog.Logger, authCtx *contex
 // CreateGlobalIssuer creates a global remote_session_issuer (project_id NULL,
 // organization_id NULL), reusing CreateRemoteSessionIssuer with NULL scoping.
 func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.CreateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	return s.createGlobalIssuer(ctx, payload, nil)
+}
+
+func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.CreateGlobalIssuerPayload, callerTx pgx.Tx) (*types.RemoteSessionIssuer, error) {
+	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +90,21 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 	}
 	if strings.TrimSpace(payload.Issuer) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
+	}
+	if conv.PtrValOr(payload.TunneledMcpServerID, "") != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "a global identity provider cannot be bound to a project tunnel").LogError(ctx, logger)
+	}
+	trimmedIssuer := strings.TrimSpace(payload.Issuer)
+	if err := validateRemoteSessionProviderURLs(trimmedIssuer, remoteSessionProviderEndpoints{
+		authorizationEndpoint: payload.AuthorizationEndpoint,
+		tokenEndpoint:         payload.TokenEndpoint,
+		revocationEndpoint:    payload.RevocationEndpoint,
+		registrationEndpoint:  payload.RegistrationEndpoint,
+		jwksURI:               payload.JwksURI,
+		userinfoEndpoint:      payload.UserinfoEndpoint,
+		introspectionEndpoint: payload.IntrospectionEndpoint,
+	}); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider URL").LogError(ctx, logger)
 	}
 
 	// Operator-supplied and later rendered as a link, so it is validated here.
@@ -85,13 +116,6 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
-	}
-
-	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
-	// never crosses a network: tokens are sensitive credentials that must not
-	// be transmitted in plaintext. An empty value stays legal.
-	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
 	}
 
 	// Discovery drops malformed documentation URLs, but a caller holding the write
@@ -108,32 +132,27 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	issuer, err := repo.New(dbtx).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:                    pgtype.Text{String: "", Valid: false},
-		Slug:                              strings.TrimSpace(payload.Slug),
-		Issuer:                            strings.TrimSpace(payload.Issuer),
-		Name:                              conv.PtrToPGTextTrimmed(payload.Name),
-		LogoAssetID:                       logoAssetID,
-		ClientSetupDocumentationUrl:       conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
-		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
-		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
-		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
-		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
-		OpPolicyUri:                       conv.PtrToPGTextEmpty(payload.OpPolicyURI),
-		OpTosUri:                          conv.PtrToPGTextEmpty(payload.OpTosURI),
-		ScopesSupported:                   orEmptySlice(payload.ScopesSupported),
-		GrantTypesSupported:               orEmptySlice(payload.GrantTypesSupported),
-		ResponseTypesSupported:            orEmptySlice(payload.ResponseTypesSupported),
-		TokenEndpointAuthMethodsSupported: orEmptySlice(payload.TokenEndpointAuthMethodsSupported),
+	params := repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                      pgtype.Text{String: "", Valid: false},
+		Slug:                                strings.TrimSpace(payload.Slug),
+		Issuer:                              trimmedIssuer,
+		Name:                                conv.PtrToPGTextTrimmed(payload.Name),
+		LogoAssetID:                         logoAssetID,
+		ClientSetupDocumentationUrl:         conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
+		AuthorizationEndpoint:               conv.PtrToPGText(payload.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                  conv.PtrToPGText(payload.RevocationEndpoint),
+		RegistrationEndpoint:                conv.PtrToPGText(payload.RegistrationEndpoint),
+		JwksUri:                             conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:                conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
+		OpPolicyUri:                         conv.PtrToPGTextEmpty(payload.OpPolicyURI),
+		OpTosUri:                            conv.PtrToPGTextEmpty(payload.OpTosURI),
+		ScopesSupported:                     orEmptySlice(payload.ScopesSupported),
+		GrantTypesSupported:                 orEmptySlice(payload.GrantTypesSupported),
+		AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported,
+		ResponseTypesSupported:              orEmptySlice(payload.ResponseTypesSupported),
+		TokenEndpointAuthMethodsSupported:   orEmptySlice(payload.TokenEndpointAuthMethodsSupported),
 		// Unlike the NOT NULL siblings above, deliberately not orEmptySlice:
 		// the column is nullable, and an omitted payload field must store NULL
 		// ("not captured") rather than the empty array ("the issuer advertises
@@ -142,12 +161,46 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
-	})
+		TunneledMcpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		// Discovered fields forwarded from the draft. Omitted fields store NULL
+		// ("not captured"), like code_challenge_methods_supported above.
+		UserinfoEndpoint:                           conv.PtrToPGTextEmpty(payload.UserinfoEndpoint),
+		IntrospectionEndpoint:                      conv.PtrToPGTextEmpty(payload.IntrospectionEndpoint),
+		IntrospectionEndpointAuthMethodsSupported:  payload.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           payload.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            payload.ClaimsSupported,
+		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
+		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
+		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Metadata:                                   nil,
+		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataLastError:                          "",
+		MetadataLastErrorUrl:                       "",
+	}
+	s.recordCreateDiscovery(ctx, logger, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, &params, time.Now())
+
+	dbtx := callerTx
+	if dbtx == nil {
+		ownTx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+		}
+		defer o11y.NoLogDefer(func() error { return ownTx.Rollback(ctx) })
+		dbtx = ownTx
+	}
+
+	issuer, err := repo.New(dbtx).CreateRemoteSessionIssuer(ctx, params)
 	if err != nil {
 		if isGlobalRemoteSessionIssuerSlugConflict(err) {
 			return nil, oops.E(oops.CodeConflict, err, "a global issuer with this slug already exists").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create global remote session issuer").LogError(ctx, logger)
+	}
+
+	if callerTx != nil {
+		return mv.BuildRemoteSessionIssuerView(issuer), nil
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -168,18 +221,18 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 // answering that question here would put another organization's configuration
 // in front of a form that is only asking about the shared catalog.
 func (s *Service) GetGlobalIssuerDuplicatePreflight(ctx context.Context, payload *adminrsgen.GetGlobalIssuerDuplicatePreflightPayload) (*types.RemoteSessionIssuerDuplicatePreflight, error) {
-	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
 
-	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	canonical, err := issuerurl.Parse(conv.PtrValOrEmpty(payload.Issuer, ""))
 	if err != nil {
 		return emptyIssuerDuplicatePreflight(), nil
 	}
 
 	candidates, err := repo.New(s.db).ListGlobalRemoteSessionIssuersByIssuerURL(ctx, repo.ListGlobalRemoteSessionIssuersByIssuerURLParams{
-		Issuers:    canonical.matchCandidates(),
+		Issuers:    canonical.MatchCandidates(),
 		LimitValue: maxIssuerDuplicateMatchesPerTier,
 	})
 	if err != nil {
@@ -197,7 +250,7 @@ func (s *Service) GetGlobalIssuerDuplicatePreflight(ctx context.Context, payload
 // ListGlobalIssuers lists the global remote_session_issuers, each with the
 // global and tenant-owned client counts that decide whether it can be deleted.
 func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.ListGlobalIssuersPayload) (*adminrsgen.ListGlobalRemoteSessionIssuersResult, error) {
-	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -219,9 +272,11 @@ func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.Lis
 	items := make([]*adminrsgen.GlobalRemoteSessionIssuer, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, &adminrsgen.GlobalRemoteSessionIssuer{
-			Issuer:            mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
-			GlobalClientCount: int(row.GlobalClientCount),
-			TenantClientCount: int(row.TenantClientCount),
+			EmaBindingCount:               nil, // Counts are available on the detail response only.
+			Issuer:                        mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
+			GlobalClientCount:             int(row.GlobalClientCount),
+			TenantClientCount:             int(row.TenantClientCount),
+			TrustedUserSessionIssuerCount: int(row.TrustedUserSessionIssuerCount),
 		})
 	}
 
@@ -238,10 +293,10 @@ func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.Lis
 }
 
 // GetGlobalIssuer resolves a global remote_session_issuer by id, with the same
-// client counts the listing carries so the detail view can describe a delete
-// without a second round trip.
+// client counts the listing carries and the active identity-chaining binding
+// count, so the detail view can describe a delete without a second round trip.
 func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGlobalIssuerPayload) (*adminrsgen.GlobalRemoteSessionIssuer, error) {
-	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -259,16 +314,27 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
+	emaCount, err := repo.New(s.db).CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: issuerID, OrganizationID: "", ProjectID: uuid.Nil})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count global issuer identity-chaining bindings").LogError(ctx, logger)
+	}
+
 	return &adminrsgen.GlobalRemoteSessionIssuer{
-		Issuer:            mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
-		GlobalClientCount: int(row.GlobalClientCount),
-		TenantClientCount: int(row.TenantClientCount),
+		EmaBindingCount:               new(int(emaCount)),
+		Issuer:                        mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
+		GlobalClientCount:             int(row.GlobalClientCount),
+		TenantClientCount:             int(row.TenantClientCount),
+		TrustedUserSessionIssuerCount: int(row.TrustedUserSessionIssuerCount),
 	}, nil
 }
 
 // UpdateGlobalIssuer patches a global remote_session_issuer.
 func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.UpdateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	return s.updateGlobalIssuer(ctx, payload, nil)
+}
+
+func (s *Service) updateGlobalIssuer(ctx context.Context, payload *adminrsgen.UpdateGlobalIssuerPayload, callerTx pgx.Tx) (*types.RemoteSessionIssuer, error) {
+	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -283,6 +349,9 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 	}
 	if payload.Issuer != nil && strings.TrimSpace(*payload.Issuer) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").LogError(ctx, logger)
+	}
+	if conv.PtrValOr(payload.TunneledMcpServerID, "") != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "a global identity provider cannot be bound to a project tunnel").LogError(ctx, logger)
 	}
 
 	// Operator-supplied and later rendered as a link, so it is validated here.
@@ -308,6 +377,12 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
 	}
+	if v := conv.PtrValOr(payload.UserinfoEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "userinfo_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(payload.IntrospectionEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "introspection_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
+	}
 
 	// Discovery drops malformed documentation URLs, but a caller holding the write
 	// scope can POST them without ever calling discover, and they are persisted
@@ -322,39 +397,79 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 	if v := conv.PtrValOr(payload.OpTosURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	if err := validateRemoteSessionProviderURLChanges(payload.Issuer, remoteSessionProviderEndpoints{
+		authorizationEndpoint: payload.AuthorizationEndpoint,
+		tokenEndpoint:         payload.TokenEndpoint,
+		revocationEndpoint:    payload.RevocationEndpoint,
+		registrationEndpoint:  payload.RegistrationEndpoint,
+		jwksURI:               payload.JwksURI,
+		userinfoEndpoint:      payload.UserinfoEndpoint,
+		introspectionEndpoint: payload.IntrospectionEndpoint,
+	}); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider URL").LogError(ctx, logger)
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	updated, err := repo.New(dbtx).UpdateGlobalRemoteSessionIssuer(ctx, repo.UpdateGlobalRemoteSessionIssuerParams{
+	dbtx := callerTx
+	if dbtx == nil {
+		ownTx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+		}
+		defer o11y.NoLogDefer(func() error { return ownTx.Rollback(ctx) })
+		dbtx = ownTx
+	}
+
+	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer configuration").LogError(ctx, logger)
+	}
+
+	// Resolve and lock only the global partition before inspecting EMA bindings.
+	existing, err := txRepo.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer").LogError(ctx, logger)
+	}
+
+	updated, err := txRepo.UpdateGlobalRemoteSessionIssuer(ctx, repo.UpdateGlobalRemoteSessionIssuerParams{
 		// Trimmed so the stored slug/issuer match what the emptiness validation
 		// above saw; whitespace-only never reaches here, so the trimmed-empty →
 		// NULL (keep) behavior of PtrToPGTextTrimmed cannot trigger.
-		Slug:                              conv.PtrToPGTextTrimmed(payload.Slug),
-		Issuer:                            conv.PtrToPGTextTrimmed(payload.Issuer),
-		Name:                              conv.PtrToPGText(payload.Name),
-		LogoAssetID:                       conv.PtrToPGText(payload.LogoAssetID),
-		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
-		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
-		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
-		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
-		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ServiceDocumentation:              conv.PtrToPGText(payload.ServiceDocumentation),
-		OpPolicyUri:                       conv.PtrToPGText(payload.OpPolicyURI),
-		OpTosUri:                          conv.PtrToPGText(payload.OpTosURI),
-		ScopesSupported:                   payload.ScopesSupported,
-		GrantTypesSupported:               payload.GrantTypesSupported,
-		ResponseTypesSupported:            payload.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
-		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
-		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
-		Oidc:                              conv.PtrToPGBool(payload.Oidc),
-		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
-		ID:                                issuerID,
+		Slug:                                conv.PtrToPGTextTrimmed(payload.Slug),
+		Issuer:                              conv.PtrToPGTextTrimmed(payload.Issuer),
+		Name:                                conv.PtrToPGText(payload.Name),
+		LogoAssetID:                         conv.PtrToPGText(payload.LogoAssetID),
+		ClientSetupDocumentationUrl:         conv.PtrToPGText(payload.ClientSetupDocumentationURL),
+		AuthorizationEndpoint:               conv.PtrToPGText(payload.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                  conv.PtrToPGText(payload.RevocationEndpoint),
+		RegistrationEndpoint:                conv.PtrToPGText(payload.RegistrationEndpoint),
+		JwksUri:                             conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:                conv.PtrToPGText(payload.ServiceDocumentation),
+		OpPolicyUri:                         conv.PtrToPGText(payload.OpPolicyURI),
+		OpTosUri:                            conv.PtrToPGText(payload.OpTosURI),
+		ScopesSupported:                     payload.ScopesSupported,
+		GrantTypesSupported:                 payload.GrantTypesSupported,
+		AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported,
+		ResponseTypesSupported:              payload.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported:   payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:       payload.CodeChallengeMethodsSupported,
+		ClientIDMetadataDocumentSupported:   conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
+		UserinfoEndpoint:                    conv.PtrToPGText(payload.UserinfoEndpoint),
+		IntrospectionEndpoint:               conv.PtrToPGText(payload.IntrospectionEndpoint),
+		IntrospectionEndpointAuthMethodsSupported:  payload.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           payload.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            payload.ClaimsSupported,
+		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
+		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
+		ScopeOverride:                              payload.ScopeOverride,
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
+		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),
+		ID:                                         issuerID,
 	})
 	if err != nil {
 		if isGlobalRemoteSessionIssuerSlugConflict(err) {
@@ -364,6 +479,26 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 			return nil, oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session issuer").LogError(ctx, logger)
+	}
+	if issuerBindingConfigurationChanged(existing, updated) {
+		if err := guardEMABindingsForIssuer(ctx, repo.New(dbtx), "", uuid.Nil, issuerID); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := requireIssuerTokenEndpointForSelfClients(ctx, logger, txRepo, updated); err != nil {
+		return nil, err
+	}
+
+	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
+		if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
+			return nil, oops.E(oops.CodeBadRequest, err, "update would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "validate clients that trust global remote session issuer").LogError(ctx, logger)
+	}
+
+	if callerTx != nil {
+		return mv.BuildRemoteSessionIssuerView(updated), nil
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -379,7 +514,7 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 // any global clients still reference it (the operator deletes the clients
 // first). Mirrors the org-scoped DeleteIssuer.
 func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.DeleteGlobalIssuerPayload) error {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return err
 	}
@@ -428,6 +563,10 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 	// first" would point a platform admin at clients they cannot see or remove.
 	// Reporting the two counts distinctly tells them which blockers are theirs
 	// (the global clients) and which belong to tenants.
+	if err := guardEMABindingsForIssuer(ctx, txRepo, "", uuid.Nil, issuerID); err != nil {
+		return err
+	}
+
 	clientCount, err := txRepo.CountRemoteSessionClientsByIssuerID(ctx, issuerID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "count remote session clients").LogError(ctx, logger)
@@ -451,6 +590,13 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 			return oops.E(oops.CodeConflict, nil, "global remote session issuer has active clients: %d global, %d tenant-owned; delete the global client(s) here, tenant-owned clients must be removed by their owning organizations", globalCount, tenantCount).LogError(ctx, logger)
 		}
 	}
+	trustedCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, issuerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "count user session issuers that trust global issuer").LogError(ctx, logger)
+	}
+	if trustedCount > 0 {
+		return oops.E(oops.CodeConflict, nil, "global remote session issuer is trusted by %d active tenant-owned user session issuer(s); they must be unlinked by their owning organizations", trustedCount).LogError(ctx, logger)
+	}
 
 	deleted, err := txRepo.DeleteGlobalRemoteSessionIssuer(ctx, issuerID)
 	if err != nil {
@@ -473,7 +619,7 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 // document and returns a draft suitable for CreateGlobalIssuer. Keyed by issuer
 // URL, so no record need exist and nothing is persisted.
 func (s *Service) FetchGlobalIssuerMetadata(ctx context.Context, payload *adminrsgen.FetchGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerDraft, error) {
-	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -487,12 +633,12 @@ func (s *Service) FetchGlobalIssuerMetadata(ctx context.Context, payload *adminr
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
 	}
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	discovered, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
 	}
 
-	return buildIssuerDraft(doc, issuerURL, warnings), nil
+	return buildIssuerDraft(discovered.doc, issuerURL, discovered.warnings), nil
 }
 
 // RefreshGlobalIssuerMetadata re-reads an existing global issuer's RFC 8414
@@ -503,7 +649,7 @@ func (s *Service) FetchGlobalIssuerMetadata(ctx context.Context, payload *adminr
 // than an auditlogs row, since audit_log.organization_id is NOT NULL and a
 // global issuer belongs to no organization.
 func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *adminrsgen.RefreshGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerRefresh, error) {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -526,9 +672,9 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
-	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, s.tunnels, existing)
 	if err != nil {
-		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
+		return nil, s.recordIssuerDiscoveryFailure(ctx, logger, existing, err)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -537,12 +683,37 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	updated, err := repo.New(dbtx).UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
+	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer configuration").LogError(ctx, logger)
+	}
+	locked, err := txRepo.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer").LogError(ctx, logger)
+	}
+	if !sameMetadataRefreshSnapshot(locked, existing) {
+		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
+	}
+
+	if err := guardEMAEndpointRefresh(ctx, txRepo, locked, params); err != nil {
+		return nil, err
+	}
+
+	updated, err := txRepo.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session issuer discovered metadata").LogError(ctx, logger)
+	}
+	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
+		if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
+			return nil, oops.E(oops.CodeBadRequest, err, "refreshed metadata would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "validate clients after refreshing global remote session issuer").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -634,7 +805,7 @@ func loadPlatformMigrationPair(ctx context.Context, r *repo.Queries, logger *slo
 // upstream authorization server as a given global issuer, so a platform admin
 // can see who could be consolidated onto the shared catalog entry.
 func (s *Service) ListGlobalIssuerConvergenceCandidates(ctx context.Context, payload *adminrsgen.ListGlobalIssuerConvergenceCandidatesPayload) (*adminrsgen.ListIssuerConvergenceCandidatesResult, error) {
-	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -665,8 +836,8 @@ func (s *Service) ListGlobalIssuerConvergenceCandidates(ctx context.Context, pay
 	// offering a candidate that names a different upstream, and the parity guard
 	// compares the same two values the same way.
 	issuers := []string{target.Issuer}
-	if canonical, canonicalErr := parseCanonicalIssuerURL(target.Issuer); canonicalErr == nil {
-		issuers = canonical.matchCandidates()
+	if canonical, canonicalErr := issuerurl.Parse(target.Issuer); canonicalErr == nil {
+		issuers = canonical.MatchCandidates()
 	}
 
 	rows, err := r.ListTenantRemoteSessionIssuersByIssuerURL(ctx, repo.ListTenantRemoteSessionIssuersByIssuerURLParams{
@@ -713,7 +884,7 @@ func (s *Service) ListGlobalIssuerConvergenceCandidates(ctx context.Context, pay
 // onto a global one would do, and every blocker that would make it fail, so the
 // confirmation dialog is authoritative before the mutation runs.
 func (s *Service) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *adminrsgen.GetGlobalIssuerMigratePreflightPayload) (*adminrsgen.IssuerMigratePreflight, error) {
-	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -740,13 +911,15 @@ func (s *Service) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *
 	}
 
 	return &adminrsgen.IssuerMigratePreflight{
-		ClientCount:               int(preflight.clientCount),
-		McpServerNames:            preflight.mcpServerNames,
-		EndpointMismatches:        issuerFieldMismatchViews(preflight.endpointMismatches),
-		ConflictingMcpServerNames: preflight.conflictingMcpServerNames,
-		Warnings:                  issuerFieldMismatchViews(preflight.warnings),
-		CanMigrate:                preflight.canMigrate(),
-		TargetTenantClientCount:   int(targetTenantClients),
+		EmaBindingCount:               int(preflight.emaBindingCount),
+		ClientCount:                   int(preflight.clientCount),
+		McpServerNames:                preflight.mcpServerNames,
+		EndpointMismatches:            issuerFieldMismatchViews(preflight.endpointMismatches),
+		ConflictingMcpServerNames:     preflight.conflictingMcpServerNames,
+		Warnings:                      issuerFieldMismatchViews(preflight.warnings),
+		TrustedUserSessionIssuerCount: int(preflight.trustedUserSessionIssuerCount),
+		CanMigrate:                    preflight.canMigrate(),
+		TargetTenantClientCount:       int(targetTenantClients),
 	}, nil
 }
 
@@ -763,7 +936,7 @@ func (s *Service) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *
 // Like every other platform-admin mutation this records a structured-log line
 // rather than an auditlogs row.
 func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen.MigrateToGlobalIssuerPayload) (*adminrsgen.MigrateRemoteSessionIssuerResult, error) {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -869,7 +1042,7 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen
 // global issuer, reusing CreateRemoteSessionClient with NULL scoping. Global
 // clients carry no user_session_issuer attachments.
 func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.CreateGlobalClientPayload) (*types.RemoteSessionClient, error) {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -884,16 +1057,8 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "client_id is required").LogError(ctx, logger)
 	}
 
-	// Encrypt a supplied client secret before it touches the database; an absent
-	// or blank secret leaves the stored ciphertext NULL.
-	var secretCiphertext pgtype.Text
-	if payload.ClientSecret != nil && strings.TrimSpace(*payload.ClientSecret) != "" {
-		ciphertext, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		secretCiphertext = conv.ToPGText(ciphertext)
-	}
+	// An absent or blank secret leaves the client without one.
+	hasSecret := payload.ClientSecret != nil && strings.TrimSpace(*payload.ClientSecret) != ""
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -914,21 +1079,42 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
+	if err := refuseGlobalPrivateKeyJWT(payload.TokenEndpointAuthMethod); err != nil {
+		return nil, err
+	}
+
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-		ProjectID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:          pgtype.Text{String: "", Valid: false},
-		RemoteSessionIssuerID:   issuerID,
-		ClientID:                clientID,
-		ClientSecretEncrypted:   secretCiphertext,
-		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
-		Scope:                   payload.Scope,
-		Audience:                conv.PtrToPGText(payload.Audience),
-		LegacyCallbackUrl:       false,
+		ForwardClientName:               false,
+		ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                  pgtype.Text{String: "", Valid: false},
+		RemoteSessionIssuerID:           issuerID,
+		ClientID:                        clientID,
+		ClientIDIssuedAt:                conv.ToPGTimestamptz(time.Now().UTC()),
+		ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
+		Scope:                           payload.Scope,
+		Audience:                        conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:               false,
+		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		// Global clients are shared across organizations and stay on the
+		// pinned outbound callback origin.
+		CallbackBaseUrl: pgtype.Text{String: "", Valid: false},
+		// Global clients have no organization, so the credential_owner
+		// constraint keeps them subject.
+		GrantTypes:      nil,
+		CredentialOwner: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create global remote session client").LogError(ctx, logger)
+	}
+
+	if hasSecret {
+		created, err = s.secrets.Set(ctx, dbtx, created.ID, clientOwner(created), []byte(*payload.ClientSecret), created.ClientSecretExpiresAt)
+		if err != nil {
+			return nil, clientSecretWriteError(ctx, logger, err)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -942,7 +1128,7 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 
 // ListGlobalClients lists the global clients registered with a global issuer.
 func (s *Service) ListGlobalClients(ctx context.Context, payload *adminrsgen.ListGlobalClientsPayload) (*adminrsgen.ListRemoteSessionClientsResult, error) {
-	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -986,7 +1172,7 @@ func (s *Service) ListGlobalClients(ctx context.Context, payload *adminrsgen.Lis
 
 // GetGlobalClient resolves a global client by id.
 func (s *Service) GetGlobalClient(ctx context.Context, payload *adminrsgen.GetGlobalClientPayload) (*types.RemoteSessionClient, error) {
-	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -1010,7 +1196,7 @@ func (s *Service) GetGlobalClient(ctx context.Context, payload *adminrsgen.GetGl
 // UpdateGlobalClient patches a global client's non-issuer fields, rotating the
 // client secret when supplied.
 func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.UpdateGlobalClientPayload) (*types.RemoteSessionClient, error) {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -1020,18 +1206,11 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	// Encrypt a rotated client secret before it touches the database; an absent
-	// secret leaves the stored ciphertext untouched (narg NULL → COALESCE keeps).
-	var clientSecretEncrypted pgtype.Text
-	if payload.ClientSecret != nil {
-		if strings.TrimSpace(*payload.ClientSecret) == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "client_secret cannot be empty").LogError(ctx, logger)
-		}
-		ciphertext, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		clientSecretEncrypted = conv.ToPGText(ciphertext)
+	// A rotated client secret replaces the stored one; an absent secret leaves
+	// it untouched.
+	newSecret := payload.ClientSecret != nil
+	if newSecret && strings.TrimSpace(*payload.ClientSecret) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_secret cannot be empty").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -1040,18 +1219,45 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := refuseGlobalPrivateKeyJWT(payload.TokenEndpointAuthMethod); err != nil {
+		return nil, err
+	}
+
+	// Ownership is immutable. Authorize with the global-only lookup before
+	// the EMA guard takes its ID-only row lock.
+	if _, err := repo.New(dbtx).GetGlobalRemoteSessionClientByID(ctx, clientID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "global remote session client not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session client").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForClient(ctx, repo.New(dbtx), "", uuid.Nil, clientID); err != nil {
+		return nil, err
+	}
+
 	updated, err := repo.New(dbtx).UpdateGlobalRemoteSessionClient(ctx, repo.UpdateGlobalRemoteSessionClientParams{
-		ClientSecretEncrypted:   clientSecretEncrypted,
-		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
-		Scope:                   payload.Scope,
-		Audience:                conv.PtrToPGText(payload.Audience),
-		ID:                      clientID,
+		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
+		Scope:                           payload.Scope,
+		Audience:                        conv.PtrToPGText(payload.Audience),
+		// Global clients were never registered under the legacy callback URL.
+		LegacyCallbackUrl: pgtype.Bool{Bool: false, Valid: false},
+		ID:                clientID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "global remote session client not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session client").LogError(ctx, logger)
+	}
+
+	// Global clients carry no issuer-reported secret expiry.
+	if newSecret {
+		updated, err = s.secrets.Set(ctx, dbtx, updated.ID, clientOwner(updated), []byte(*payload.ClientSecret), pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false})
+		if err != nil {
+			return nil, clientSecretWriteError(ctx, logger, err)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -1066,7 +1272,7 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 // DeleteGlobalClient soft-deletes a global client and cascades the
 // remote_sessions minted against it.
 func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.DeleteGlobalClientPayload) error {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return err
 	}
@@ -1084,6 +1290,58 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 
 	txRepo := repo.New(dbtx)
 
+	// A platform-global client is reachable from several organizations. Both
+	// the discovery and each organization's scopes precede the first mutation,
+	// so they are held before any row lock is taken. Organizations are taken
+	// in a fixed order: two deletions reaching the same pair must not take
+	// them in opposite orders.
+	affected, err := serversLosingGlobalClient(ctx, dbtx, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list servers losing the global client").LogError(ctx, logger)
+	}
+	bindingServers, err := ReadGlobalClientBindingServers(ctx, dbtx, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read servers on the global client's issuers").LogError(ctx, logger)
+	}
+	organizationIDs := slices.Sorted(maps.Keys(affected))
+	for _, organizationID := range bindingServers.Organizations() {
+		if !slices.Contains(organizationIDs, organizationID) {
+			organizationIDs = append(organizationIDs, organizationID)
+		}
+	}
+	slices.Sort(organizationIDs)
+	for _, organizationID := range organizationIDs {
+		scope := affected[organizationID]
+		projects := slices.Clone(scope.projects)
+		for _, projectID := range bindingServers.Projects(organizationID) {
+			if !slices.Contains(projects, projectID) {
+				projects = append(projects, projectID)
+			}
+		}
+		if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, organizationID, projects); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
+		}
+		if err := authclientbackfill.PreflightServerAssociationsWithRegistrations(ctx, dbtx, organizationID, scope.servers, []uuid.UUID{clientID}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
+		}
+	}
+
+	// Ownership is immutable. Authorize with the global-only lookup before
+	// the EMA guard takes its ID-only row lock.
+	if _, err := repo.New(dbtx).GetGlobalRemoteSessionClientByID(ctx, clientID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "get global remote session client").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForClient(ctx, txRepo, "", uuid.Nil, clientID); err != nil {
+		return err
+	}
+	if err := recheckGlobalClientAssociationScope(ctx, dbtx, clientID, affected); err != nil {
+		return err.LogWarn(ctx, logger)
+	}
+
 	deleted, err := txRepo.DeleteGlobalRemoteSessionClient(ctx, clientID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1092,9 +1350,28 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "delete global remote session client").LogError(ctx, logger)
 	}
 
+	if err := txRepo.RetirePrincipalAttachmentsForDeletedRegistration(ctx, repo.RetirePrincipalAttachmentsForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGTextEmpty(""), ProjectID: deleted.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire principal attachments for deleted client").LogError(ctx, logger)
+	}
+
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
+	}
+
+	if _, err := upstreamclientsrepo.New(dbtx).RemoveGlobalClientAssociations(ctx, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
+	}
+	for _, organizationID := range organizationIDs {
+		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, affected[organizationID].servers...); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "sync auth clients of the global client's servers").LogError(ctx, logger)
+		}
+	}
+	if err := txRepo.RetireOffersForDeletedRegistration(ctx, repo.RetireOffersForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGTextEmpty(""), ProjectID: deleted.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire typed offers for deleted client").LogError(ctx, logger)
+	}
+	if err := bindingServers.Derive(ctx, dbtx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "derive upstream issuer of the global client's servers").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -1109,4 +1386,64 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 	logGlobalMutation(ctx, logger, authCtx, "delete", "client", deleted.ID.String())
 
 	return nil
+}
+
+// globalClientScope is one organization's servers losing a global client and
+// the projects they sit in, which its writer scope has to name.
+type globalClientScope struct {
+	servers  []uuid.UUID
+	projects []uuid.UUID
+}
+
+// serversLosingGlobalClient is every live MCP server associated with a
+// platform-global client, grouped by the organization that owns it.
+// Tombstoned associations are included so an earlier partial removal is
+// repaired rather than left behind. The
+// removal spans organizations and reports only a count, so the ids are read
+// first and each organization's typed records are decided again on its own.
+// recheckGlobalClientAssociationScope confirms the servers discovered before
+// the scopes were taken are still the servers this deletion will remove.
+// Associating a server with the client takes a key-share lock on its row, so
+// once the EMA guard holds that row the set can no longer change; this catches
+// one that committed in the window before it. Removing it without re-deciding
+// it would leave the typed link behind, so the caller retries on the fresh set.
+func recheckGlobalClientAssociationScope(ctx context.Context, dbtx pgx.Tx, clientID uuid.UUID, discovered map[string]globalClientScope) *oops.ShareableError {
+	current, err := serversLosingGlobalClient(ctx, dbtx, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "re-list servers losing the global client")
+	}
+	if len(current) != len(discovered) {
+		return oops.E(oops.CodeConflict, nil, "this client's MCP servers changed while it was being deleted; reload and retry")
+	}
+	for organizationID, scope := range current {
+		if !slices.Equal(discovered[organizationID].servers, scope.servers) {
+			return oops.E(oops.CodeConflict, nil, "this client's MCP servers changed while it was being deleted; reload and retry")
+		}
+	}
+	return nil
+}
+
+func serversLosingGlobalClient(ctx context.Context, dbtx pgx.Tx, clientID uuid.UUID) (map[string]globalClientScope, error) {
+	rows, err := upstreamclientsrepo.New(dbtx).ListServersAssociatedWithClient(ctx, upstreamclientsrepo.ListServersAssociatedWithClientParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        pgtype.Text{String: "", Valid: false},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list servers losing global client: %w", err)
+	}
+	affected := map[string]globalClientScope{}
+	seen := map[string]map[uuid.UUID]bool{}
+	for _, row := range rows {
+		scope := affected[row.OrganizationID]
+		scope.servers = append(scope.servers, row.McpServerID)
+		if seen[row.OrganizationID] == nil {
+			seen[row.OrganizationID] = map[uuid.UUID]bool{}
+		}
+		if !seen[row.OrganizationID][row.ProjectID] {
+			seen[row.OrganizationID][row.ProjectID] = true
+			scope.projects = append(scope.projects, row.ProjectID)
+		}
+		affected[row.OrganizationID] = scope
+	}
+	return affected, nil
 }

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { describe, expect, it } from "vitest";
 import {

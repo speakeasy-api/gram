@@ -10,12 +10,36 @@ const {
   useUserSessionsInfinite,
   invalidateAllUserSessionClients,
   revokeSessionMutate,
+  batchBadgesMutate,
+  listAgents,
+  healthFlag,
 } = vi.hoisted(() => ({
+  healthFlag: { value: "off" as "pending" | "on" | "off" },
   useUserSessionClientsInfinite: vi.fn(),
   useUserSessionsInfinite: vi.fn(),
   invalidateAllUserSessionClients: vi.fn(),
   revokeSessionMutate: vi.fn(),
+  batchBadgesMutate: vi.fn(),
+  listAgents: vi.fn(),
 }));
+
+vi.mock("@/pages/mcp-sessions/connection-health/flag", () => ({
+  useConnectionHealthFlag: () => healthFlag.value,
+}));
+
+vi.mock(
+  "@/pages/mcp-sessions/connection-health/ServerConnectionHealth",
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    ServerConnectionHealth: ({
+      providerId,
+      serverId,
+    }: {
+      providerId: string;
+      serverId: string;
+    }) => <div data-testid="server-health">{`${providerId}:${serverId}`}</div>,
+  }),
+);
 
 vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
   useUserSessionClientsInfinite: (...args: unknown[]) =>
@@ -66,6 +90,20 @@ vi.mock("@/components/ui/MoreActions", () => ({
   ),
 }));
 
+vi.mock("@/hooks/useKillswitchAccess", () => ({
+  useKillswitchAccess: () => ({
+    canAccess: true,
+    isLoading: false,
+    reason: "allowed",
+  }),
+}));
+
+vi.mock("@gram/client/react-query/batchKillswitchUserBadges.js", () => ({
+  useBatchKillswitchUserBadgesMutation: () => ({
+    mutateAsync: batchBadgesMutate,
+  }),
+}));
+
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true, hasAnyScope: () => true }),
 }));
@@ -100,8 +138,21 @@ vi.mock("./RevokeClientDialog", () => ({
   }) => (open ? <button onClick={onRevoked}>Confirm revoke</button> : null),
 }));
 
+// Keep the real session-agent query/resolution hooks; stub only their API boundary.
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({ agents: { list: listAgents } }),
+  useProjectSlugForRequests: () => "project-1",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-1" }),
+}));
+
 vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-1" }),
   useProject: () => ({ id: "project-1", slug: "project-1" }),
+  useSession: () => ({
+    session: "session-1",
+    user: { id: "user-1" },
+    organization: { id: "org-1" },
+  }),
 }));
 
 function client(overrides: Record<string, unknown>) {
@@ -159,7 +210,7 @@ function queryResult(
 // provider to the component.
 function wrap(ui: React.ReactElement, initialEntries: string[] = ["/"]) {
   // The tab invalidates session queries after a revoke, so it needs a real
-  // QueryClient even though every data hook is mocked.
+  // QueryClient; readable-agent queries also exercise this real cache.
   return (
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter initialEntries={initialEntries}>
@@ -175,19 +226,62 @@ function renderTab(ui: React.ReactElement, initialEntries?: string[]) {
 
 describe("ClientsAndSessionsTab", () => {
   beforeEach(() => {
+    listAgents.mockResolvedValue([{ result: { items: [] } }]);
     useUserSessionsInfinite.mockReturnValue(queryResult([]));
     useUserSessionClientsInfinite.mockReturnValue(queryResult([]));
+    batchBadgesMutate.mockResolvedValue({
+      badges: [
+        {
+          userId: "u1",
+          affected: true,
+          affectedNow: true,
+          scheduled: false,
+        },
+      ],
+    });
   });
 
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    healthFlag.value = "off";
   });
+
+  it("shows connection health for the server when the flag is on", () => {
+    healthFlag.value = "on";
+    renderTab(
+      <ClientsAndSessionsTab
+        issuerId="issuer-1"
+        originatingMcpServerId="srv-1"
+      />,
+    );
+
+    expect(screen.getByTestId("server-health").textContent).toBe(
+      "issuer-1:srv-1",
+    );
+    expect(useUserSessionsInfinite).not.toHaveBeenCalled();
+  });
+
+  it.each(["off", "pending"] as const)(
+    "lists sessions without connection health when the flag is %s",
+    (value) => {
+      healthFlag.value = value;
+      renderTab(
+        <ClientsAndSessionsTab
+          issuerId="issuer-1"
+          originatingMcpServerId="srv-1"
+        />,
+      );
+
+      expect(screen.queryByTestId("server-health")).toBeNull();
+      expect(useUserSessionsInfinite).toHaveBeenCalled();
+    },
+  );
 
   it("explains why there is nothing to show when no issuer is attached", () => {
     renderTab(<ClientsAndSessionsTab issuerId={undefined} />);
 
-    expect(screen.getByText(/has no session issuer/i)).toBeDefined();
+    expect(screen.getByText(/Turn on sign-in/i)).toBeDefined();
     // Without an issuer to scope to, the listing endpoints would fall back to
     // the whole project, so both queries have to be disabled rather than
     // merely unrendered.
@@ -205,7 +299,7 @@ describe("ClientsAndSessionsTab", () => {
 
   it("reads a connection as one chain: client, server, then upstream", () => {
     // The whole point of the surface. A sessions table shows the inbound half
-    // and leaves an admin unable to see what Gram reaches on the subject's
+    // and leaves an admin unable to see what Speakeasy reaches on the subject's
     // behalf.
     useUserSessionsInfinite.mockReturnValue(
       queryResult([
@@ -232,13 +326,15 @@ describe("ClientsAndSessionsTab", () => {
     // not repeated — this tab is already scoped to one.
     expect(screen.getByText(/1 provider/)).toBeDefined();
 
-    fireEvent.click(screen.getByText("Ada Lovelace"));
+    // Not the person's name — that is a link to their profile now, so the
+    // row is opened from anywhere else on it.
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
 
     expect(screen.getAllByText("Test Client").length).toBeGreaterThan(0);
   });
 
   it("says so when a connection reaches no upstream at all", () => {
-    // Distinct from a missing value: reaching only Gram-native tools is a real
+    // Distinct from a missing value: reaching only Speakeasy-native tools is a real
     // state, and a blank would read as data we failed to load.
     useUserSessionsInfinite.mockReturnValue(
       queryResult([session({ upstreams: [] })]),
@@ -246,7 +342,7 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    expect(screen.getByText(/Speakeasy tools only/)).toBeDefined();
+    expect(screen.getByText(/no upstreams/)).toBeDefined();
   });
 
   it("groups connections by person and can regroup by provider", () => {
@@ -300,6 +396,93 @@ describe("ClientsAndSessionsTab", () => {
     expect(screen.getByText("Needs re-auth")).toBeDefined();
   });
 
+  it("batches deduplicated people once and links status/actions to the exact user", async () => {
+    useUserSessionsInfinite.mockReturnValue(
+      queryResult([session({ id: "session-1" }), session({ id: "session-2" })]),
+    );
+
+    renderTab(
+      <ClientsAndSessionsTab
+        issuerId="issuer-1"
+        originatingMcpServerId="mcp-server-1"
+      />,
+    );
+
+    await vi.waitFor(() => expect(batchBadgesMutate).toHaveBeenCalledTimes(1));
+    expect(batchBadgesMutate.mock.calls[0]?.[0]).toMatchObject({
+      request: {
+        killswitchBatchUserBadgesRequest: { userIds: ["u1"] },
+      },
+    });
+    expect(
+      (
+        await screen.findByRole("link", { name: /Killswitch active/ })
+      ).getAttribute("href"),
+    ).toBe("/org/projects/project-1/identities/user%3Au1/access");
+    expect(screen.getByText("View killswitches")).toBeDefined();
+    fireEvent.click(screen.getByText("New killswitch…"));
+    expect(revokeSessionMutate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Revoke all connections"));
+    expect(
+      screen
+        .getByRole("link", { name: "New killswitch…" })
+        .getAttribute("href"),
+    ).toBe(
+      "/org/projects/project-1/identities/user%3Au1/access?create=1&createCapability=mcp_tool_calls&originServer=mcp-server-1",
+    );
+  });
+
+  it("batches only people revealed under an expanded agent", async () => {
+    useUserSessionsInfinite.mockReturnValue(queryResult([session({})]));
+    useUserSessionClientsInfinite.mockReturnValue(
+      queryResult([client({ clientName: "Visible Agent" })]),
+    );
+
+    renderTab(
+      <ClientsAndSessionsTab
+        issuerId="issuer-1"
+        originatingMcpServerId="mcp-server-1"
+      />,
+    );
+    fireEvent.click(screen.getByText("Agent"));
+    batchBadgesMutate.mockClear();
+
+    expect(batchBadgesMutate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Visible Agent"));
+
+    await vi.waitFor(() => expect(batchBadgesMutate).toHaveBeenCalledTimes(1));
+    expect(batchBadgesMutate.mock.calls[0]?.[0]).toMatchObject({
+      request: {
+        killswitchBatchUserBadgesRequest: { userIds: ["u1"] },
+      },
+    });
+  });
+
+  it("resolves readable managed agents without losing row expansion", async () => {
+    listAgents.mockResolvedValue([
+      { result: { items: [{ id: "agent-1", name: "Release assistant" }] } },
+    ]);
+    useUserSessionsInfinite.mockReturnValue(
+      queryResult([
+        session({ subjectType: "agent", subjectUrn: "agent:agent-1" }),
+      ]),
+    );
+
+    renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
+
+    const link = await screen.findByRole("link", { name: "Release assistant" });
+    expect(link.getAttribute("href")).toBe(
+      "/org/projects/project-1/identities/agent%3Aagent-1/overview",
+    );
+    expect(listAgents).toHaveBeenCalledTimes(1);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Expand Release assistant" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Collapse Release assistant" }),
+    ).toBeDefined();
+  });
+
   it("no longer offers the client drill-down that filtered the table above", () => {
     // The retired paradigm: clicking a client re-scoped a separate table
     // elsewhere on the page. Grouping replaced it, so the affordance must be
@@ -324,7 +507,9 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    fireEvent.click(screen.getByText("Ada Lovelace"));
+    // The person's name is a link to their profile; the row opens from
+    // anywhere else on it.
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
     fireEvent.click(screen.getByText("Revoke connection"));
     fireEvent.click(screen.getByText("Confirm session revoke"));
 

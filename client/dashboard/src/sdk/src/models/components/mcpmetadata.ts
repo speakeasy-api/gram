@@ -13,7 +13,7 @@ import {
 } from "./mcpenvironmentconfig.js";
 
 /**
- * Metadata used to configure the MCP install page. Exactly one of toolset_id or mcp_server_id identifies which backend the metadata belongs to.
+ * Metadata used to configure the MCP install page. toolset_id or mcp_server_id identifies which backend the metadata belongs to; a hosted MCP server with a live canonical MCP server carries both, set to the same id.
  */
 export type McpMetadata = {
   /**
@@ -53,11 +53,11 @@ export type McpMetadata = {
    */
   logoAssetId?: string | undefined;
   /**
-   * The MCP server associated with this install page metadata. Mutually exclusive with toolset_id.
+   * The MCP server associated with this install page metadata. Also set with toolset_id, to the same id, for a hosted MCP server with a live canonical MCP server.
    */
   mcpServerId?: string | undefined;
   /**
-   * The toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
+   * The toolset associated with this install page metadata. Also set with mcp_server_id, to the same id, for a hosted MCP server with a live canonical MCP server.
    */
   toolsetId?: string | undefined;
   /**

@@ -3,8 +3,10 @@ package mv
 import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 )
 
 // BuildMetaMcpServerView converts a repo meta_mcp_servers row into the API
@@ -17,6 +19,10 @@ func BuildMetaMcpServerView(server repo.MetaMcpServer) *types.MetaMcpServer {
 		Name:                server.Name,
 		UserSessionIssuerID: conv.FromNullableUUID(server.UserSessionIssuerID),
 		Visibility:          types.MetaMcpServerVisibility(server.Visibility),
+		NetworkAccessMode:   types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
+		Instructions:        conv.FromPGText[string](server.Instructions),
+		CodeModeEnabled:     nil,
+		DiscoveryMode:       string(metamcp.ResolveDiscoveryMode(server.DiscoveryMode)),
 		CreatedAt:           conv.FromPGTimestamptz(server.CreatedAt),
 		UpdatedAt:           conv.FromPGTimestamptz(server.UpdatedAt),
 		MemberCount:         nil,

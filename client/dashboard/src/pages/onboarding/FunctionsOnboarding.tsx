@@ -1,3 +1,9 @@
+import { Navigate } from "react-router";
+import { useFunctionsAvailability } from "@/hooks/useFunctionsAvailability";
+import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
+import { useProject } from "@/contexts/Auth";
+import { useRoutes } from "@/routes";
+import { Button } from "@/components/ui/Button";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";
@@ -7,13 +13,47 @@ import { Stack } from "@/components/ui/Stack";
 import { CodeIcon } from "lucide-react";
 
 export default function FunctionsOnboarding(): JSX.Element {
+  const routes = useRoutes();
+  const functionsAvailability = useFunctionsAvailability();
+
+  // A deployment without Functions has no way to deploy them, so a stale link
+  // or bookmark lands on the add-server page instead.
+  if (functionsAvailability === "unavailable") {
+    return <Navigate to={routes.mcp.add.href()} replace />;
+  }
+
+  if (functionsAvailability === "loading") {
+    return (
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs />
+        </Page.Header>
+        <Page.Body isLoading>{null}</Page.Body>
+      </Page>
+    );
+  }
+
+  return <FunctionsOnboardingContent />;
+}
+
+function FunctionsOnboardingContent(): JSX.Element {
+  const gateway = useGatewayCreation();
+  const project = useProject();
+  const routes = useRoutes();
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="project:write" level="page">
+        <RequireScope
+          scope={
+            gateway.gatewayId ? ["project:write", "mcp:write"] : "project:write"
+          }
+          all
+          resourceId={gateway.gatewayId ? project.id : undefined}
+          level="page"
+        >
           <div className="max-w-2xl">
             {/* Header */}
             <Stack gap={3} className="mb-8">
@@ -33,6 +73,27 @@ export default function FunctionsOnboarding(): JSX.Element {
 
             {/* Instructions */}
             <GettingStartedInstructions />
+            {gateway.gatewayId && (
+              <Stack gap={3} className="mt-6">
+                <Text muted>
+                  After deploying your functions, select the deployed source to
+                  create a server and add it to this gateway.
+                </Text>
+                <routes.mcp.add.fromSource.Link
+                  queryParams={{ attachToGateway: gateway.gatewayId }}
+                >
+                  Select deployed function
+                </routes.mcp.add.fromSource.Link>
+                <Button
+                  variant="tertiary"
+                  onClick={() => {
+                    gateway.cancel();
+                  }}
+                >
+                  <Button.Text>Cancel</Button.Text>
+                </Button>
+              </Stack>
+            )}
 
             {/* Help text */}
             <Text small muted className="mt-6">

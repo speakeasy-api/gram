@@ -1,0 +1,5 @@
+messages:
+  - role: ROLE_USER
+    parts:
+      - text: Please help with a failed payment
+target_message_index: 0

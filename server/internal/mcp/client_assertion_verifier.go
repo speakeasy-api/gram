@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
@@ -49,7 +49,7 @@ func clientAssertionSigningAlgorithms() []string {
 // them through; every consumer checks for nil before use. The only
 // construction errors are nil dependencies, which the checks above rule out,
 // so a failure here is logged and treated exactly like an absent Redis.
-func newClientAssertionVerifier(redisClient *redis.Client, policy *guardian.Policy, meterProvider metric.MeterProvider, logger *slog.Logger) *clientauth.Verifier {
+func newClientAssertionVerifier(redisClient *redis.Client, policy *guardian.Policy, meterProvider metric.MeterProvider, logger *slog.Logger) *privatekeyjwt.Verifier {
 	if redisClient == nil {
 		return nil
 	}
@@ -61,12 +61,12 @@ func newClientAssertionVerifier(redisClient *redis.Client, policy *guardian.Poli
 		logger.ErrorContext(context.Background(), "client assertion key resolver unavailable, assertion clients will be refused", attr.SlogError(err))
 		return nil
 	}
-	guard, err := replay.NewRedisGuard(redisClient, "client_assertion_jti", clientauth.DefaultMaxReplayHold)
+	guard, err := replay.NewRedisGuard(redisClient, "client_assertion_jti", privatekeyjwt.DefaultMaxReplayHold)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "client assertion replay guard unavailable, assertion clients will be refused", attr.SlogError(err))
 		return nil
 	}
-	verifier, err := clientauth.NewVerifier(keys, guard)
+	verifier, err := privatekeyjwt.NewVerifier(keys, guard)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "client assertion verifier unavailable, assertion clients will be refused", attr.SlogError(err))
 		return nil

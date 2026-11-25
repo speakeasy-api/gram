@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,51 +45,60 @@ type challengeLogger struct {
 	FilterAllowedCount   uint32
 }
 
-const challengeOutboxTimeout = 10 * time.Second
+const challengeLogStepTimeout = 10 * time.Second
 
 // Log enqueues the challenge for asynchronous ingestion into ClickHouse. The
 // enqueue is gated behind the ChallengeLoggingEnabled feature check — if the
 // feature is not enabled for the org (or the check fails), the call is a
 // no-op. Errors are logged at warn level and never bubble back to the caller.
-func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
+// It reports whether the challenge was enqueued.
+func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) bool {
+	RecordAuthorizationDecision(ctx, l.Operation, l.Outcome, l.Reason)
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
-		return
+		return false
 	}
 
 	// Skip challenge logging when a Speakeasy admin is impersonating a
 	// customer org — challenges belong to the admin, not the customer.
 	if contextvalues.IsSupportSession(ctx) {
-		return
+		return false
 	}
 
 	// Likewise for sessions exploring the shared demo org: challenges there
 	// belong to the visitor, and the daily seed rerun would wipe them anyway.
 	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
-		return
+		return false
 	}
 
-	enabled, err := isEnabled(ctx, authCtx.ActiveOrganizationID)
+	// A listing records nothing (see WithoutChallenges).
+	if challengesSilenced(ctx) {
+		return false
+	}
+
+	// Detached and bounded: a client cancel must not drop a completed decision.
+	checkCtx, cancelCheck := context.WithTimeout(context.WithoutCancel(ctx), challengeLogStepTimeout)
+	defer cancelCheck()
+
+	enabled, err := isEnabled(checkCtx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		logger.WarnContext(ctx, "failed to check authz challenge logging feature flag",
+		logger.WarnContext(checkCtx, "failed to check authz challenge logging feature flag",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		)
-		return
+		return false
 	}
 	if !enabled {
-		return
+		return false
+	}
+	// A request records each resource it names once (see
+	// WithOneChallengePerResource).
+	if !claimChallenge(ctx, l) {
+		return false
 	}
 
-	principalURN := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String()
-	principalType := authzrepo.PrincipalTypeUser
-	if authCtx.APIKeyID != "" {
-		principalURN = "api_key:" + authCtx.APIKeyID
-		principalType = authzrepo.PrincipalTypeAPIKey
-	}
-	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
-		principalType = authzrepo.PrincipalTypeAssistant
-	}
+	principalURN, principalType := authorizationChallengePrincipal(ctx, authCtx)
 
 	var focus Check
 	var focusSelector Selector
@@ -192,11 +202,8 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		FilterAllowedCount:   &l.FilterAllowedCount,
 	}.Build()
 
-	// Request cancellation must not abort the durable enqueue after the
-	// authorization decision has completed. Keep it bounded so challenge
-	// logging cannot hold up the request indefinitely during a database outage.
-	enqueueCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), challengeOutboxTimeout)
-	defer cancel()
+	enqueueCtx, cancelEnqueue := context.WithTimeout(context.WithoutCancel(ctx), challengeLogStepTimeout)
+	defer cancelEnqueue()
 
 	if _, err := outbox.Publish(enqueueCtx, dbtx, authCtx.ActiveOrganizationID, outbox.Message{
 		Proto:      message,
@@ -206,8 +213,32 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		logger.WarnContext(enqueueCtx, "failed to enqueue authz challenge",
 			attr.SlogError(err),
 		)
-		return
+		return false
 	}
+	return true
+}
+
+func authorizationChallengePrincipal(ctx context.Context, authCtx *contextvalues.AuthContext) (string, authzrepo.PrincipalType) {
+	principalURN := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String()
+	principalType := authzrepo.PrincipalTypeUser
+	if authCtx.APIKeyID != "" {
+		principalURN = "api_key:" + authCtx.APIKeyID
+		principalType = authzrepo.PrincipalTypeAPIKey
+	}
+	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
+		principalType = authzrepo.PrincipalTypeAssistant
+	}
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
+		principalURN = actor.String()
+		principalType = authzrepo.PrincipalTypeAgent
+	}
+	// A workload actor carries neither a UserID nor an APIKeyID, so without
+	// this arm its challenges would be logged against an empty user principal.
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
+		principalURN = actor.String()
+		principalType = authzrepo.PrincipalTypeWorkload
+	}
+	return principalURN, principalType
 }
 
 func marshalSelector(v Selector) string {
@@ -241,4 +272,132 @@ func roleSlugsFromContext(ctx context.Context) []string {
 		out = append(out, slug)
 	}
 	return out
+}
+
+type challengeScopeKey struct{}
+
+// challengeScope decides which decisions of one request are recorded as
+// authorization checks. Decisions still count in the decision metrics either
+// way; only the recorded check, an outbox row each, is skipped.
+type challengeScope struct {
+	// silent records nothing: the caller is filtering or listing, not
+	// asking for one resource.
+	silent bool
+	// recorded is shared by every scope derived from one request. Nil for a
+	// silent scope.
+	recorded *recordedChallenges
+}
+
+// recordedChallenges remembers which decisions a request has recorded.
+type recordedChallenges struct {
+	mu sync.Mutex
+	// decided holds every scope and resource with a recorded decision.
+	decided map[challengeResource]struct{}
+	// denied holds every recorded denial by the tool and disposition it
+	// refused, so each distinct refusal on a resource is recorded once.
+	denied map[challengeDenial]struct{}
+}
+
+type challengeResource struct {
+	scope      Scope
+	resourceID string
+}
+
+// challengeDenial is the refusal of one tool and disposition on a resource. A
+// check that names no tool, such as connecting to the server, has both empty.
+type challengeDenial struct {
+	resource    challengeResource
+	tool        string
+	disposition string
+	// server is the MCP server an auth client was refused on: one client
+	// serves several servers, and each refusal is its own.
+	server string
+}
+
+// WithOneChallengePerResource returns a context under which the engine records
+// at most one check per scope and resource for the rest of the request: the
+// first decision, and later each distinct denial (by tool and disposition) not
+// recorded yet. A gateway request checks the server it names several times
+// (the server, then the tool it calls), and every one of those would otherwise
+// be its own row.
+func WithOneChallengePerResource(ctx context.Context) context.Context {
+	if scope, ok := ctx.Value(challengeScopeKey{}).(*challengeScope); ok && scope.recorded != nil {
+		return ctx
+	}
+	return context.WithValue(ctx, challengeScopeKey{}, &challengeScope{
+		silent:   false,
+		recorded: &recordedChallenges{mu: sync.Mutex{}, decided: map[challengeResource]struct{}{}, denied: map[challengeDenial]struct{}{}},
+	})
+}
+
+// WithoutChallenges returns a context under which the engine records no
+// checks. Use it where a request filters or lists resources it did not name,
+// so a caller is not shown a denial for every resource it simply cannot see.
+// Evaluate is the single-check form of the same rule.
+func WithoutChallenges(ctx context.Context) context.Context {
+	return context.WithValue(ctx, challengeScopeKey{}, &challengeScope{silent: true, recorded: nil})
+}
+
+// challengesSilenced reports a context that records no checks. It is read
+// before anything else a recorded check costs, such as the feature flag.
+func challengesSilenced(ctx context.Context) bool {
+	scope, ok := ctx.Value(challengeScopeKey{}).(*challengeScope)
+	return ok && scope.silent
+}
+
+// claimChallenge reports whether a decision is recorded under ctx's scope, and
+// marks it recorded. Call it only once the decision is about to be written.
+func claimChallenge(ctx context.Context, l challengeLogger) bool {
+	scope, ok := ctx.Value(challengeScopeKey{}).(*challengeScope)
+	if !ok {
+		return true
+	}
+	if scope.recorded == nil {
+		return false
+	}
+
+	// A batch (Filter, FindMatched) names no one resource. It never takes a
+	// resource's slot, so a later decision about that resource still records,
+	// but it is skipped once that resource has a recorded decision.
+	batch := l.Focus == nil
+	focus := l.Focus
+	if batch && len(l.Checks) > 0 {
+		focus = &l.Checks[0]
+	}
+	if focus == nil {
+		return true
+	}
+	key := challengeResource{scope: focus.Scope, resourceID: focus.ResourceID}
+
+	scope.recorded.mu.Lock()
+	defer scope.recorded.mu.Unlock()
+	_, decided := scope.recorded.decided[key]
+	if batch {
+		return !decided
+	}
+	switch l.Outcome {
+	case authzrepo.OutcomeAllow:
+		if decided {
+			return false
+		}
+	case authzrepo.OutcomeDeny:
+		// A denial after an allow is still recorded: connecting was allowed
+		// but this tool or disposition was not, and that refusal is real. Two
+		// different refused tools on one server are two refusals.
+		denial := challengeDenial{
+			resource:    key,
+			tool:        focus.Dimensions[SelectorKeyTool],
+			disposition: focus.Dimensions[SelectorKeyDisposition],
+			server:      focus.Dimensions[ChallengeKeyMCPServerID],
+		}
+		if _, seen := scope.recorded.denied[denial]; seen {
+			return false
+		}
+		scope.recorded.denied[denial] = struct{}{}
+	default:
+		// Errors are always recorded: they are not a decision about access.
+		return true
+	}
+	scope.recorded.decided[key] = struct{}{}
+	return true
 }

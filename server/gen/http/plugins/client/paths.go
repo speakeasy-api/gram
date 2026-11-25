@@ -7,6 +7,16 @@
 
 package client
 
+// ListDistributionPluginsPluginsPath returns the URL path to the plugins service listDistributionPlugins HTTP endpoint.
+func ListDistributionPluginsPluginsPath() string {
+	return "/rpc/plugins.listDistributionPlugins"
+}
+
+// GetDistributionPluginPluginsPath returns the URL path to the plugins service getDistributionPlugin HTTP endpoint.
+func GetDistributionPluginPluginsPath() string {
+	return "/rpc/plugins.getDistributionPlugin"
+}
+
 // ListPluginsPluginsPath returns the URL path to the plugins service listPlugins HTTP endpoint.
 func ListPluginsPluginsPath() string {
 	return "/rpc/plugins.listPlugins"
@@ -60,6 +70,11 @@ func ListAudiencesPluginsPath() string {
 // DownloadPluginPackagePluginsPath returns the URL path to the plugins service downloadPluginPackage HTTP endpoint.
 func DownloadPluginPackagePluginsPath() string {
 	return "/rpc/plugins.downloadPluginPackage"
+}
+
+// RotateObservabilityCredentialPluginsPath returns the URL path to the plugins service rotateObservabilityCredential HTTP endpoint.
+func RotateObservabilityCredentialPluginsPath() string {
+	return "/rpc/plugins.rotateObservabilityCredential"
 }
 
 // DownloadObservabilityPluginPluginsPath returns the URL path to the plugins service downloadObservabilityPlugin HTTP endpoint.

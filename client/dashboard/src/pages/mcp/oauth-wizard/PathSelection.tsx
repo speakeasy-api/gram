@@ -1,66 +1,24 @@
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import {
-  ServerIcon,
-  WaypointsIcon,
-  ZapIcon,
-  type LucideIcon,
-} from "lucide-react";
+import { ServerIcon, WaypointsIcon, type LucideIcon } from "lucide-react";
 
-import { Badge } from "@/components/ui/Badge";
-import { ReactNode } from "react";
-import { canAutoConfigureFromDiscovered, WizardContext } from "./machine";
-import type { DiscoveredOAuth } from "./machine-types";
+import { WizardContext } from "./machine";
 
 export function PathSelection(): JSX.Element {
   const actorRef = WizardContext.useActorRef();
   const send = actorRef.send.bind(actorRef);
-  const discovered = WizardContext.useSelector((s) => s.context.discovered);
-  const canAutoConfigure = canAutoConfigureFromDiscovered(discovered);
 
   return (
     <div className="space-y-4">
-      {discovered && <OAuthDetectedCallout discovered={discovered} />}
-
       <Text muted small>
         Choose how you want to configure OAuth for this MCP server.
       </Text>
 
       <div className="flex flex-col gap-4">
-        {canAutoConfigure && (
-          <PathOptionCard
-            title="Auto-Configure"
-            onClick={() => send({ type: "SELECT_PROXY_AUTO" })}
-            icon={ZapIcon}
-            badges={[
-              <Badge key="recommended" variant="information">
-                Recommended
-              </Badge>,
-            ]}
-          >
-            <Text muted small>
-              Automatically set up OAuth Proxy based on pre-discovered details
-              about this MCP server.
-            </Text>
-          </PathOptionCard>
-        )}
-
         <PathOptionCard
           title="OAuth Proxy"
           onClick={() => send({ type: "SELECT_PROXY" })}
           icon={WaypointsIcon}
-          badges={[
-            !canAutoConfigure && discovered?.version === "2.0" && (
-              <Badge key="recommended" variant="information">
-                Recommended
-              </Badge>
-            ),
-            discovered && (
-              <Badge key="discovered" variant="neutral">
-                Discovered
-              </Badge>
-            ),
-          ]}
         >
           <Text muted small>
             Use existing OAuth credentials from the upstream service to
@@ -72,11 +30,6 @@ export function PathSelection(): JSX.Element {
           title="External OAuth"
           onClick={() => send({ type: "SELECT_EXTERNAL" })}
           icon={ServerIcon}
-          badges={
-            discovered?.version === "2.1" && (
-              <Badge variant="neutral">Discovered</Badge>
-            )
-          }
         >
           <Text muted small>
             Allow MCP clients to interact directly with an external OAuth
@@ -89,43 +42,8 @@ export function PathSelection(): JSX.Element {
   );
 }
 
-const OAuthDetectedCallout = ({
-  discovered,
-}: {
-  discovered: DiscoveredOAuth;
-}) => {
-  const { name, version } = discovered;
-
-  let description: ReactNode = (
-    <Text muted small className="mt-1">
-      We discovered OAuth {version} metadata from this server. The configuration
-      will be pre-filled for either selection below.
-    </Text>
-  );
-  if (version == "2.0") {
-    description = (
-      <Text muted small className="mt-1">
-        We discovered OAuth 2.0 metadata from this server. These details will be
-        pre-filled for the OAuth Proxy configuration below.
-      </Text>
-    );
-  }
-
-  return (
-    <div className="border-border bg-muted/50 flex items-start justify-between gap-4 border p-4">
-      <div>
-        <Text small className="font-medium">
-          OAuth detected from {name}
-        </Text>
-        {description}
-      </div>
-    </div>
-  );
-};
-
 function PathOptionCard(props: {
   title: string;
-  badges?: React.ReactNode;
   onClick: () => void;
   icon: LucideIcon;
   children: React.ReactNode;
@@ -145,7 +63,6 @@ function PathOptionCard(props: {
         <Icon className="text-muted-foreground w-5" />
         <Text className="font-medium">{props.title}</Text>
       </div>
-      <div className="flex gap-2">{props.badges}</div>
       {props.children}
     </button>
   );

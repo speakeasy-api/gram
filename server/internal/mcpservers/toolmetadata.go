@@ -126,7 +126,7 @@ func (s *Service) SetToolMetadataBatch(ctx context.Context, payload *gen.SetTool
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -200,7 +200,7 @@ func (s *Service) SetToolMetadataBatch(ctx context.Context, payload *gen.SetTool
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.invalidateDispositionCache(ctx, serverID, logger)
+	s.invalidateDispositionCache(ctx, *authCtx.ProjectID, serverID, logger)
 
 	return &gen.SetToolMetadataBatchResult{Tools: after, Deleted: deleted}, nil
 }
@@ -218,7 +218,7 @@ func (s *Service) AddToolMetadataBatch(ctx context.Context, payload *gen.AddTool
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -304,7 +304,7 @@ func (s *Service) AddToolMetadataBatch(ctx context.Context, payload *gen.AddTool
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.invalidateDispositionCache(ctx, serverID, logger)
+	s.invalidateDispositionCache(ctx, *authCtx.ProjectID, serverID, logger)
 
 	return &gen.AddToolMetadataBatchResult{Tools: created}, nil
 }
@@ -347,7 +347,7 @@ func (s *Service) ListToolMetadata(ctx context.Context, payload *gen.ListToolMet
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -382,7 +382,7 @@ func (s *Service) SetToolMetadata(ctx context.Context, payload *gen.SetToolMetad
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -445,7 +445,7 @@ func (s *Service) SetToolMetadata(ctx context.Context, payload *gen.SetToolMetad
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.invalidateDispositionCache(ctx, serverID, logger)
+	s.invalidateDispositionCache(ctx, *authCtx.ProjectID, serverID, logger)
 
 	return mv.BuildToolMetadataView(updated), nil
 }
@@ -463,7 +463,7 @@ func (s *Service) DeleteToolMetadata(ctx context.Context, payload *gen.DeleteToo
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -522,7 +522,7 @@ func (s *Service) DeleteToolMetadata(ctx context.Context, payload *gen.DeleteToo
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.invalidateDispositionCache(ctx, serverID, logger)
+	s.invalidateDispositionCache(ctx, *authCtx.ProjectID, serverID, logger)
 
 	return nil
 }
@@ -532,14 +532,14 @@ func (s *Service) DeleteToolMetadata(ctx context.Context, payload *gen.DeleteToo
 // in remote-MCP enforcement without waiting out the read cache's TTL. A failure
 // only means that cache serves the prior view until it expires, so it is logged
 // rather than surfaced — the write itself has already committed.
-func (s *Service) invalidateDispositionCache(ctx context.Context, serverID uuid.UUID, logger *slog.Logger) {
+func (s *Service) invalidateDispositionCache(ctx context.Context, projectID, serverID uuid.UUID, logger *slog.Logger) {
 	// Detach from the request context: the write has already committed, so a
 	// client disconnect after the response must not cancel the eviction and
 	// strand a stale disposition in cache until the TTL lapses.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 
-	if err := s.dispositionCache.Invalidate(ctx, serverID.String()); err != nil {
+	if err := s.dispositionCache.Invalidate(ctx, projectID, serverID); err != nil {
 		logger.WarnContext(ctx, "invalidate tool disposition cache", attr.SlogError(err), attr.SlogMcpServerID(serverID.String()))
 	}
 }

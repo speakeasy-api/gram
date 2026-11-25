@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -30,7 +31,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: false})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -75,8 +76,11 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	ctx = withDefaultOrgAdminGrant(t, ctx, conn)
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	auditLogger := audit.NewLogger()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
 	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger)
 	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 

@@ -1,5 +1,5 @@
 // Management API handlers for the userSessionIssuersCimdClients service:
-// the read-only CIMD preset catalog Gram curates, and CRUD over the custom
+// the read-only CIMD preset catalog Speakeasy curates, and CRUD over the custom
 // document URLs an individual issuer additionally admits.
 //
 // Together with the client_id_metadata_admission_mode field on the
@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -40,9 +39,8 @@ const (
 	verifyRateBurst  = 5
 )
 
-// Lists Gram's curated CIMD preset catalog. The catalog is a compile-time
-// constant with no tenant data, but the endpoint still carries the standard
-// project auth: it is only meaningful next to the issuer configuration it
+// Lists Speakeasy's curated CIMD preset catalog. The AI client catalog has no
+// tenant data, but the endpoint still carries the standard project auth: it is only meaningful next to the issuer configuration it
 // accompanies, and an unauthenticated surface would be a needless addition
 // to the public attack area.
 func (s *Service) ListPresets(ctx context.Context, payload *gen.ListPresetsPayload) (*gen.ListCimdClientPresetsResult, error) {
@@ -51,11 +49,11 @@ func (s *Service) ListPresets(ctx context.Context, payload *gen.ListPresetsPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
-	presets := admission.Catalog()
+	presets := s.aiCatalog.SnapshotFor(ctx).Catalog()
 	items := make([]*types.CimdClientPreset, 0, len(presets))
 	for _, preset := range presets {
 		items = append(items, &types.CimdClientPreset{
@@ -80,7 +78,7 @@ func (s *Service) ListPresets(ctx context.Context, payload *gen.ListPresetsPaylo
 // itself was bad or the caller is not authorized, never that the document is.
 //
 // Takes the write scope rather than read: this is a pre-flight for a write,
-// it makes Gram issue an outbound request to a caller-chosen URL, and gating
+// it makes Speakeasy issue an outbound request to a caller-chosen URL, and gating
 // it lower than the create it precedes would be an odd seam.
 func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) (*gen.VerifyCimdURLResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -88,7 +86,7 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -108,7 +106,7 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 	// asked for, not a malformed request.
 	result := s.cimdResolver.Inspect(ctx, payload.ClientIDMetadataURI)
 
-	// This is the only endpoint that makes Gram issue an outbound request to
+	// This is the only endpoint that makes Speakeasy issue an outbound request to
 	// a caller-chosen host, and the resolver's own log line carries the
 	// origin but no tenant. Stamp the project so egress can be attributed if
 	// the endpoint is ever abused as a scanner.
@@ -124,11 +122,20 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 		Reason:     nil,
 		Detail:     result.Detail,
 		ClientName: nil,
+		Document:   nil,
 	}
 	view.HTTPStatus = conv.PtrEmpty(result.HTTPStatus)
 	view.Reason = conv.PtrEmpty(result.Reason)
 	if result.Document != nil {
 		view.ClientName = conv.PtrEmpty(result.Document.ClientName)
+		// A failure to render is not a failure to verify: the probe answered
+		// the operator's question either way, so log it and omit the body
+		// rather than turning a good result into an error.
+		if rendered, renderErr := cimd.CanonicalJSON(result.Document); renderErr != nil {
+			s.logger.WarnContext(ctx, "cimd document could not be rendered", attr.SlogError(renderErr))
+		} else {
+			view.Document = conv.PtrEmpty(rendered)
+		}
 	}
 
 	return view, nil
@@ -141,7 +148,7 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -180,7 +187,7 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 
 	txRepo := repo.New(dbtx)
 
-	issuer, err := txRepo.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+	issuer, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{
 		ID:        issuerID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -207,10 +214,14 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 	if row.ProjectID.Valid {
 		projectID = row.ProjectID.UUID.String()
 	}
-
+	organizationID := ""
+	if row.OrganizationID.Valid {
+		organizationID = row.OrganizationID.String
+	}
 	view := &types.UserSessionIssuerCimdClient{
 		ID:                  row.ID.String(),
 		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 		UserSessionIssuerID: row.UserSessionIssuerID.String(),
 		ClientIDMetadataURI: row.ClientIDMetadataUri,
 		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),
@@ -255,7 +266,7 @@ func (s *Service) ListUserSessionIssuerCimdClients(ctx context.Context, payload 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -276,6 +287,7 @@ func (s *Service) ListUserSessionIssuerCimdClients(ctx context.Context, payload 
 	limit := pageLimit(payload.Limit)
 	rows, err := repo.New(s.db).ListUserSessionIssuerCimdClientsByIssuerID(ctx, repo.ListUserSessionIssuerCimdClientsByIssuerIDParams{
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: issuerID,
 		Cursor:              cursor,
 		LimitValue:          limit,
@@ -304,7 +316,7 @@ func (s *Service) GetUserSessionIssuerCimdClient(ctx context.Context, payload *g
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -314,8 +326,9 @@ func (s *Service) GetUserSessionIssuerCimdClient(ctx context.Context, payload *g
 	}
 
 	row, err := repo.New(s.db).GetUserSessionIssuerCimdClientByID(ctx, repo.GetUserSessionIssuerCimdClientByIDParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -334,7 +347,7 @@ func (s *Service) DeleteUserSessionIssuerCimdClient(ctx context.Context, payload
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -364,7 +377,7 @@ func (s *Service) DeleteUserSessionIssuerCimdClient(ctx context.Context, payload
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer cimd client").LogError(ctx, logger)
 	}
 
-	issuer, err := txRepo.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+	issuer, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{
 		ID:        row.UserSessionIssuerID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -399,10 +412,15 @@ func userSessionIssuerCimdClientView(row repo.UserSessionIssuerCimdClient) *type
 	if row.ProjectID.Valid {
 		projectID = row.ProjectID.UUID.String()
 	}
+	organizationID := ""
+	if row.OrganizationID.Valid {
+		organizationID = row.OrganizationID.String
+	}
 
 	return &types.UserSessionIssuerCimdClient{
 		ID:                  row.ID.String(),
 		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 		UserSessionIssuerID: row.UserSessionIssuerID.String(),
 		ClientIDMetadataURI: row.ClientIDMetadataUri,
 		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),

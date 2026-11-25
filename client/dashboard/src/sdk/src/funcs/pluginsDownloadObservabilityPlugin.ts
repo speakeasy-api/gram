@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * downloadObservabilityPlugin plugins
  *
  * @remarks
- * Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+ * Download a ZIP of the per-org observability plugin (Speakeasy hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
  */
 export function pluginsDownloadObservabilityPlugin(
   client: GramCore,
@@ -201,7 +201,7 @@ async function $do(
       key: "Result",
     }),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
-    M.jsonErr([500, 502], ServiceError$inboundSchema),
+    M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

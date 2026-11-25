@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { CurrentUser, Mode } from "@/lib/devidp";
+import type { Backend, CurrentUser, Mode } from "@/lib/devidp";
 
 export interface EnvVarReadout {
   name: string;
@@ -11,6 +11,9 @@ export interface EnvVarReadout {
 }
 
 export interface GramMode {
+  /** Identity backend dev-idp is running, from GRAM_DEVIDP_BACKEND. */
+  backend: Backend;
+  /** The currentUser slot that is authoritative for that backend. */
   mode: Mode | null;
   currentUser: CurrentUser | null;
   meta: {

@@ -1,5 +1,7 @@
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { logoutToLogin } from "@/lib/logout-to-login";
+import { recordOrganizationSwitch } from "@/lib/organization-host";
 import { cn } from "@/lib/utils";
 import { AUTH_BUTTON_CLASSES } from "@/pages/login/components/auth-constants";
 import { AuthShell } from "@/pages/login/components/auth-shell";
@@ -100,16 +102,14 @@ export default function SwitchOrg({
     setIsSwitching(true);
     try {
       await client.auth.switchScopes({ organizationId: selectedOrgId });
+      recordOrganizationSwitch(selectedOrgId);
       window.location.replace("/");
     } finally {
       setIsSwitching(false);
     }
   };
 
-  const handleLogout = async () => {
-    await client.auth.logout();
-    window.location.href = "/login";
-  };
+  const handleLogout = () => logoutToLogin(client);
 
   const currentOrg = allOrgs.find((org) => org.id === currentOrgId);
   const currentOrgName =

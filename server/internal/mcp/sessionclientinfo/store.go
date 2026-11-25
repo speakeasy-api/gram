@@ -1,6 +1,6 @@
 // Package sessionclientinfo holds the Redis-only record of who is on the other
 // end of an MCP session. A client reports its identity once, during the
-// initialize handshake; Gram's hosted MCP path is otherwise stateless, so
+// initialize handshake; Speakeasy's hosted MCP path is otherwise stateless, so
 // without this record the identity is gone by the time the client calls a tool.
 //
 // There is deliberately no Postgres row and no expiry. MCP sessions can run for

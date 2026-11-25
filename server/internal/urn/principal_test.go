@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
@@ -41,6 +42,36 @@ func TestNewPrincipal(t *testing.T) {
 			typ:     urn.PrincipalTypeRole,
 			id:      "member",
 			wantErr: nil,
+		},
+		{
+			name:    "valid agent principal",
+			typ:     urn.PrincipalTypeAgent,
+			id:      "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
+			wantErr: nil,
+		},
+		{
+			name:    "invalid agent principal id",
+			typ:     urn.PrincipalTypeAgent,
+			id:      "not-a-uuid",
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "valid workload principal",
+			typ:     urn.PrincipalTypeWorkload,
+			id:      "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001:repo:acme/payments-api:ref:refs/heads/main",
+			wantErr: nil,
+		},
+		{
+			name:    "workload principal without a subject",
+			typ:     urn.PrincipalTypeWorkload,
+			id:      "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001:",
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "workload principal naming the nil issuer",
+			typ:     urn.PrincipalTypeWorkload,
+			id:      "00000000-0000-0000-0000-000000000000:repo:acme/payments-api",
+			wantErr: urn.ErrInvalid,
 		},
 		{
 			name:    "empty type",
@@ -90,6 +121,53 @@ func TestNewPrincipal(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A workload principal names the same machine as its session subject: the
+// issuer row and the subject survive a round trip, colons in the subject
+// included.
+func TestWorkloadPrincipal_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.MustParse("018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
+	const subject = "system:serviceaccount:payments:checkout-worker"
+
+	principal := urn.NewWorkloadPrincipal(issuerID, subject)
+	parsed, err := urn.ParsePrincipal(principal.String())
+	require.NoError(t, err)
+
+	gotIssuer, gotSubject, err := parsed.Workload()
+	require.NoError(t, err)
+	require.Equal(t, issuerID, gotIssuer)
+	require.Equal(t, subject, gotSubject)
+	require.Equal(t, urn.NewWorkloadSubject(issuerID, subject).ID, principal.ID,
+		"a workload principal and its session subject must carry the same identity")
+
+	_, _, err = urn.NewPrincipal(urn.PrincipalTypeAgent, issuerID.String()).Workload()
+	require.ErrorIs(t, err, urn.ErrInvalid)
+}
+
+func TestWorkloadPrincipal_SharesTheSessionSubjectCap(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.MustParse("018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
+
+	arn := "arn:aws-us-gov:iam::123456789012:role/" + strings.Repeat("platform/", 20) + strings.Repeat("R", 64)
+	principal := urn.NewWorkloadPrincipal(issuerID, arn)
+	parsed, err := urn.ParsePrincipal(principal.String())
+	require.NoError(t, err, "a long platform subject must fit a workload principal")
+	_, gotSubject, err := parsed.Workload()
+	require.NoError(t, err)
+	require.Equal(t, arn, gotSubject)
+
+	atCap := strings.Repeat("s", urn.MaxWorkloadExternalSubjectLength)
+	_, err = urn.ParsePrincipal(urn.NewWorkloadPrincipal(issuerID, atCap).String())
+	require.NoError(t, err)
+	_, err = urn.ParsePrincipal(urn.NewWorkloadPrincipal(issuerID, atCap+"s").String())
+	require.ErrorIs(t, err, urn.ErrInvalid)
+
+	_, err = urn.ParsePrincipal("user:" + strings.Repeat("u", urn.MaxSessionSubjectIDLength+1))
+	require.ErrorIs(t, err, urn.ErrInvalid, "other principal types keep the generic segment bound")
 }
 
 func TestPrincipal_String(t *testing.T) {
@@ -175,6 +253,64 @@ func TestParsePrincipal(t *testing.T) {
 			input:   "role:admin",
 			want:    urn.NewPrincipal(urn.PrincipalTypeRole, "admin"),
 			wantErr: false,
+		},
+		{
+			name:    "valid email",
+			input:   "email:dev@example.com",
+			want:    urn.NewPrincipal(urn.PrincipalTypeEmail, "dev@example.com"),
+			wantErr: false,
+		},
+		{
+			name:    "valid canonical agent",
+			input:   "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
+			want:    urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"),
+			wantErr: false,
+		},
+		{
+			name:    "malformed agent UUID",
+			input:   "agent:not-a-uuid",
+			wantErr: true,
+		},
+		{
+			name:    "non-canonical uppercase agent UUID",
+			input:   "agent:018F8D7B-58D7-7CC4-BB16-9F8C6B99A001",
+			wantErr: true,
+		},
+		{
+			name:    "non-canonical compact agent UUID",
+			input:   "agent:018f8d7b58d77cc4bb169f8c6b99a001",
+			wantErr: true,
+		},
+		{
+			name:    "non-canonical braced agent UUID",
+			input:   "agent:{018f8d7b-58d7-7cc4-bb16-9f8c6b99a001}",
+			wantErr: true,
+		},
+		{
+			name:    "bare agent UUID",
+			input:   "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
+			wantErr: true,
+		},
+		{
+			name:    "unsupported agent form",
+			input:   "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001:child",
+			wantErr: true,
+		},
+		{
+			name:    "valid workload with a colon-heavy subject",
+			input:   "workload:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001:system:serviceaccount:payments:checkout-worker",
+			want:    urn.NewPrincipal(urn.PrincipalTypeWorkload, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001:system:serviceaccount:payments:checkout-worker"),
+			wantErr: false,
+		},
+		{
+			name:    "workload without an issuer reference",
+			input:   "workload:repo-acme-payments-api",
+			wantErr: true,
+		},
+		{
+			name:    "non-canonical uppercase workload issuer",
+			input:   "workload:018F8D7B-58D7-7CC4-BB16-9F8C6B99A001:repo:acme/payments-api",
+			wantErr: true,
 		},
 		{
 			name:    "empty string",
@@ -439,37 +575,45 @@ func TestPrincipal_IsZero(t *testing.T) {
 
 func TestPrincipal_roundTrip(t *testing.T) {
 	t.Parallel()
-	original := urn.NewPrincipal(urn.PrincipalTypeUser, "user_01abc")
 
-	// JSON round trip
-	jsonData, err := json.Marshal(original)
-	require.NoError(t, err)
+	tests := []urn.Principal{
+		urn.NewPrincipal(urn.PrincipalTypeUser, "user_01abc"),
+		urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"),
+	}
 
-	var fromJSON urn.Principal
-	err = json.Unmarshal(jsonData, &fromJSON)
-	require.NoError(t, err)
-	require.Equal(t, original.Type, fromJSON.Type)
-	require.Equal(t, original.ID, fromJSON.ID)
+	for _, original := range tests {
+		principal := original
+		t.Run(string(principal.Type), func(t *testing.T) {
+			t.Parallel()
 
-	// Text round trip
-	textData, err := original.MarshalText()
-	require.NoError(t, err)
+			jsonData, err := json.Marshal(principal)
+			require.NoError(t, err)
 
-	var fromText urn.Principal
-	err = fromText.UnmarshalText(textData)
-	require.NoError(t, err)
-	require.Equal(t, original.Type, fromText.Type)
-	require.Equal(t, original.ID, fromText.ID)
+			var fromJSON urn.Principal
+			err = json.Unmarshal(jsonData, &fromJSON)
+			require.NoError(t, err)
+			require.Equal(t, principal.Type, fromJSON.Type)
+			require.Equal(t, principal.ID, fromJSON.ID)
 
-	// Database round trip
-	value, err := original.Value()
-	require.NoError(t, err)
+			textData, err := principal.MarshalText()
+			require.NoError(t, err)
 
-	var fromDB urn.Principal
-	err = fromDB.Scan(value)
-	require.NoError(t, err)
-	require.Equal(t, original.Type, fromDB.Type)
-	require.Equal(t, original.ID, fromDB.ID)
+			var fromText urn.Principal
+			err = fromText.UnmarshalText(textData)
+			require.NoError(t, err)
+			require.Equal(t, principal.Type, fromText.Type)
+			require.Equal(t, principal.ID, fromText.ID)
+
+			value, err := principal.Value()
+			require.NoError(t, err)
+
+			var fromDB urn.Principal
+			err = fromDB.Scan(value)
+			require.NoError(t, err)
+			require.Equal(t, principal.Type, fromDB.Type)
+			require.Equal(t, principal.ID, fromDB.ID)
+		})
+	}
 }
 
 func TestPrincipal_validationCaching(t *testing.T) {

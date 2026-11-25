@@ -1,5 +1,5 @@
 // Package admission implements CIMD admission control: the per-issuer
-// policy deciding WHICH Client ID Metadata Document URLs a Gram user-session
+// policy deciding WHICH Client ID Metadata Document URLs a Speakeasy user-session
 // authorization server will accept, evaluated before any document is
 // fetched. A denied client_id costs a map lookup — no outbound request, no
 // timeout.
@@ -12,7 +12,7 @@
 // handlers all share one definition of the policy.
 //
 // The policy has two halves, and this package owns only the first: an
-// in-memory decision over the compile-time preset catalog, plus the mode
+// in-memory decision over a catalog snapshot, plus the mode
 // resolution rules. The second half — an issuer's own custom URL rows — is a
 // database lookup the caller performs, and only when Evaluate asks for it.
 //

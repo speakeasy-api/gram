@@ -19,6 +19,18 @@ import (
 type Service interface {
 	// Get the active organization from the session.
 	Get(context.Context, *GetPayload) (res *Organization, err error)
+	// Get the active organization's gateway: one MCP URL that gives each member
+	// every MCP server in the organization they can reach, signed in through the
+	// organization's own user session issuer. It is served while the organization
+	// owns exactly one organization-level user session issuer, on the platform
+	// host, so not for an organization whose custom domain restricts access to an
+	// IP allowlist, not while an organization admin has turned it off, and not for
+	// a disabled organization. Requires org:read.
+	GetGateway(context.Context, *GetGatewayPayload) (res *OrganizationGateway, err error)
+	// Get the selected project's Project Gateway: the organization's gateway
+	// limited to that project's MCP servers. It is served under the same
+	// conditions as the organization's gateway. Requires project:read.
+	GetProjectGateway(context.Context, *GetProjectGatewayPayload) (res *ProjectGateway, err error)
 	// Send a WorkOS invitation for the active organization.
 	SendInvite(context.Context, *SendInvitePayload) (res *OrganizationInvitation, err error)
 	// Revoke a pending WorkOS invitation.
@@ -27,24 +39,28 @@ type Service interface {
 	UpdateInviteRole(context.Context, *UpdateInviteRolePayload) (res *OrganizationInvitation, err error)
 	// List pending WorkOS invitations for the active organization.
 	ListInvites(context.Context, *ListInvitesPayload) (res *ListInvitesResult, err error)
-	// List users in the active organization from Gram
+	// List users in the active organization from Speakeasy
 	// organization_user_relationships.
 	ListUsers(context.Context, *ListUsersPayload) (res *ListUsersResult, err error)
-	// Remove a user from the active organization in Gram and delete their WorkOS
-	// organization membership.
+	// Remove a user from the active organization in Speakeasy and delete their
+	// WorkOS organization membership.
 	RemoveUser(context.Context, *RemoveUserPayload) (err error)
+	// Revoke a member's sign-ins in the active organization, end their identity
+	// provider sessions, and revoke every MCP grant made from those sign-ins.
+	// Requires organization admin.
+	RevokeMemberSignIns(context.Context, *RevokeMemberSignInsPayload) (res *types.RevokeSignInsResult, err error)
 	// Enable  webhooks for the active organization.
 	EnableWebhooks(context.Context, *EnableWebhooksPayload) (err error)
 	// Disable  webhooks for the active organization.
 	DisableWebhooks(context.Context, *DisableWebhooksPayload) (err error)
 	// Create a webhook portal session.
 	CreatePortalSession(context.Context, *CreatePortalSessionPayload) (res *CreatePortalSessionResult, err error)
-	// Get the onboarding status for the active organization by checking WorkOS SSO
-	// connections and directory sync state.
+	// Get the onboarding status for the active organization by checking WorkOS
+	// domain verification, SSO connections, and directory sync state.
 	GetOnboardingStatus(context.Context, *GetOnboardingStatusPayload) (res *OnboardingStatusResult, err error)
 	// Return recent hook events for the active organization so the onboarding
 	// wizard can confirm that coding agent instrumentation is delivering events to
-	// Gram. Polled from the confirm-traffic step.
+	// Speakeasy. Polled from the confirm-traffic step.
 	VerifyOnboardingHooksSetup(context.Context, *VerifyOnboardingHooksSetupPayload) (res *VerifyOnboardingHooksSetupResult, err error)
 	// Send the enterprise admin onboarding email to one or more recipients. The
 	// email links each recipient to the wizard for the active organization. Used
@@ -52,6 +68,17 @@ type Service interface {
 	SendEnterpriseAdminOnboardingEmail(context.Context, *SendEnterpriseAdminOnboardingEmailPayload) (res *SendEnterpriseAdminOnboardingEmailResult, err error)
 	// Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
 	GenerateWorkOSAdminPortalLink(context.Context, *GenerateWorkOSAdminPortalLinkPayload) (res *GenerateWorkOSAdminPortalLinkResult, err error)
+	// List the fixed setup task catalog projected with organization state and
+	// completion evidence.
+	ListSetupTasks(context.Context, *ListSetupTasksPayload) (res *ListSetupTasksResult, err error)
+	// Update one fixed setup task. The request must include at least one effective
+	// update: status, assignee, hidden, or clear_assignee=true. Assignee is
+	// mutually exclusive with clear_assignee=true.
+	UpdateSetupTask(context.Context, *UpdateSetupTaskPayload) (res *SetupTask, err error)
+	// Record the onboarding survey result. The server picks the use case's default
+	// playbook, which decides the setup tasks the wizard walks; progress and
+	// assignments are kept.
+	SubmitOnboardingSurvey(context.Context, *SubmitOnboardingSurveyPayload) (res *ListSetupTasksResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -74,7 +101,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink"}
+var MethodNames = [20]string{"get", "getGateway", "getProjectGateway", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "revokeMemberSignIns", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -128,6 +155,12 @@ type GenerateWorkOSAdminPortalLinkResult struct {
 	URL string
 }
 
+// GetGatewayPayload is the payload type of the organizations service
+// getGateway method.
+type GetGatewayPayload struct {
+	SessionToken *string
+}
+
 // GetOnboardingStatusPayload is the payload type of the organizations service
 // getOnboardingStatus method.
 type GetOnboardingStatusPayload struct {
@@ -137,6 +170,13 @@ type GetOnboardingStatusPayload struct {
 // GetPayload is the payload type of the organizations service get method.
 type GetPayload struct {
 	SessionToken *string
+}
+
+// GetProjectGatewayPayload is the payload type of the organizations service
+// getProjectGateway method.
+type GetProjectGatewayPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // ListInvitesPayload is the payload type of the organizations service
@@ -153,6 +193,21 @@ type ListInvitesResult struct {
 	Invitations []*OrganizationInvitation
 }
 
+// ListSetupTasksPayload is the payload type of the organizations service
+// listSetupTasks method.
+type ListSetupTasksPayload struct {
+	// Include hidden tasks for platform administrators.
+	IncludeHidden *bool
+	SessionToken  *string
+}
+
+// ListSetupTasksResult is the result type of the organizations service
+// listSetupTasks method.
+type ListSetupTasksResult struct {
+	// Setup tasks in catalog order. A group precedes the cards under it.
+	Tasks []*SetupTask
+}
+
 // ListUsersPayload is the payload type of the organizations service listUsers
 // method.
 type ListUsersPayload struct {
@@ -162,7 +217,7 @@ type ListUsersPayload struct {
 // ListUsersResult is the result type of the organizations service listUsers
 // method.
 type ListUsersResult struct {
-	// Users linked to the organization in Gram.
+	// Users linked to the organization in Speakeasy.
 	Users []*OrganizationUser
 }
 
@@ -176,14 +231,14 @@ type OnboardingHookEvent struct {
 	ToolName *string
 	// Hook event name (e.g. PreToolUse, SessionStart).
 	EventName *string
-	// Slug of the Gram project that received the event.
+	// Slug of the Speakeasy project that received the event.
 	ProjectSlug string
 	// Outcome status: allowed, blocked, failure, or pending.
 	Status *string
 	// Email of the user whose session produced the event, when present in hook
 	// attributes.
 	UserEmail *string
-	// Gram chat/session ID that owns this event, when present.
+	// Speakeasy chat/session ID that owns this event, when present.
 	ChatID *string
 }
 
@@ -194,6 +249,12 @@ type OnboardingStatusResult struct {
 	SsoConfigured bool
 	// Whether the organization has at least one linked directory sync in WorkOS.
 	DsyncConfigured bool
+	// Whether the organization has at least one verified domain in WorkOS. Single
+	// sign-on cannot be set up until one is verified.
+	DomainVerified bool
+	// Domains WorkOS has verified for the organization. Single sign-on only works
+	// for users on these domains.
+	VerifiedDomains []string
 }
 
 // Organization is the result type of the organizations service get method.
@@ -216,6 +277,17 @@ type Organization struct {
 	UpdatedAt string
 }
 
+// OrganizationGateway is the result type of the organizations service
+// getGateway method.
+type OrganizationGateway struct {
+	// Whether the organization is served a gateway.
+	Available bool
+	// The gateway's MCP URL. Set only when available.
+	URL *string
+	// Why the gateway is not served. Set only when not available.
+	UnavailableReason *string
+}
+
 // OrganizationInvitation is the result type of the organizations service
 // sendInvite method.
 type OrganizationInvitation struct {
@@ -229,7 +301,7 @@ type OrganizationInvitation struct {
 	AcceptedAt *string
 	// When the invitation was revoked.
 	RevokedAt *string
-	// Gram user ID of the inviter, when known.
+	// Speakeasy user ID of the inviter, when known.
 	InviterUserID *string
 	// WorkOS role slug assigned when the invite is accepted.
 	RoleSlug *string
@@ -240,11 +312,11 @@ type OrganizationInvitation struct {
 }
 
 type OrganizationUser struct {
-	// Gram relationship row ID.
+	// Speakeasy relationship row ID.
 	ID string
-	// Gram organization ID.
+	// Speakeasy organization ID.
 	OrganizationID string
-	// Gram user ID.
+	// Speakeasy user ID.
 	UserID string
 	// User display name.
 	Name string
@@ -260,10 +332,21 @@ type OrganizationUser struct {
 	LastLogin *string
 }
 
+// ProjectGateway is the result type of the organizations service
+// getProjectGateway method.
+type ProjectGateway struct {
+	// Whether the project is served a gateway.
+	Available bool
+	// The gateway's MCP URL. Set only when available.
+	URL *string
+	// Why the gateway is not served. Set only when not available.
+	UnavailableReason *string
+}
+
 // RemoveUserPayload is the payload type of the organizations service
 // removeUser method.
 type RemoveUserPayload struct {
-	// Gram user ID to remove.
+	// Speakeasy user ID to remove.
 	UserID       string
 	SessionToken *string
 }
@@ -273,6 +356,14 @@ type RemoveUserPayload struct {
 type RevokeInvitePayload struct {
 	// WorkOS invitation ID.
 	InvitationID string
+	SessionToken *string
+}
+
+// RevokeMemberSignInsPayload is the payload type of the organizations service
+// revokeMemberSignIns method.
+type RevokeMemberSignInsPayload struct {
+	// Speakeasy user ID of the member.
+	UserID       string
 	SessionToken *string
 }
 
@@ -303,6 +394,64 @@ type SendInvitePayload struct {
 	SessionToken *string
 }
 
+// SetupTask is the result type of the organizations service updateSetupTask
+// method.
+type SetupTask struct {
+	// Stable code-owned task key.
+	Key string
+	// Task title.
+	Title string
+	// Task description.
+	Description string
+	// Effective task status.
+	Status string
+	// Whether current organization facts force the effective status to done. This
+	// field is read-only.
+	CompletedByFact bool
+	// Current resolved user or email assignee.
+	Assignee *SetupTaskAssignee
+	// Incomplete prerequisite task keys.
+	BlockedBy []string
+	// Whether a platform administrator hid the task.
+	Hidden bool
+	// Key of the group this card sits under. Absent for a top-level card or a
+	// group.
+	ParentKey *string
+	// True for a group that nests cards. A group has no card of its own: it is
+	// hidden when every card under it is, done when every visible card is, and
+	// cannot be assigned or marked by hand.
+	Group bool
+}
+
+type SetupTaskAssignee struct {
+	// Resolved active organization member ID.
+	UserID *string
+	// Assignee email address.
+	Email string
+	// Resolved member display name.
+	Name *string
+	// Resolved member photo URL.
+	PhotoURL *string
+}
+
+// Assignee selector. Exactly one of user_id or email must be present and
+// non-empty.
+type SetupTaskAssigneeInput struct {
+	// Active organization member to assign. Mutually exclusive with email.
+	UserID *string
+	// Email address to assign before membership exists. Mutually exclusive with
+	// user_id.
+	Email *string
+}
+
+// SubmitOnboardingSurveyPayload is the payload type of the organizations
+// service submitOnboardingSurvey method.
+type SubmitOnboardingSurveyPayload struct {
+	// Use case the survey answers resolved to.
+	UseCase      string
+	SessionToken *string
+}
+
 // UpdateInviteRolePayload is the payload type of the organizations service
 // updateInviteRole method.
 type UpdateInviteRolePayload struct {
@@ -310,6 +459,22 @@ type UpdateInviteRolePayload struct {
 	InvitationID string
 	// Role ID to assign to the invitee.
 	RoleID       string
+	SessionToken *string
+}
+
+// UpdateSetupTaskPayload is the payload type of the organizations service
+// updateSetupTask method.
+type UpdateSetupTaskPayload struct {
+	// Stable setup task key.
+	TaskKey string
+	// Setup task status.
+	Status *string
+	// Replacement task assignee. Must not be set when clear_assignee=true.
+	Assignee *SetupTaskAssigneeInput
+	// Clear the current task assignee. Must not be true when assignee is set.
+	ClearAssignee *bool
+	// Hide or restore the task.
+	Hidden       *bool
 	SessionToken *string
 }
 

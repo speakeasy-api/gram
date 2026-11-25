@@ -1,6 +1,7 @@
 import React from "react";
 import { Input } from "./input";
-import { AnyField, AnyFieldProps } from "./any-field";
+import type { AnyFieldProps } from "./any-field";
+import { AnyField } from "./any-field";
 
 export interface InputFieldProps
   extends AnyFieldProps, React.ComponentProps<"input"> {}

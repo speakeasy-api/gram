@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { formatPlatform } from "./formatPlatform";
 
@@ -27,12 +28,45 @@ describe("formatPlatform", () => {
     expect(formatPlatform("CODEX_WEB")).toBe("Codex Web");
     expect(formatPlatform("chatgpt")).toBe("ChatGPT");
     expect(formatPlatform("ChatGPT")).toBe("ChatGPT");
+    expect(formatPlatform("chatgpt-desktop")).toBe("ChatGPT Desktop");
+    expect(formatPlatform("ChatGPT Desktop")).toBe("ChatGPT Desktop");
     expect(formatPlatform("chatgpt-work")).toBe("ChatGPT Work");
     expect(formatPlatform("opencode")).toBe("opencode");
+    expect(formatPlatform("pi")).toBe("Pi");
+    expect(formatPlatform("PI")).toBe("Pi");
     expect(formatPlatform("litellm")).toBe("LiteLLM");
-    expect(formatPlatform("copilot-cli")).toBe("GitHub Copilot CLI");
-    expect(formatPlatform("vscode-copilot")).toBe("GitHub Copilot in VS Code");
+    expect(formatPlatform("copilot-cli")).toBe("Copilot CLI");
+    expect(formatPlatform("vscode-copilot")).toBe("Copilot in VS Code");
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
+  });
+
+  it("separates the Speakeasy Slackbot from other assistant sessions", () => {
+    expect(formatPlatform("speakeasy-slack")).toBe("Speakeasy Slackbot");
+    expect(formatPlatform("speakeasy_slack")).toBe("Speakeasy Slackbot");
+    expect(formatPlatform("assistants")).toBe("Assistants");
+    expect(formatPlatform("slack")).toBe("Slack");
+  });
+
+  it("distinguishes Copilot CLI from Microsoft Copilot", () => {
+    for (const source of [
+      "copilot",
+      "github-copilot",
+      "copilot-cli",
+      "GitHub Copilot CLI",
+    ]) {
+      expect(formatPlatform(source)).toBe("Copilot CLI");
+    }
+    expect(formatPlatform("microsoft-copilot")).toBe("Microsoft Copilot");
+  });
+
+  it("labels Kit sources consistently", () => {
+    for (const source of ["kit", "Kit", "KIT", "ahp-harness:kit"]) {
+      expect(formatPlatform(source)).toBe("Kit");
+    }
+  });
+
+  it("preserves a literal prefix in an arbitrary harness name", () => {
+    expect(formatPlatform("ahp-harness:custom")).toBe("Ahp Harness:custom");
   });
 
   it("title-cases unknown delimited sources", () => {

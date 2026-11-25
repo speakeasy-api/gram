@@ -15,7 +15,9 @@ import (
 )
 
 const (
-	ActionAssistantToolCall Action = "assistant:tool_call"
+	ActionAssistantToolCall          Action = "assistant:tool_call"
+	ActionAssistantIdentityProvision Action = "assistant:identity_provision"
+	ActionAssistantRuntimeSwitch     Action = "assistant:runtime_switch"
 )
 
 // maxAuditToolCallParamsBytes caps the size of the tool call params payload
@@ -48,6 +50,10 @@ type LogAssistantToolCallEvent struct {
 	ToolName     string
 	ToolURN      urn.Tool
 	Params       json.RawMessage
+
+	// Authorizer is the user a principal credential acts for, when the call
+	// was made with one; the credential's principal is then the actor.
+	Authorizer *urn.Principal
 }
 
 func (l *Logger) LogAssistantToolCall(ctx context.Context, dbtx repo.DBTX, event LogAssistantToolCallEvent) error {
@@ -62,6 +68,9 @@ func (l *Logger) LogAssistantToolCall(ctx context.Context, dbtx repo.DBTX, event
 	}
 	if event.Thread != uuid.Nil {
 		meta["thread_id"] = event.Thread.String()
+	}
+	if event.Authorizer != nil {
+		meta["authorizer_urn"] = event.Authorizer.String()
 	}
 	if event.Chat != "" {
 		meta["chat_id"] = event.Chat
@@ -79,6 +88,7 @@ func (l *Logger) LogAssistantToolCall(ctx context.Context, dbtx repo.DBTX, event
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -100,6 +110,108 @@ func (l *Logger) LogAssistantToolCall(ctx context.Context, dbtx repo.DBTX, event
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AssistantToolCallV1})
+}
+
+// LogAssistantIdentityProvisionEvent records that an assistant was bound to a
+// dedicated agent. The agent's own creation and policy are audited as agent
+// events; this entry links the assistant to that agent.
+type LogAssistantIdentityProvisionEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	AssistantURN  urn.Assistant
+	AssistantName string
+	AgentURN      urn.Identity
+}
+
+func (l *Logger) LogAssistantIdentityProvision(ctx context.Context, dbtx repo.DBTX, event LogAssistantIdentityProvisionEvent) error {
+	action := ActionAssistantIdentityProvision
+
+	metadata, err := marshalAuditPayload(map[string]any{"agent_id": event.AgentURN.ID})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.AssistantURN.ID.String(),
+		SubjectType:        string(subjectTypeAssistant),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.AssistantName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+		ActingSurface:  conv.ToPGTextEmpty(""),
+		ActingClientID: conv.ToPGTextEmpty(""),
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AssistantIdentityV1})
+}
+
+// LogAssistantRuntimeSwitchEvent records that an assistant's selected runtime
+// changed. The versions are carried in metadata.
+type LogAssistantRuntimeSwitchEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	AssistantURN  urn.Assistant
+	AssistantName string
+	FromVersion   int
+	ToVersion     int
+}
+
+func (l *Logger) LogAssistantRuntimeSwitch(ctx context.Context, dbtx repo.DBTX, event LogAssistantRuntimeSwitchEvent) error {
+	action := ActionAssistantRuntimeSwitch
+
+	metadata, err := marshalAuditPayload(map[string]any{"from_runtime_version": event.FromVersion, "to_runtime_version": event.ToVersion})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.AssistantURN.ID.String(),
+		SubjectType:        string(subjectTypeAssistant),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.AssistantName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+		ActingSurface:  conv.ToPGTextEmpty(""),
+		ActingClientID: conv.ToPGTextEmpty(""),
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AssistantRuntimeV1})
 }
 
 // sanitizeToolCallParams prepares raw tool call arguments for persistence in

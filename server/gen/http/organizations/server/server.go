@@ -20,12 +20,15 @@ import (
 type Server struct {
 	Mounts                             []*MountPoint
 	Get                                http.Handler
+	GetGateway                         http.Handler
+	GetProjectGateway                  http.Handler
 	SendInvite                         http.Handler
 	RevokeInvite                       http.Handler
 	UpdateInviteRole                   http.Handler
 	ListInvites                        http.Handler
 	ListUsers                          http.Handler
 	RemoveUser                         http.Handler
+	RevokeMemberSignIns                http.Handler
 	EnableWebhooks                     http.Handler
 	DisableWebhooks                    http.Handler
 	CreatePortalSession                http.Handler
@@ -33,6 +36,9 @@ type Server struct {
 	VerifyOnboardingHooksSetup         http.Handler
 	SendEnterpriseAdminOnboardingEmail http.Handler
 	GenerateWorkOSAdminPortalLink      http.Handler
+	ListSetupTasks                     http.Handler
+	UpdateSetupTask                    http.Handler
+	SubmitOnboardingSurvey             http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -63,12 +69,15 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"Get", "GET", "/rpc/organizations.get"},
+			{"GetGateway", "GET", "/rpc/organizations.getGateway"},
+			{"GetProjectGateway", "GET", "/rpc/organizations.getProjectGateway"},
 			{"SendInvite", "POST", "/rpc/organizations.sendInvite"},
 			{"RevokeInvite", "DELETE", "/rpc/organizations.revokeInvite"},
 			{"UpdateInviteRole", "PUT", "/rpc/organizations.updateInviteRole"},
 			{"ListInvites", "GET", "/rpc/organizations.listInvites"},
 			{"ListUsers", "GET", "/rpc/organizations.listUsers"},
 			{"RemoveUser", "DELETE", "/rpc/organizations.removeUser"},
+			{"RevokeMemberSignIns", "POST", "/rpc/organizations.revokeMemberSignIns"},
 			{"EnableWebhooks", "POST", "/rpc/organizations.enableWebhooks"},
 			{"DisableWebhooks", "POST", "/rpc/organizations.disableWebhooks"},
 			{"CreatePortalSession", "POST", "/rpc/organizations.createPortalSession"},
@@ -76,14 +85,20 @@ func New(
 			{"VerifyOnboardingHooksSetup", "GET", "/rpc/organizations.verifyOnboardingHooksSetup"},
 			{"SendEnterpriseAdminOnboardingEmail", "POST", "/rpc/organizations.sendEnterpriseAdminOnboardingEmail"},
 			{"GenerateWorkOSAdminPortalLink", "POST", "/rpc/organizations.generateWorkOSAdminPortalLink"},
+			{"ListSetupTasks", "GET", "/rpc/organizations.listSetupTasks"},
+			{"UpdateSetupTask", "POST", "/rpc/organizations.updateSetupTask"},
+			{"SubmitOnboardingSurvey", "POST", "/rpc/organizations.submitOnboardingSurvey"},
 		},
 		Get:                                NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
+		GetGateway:                         NewGetGatewayHandler(e.GetGateway, mux, decoder, encoder, errhandler, formatter),
+		GetProjectGateway:                  NewGetProjectGatewayHandler(e.GetProjectGateway, mux, decoder, encoder, errhandler, formatter),
 		SendInvite:                         NewSendInviteHandler(e.SendInvite, mux, decoder, encoder, errhandler, formatter),
 		RevokeInvite:                       NewRevokeInviteHandler(e.RevokeInvite, mux, decoder, encoder, errhandler, formatter),
 		UpdateInviteRole:                   NewUpdateInviteRoleHandler(e.UpdateInviteRole, mux, decoder, encoder, errhandler, formatter),
 		ListInvites:                        NewListInvitesHandler(e.ListInvites, mux, decoder, encoder, errhandler, formatter),
 		ListUsers:                          NewListUsersHandler(e.ListUsers, mux, decoder, encoder, errhandler, formatter),
 		RemoveUser:                         NewRemoveUserHandler(e.RemoveUser, mux, decoder, encoder, errhandler, formatter),
+		RevokeMemberSignIns:                NewRevokeMemberSignInsHandler(e.RevokeMemberSignIns, mux, decoder, encoder, errhandler, formatter),
 		EnableWebhooks:                     NewEnableWebhooksHandler(e.EnableWebhooks, mux, decoder, encoder, errhandler, formatter),
 		DisableWebhooks:                    NewDisableWebhooksHandler(e.DisableWebhooks, mux, decoder, encoder, errhandler, formatter),
 		CreatePortalSession:                NewCreatePortalSessionHandler(e.CreatePortalSession, mux, decoder, encoder, errhandler, formatter),
@@ -91,6 +106,9 @@ func New(
 		VerifyOnboardingHooksSetup:         NewVerifyOnboardingHooksSetupHandler(e.VerifyOnboardingHooksSetup, mux, decoder, encoder, errhandler, formatter),
 		SendEnterpriseAdminOnboardingEmail: NewSendEnterpriseAdminOnboardingEmailHandler(e.SendEnterpriseAdminOnboardingEmail, mux, decoder, encoder, errhandler, formatter),
 		GenerateWorkOSAdminPortalLink:      NewGenerateWorkOSAdminPortalLinkHandler(e.GenerateWorkOSAdminPortalLink, mux, decoder, encoder, errhandler, formatter),
+		ListSetupTasks:                     NewListSetupTasksHandler(e.ListSetupTasks, mux, decoder, encoder, errhandler, formatter),
+		UpdateSetupTask:                    NewUpdateSetupTaskHandler(e.UpdateSetupTask, mux, decoder, encoder, errhandler, formatter),
+		SubmitOnboardingSurvey:             NewSubmitOnboardingSurveyHandler(e.SubmitOnboardingSurvey, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -100,12 +118,15 @@ func (s *Server) Service() string { return "organizations" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Get = m(s.Get)
+	s.GetGateway = m(s.GetGateway)
+	s.GetProjectGateway = m(s.GetProjectGateway)
 	s.SendInvite = m(s.SendInvite)
 	s.RevokeInvite = m(s.RevokeInvite)
 	s.UpdateInviteRole = m(s.UpdateInviteRole)
 	s.ListInvites = m(s.ListInvites)
 	s.ListUsers = m(s.ListUsers)
 	s.RemoveUser = m(s.RemoveUser)
+	s.RevokeMemberSignIns = m(s.RevokeMemberSignIns)
 	s.EnableWebhooks = m(s.EnableWebhooks)
 	s.DisableWebhooks = m(s.DisableWebhooks)
 	s.CreatePortalSession = m(s.CreatePortalSession)
@@ -113,6 +134,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.VerifyOnboardingHooksSetup = m(s.VerifyOnboardingHooksSetup)
 	s.SendEnterpriseAdminOnboardingEmail = m(s.SendEnterpriseAdminOnboardingEmail)
 	s.GenerateWorkOSAdminPortalLink = m(s.GenerateWorkOSAdminPortalLink)
+	s.ListSetupTasks = m(s.ListSetupTasks)
+	s.UpdateSetupTask = m(s.UpdateSetupTask)
+	s.SubmitOnboardingSurvey = m(s.SubmitOnboardingSurvey)
 }
 
 // MethodNames returns the methods served.
@@ -121,12 +145,15 @@ func (s *Server) MethodNames() []string { return organizations.MethodNames[:] }
 // Mount configures the mux to serve the organizations endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetHandler(mux, h.Get)
+	MountGetGatewayHandler(mux, h.GetGateway)
+	MountGetProjectGatewayHandler(mux, h.GetProjectGateway)
 	MountSendInviteHandler(mux, h.SendInvite)
 	MountRevokeInviteHandler(mux, h.RevokeInvite)
 	MountUpdateInviteRoleHandler(mux, h.UpdateInviteRole)
 	MountListInvitesHandler(mux, h.ListInvites)
 	MountListUsersHandler(mux, h.ListUsers)
 	MountRemoveUserHandler(mux, h.RemoveUser)
+	MountRevokeMemberSignInsHandler(mux, h.RevokeMemberSignIns)
 	MountEnableWebhooksHandler(mux, h.EnableWebhooks)
 	MountDisableWebhooksHandler(mux, h.DisableWebhooks)
 	MountCreatePortalSessionHandler(mux, h.CreatePortalSession)
@@ -134,6 +161,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountVerifyOnboardingHooksSetupHandler(mux, h.VerifyOnboardingHooksSetup)
 	MountSendEnterpriseAdminOnboardingEmailHandler(mux, h.SendEnterpriseAdminOnboardingEmail)
 	MountGenerateWorkOSAdminPortalLinkHandler(mux, h.GenerateWorkOSAdminPortalLink)
+	MountListSetupTasksHandler(mux, h.ListSetupTasks)
+	MountUpdateSetupTaskHandler(mux, h.UpdateSetupTask)
+	MountSubmitOnboardingSurveyHandler(mux, h.SubmitOnboardingSurvey)
 }
 
 // Mount configures the mux to serve the organizations endpoints.
@@ -171,6 +201,112 @@ func NewGetHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "get")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetGatewayHandler configures the mux to serve the "organizations"
+// service "getGateway" endpoint.
+func MountGetGatewayHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizations.getGateway", f)
+}
+
+// NewGetGatewayHandler creates a HTTP handler which loads the HTTP request and
+// calls the "organizations" service "getGateway" endpoint.
+func NewGetGatewayHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetGatewayRequest(mux, decoder)
+		encodeResponse = EncodeGetGatewayResponse(encoder)
+		encodeError    = EncodeGetGatewayError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getGateway")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetProjectGatewayHandler configures the mux to serve the
+// "organizations" service "getProjectGateway" endpoint.
+func MountGetProjectGatewayHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizations.getProjectGateway", f)
+}
+
+// NewGetProjectGatewayHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizations" service "getProjectGateway" endpoint.
+func NewGetProjectGatewayHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetProjectGatewayRequest(mux, decoder)
+		encodeResponse = EncodeGetProjectGatewayResponse(encoder)
+		encodeError    = EncodeGetProjectGatewayError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getProjectGateway")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -489,6 +625,59 @@ func NewRemoveUserHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "removeUser")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevokeMemberSignInsHandler configures the mux to serve the
+// "organizations" service "revokeMemberSignIns" endpoint.
+func MountRevokeMemberSignInsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizations.revokeMemberSignIns", f)
+}
+
+// NewRevokeMemberSignInsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizations" service "revokeMemberSignIns" endpoint.
+func NewRevokeMemberSignInsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevokeMemberSignInsRequest(mux, decoder)
+		encodeResponse = EncodeRevokeMemberSignInsResponse(encoder)
+		encodeError    = EncodeRevokeMemberSignInsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revokeMemberSignIns")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -863,6 +1052,166 @@ func NewGenerateWorkOSAdminPortalLinkHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "generateWorkOSAdminPortalLink")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListSetupTasksHandler configures the mux to serve the "organizations"
+// service "listSetupTasks" endpoint.
+func MountListSetupTasksHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizations.listSetupTasks", f)
+}
+
+// NewListSetupTasksHandler creates a HTTP handler which loads the HTTP request
+// and calls the "organizations" service "listSetupTasks" endpoint.
+func NewListSetupTasksHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListSetupTasksRequest(mux, decoder)
+		encodeResponse = EncodeListSetupTasksResponse(encoder)
+		encodeError    = EncodeListSetupTasksError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listSetupTasks")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateSetupTaskHandler configures the mux to serve the "organizations"
+// service "updateSetupTask" endpoint.
+func MountUpdateSetupTaskHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizations.updateSetupTask", f)
+}
+
+// NewUpdateSetupTaskHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizations" service "updateSetupTask" endpoint.
+func NewUpdateSetupTaskHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateSetupTaskRequest(mux, decoder)
+		encodeResponse = EncodeUpdateSetupTaskResponse(encoder)
+		encodeError    = EncodeUpdateSetupTaskError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateSetupTask")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSubmitOnboardingSurveyHandler configures the mux to serve the
+// "organizations" service "submitOnboardingSurvey" endpoint.
+func MountSubmitOnboardingSurveyHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizations.submitOnboardingSurvey", f)
+}
+
+// NewSubmitOnboardingSurveyHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizations" service "submitOnboardingSurvey"
+// endpoint.
+func NewSubmitOnboardingSurveyHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSubmitOnboardingSurveyRequest(mux, decoder)
+		encodeResponse = EncodeSubmitOnboardingSurveyResponse(encoder)
+		encodeError    = EncodeSubmitOnboardingSurveyError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "submitOnboardingSurvey")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
 		payload, err := decodeRequest(r)
 		if err != nil {

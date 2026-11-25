@@ -12,12 +12,12 @@ func (SemconvMetric) SessionID(point MetricDataPoint) (string, string, error) {
 }
 
 func (SemconvMetric) ExternalUserID(point MetricDataPoint) (string, string, error) {
-	key, value := getOneMetricPointAttr(point, "user.id")
+	key, value := getOneMetricPointAttr(point, semconvUserIDKey)
 	return key, value, nil
 }
 
 func (SemconvMetric) ExternalUserEmail(point MetricDataPoint) (string, string, error) {
-	key, value := getOneMetricPointAttr(point, "user.email")
+	key, value := getOneMetricPointAttr(point, userEmailKey)
 	return key, value, nil
 }
 

@@ -101,12 +101,10 @@ func exclusionToType(exclusion exclusioncore.Exclusion) *types.RiskExclusion {
 }
 
 func (s *Service) exclusionError(ctx context.Context, err error) error {
-	var validation *exclusioncore.ValidationError
-	if errors.As(err, &validation) {
+	if validation, ok := errors.AsType[*exclusioncore.ValidationError](err); ok {
 		return oops.E(oops.CodeInvalid, validation.Cause, "%s", validation.Message)
 	}
-	var regexLimit *exclusioncore.RegexLimitError
-	if errors.As(err, &regexLimit) {
+	if regexLimit, ok := errors.AsType[*exclusioncore.RegexLimitError](err); ok {
 		return oops.E(oops.CodeInvalid, nil, "%s", regexLimit)
 	}
 	if errors.Is(err, exclusioncore.ErrPolicyNotFound) {
@@ -115,8 +113,7 @@ func (s *Service) exclusionError(ctx context.Context, err error) error {
 	if errors.Is(err, exclusioncore.ErrExclusionNotFound) {
 		return oops.E(oops.CodeNotFound, err, "risk exclusion not found").LogError(ctx, s.logger)
 	}
-	var mutation *exclusioncore.MutationError
-	if errors.As(err, &mutation) {
+	if mutation, ok := errors.AsType[*exclusioncore.MutationError](err); ok {
 		return oops.E(oops.CodeUnexpected, mutation.Cause, "%s", mutation.Message).LogError(ctx, s.logger)
 	}
 	return oops.E(oops.CodeUnexpected, err, "administer risk exclusion").LogError(ctx, s.logger)

@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -108,15 +109,14 @@ func (r *RemoteSessionRefresh) Do(ctx context.Context, input RefreshRemoteSessio
 		attr.SlogOrganizationID(input.OrganizationID),
 	)
 	now := time.Now()
-	candidate, err := remotesessions_repo.New(r.db).GetDueRemoteSessionRefreshCandidate(
-		ctx,
-		remotesessions_repo.GetDueRemoteSessionRefreshCandidateParams{
-			ID:              input.SessionID,
-			OrganizationID:  input.OrganizationID,
-			NowTs:           conv.ToPGTimestamptz(now),
-			KeepaliveCutoff: conv.ToPGTimestamptz(now.Add(-remoteSessionRefreshKeepalive)),
-		},
-	)
+	q := remotesessions_repo.New(r.db)
+	params := remotesessions_repo.GetDueRemoteSessionRefreshCandidateParams{
+		ID:              input.SessionID,
+		OrganizationID:  input.OrganizationID,
+		NowTs:           conv.ToPGTimestamptz(now),
+		KeepaliveCutoff: conv.ToPGTimestamptz(now.Add(-remoteSessionRefreshKeepalive)),
+	}
+	candidate, err := q.GetDueRemoteSessionRefreshCandidate(ctx, params)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return RefreshRemoteSessionResult{RateLimited: false}, nil
@@ -125,18 +125,46 @@ func (r *RemoteSessionRefresh) Do(ctx context.Context, input RefreshRemoteSessio
 	}
 	sess := candidate.RemoteSession
 
-	result, err := r.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled)
+	scope := mcpconnectionattempts.ProviderSessionScope(input.OrganizationID, candidate.ClientProjectID.UUID, mcpconnectionattempts.AppBackground)
+	var eligibilityReadErr error
+	attribution := remotesessions.RefreshIn(scope).WithScheduledEligibility(func(ctx context.Context, locked remotesessions_repo.RemoteSession) ([]string, error) {
+		params.NowTs = conv.ToPGTimestamptz(time.Now())
+		current, err := q.GetDueRemoteSessionRefreshCandidate(ctx, params)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, pgx.ErrNoRows
+			}
+			eligibilityReadErr = fmt.Errorf("reload scheduled grant in claimed organization: %w", err)
+			return nil, eligibilityReadErr
+		}
+		if locked.ID != current.RemoteSession.ID || locked.GrantGeneration != current.RemoteSession.GrantGeneration || !locked.UpdatedAt.Time.Equal(current.RemoteSession.UpdatedAt.Time) {
+			return nil, pgx.ErrNoRows
+		}
+		return current.Resources, nil
+	})
+	result, err := r.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled, attribution)
+	// The eligibility callback runs before the provider POST. Unlike a failed
+	// POST, retrying this database read cannot replay a rotating token.
+	if eligibilityReadErr != nil {
+		return RefreshRemoteSessionResult{}, eligibilityReadErr
+	}
 	if err != nil {
 		// The issuer URL and outcome are the ones the upstream-refresh metric
-		// recorded, so these lines join to its series; the user id is what
-		// lets "how many users are affected" be answered, since a client id is
-		// one row per provider connection, not per user.
+		// recorded, so these lines join to its series; the error code is the
+		// one the upstream answered with when its body carried one; the user
+		// id is what lets "how many users are affected" be answered, since a
+		// client id is one row per provider connection, not per user.
 		args := []any{
 			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
 			attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
 		}
 		if failure, ok := errors.AsType[*remotesessions.RefreshError](err); ok {
 			args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
+		}
+		if tokenErr, ok := errors.AsType[*remotesessions.TokenRefreshError](err); ok {
+			if code := tokenErr.UpstreamCode(); code != "" {
+				args = append(args, attr.SlogOAuthError(code))
+			}
 		}
 		if sess.SubjectUrn.Kind == urn.SessionSubjectKindUser {
 			args = append(args, attr.SlogUserID(sess.SubjectUrn.ID))

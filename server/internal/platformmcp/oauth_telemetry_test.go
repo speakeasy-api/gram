@@ -59,6 +59,35 @@ func TestOAuthTelemetryUsesOnlyBoundedAttributes(t *testing.T) {
 	requireMetricAttribute(t, transitions[0].Attributes, "platform_mcp.reason", "refresh_reuse")
 }
 
+func TestOAuthTelemetryRecordsOnlyKnownOrganizationSelections(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(t.Context())) })
+	telemetry := NewOAuthTelemetry(testenv.NewLogger(t), provider)
+
+	telemetry.Record(t.Context(), OAuthEvent{Operation: "interactive_authorization", Outcome: "succeeded", OrganizationSelection: organizationSelectionChanged})
+	telemetry.Record(t.Context(), OAuthEvent{Operation: "interactive_authorization", Outcome: "access_denied", OrganizationSelection: "org-1"})
+
+	var metrics metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &metrics))
+
+	events := oauthCounterPoints(t, metrics, platformMCPOAuthEventMetric)
+	require.Len(t, events, 2, "an unknown selection still counts its authorization")
+	for _, event := range events {
+		outcome, ok := event.Attributes.Value("platform_mcp.outcome")
+		require.True(t, ok)
+		selection, recorded := event.Attributes.Value("platform_mcp.organization_selection")
+		if outcome.AsString() == "succeeded" {
+			require.True(t, recorded)
+			require.Equal(t, string(organizationSelectionChanged), selection.AsString())
+			continue
+		}
+		require.False(t, recorded, "an unknown selection is not recorded")
+	}
+}
+
 func TestOAuthResponseRecorderDoesNotRetainResponseBody(t *testing.T) {
 	t.Parallel()
 
@@ -97,6 +126,7 @@ func TestOAuthTelemetryAcceptsOnlyBoundedDimensions(t *testing.T) {
 	t.Parallel()
 
 	require.True(t, validOAuthEvent(OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "authorization_denied"}))
+	require.True(t, validOAuthEvent(OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "membership_denied"}))
 	require.True(t, validOAuthEvent(OAuthEvent{Operation: "interactive_authorization", Outcome: "temporarily_unavailable", Reason: "authorization_unavailable"}))
 	require.False(t, validOAuthEvent(OAuthEvent{Operation: "https://untrusted.example", Outcome: "succeeded"}))
 	require.False(t, validOAuthEvent(OAuthEvent{Operation: "refresh", Outcome: "succeeded", Reason: "access-token"}))

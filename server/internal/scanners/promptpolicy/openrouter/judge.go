@@ -4,6 +4,7 @@ package openrouter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -22,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -29,16 +32,27 @@ const (
 	// judgeTimeout bounds a single judge call on both the realtime and batch
 	// paths.
 	judgeTimeout = 10 * time.Second
-	// defaultJudgeModel is used when a policy's model_config does not pin a
-	// model. It is a fast, cheap, high-recall classifier chosen by the
-	// server/cmd/riskjudgebench benchmark - see that tool's README. Without it,
-	// an empty model falls through to the openrouter client's general
-	// DefaultChatModel (a large, expensive chat model), which is a poor fit for
-	// a high-volume per-message guardrail.
-	defaultJudgeModel = "google/gemini-3.1-flash-lite"
+	// judgeModel is the single model every prompt-policy judge call uses. It is
+	// a fast, cheap, high-recall classifier chosen by the
+	// server/cmd/riskjudgebench benchmark - see that tool's README. Policies
+	// cannot pin their own model: one model keeps verdicts comparable across
+	// policies and keeps the benchmark an honest measure of production.
+	judgeModel = "google/gemini-3.5-flash-lite"
+	// JudgeReasoningEffort must stay non-empty. The object-completion path
+	// defaults a nil Reasoning to effort "none", which the Gemini 3.5
+	// generation rejects with a 400 ("Reasoning is mandatory for this
+	// endpoint") - every evaluation would fail into the policy's error mode.
+	// Exported so server/cmd/riskjudgebench benches the production effort
+	// rather than a drifting copy.
+	JudgeReasoningEffort = "low"
 	// defaultJudgeTemperature keeps verdicts deterministic when a policy does
 	// not pin its own temperature.
 	defaultJudgeTemperature = 0.0
+	// maxVerdictTokens caps generated tokens, reasoning included. Uncapped,
+	// OpenRouter reserves the model's full 65,536-token ceiling against the
+	// key's remaining monthly limit and refuses the call. Generous on purpose:
+	// truncating a verdict degrades the policy, over-reserving costs nothing.
+	maxVerdictTokens = 8192
 	// maxRationaleLen caps the stored rationale. Previously enforced via the
 	// response schema's maxLength, now enforced in code because Anthropic routes
 	// reject that constraint (see call()).
@@ -77,11 +91,12 @@ Output ONLY the JSON object, no prose or markdown fences.`
 // custom-rule suggestion path: strict JSON schema, low temperature, hard
 // timeout, OpenRouter object completion.
 type Judge struct {
-	logger  *slog.Logger
-	tracer  trace.Tracer
-	metrics *judgeMetrics
-	client  openrouter.CompletionClient
-	limiter *ratelimit.Limiter
+	logger      *slog.Logger
+	tracer      trace.Tracer
+	metrics     *judgeMetrics
+	client      openrouter.CompletionClient
+	limiter     *ratelimit.Limiter
+	stokenCodec *stokens.Codec
 }
 
 // New constructs a Judge. A nil client yields a judge whose Evaluate always
@@ -89,11 +104,12 @@ type Judge struct {
 func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Judge {
 	logger = logger.With(attr.SlogComponent("risk-llm-judge"))
 	return &Judge{
-		logger:  logger,
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"),
-		metrics: newJudgeMetrics(meterProvider, logger),
-		client:  client,
-		limiter: limiter,
+		logger:      logger,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"),
+		metrics:     newJudgeMetrics(meterProvider, logger),
+		client:      client,
+		limiter:     limiter,
+		stokenCodec: stokens.NewCodec(),
 	}
 }
 
@@ -112,6 +128,9 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	if strings.TrimSpace(in.Prompt) == "" || !in.Message.HasContent() {
 		return nil, nil
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, j.contextDone(ctx, nil, in.OrgID, err)
+	}
 
 	ctx, span := j.tracer.Start(ctx, "risk.judge.evaluate", trace.WithAttributes(
 		attr.OrganizationID(in.OrgID),
@@ -119,43 +138,53 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	))
 	defer span.End()
 
-	model := in.Config.Model
-	if model == "" {
-		model = defaultJudgeModel
-	}
-	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, j.logger, j.client, in.OrgID, in.ProjectID, billing.ModelUsageSourceRiskPolicy, model)
+	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, j.logger, j.client, in.OrgID, in.ProjectID, billing.ModelUsageSourceRiskPolicy, judgeModel)
+
 	// A throttled call is treated like a judge error: the policy's fail-mode
-	// decides. A Store outage is not a throttle - proceed rather than let limiter
-	// infra disable the guardrail.
-	switch res, err := j.limiter.Allow(ctx, bucket); {
-	case err != nil:
+	// decides. A Store outage is not a throttle, so proceed rather than let
+	// limiter infra disable the guardrail.
+	res, limitErr := j.limiter.Allow(ctx, bucket)
+	switch {
+	case ctx.Err() != nil:
+		span.SetStatus(codes.Error, "llm judge context done")
+		return nil, j.contextDone(ctx, span, in.OrgID, ctx.Err())
+	case errors.Is(limitErr, context.Canceled):
+		span.SetStatus(codes.Error, "llm judge context done")
+		return nil, j.contextDone(ctx, span, in.OrgID, limitErr)
+	case limitErr != nil:
 		j.logger.WarnContext(ctx, "judge rate limiter unavailable, allowing call",
-			attr.SlogError(err),
+			attr.SlogError(limitErr),
 			attr.SlogOrganizationID(in.OrgID),
 		)
 	case !res.Allowed:
 		j.metrics.RecordRateLimited(ctx, in.OrgID)
 		span.SetAttributes(attribute.Bool("risk.judge.rate_limited", true))
+		span.SetStatus(codes.Error, "llm judge rate limited")
 		j.logger.WarnContext(ctx, "llm judge rate limited",
 			attr.SlogOrganizationID(in.OrgID),
 		)
 		return nil, fmt.Errorf("llm judge call: %w", promptpolicy.ErrRateLimited)
 	}
 
+	judgePrompt, countContent := prepareJudgePrompt(in)
 	start := time.Now()
-	callResult, err := j.call(ctx, in)
+	callResult, err := j.call(ctx, in, judgePrompt)
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	j.metrics.RecordEvaluation(ctx, in.OrgID, outcome, time.Since(start))
 	if err != nil {
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "llm judge call failed")
 		span.SetAttributes(attr.Outcome(outcome))
-		j.logger.WarnContext(ctx, "llm judge call failed",
-			attr.SlogError(err),
-			attr.SlogOutcome(string(outcome)),
-			attr.SlogOrganizationID(in.OrgID),
-		)
+		if outcome != o11y.OutcomeCanceled {
+			j.logger.WarnContext(ctx, "llm judge call failed",
+				attr.SlogError(err),
+				attr.SlogOutcome(string(outcome)),
+				attr.SlogOrganizationID(in.OrgID),
+			)
+		}
 		return nil, err
 	}
+	stokenCount, countErr := j.stokenCodec.Count(ctx, countContent...)
 	if callResult.matched {
 		j.metrics.RecordConfidence(ctx, in.OrgID, callResult.confidence)
 	}
@@ -171,7 +200,24 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 		PromptTokens:     callResult.promptTokens,
 		CompletionTokens: callResult.completionTokens,
 		TotalTokens:      callResult.totalTokens,
+		STokens:          int64(stokenCount),
+		Completed:        countErr == nil,
+		Model:            judgeModel,
+		Provider:         "openrouter",
 	}, nil
+}
+
+// contextDone records an evaluation abandoned because the caller's context
+// ended (canceled or past its deadline) without the warn log a real failure
+// gets. span is nil when it ended before the span started; callers set span
+// status inline so spancheck can see it.
+func (j *Judge) contextDone(ctx context.Context, span trace.Span, orgID string, err error) error {
+	outcome := o11y.OutcomeFromErrorWithTimeout(err)
+	j.metrics.RecordEvaluation(ctx, orgID, outcome, 0)
+	if span != nil {
+		span.SetAttributes(attr.Outcome(outcome))
+	}
+	return fmt.Errorf("llm judge call: %w", err)
 }
 
 type judgeCallResult struct {
@@ -184,7 +230,7 @@ type judgeCallResult struct {
 	totalTokens      int
 }
 
-func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResult, error) {
+func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt string) (judgeCallResult, error) {
 	strict := true
 	jsonSchema := or.ChatJSONSchemaConfig{
 		Name:        "risk_policy_judge_verdict",
@@ -197,21 +243,14 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 	if in.Config.Temperature != nil {
 		temperature = *in.Config.Temperature
 	}
-
-	model := in.Config.Model
-	if model == "" {
-		model = defaultJudgeModel
-	}
-
-	judgePrompt := BuildJudgePrompt(in)
-
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
 	defer cancel()
 
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
+		MaxTokens:              new(maxVerdictTokens),
 		OrgID:                  in.OrgID,
 		ProjectID:              in.ProjectID,
-		Model:                  model,
+		Model:                  judgeModel,
 		SystemPrompt:           SystemPrompt,
 		Prompt:                 judgePrompt,
 		Temperature:            &temperature,
@@ -223,7 +262,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 		UserEmail:              "",
 		HTTPMetadata:           nil,
 		JSONSchema:             &jsonSchema,
-		Reasoning:              nil,
+		Reasoning:              &openrouter.Reasoning{Effort: JudgeReasoningEffort, MaxTokens: nil, Exclude: nil, Enabled: nil},
 		DisableResponseHealing: false,
 	})
 	if err != nil {
@@ -231,6 +270,11 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 	}
 	if response == nil || response.Message == nil {
 		return judgeCallResult{}, fmt.Errorf("empty completion response")
+	}
+	// A truncated completion often still parses, so reject it on the finish
+	// reason rather than the body.
+	if response.FinishReason != nil && *response.FinishReason == openrouter.FinishReasonLength {
+		return judgeCallResult{}, fmt.Errorf("completion hit the %d-token cap", maxVerdictTokens)
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if raw == "" {
@@ -304,17 +348,19 @@ type judgePromptPayload struct {
 // oversized payload cannot blow the model's context window. Exported so
 // server/cmd/riskjudgebench drives the exact production user prompt.
 func BuildJudgePrompt(in promptpolicy.Input) string {
+	prompt, _ := prepareJudgePrompt(in)
+	return prompt
+}
+
+func prepareJudgePrompt(in promptpolicy.Input) (string, []string) {
+	messagePayload := judgemessage.RenderPayload(in.Message)
 	payload := judgePromptPayload{
 		Policy:  in.Prompt,
-		Message: judgemessage.RenderPayload(in.Message),
+		Message: messagePayload,
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
-		// Unreachable: payload is composed solely of strings, bools, slices, and
-		// pointers to string structs, none of which json.Marshal can fail on. Fall
-		// back to the raw body so a future change that breaks marshaling can't
-		// silently drop the message under evaluation entirely.
-		return in.Message.Body
+		return in.Message.Body, []string{in.Message.Body}
 	}
-	return string(b)
+	return string(b), judgemessage.STokenContent(messagePayload)
 }

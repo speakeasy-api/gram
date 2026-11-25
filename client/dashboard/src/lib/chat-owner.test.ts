@@ -1,6 +1,8 @@
+// @vitest-environment node
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { describe, expect, it } from "vitest";
 import {
+  chatActor,
   chatOwnerDisplay,
   chatOwnerLabel,
   resolveChatOwner,
@@ -15,6 +17,7 @@ function member(overrides: Partial<AccessMember>): AccessMember {
     joinedAt: new Date(0),
     principalUrn: "principal:user:gram-user-id",
     roleIds: [],
+    directoryRoleIds: [],
     ...overrides,
   };
 }
@@ -26,7 +29,7 @@ const members = [
 const currentUser = { id: "gram-2", email: "grace@example.com" };
 
 describe("resolveChatOwner", () => {
-  it("matches a compliance chat using its resolved Gram user ID", () => {
+  it("matches a compliance chat using its resolved Speakeasy user ID", () => {
     const owner = resolveChatOwner(members, {
       userId: "gram-2",
       externalUserId: "user_01HXXXXXXXXXXXXXXXXXXXXXXX",
@@ -127,6 +130,56 @@ describe("chatOwnerDisplay", () => {
     expect(
       chatOwnerDisplay(members, { externalUserId: "user_opaque" }, currentUser),
     ).toEqual({ label: "user_opaque", resolved: false });
+  });
+});
+
+describe("chatActor", () => {
+  it("names only the person on their own session", () => {
+    expect(chatActor({ userId: "gram-1" })).toEqual({
+      agent: false,
+      person: true,
+    });
+  });
+
+  it("names a hosted assistant and the person it acted for", () => {
+    expect(chatActor({ userId: "gram-1", assistantName: "Helper" })).toEqual({
+      agent: true,
+      person: true,
+    });
+  });
+
+  it("keeps naming a hosted assistant's person when none was reported", () => {
+    expect(chatActor({ assistantName: "Helper" })).toEqual({
+      agent: true,
+      person: true,
+    });
+  });
+
+  it("names only the agent when an agent session reports nobody", () => {
+    expect(
+      chatActor({ agentId: "agent-1", userId: "", externalUserId: "" }),
+    ).toEqual({ agent: true, person: false });
+  });
+
+  it("names the person behind an agent session that reports one", () => {
+    expect(chatActor({ agentId: "agent-1", userId: "gram-1" })).toEqual({
+      agent: true,
+      person: true,
+    });
+    expect(
+      chatActor({ agentId: "agent-1", externalUserId: "user_opaque" }),
+    ).toEqual({ agent: true, person: true });
+    expect(chatActor({ agentId: "agent-1" }, "personal@example.com")).toEqual({
+      agent: true,
+      person: true,
+    });
+  });
+
+  it("treats an assistant session's agent identity as the assistant", () => {
+    expect(chatActor({ agentId: "agent-1", assistantName: "Helper" })).toEqual({
+      agent: true,
+      person: true,
+    });
   });
 });
 

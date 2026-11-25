@@ -1,0 +1,2 @@
+-- Modify "okta_resource_connections" table
+ALTER TABLE "okta_resource_connections" DROP CONSTRAINT "okta_resource_connections_okta_application_fkey", ADD CONSTRAINT "okta_resource_connections_okta_application_fkey" FOREIGN KEY ("organization_id", "identity_provider_connection_id", "okta_application_id") REFERENCES "okta_applications" ("organization_id", "identity_provider_connection_id", "okta_app_id") ON UPDATE NO ACTION ON DELETE CASCADE;

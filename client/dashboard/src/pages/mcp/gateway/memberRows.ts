@@ -1,5 +1,6 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 
 /**
  * Backend-attested member classification. "hosted" (toolset-backed) members
@@ -52,37 +53,6 @@ export function buildMemberRows(
   });
 }
 
-/**
- * Plan the updateMember calls for moving one row. Recomputes sequential
- * sortOrder over the whole target order and returns only the rows whose
- * stored value differs — robust to duplicate sortOrder values (all rows
- * default to 0).
- */
-export function planReorder(
-  orderedMembers: MetaMcpMember[],
-  fromIndex: number,
-  toIndex: number,
-): { id: string; sortOrder: number }[] {
-  if (
-    fromIndex === toIndex ||
-    fromIndex < 0 ||
-    toIndex < 0 ||
-    fromIndex >= orderedMembers.length ||
-    toIndex >= orderedMembers.length
-  ) {
-    return [];
-  }
-  const next = [...orderedMembers];
-  const [moved] = next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, moved!);
-  return next
-    .map((member, index) => ({ id: member.id, sortOrder: index }))
-    .filter(
-      ({ id, sortOrder }) =>
-        orderedMembers.find((m) => m.id === id)?.sortOrder !== sortOrder,
-    );
-}
-
 /** sortOrder for a newly added member: after every existing member. */
 export function nextSortOrder(members: MetaMcpMember[]): number {
   return members.reduce((max, m) => Math.max(max, m.sortOrder + 1), 0);
@@ -106,4 +76,137 @@ export function memberBackendKind(
   if (server.tunneledMcpServerId) return "tunneled";
   if (server.remoteMcpServerId) return "remote";
   return undefined;
+}
+
+/**
+ * Add member candidates: existing mcp_servers rows, plus toolsets with no
+ * toolset-backed row yet (adding one mints the row, then attaches it).
+ */
+export type AddCandidate =
+  | { kind: "server"; server: McpServer }
+  | { kind: "toolset"; toolset: ToolsetEntry };
+
+export function buildAddCandidates(
+  servers: McpServer[],
+  toolsets: ToolsetEntry[],
+  memberServerIds: Set<string>,
+  search: string,
+): AddCandidate[] {
+  const query = search.trim().toLowerCase();
+  const matches = (...fields: (string | undefined)[]) =>
+    !query || fields.some((f) => f?.toLowerCase().includes(query));
+  // A toolset's own hosted server (id = toolset id) is never a gateway member;
+  // the toolset candidate mints a separate wrapper instead.
+  const pickable = servers.filter((s) => s.id !== s.toolsetId);
+  const wrappedToolsetIds = new Set(
+    pickable.flatMap((s) => (s.toolsetId ? [s.toolsetId] : [])),
+  );
+
+  const serverCandidates: AddCandidate[] = pickable
+    .filter((s) => !memberServerIds.has(s.id))
+    .filter((s) => matches(s.name, s.slug))
+    .map((server) => ({ kind: "server", server }));
+  const toolsetCandidates: AddCandidate[] = toolsets
+    .filter((t) => !wrappedToolsetIds.has(t.id))
+    .filter((t) => matches(t.name, t.slug))
+    .map((toolset) => ({ kind: "toolset", toolset }));
+
+  return [...serverCandidates, ...toolsetCandidates].sort(
+    (a, b) =>
+      candidateName(a).localeCompare(candidateName(b)) ||
+      candidateKey(a).localeCompare(candidateKey(b)),
+  );
+}
+
+export function candidateName(candidate: AddCandidate): string {
+  return candidate.kind === "server"
+    ? (candidate.server.name ?? "")
+    : candidate.toolset.name;
+}
+
+/** Only reconcile a toolset retry with the exact wrapper this batch created. */
+export function candidateKey(
+  candidate: AddCandidate,
+  wrappers?: ReadonlyMap<string, string>,
+): string {
+  if (candidate.kind === "toolset") return `toolset-${candidate.toolset.id}`;
+  for (const [key, serverId] of wrappers ?? []) {
+    if (serverId === candidate.server.id) return key;
+  }
+  return `server-${candidate.server.id}`;
+}
+
+export interface AddBatchState {
+  wrappers: Map<string, string>;
+  orders: Map<string, number>;
+  completed: Set<string>;
+}
+
+/** Fresh membership supersedes completed writes, not failed retries/wrappers. */
+export function reconcileCompletedMembers(
+  state: AddBatchState,
+  memberServerIds: ReadonlySet<string>,
+): void {
+  for (const key of state.completed) {
+    const serverId = state.wrappers.get(key) ?? key.slice("server-".length);
+    if (!memberServerIds.has(serverId)) {
+      state.completed.delete(key);
+      state.orders.delete(key);
+    }
+  }
+}
+
+export interface AddResult {
+  key: string;
+  name: string;
+  error?: string;
+}
+
+/** Allocate order before writing; retries keep their slot and successful writes. */
+export async function addCandidateBatch(
+  candidates: AddCandidate[],
+  startOrder: number,
+  state: AddBatchState,
+  dependencies: {
+    createWrapper: (toolset: ToolsetEntry) => Promise<string>;
+    attach: (serverId: string, sortOrder: number) => Promise<void>;
+  },
+): Promise<AddResult[]> {
+  let order = Math.max(
+    startOrder,
+    ...Array.from(state.orders.values(), (n) => n + 1),
+  );
+  for (const candidate of candidates) {
+    const key = candidateKey(candidate, state.wrappers);
+    if (!state.orders.has(key)) state.orders.set(key, order++);
+  }
+  const results: AddResult[] = [];
+  for (const candidate of candidates) {
+    const key = candidateKey(candidate, state.wrappers);
+    const result: AddResult = {
+      key,
+      name: candidateName(candidate) || "MCP server",
+    };
+    try {
+      if (!state.completed.has(key)) {
+        let serverId =
+          candidate.kind === "server"
+            ? candidate.server.id
+            : state.wrappers.get(key);
+        if (!serverId && candidate.kind === "toolset") {
+          serverId = await dependencies.createWrapper(candidate.toolset);
+          state.wrappers.set(key, serverId);
+        }
+        await dependencies.attach(serverId!, state.orders.get(key)!);
+        state.completed.add(key);
+      }
+    } catch (error) {
+      result.error =
+        error instanceof Error
+          ? error.message
+          : "Couldn't add this server. Try again.";
+    }
+    results.push(result);
+  }
+  return results;
 }

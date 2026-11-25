@@ -24,10 +24,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -90,11 +96,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	assetStorage := assetstest.NewTestBlobStore(t)
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
+	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger, true)
 
-	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardianPolicy)
-	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc, revoker)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, conn, testenv.NewEncryptionClient(t)), nil, guardianPolicy, nil)
+	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc, revoker, networkaccess.DenyAllChecker{})
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -104,14 +110,51 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
+func seedBlockedDirectRemoteDistribution(t *testing.T, ctx context.Context, ti *testInstance, serverID uuid.UUID) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := platformrepo.New(ti.conn)
+	registration, err := queries.CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		SourceKind: "remote", CatalogProvider: "direct-remote-url-v1",
+		CatalogReference: serverID.String(), Status: "registered",
+	})
+	require.NoError(t, err)
+	_, err = queries.UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformrepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{
+		ID: registration.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		Status: "registered", McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+	})
+	require.NoError(t, err)
+	ti.service.WithDistributionAdmission(admission.NewGuard())
+}
+
+// seedBlockingShadowMCPPolicy gives the project an enabled Shadow MCP block
+// policy, which is what makes direct-remote admission enforce anything.
+func seedBlockingShadowMCPPolicy(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID: uuid.New(), ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+		Name: "Blocking Shadow MCP", PolicyType: "standard", Sources: []string{shadowmcp.SourceShadowMCP},
+		PresidioEntities: nil, AnalyzerConfig: nil, PromptInjectionRules: nil, DisabledRules: nil, CustomRuleIds: nil,
+		Enabled: true, Action: "block", AudienceType: "everyone", ShadowMcpDisposition: pgtype.Text{},
+		AutoName: false, UserMessage: pgtype.Text{}, Prompt: pgtype.Text{}, ModelConfig: nil, Score: pgtype.Float8{},
+	})
+	require.NoError(t, err)
+}
+
 func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	// Existing requests may still be using authCtx in background icon discovery.
+	updatedAuthCtx := *authCtx
+	updatedAuthCtx.AccountType = "enterprise"
+	ctx = contextvalues.SetAuthContext(ctx, &updatedAuthCtx)
 
 	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "mcpservers-rbac-grants-"+uuid.NewString())
 	for _, grant := range grants {
@@ -160,11 +203,12 @@ func seedTunneledMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	t.Helper()
 
 	server, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        uuid.New(),
-		ProjectID: projectID,
-		Name:      "test tunneled mcp server " + uuid.NewString(),
-		KeyHash:   "test-key-hash-" + uuid.NewString(),
-		KeyPrefix: "test-key-prefix",
+		ID:                 uuid.New(),
+		ProjectID:          projectID,
+		Name:               "test tunneled mcp server " + uuid.NewString(),
+		KeyHash:            "test-key-hash-" + uuid.NewString(),
+		KeyPrefix:          "test-key-prefix",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
@@ -200,9 +244,10 @@ func withStaffEmail(t *testing.T, ctx context.Context) context.Context {
 	require.NotNil(t, authCtx)
 
 	email := "staffer@speakeasyapi.dev"
-	authCtx.Email = &email
+	updatedAuthCtx := *authCtx
+	updatedAuthCtx.Email = &email
 
-	return contextvalues.SetAuthContext(ctx, authCtx)
+	return contextvalues.SetAuthContext(ctx, &updatedAuthCtx)
 }
 
 func enableTunneledPublicConsent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, tunneledServerID uuid.UUID) {
@@ -215,7 +260,7 @@ func enableTunneledPublicConsent(t *testing.T, ctx context.Context, conn *pgxpoo
 	require.NoError(t, err)
 
 	_, err = tunneledmcprepo.New(conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
-		Name:        server.Name,
+		Name:        pgtype.Text{String: server.Name, Valid: true},
 		AllowPublic: pgtype.Bool{Bool: true, Valid: true},
 		ID:          tunneledServerID,
 		ProjectID:   projectID,

@@ -4,6 +4,8 @@ import { Link } from "react-router";
 
 interface DotRowProps extends React.ComponentPropsWithoutRef<"tr"> {
   icon?: React.ReactNode;
+  iconRailClassName?: string;
+  iconTileClassName?: string;
   /**
    * When set, the whole row becomes a real navigation link. A stretched anchor
    * covers the row so browser semantics (open-in-new-tab, copy link, the
@@ -27,7 +29,16 @@ interface DotRowProps extends React.ComponentPropsWithoutRef<"tr"> {
  */
 export const DotRow = forwardRef<HTMLTableRowElement, DotRowProps>(
   function DotRow(
-    { children, icon, className, href, ariaLabel, ...rest },
+    {
+      children,
+      icon,
+      iconRailClassName,
+      iconTileClassName,
+      className,
+      href,
+      ariaLabel,
+      ...rest
+    },
     ref,
   ): JSX.Element {
     return (
@@ -51,7 +62,12 @@ export const DotRow = forwardRef<HTMLTableRowElement, DotRowProps>(
               className="absolute inset-0 z-10"
             />
           )}
-          <div className="bg-muted/30 text-muted-foreground/20 relative size-17 overflow-hidden">
+          <div
+            className={cn(
+              "bg-muted/30 text-muted-foreground/20 relative size-17 overflow-hidden",
+              iconRailClassName,
+            )}
+          >
             <div
               className="scroll-dots-target absolute inset-0"
               style={{
@@ -62,7 +78,12 @@ export const DotRow = forwardRef<HTMLTableRowElement, DotRowProps>(
             />
             {icon && (
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="bg-background/90 p-1.5 shadow-sm backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none">
+                <div
+                  className={cn(
+                    "bg-background/90 p-1.5 shadow-sm backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none",
+                    iconTileClassName,
+                  )}
+                >
                   {icon}
                 </div>
               </div>

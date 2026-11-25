@@ -63,6 +63,11 @@ type GetDomainResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	// The custom domain is actively being registered
 	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling *bool `form:"is_reconciling,omitempty" json:"is_reconciling,omitempty" xml:"is_reconciling,omitempty"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus *string `form:"reconciliation_status,omitempty" json:"reconciliation_status,omitempty" xml:"reconciliation_status,omitempty"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
@@ -89,6 +94,26 @@ type GetDomainResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // ListDomainsResponseBody is the type of the "domains" service "listDomains"
@@ -119,6 +144,11 @@ type CreateDomainResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	// The custom domain is actively being registered
 	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling *bool `form:"is_reconciling,omitempty" json:"is_reconciling,omitempty" xml:"is_reconciling,omitempty"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus *string `form:"reconciliation_status,omitempty" json:"reconciliation_status,omitempty" xml:"reconciliation_status,omitempty"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
@@ -145,6 +175,26 @@ type CreateDomainResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // UpdateDomainResponseBody is the type of the "domains" service "updateDomain"
@@ -166,6 +216,11 @@ type UpdateDomainResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	// The custom domain is actively being registered
 	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling *bool `form:"is_reconciling,omitempty" json:"is_reconciling,omitempty" xml:"is_reconciling,omitempty"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus *string `form:"reconciliation_status,omitempty" json:"reconciliation_status,omitempty" xml:"reconciliation_status,omitempty"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
@@ -192,6 +247,26 @@ type UpdateDomainResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // SetRootMcpEndpointResponseBody is the type of the "domains" service
@@ -213,6 +288,11 @@ type SetRootMcpEndpointResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	// The custom domain is actively being registered
 	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling *bool `form:"is_reconciling,omitempty" json:"is_reconciling,omitempty" xml:"is_reconciling,omitempty"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus *string `form:"reconciliation_status,omitempty" json:"reconciliation_status,omitempty" xml:"reconciliation_status,omitempty"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
@@ -239,12 +319,104 @@ type SetRootMcpEndpointResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // ListRootMcpServersResponseBody is the type of the "domains" service
 // "listRootMcpServers" endpoint HTTP response body.
 type ListRootMcpServersResponseBody struct {
 	McpServers []*RootMcpServerOptionResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
+}
+
+// ReconcileDomainResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body.
+type ReconcileDomainResponseBody struct {
+	// The ID of the custom domain
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the organization this domain belongs to
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The custom domain name
+	Domain *string `form:"domain,omitempty" json:"domain,omitempty" xml:"domain,omitempty"`
+	// Whether the domain is verified
+	Verified *bool `form:"verified,omitempty" json:"verified,omitempty" xml:"verified,omitempty"`
+	// Whether the domain is activated in ingress
+	Activated *bool `form:"activated,omitempty" json:"activated,omitempty" xml:"activated,omitempty"`
+	// When the custom domain was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the custom domain was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The custom domain is actively being registered
+	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling *bool `form:"is_reconciling,omitempty" json:"is_reconciling,omitempty" xml:"is_reconciling,omitempty"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus *string `form:"reconciliation_status,omitempty" json:"reconciliation_status,omitempty" xml:"reconciliation_status,omitempty"`
+	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
+	// unrestricted.
+	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
+	// The latest observed domain health status. One of: unknown, healthy,
+	// unhealthy.
+	HealthStatus *string `form:"health_status,omitempty" json:"health_status,omitempty" xml:"health_status,omitempty"`
+	// The reason the domain was last observed as unhealthy. One of: dns_not_found,
+	// dns_target_mismatch, resource_missing, certificate_missing,
+	// certificate_not_ready, certificate_expired, certificate_invalid,
+	// check_failed.
+	HealthIssue *string `form:"health_issue,omitempty" json:"health_issue,omitempty" xml:"health_issue,omitempty"`
+	// When the domain health was last checked.
+	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
+	// When the current unhealthy period began.
+	UnhealthySince *string `form:"unhealthy_since,omitempty" json:"unhealthy_since,omitempty" xml:"unhealthy_since,omitempty"`
+	// When the currently observed TLS certificate expires.
+	CertificateExpiresAt *string `form:"certificate_expires_at,omitempty" json:"certificate_expires_at,omitempty" xml:"certificate_expires_at,omitempty"`
+	// The number of consecutive failed health checks
+	ConsecutiveFailures *int32 `form:"consecutive_failures,omitempty" json:"consecutive_failures,omitempty" xml:"consecutive_failures,omitempty"`
+	// The MCP endpoint currently mapped to the domain root, if any
+	RootMcpEndpointID *string `form:"root_mcp_endpoint_id,omitempty" json:"root_mcp_endpoint_id,omitempty" xml:"root_mcp_endpoint_id,omitempty"`
+	// The token served for OpenAI app-submission domain verification, if configured
+	OpenaiAppsChallengeToken *string `form:"openai_apps_challenge_token,omitempty" json:"openai_apps_challenge_token,omitempty" xml:"openai_apps_challenge_token,omitempty"`
+	// The suggested DNS record type for this domain. A suggestion only — delegated
+	// subzones can make an apex-looking domain CNAME-capable.
+	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // CheckHealthResponseBody is the type of the "domains" service "checkHealth"
@@ -266,6 +438,11 @@ type CheckHealthResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	// The custom domain is actively being registered
 	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling *bool `form:"is_reconciling,omitempty" json:"is_reconciling,omitempty" xml:"is_reconciling,omitempty"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus *string `form:"reconciliation_status,omitempty" json:"reconciliation_status,omitempty" xml:"reconciliation_status,omitempty"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
@@ -292,6 +469,26 @@ type CheckHealthResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // ListMcpEndpointsResponseBody is the type of the "domains" service
@@ -1397,6 +1594,188 @@ type ListRootMcpServersGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ReconcileDomainUnauthorizedResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "unauthorized" error.
+type ReconcileDomainUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReconcileDomainForbiddenResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "forbidden" error.
+type ReconcileDomainForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReconcileDomainBadRequestResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "bad_request" error.
+type ReconcileDomainBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReconcileDomainNotFoundResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "not_found" error.
+type ReconcileDomainNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReconcileDomainConflictResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "conflict" error.
+type ReconcileDomainConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReconcileDomainUnsupportedMediaResponseBody is the type of the "domains"
+// service "reconcileDomain" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ReconcileDomainUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReconcileDomainInvalidResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "invalid" error.
+type ReconcileDomainInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReconcileDomainInvariantViolationResponseBody is the type of the "domains"
+// service "reconcileDomain" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ReconcileDomainInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReconcileDomainUnexpectedResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "unexpected" error.
+type ReconcileDomainUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReconcileDomainGatewayErrorResponseBody is the type of the "domains" service
+// "reconcileDomain" endpoint HTTP response body for the "gateway_error" error.
+type ReconcileDomainGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // CheckHealthUnauthorizedResponseBody is the type of the "domains" service
 // "checkHealth" endpoint HTTP response body for the "unauthorized" error.
 type CheckHealthUnauthorizedResponseBody struct {
@@ -1962,6 +2341,11 @@ type CustomDomainResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	// The custom domain is actively being registered
 	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
+	// The custom domain ingress configuration is being applied
+	IsReconciling *bool `form:"is_reconciling,omitempty" json:"is_reconciling,omitempty" xml:"is_reconciling,omitempty"`
+	// The latest domain ingress reconciliation state. One of: not_started,
+	// applying, reconciled, failed.
+	ReconciliationStatus *string `form:"reconciliation_status,omitempty" json:"reconciliation_status,omitempty" xml:"reconciliation_status,omitempty"`
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
@@ -1988,6 +2372,26 @@ type CustomDomainResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // DomainDNSConfigResponseBody is used to define fields on response body types.
@@ -2100,6 +2504,8 @@ func NewGetDomainCustomDomainOK(body *GetDomainResponseBody) *domains.CustomDoma
 		CreatedAt:                *body.CreatedAt,
 		UpdatedAt:                *body.UpdatedAt,
 		IsUpdating:               *body.IsUpdating,
+		IsReconciling:            *body.IsReconciling,
+		ReconciliationStatus:     *body.ReconciliationStatus,
 		HealthStatus:             body.HealthStatus,
 		HealthIssue:              body.HealthIssue,
 		HealthCheckedAt:          body.HealthCheckedAt,
@@ -2109,6 +2515,11 @@ func NewGetDomainCustomDomainOK(body *GetDomainResponseBody) *domains.CustomDoma
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      *body.SuggestedRecordType,
+		DNSTargetToken:           body.DNSTargetToken,
+		DNSTarget:                body.DNSTarget,
+		DNSRoutingMethod:         body.DNSRoutingMethod,
+		DNSConfigurationStatus:   body.DNSConfigurationStatus,
+		DNSCheckedAt:             body.DNSCheckedAt,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -2447,6 +2858,8 @@ func NewCreateDomainCustomDomainOK(body *CreateDomainResponseBody) *domains.Cust
 		CreatedAt:                *body.CreatedAt,
 		UpdatedAt:                *body.UpdatedAt,
 		IsUpdating:               *body.IsUpdating,
+		IsReconciling:            *body.IsReconciling,
+		ReconciliationStatus:     *body.ReconciliationStatus,
 		HealthStatus:             body.HealthStatus,
 		HealthIssue:              body.HealthIssue,
 		HealthCheckedAt:          body.HealthCheckedAt,
@@ -2456,6 +2869,11 @@ func NewCreateDomainCustomDomainOK(body *CreateDomainResponseBody) *domains.Cust
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      *body.SuggestedRecordType,
+		DNSTargetToken:           body.DNSTargetToken,
+		DNSTarget:                body.DNSTarget,
+		DNSRoutingMethod:         body.DNSRoutingMethod,
+		DNSConfigurationStatus:   body.DNSConfigurationStatus,
+		DNSCheckedAt:             body.DNSCheckedAt,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -2627,6 +3045,8 @@ func NewUpdateDomainCustomDomainOK(body *UpdateDomainResponseBody) *domains.Cust
 		CreatedAt:                *body.CreatedAt,
 		UpdatedAt:                *body.UpdatedAt,
 		IsUpdating:               *body.IsUpdating,
+		IsReconciling:            *body.IsReconciling,
+		ReconciliationStatus:     *body.ReconciliationStatus,
 		HealthStatus:             body.HealthStatus,
 		HealthIssue:              body.HealthIssue,
 		HealthCheckedAt:          body.HealthCheckedAt,
@@ -2636,6 +3056,11 @@ func NewUpdateDomainCustomDomainOK(body *UpdateDomainResponseBody) *domains.Cust
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      *body.SuggestedRecordType,
+		DNSTargetToken:           body.DNSTargetToken,
+		DNSTarget:                body.DNSTarget,
+		DNSRoutingMethod:         body.DNSRoutingMethod,
+		DNSConfigurationStatus:   body.DNSConfigurationStatus,
+		DNSCheckedAt:             body.DNSCheckedAt,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -2807,6 +3232,8 @@ func NewSetRootMcpEndpointCustomDomainOK(body *SetRootMcpEndpointResponseBody) *
 		CreatedAt:                *body.CreatedAt,
 		UpdatedAt:                *body.UpdatedAt,
 		IsUpdating:               *body.IsUpdating,
+		IsReconciling:            *body.IsReconciling,
+		ReconciliationStatus:     *body.ReconciliationStatus,
 		HealthStatus:             body.HealthStatus,
 		HealthIssue:              body.HealthIssue,
 		HealthCheckedAt:          body.HealthCheckedAt,
@@ -2816,6 +3243,11 @@ func NewSetRootMcpEndpointCustomDomainOK(body *SetRootMcpEndpointResponseBody) *
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      *body.SuggestedRecordType,
+		DNSTargetToken:           body.DNSTargetToken,
+		DNSTarget:                body.DNSTarget,
+		DNSRoutingMethod:         body.DNSRoutingMethod,
+		DNSConfigurationStatus:   body.DNSConfigurationStatus,
+		DNSCheckedAt:             body.DNSCheckedAt,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -3141,6 +3573,193 @@ func NewListRootMcpServersGatewayError(body *ListRootMcpServersGatewayErrorRespo
 	return v
 }
 
+// NewReconcileDomainCustomDomainOK builds a "domains" service
+// "reconcileDomain" endpoint result from a HTTP "OK" response.
+func NewReconcileDomainCustomDomainOK(body *ReconcileDomainResponseBody) *domains.CustomDomain {
+	v := &domains.CustomDomain{
+		ID:                       *body.ID,
+		OrganizationID:           *body.OrganizationID,
+		Domain:                   *body.Domain,
+		Verified:                 *body.Verified,
+		Activated:                *body.Activated,
+		CreatedAt:                *body.CreatedAt,
+		UpdatedAt:                *body.UpdatedAt,
+		IsUpdating:               *body.IsUpdating,
+		IsReconciling:            *body.IsReconciling,
+		ReconciliationStatus:     *body.ReconciliationStatus,
+		HealthStatus:             body.HealthStatus,
+		HealthIssue:              body.HealthIssue,
+		HealthCheckedAt:          body.HealthCheckedAt,
+		UnhealthySince:           body.UnhealthySince,
+		CertificateExpiresAt:     body.CertificateExpiresAt,
+		ConsecutiveFailures:      body.ConsecutiveFailures,
+		RootMcpEndpointID:        body.RootMcpEndpointID,
+		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
+		SuggestedRecordType:      *body.SuggestedRecordType,
+		DNSTargetToken:           body.DNSTargetToken,
+		DNSTarget:                body.DNSTarget,
+		DNSRoutingMethod:         body.DNSRoutingMethod,
+		DNSConfigurationStatus:   body.DNSConfigurationStatus,
+		DNSCheckedAt:             body.DNSCheckedAt,
+	}
+	v.IPAllowlist = make([]string, len(body.IPAllowlist))
+	for i, val := range body.IPAllowlist {
+		v.IPAllowlist[i] = val
+	}
+
+	return v
+}
+
+// NewReconcileDomainUnauthorized builds a domains service reconcileDomain
+// endpoint unauthorized error.
+func NewReconcileDomainUnauthorized(body *ReconcileDomainUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReconcileDomainForbidden builds a domains service reconcileDomain
+// endpoint forbidden error.
+func NewReconcileDomainForbidden(body *ReconcileDomainForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReconcileDomainBadRequest builds a domains service reconcileDomain
+// endpoint bad_request error.
+func NewReconcileDomainBadRequest(body *ReconcileDomainBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReconcileDomainNotFound builds a domains service reconcileDomain endpoint
+// not_found error.
+func NewReconcileDomainNotFound(body *ReconcileDomainNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReconcileDomainConflict builds a domains service reconcileDomain endpoint
+// conflict error.
+func NewReconcileDomainConflict(body *ReconcileDomainConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReconcileDomainUnsupportedMedia builds a domains service reconcileDomain
+// endpoint unsupported_media error.
+func NewReconcileDomainUnsupportedMedia(body *ReconcileDomainUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReconcileDomainInvalid builds a domains service reconcileDomain endpoint
+// invalid error.
+func NewReconcileDomainInvalid(body *ReconcileDomainInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReconcileDomainInvariantViolation builds a domains service
+// reconcileDomain endpoint invariant_violation error.
+func NewReconcileDomainInvariantViolation(body *ReconcileDomainInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReconcileDomainUnexpected builds a domains service reconcileDomain
+// endpoint unexpected error.
+func NewReconcileDomainUnexpected(body *ReconcileDomainUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReconcileDomainGatewayError builds a domains service reconcileDomain
+// endpoint gateway_error error.
+func NewReconcileDomainGatewayError(body *ReconcileDomainGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCheckHealthCustomDomainOK builds a "domains" service "checkHealth"
 // endpoint result from a HTTP "OK" response.
 func NewCheckHealthCustomDomainOK(body *CheckHealthResponseBody) *domains.CustomDomain {
@@ -3153,6 +3772,8 @@ func NewCheckHealthCustomDomainOK(body *CheckHealthResponseBody) *domains.Custom
 		CreatedAt:                *body.CreatedAt,
 		UpdatedAt:                *body.UpdatedAt,
 		IsUpdating:               *body.IsUpdating,
+		IsReconciling:            *body.IsReconciling,
+		ReconciliationStatus:     *body.ReconciliationStatus,
 		HealthStatus:             body.HealthStatus,
 		HealthIssue:              body.HealthIssue,
 		HealthCheckedAt:          body.HealthCheckedAt,
@@ -3162,6 +3783,11 @@ func NewCheckHealthCustomDomainOK(body *CheckHealthResponseBody) *domains.Custom
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      *body.SuggestedRecordType,
+		DNSTargetToken:           body.DNSTargetToken,
+		DNSTarget:                body.DNSTarget,
+		DNSRoutingMethod:         body.DNSRoutingMethod,
+		DNSConfigurationStatus:   body.DNSConfigurationStatus,
+		DNSCheckedAt:             body.DNSCheckedAt,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -3664,6 +4290,12 @@ func ValidateGetDomainResponseBody(body *GetDomainResponseBody) (err error) {
 	if body.IsUpdating == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
 	}
+	if body.IsReconciling == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_reconciling", "body"))
+	}
+	if body.ReconciliationStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconciliation_status", "body"))
+	}
 	if body.IPAllowlist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
@@ -3692,6 +4324,9 @@ func ValidateGetDomainResponseBody(body *GetDomainResponseBody) (err error) {
 		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
+	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -3747,6 +4382,12 @@ func ValidateCreateDomainResponseBody(body *CreateDomainResponseBody) (err error
 	if body.IsUpdating == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
 	}
+	if body.IsReconciling == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_reconciling", "body"))
+	}
+	if body.ReconciliationStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconciliation_status", "body"))
+	}
 	if body.IPAllowlist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
@@ -3775,6 +4416,9 @@ func ValidateCreateDomainResponseBody(body *CreateDomainResponseBody) (err error
 		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
+	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -3806,6 +4450,12 @@ func ValidateUpdateDomainResponseBody(body *UpdateDomainResponseBody) (err error
 	if body.IsUpdating == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
 	}
+	if body.IsReconciling == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_reconciling", "body"))
+	}
+	if body.ReconciliationStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconciliation_status", "body"))
+	}
 	if body.IPAllowlist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
@@ -3834,6 +4484,9 @@ func ValidateUpdateDomainResponseBody(body *UpdateDomainResponseBody) (err error
 		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
+	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -3865,6 +4518,12 @@ func ValidateSetRootMcpEndpointResponseBody(body *SetRootMcpEndpointResponseBody
 	if body.IsUpdating == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
 	}
+	if body.IsReconciling == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_reconciling", "body"))
+	}
+	if body.ReconciliationStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconciliation_status", "body"))
+	}
 	if body.IPAllowlist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
@@ -3894,6 +4553,9 @@ func ValidateSetRootMcpEndpointResponseBody(body *SetRootMcpEndpointResponseBody
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
 	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -3909,6 +4571,74 @@ func ValidateListRootMcpServersResponseBody(body *ListRootMcpServersResponseBody
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateReconcileDomainResponseBody runs the validations defined on
+// ReconcileDomainResponseBody
+func ValidateReconcileDomainResponseBody(body *ReconcileDomainResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Domain == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("domain", "body"))
+	}
+	if body.Verified == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verified", "body"))
+	}
+	if body.Activated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activated", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.IsUpdating == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
+	}
+	if body.IsReconciling == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_reconciling", "body"))
+	}
+	if body.ReconciliationStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconciliation_status", "body"))
+	}
+	if body.IPAllowlist == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
+	}
+	if body.SuggestedRecordType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggested_record_type", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.HealthCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.health_checked_at", *body.HealthCheckedAt, goa.FormatDateTime))
+	}
+	if body.UnhealthySince != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.unhealthy_since", *body.UnhealthySince, goa.FormatDateTime))
+	}
+	if body.CertificateExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.certificate_expires_at", *body.CertificateExpiresAt, goa.FormatDateTime))
+	}
+	if body.RootMcpEndpointID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.root_mcp_endpoint_id", *body.RootMcpEndpointID, goa.FormatUUID))
+	}
+	if body.SuggestedRecordType != nil {
+		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
+		}
+	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -3940,6 +4670,12 @@ func ValidateCheckHealthResponseBody(body *CheckHealthResponseBody) (err error) 
 	if body.IsUpdating == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
 	}
+	if body.IsReconciling == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_reconciling", "body"))
+	}
+	if body.ReconciliationStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconciliation_status", "body"))
+	}
 	if body.IPAllowlist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
@@ -3968,6 +4704,9 @@ func ValidateCheckHealthResponseBody(body *CheckHealthResponseBody) (err error) 
 		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
+	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -5428,6 +6167,246 @@ func ValidateListRootMcpServersGatewayErrorResponseBody(body *ListRootMcpServers
 	return
 }
 
+// ValidateReconcileDomainUnauthorizedResponseBody runs the validations defined
+// on reconcileDomain_unauthorized_response_body
+func ValidateReconcileDomainUnauthorizedResponseBody(body *ReconcileDomainUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReconcileDomainForbiddenResponseBody runs the validations defined on
+// reconcileDomain_forbidden_response_body
+func ValidateReconcileDomainForbiddenResponseBody(body *ReconcileDomainForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReconcileDomainBadRequestResponseBody runs the validations defined
+// on reconcileDomain_bad_request_response_body
+func ValidateReconcileDomainBadRequestResponseBody(body *ReconcileDomainBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReconcileDomainNotFoundResponseBody runs the validations defined on
+// reconcileDomain_not_found_response_body
+func ValidateReconcileDomainNotFoundResponseBody(body *ReconcileDomainNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReconcileDomainConflictResponseBody runs the validations defined on
+// reconcileDomain_conflict_response_body
+func ValidateReconcileDomainConflictResponseBody(body *ReconcileDomainConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReconcileDomainUnsupportedMediaResponseBody runs the validations
+// defined on reconcileDomain_unsupported_media_response_body
+func ValidateReconcileDomainUnsupportedMediaResponseBody(body *ReconcileDomainUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReconcileDomainInvalidResponseBody runs the validations defined on
+// reconcileDomain_invalid_response_body
+func ValidateReconcileDomainInvalidResponseBody(body *ReconcileDomainInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReconcileDomainInvariantViolationResponseBody runs the validations
+// defined on reconcileDomain_invariant_violation_response_body
+func ValidateReconcileDomainInvariantViolationResponseBody(body *ReconcileDomainInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReconcileDomainUnexpectedResponseBody runs the validations defined
+// on reconcileDomain_unexpected_response_body
+func ValidateReconcileDomainUnexpectedResponseBody(body *ReconcileDomainUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReconcileDomainGatewayErrorResponseBody runs the validations defined
+// on reconcileDomain_gateway_error_response_body
+func ValidateReconcileDomainGatewayErrorResponseBody(body *ReconcileDomainGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCheckHealthUnauthorizedResponseBody runs the validations defined on
 // checkHealth_unauthorized_response_body
 func ValidateCheckHealthUnauthorizedResponseBody(body *CheckHealthUnauthorizedResponseBody) (err error) {
@@ -6175,6 +7154,12 @@ func ValidateCustomDomainResponseBody(body *CustomDomainResponseBody) (err error
 	if body.IsUpdating == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
 	}
+	if body.IsReconciling == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_reconciling", "body"))
+	}
+	if body.ReconciliationStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconciliation_status", "body"))
+	}
 	if body.IPAllowlist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
@@ -6203,6 +7188,9 @@ func ValidateCustomDomainResponseBody(body *CustomDomainResponseBody) (err error
 		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
+	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
 	}
 	return
 }

@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import * as React from "react";
 
 /**
- * The area micro-label above every page title ("Observe", "Secure", ...).
+ * The area micro-label above every page title ("Observability", "MCP Gateway", ...).
  * Auto-derives from the current route's sidebar area; pass `area` to override.
  * Renders nothing when no area applies. Exposed on the Page compound as
  * `Page.Eyebrow`; custom page headers import it from here directly so they

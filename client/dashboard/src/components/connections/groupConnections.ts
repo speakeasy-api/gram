@@ -1,3 +1,4 @@
+import type { ResolvedSession } from "@/lib/session-agents";
 import {
   connectionIsInactive,
   connectionLastUsedAt,
@@ -11,19 +12,28 @@ import { subjectLabel } from "@/lib/user-session-status";
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
 import type { UserSessionUpstream } from "@gram/client/models/components/usersessionupstream.js";
+import type { UserSessionWorkload } from "@gram/client/models/components/usersessionworkload.js";
 
 /**
- * What a row is filed under. "Person" is the default because the question an
- * admin arrives with is almost always about someone — who has access, and what
- * can they reach — rather than about a credential.
+ * What a row is filed under. The subject axis is the default because the
+ * question an admin arrives with is almost always about who holds the access
+ * and what they can reach, rather than about a credential.
  */
-export type ConnectionGrouping = "subject" | "provider" | "client";
+export type ConnectionGrouping = "subject" | "issuer" | "provider" | "client";
 
 // "Agent" rather than "client": the OAuth client on the other side of a
 // connection is an agent, and that is what it is called everywhere else in the
 // product. `client` stays as the key, which names the protocol record.
 export const CONNECTION_GROUPING_LABELS: Record<ConnectionGrouping, string> = {
-  subject: "Person",
+  // The subject axis files a session under whoever holds it, and that is not
+  // always a person: API keys, agents, anonymous callers and workloads share
+  // this column. A machine under a heading reading "Person" contradicts the
+  // row's own icon and badge.
+  subject: "Identity",
+  // The Speakeasy MCP server the session was issued through, which is what the rest
+  // of the product means by "MCP server" — distinct from "Provider", the
+  // upstream the server holds tokens for.
+  issuer: "MCP server",
   provider: "Provider",
   client: "Agent",
 };
@@ -49,11 +59,18 @@ export type ConnectionGroup = {
    */
   inactive: boolean;
   /**
-   * Set when the group heading names a person, so the header can show their
-   * face. Absent for provider and client groups, which are not identities and
-   * would read oddly with an initials badge.
+   * Set when the heading names a user or a readable managed agent. Users have
+   * an identity URN/photo; agents have an authorized management destination.
+   * Absent for provider and client groups.
    */
-  identity?: { photoUrl?: string };
+  // `urn` is the subject URN the sessions were filed under, which is also the
+  // identity URN the person's page resolves from.
+  identity?: { photoUrl?: string; urn?: string; agentId?: string };
+  /**
+   * Set when the group heading names a workload rather than a person. Every
+   * session filed under one workload subject describes the same workload.
+   */
+  workload?: UserSessionWorkload;
   /**
    * The registration this group stands for, under client grouping. Carrying the
    * whole record (rather than an id) lets the header offer "revoke
@@ -86,7 +103,7 @@ export type ConnectionGroup = {
 };
 
 /**
- * A session can belong to several provider groups at once — one Gram server can
+ * A session can belong to several provider groups at once — one Speakeasy server can
  * front several upstreams — so grouping by provider intentionally repeats a
  * session under each provider it reaches. Grouping by person or client always
  * files a session exactly once.
@@ -98,6 +115,15 @@ function groupKeysFor(
   switch (grouping) {
     case "subject":
       return [{ key: session.subjectUrn, label: subjectLabel(session) }];
+    case "issuer":
+      return [
+        {
+          key: session.userSessionIssuerId,
+          // The slug is the server's own name; unlike an upstream's it needs
+          // no provider lookup to read.
+          label: session.issuerSlug,
+        },
+      ];
     case "client": {
       const label = session.clientName ?? "Unknown client";
       return [{ key: session.userSessionClientId ?? label, label }];
@@ -129,7 +155,7 @@ function groupKeysFor(
  * the order is stable between refreshes.
  */
 export function groupConnections(
-  sessions: UserSession[],
+  sessions: ResolvedSession[],
   grouping: ConnectionGrouping,
   options: { clients?: UserSessionClient[]; now?: number } = {},
 ): ConnectionGroup[] {
@@ -151,6 +177,7 @@ export function groupConnections(
         lastUsedAt: null,
         inactive: true,
         identity: undefined,
+        workload: undefined,
         client,
         clientId: client.id,
         credentialKind: client.credentialKind,
@@ -173,12 +200,20 @@ export function groupConnections(
           lastUsedAt: null,
           // Narrowed to false by the first active session filed under it.
           inactive: true,
-          // Only the person grouping names an identity. A user subject may
-          // still have no photo, in which case the header falls back to
-          // initials rather than omitting the avatar.
+          // Only subject grouping names an identity. Users fall back to initials;
+          // managed agents link only when the inventory authorized their read.
           identity:
             grouping === "subject" && session.subjectType === "user"
-              ? { photoUrl: session.subjectPhotoUrl ?? undefined }
+              ? {
+                  photoUrl: session.subjectPhotoUrl ?? undefined,
+                  urn: session.subjectUrn,
+                }
+              : grouping === "subject" && session.subjectAgentId
+                ? { agentId: session.subjectAgentId }
+                : undefined,
+          workload:
+            grouping === "subject"
+              ? (session.workload ?? undefined)
               : undefined,
           client: undefined,
           // Both read off the session rather than a registration record, which
@@ -318,4 +353,24 @@ export function groupUpstreams(group: ConnectionGroup): UserSessionUpstream[] {
     }
   }
   return [...byId.values()];
+}
+
+const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
+  { value: "subject", label: CONNECTION_GROUPING_LABELS.subject },
+  { value: "issuer", label: CONNECTION_GROUPING_LABELS.issuer },
+  { value: "provider", label: CONNECTION_GROUPING_LABELS.provider },
+  { value: "client", label: CONNECTION_GROUPING_LABELS.client },
+];
+
+/**
+ * Groupings worth offering for the scope a caller is showing.
+ *
+ * A grouping the caller has already fixed sorts a list of one: the MCP server
+ * detail lists that server's own sessions, so filing them by MCP server draws
+ * a single group and an option that appears to do nothing.
+ */
+export function groupingOptions(
+  hide: ConnectionGrouping[],
+): { value: ConnectionGrouping; label: string }[] {
+  return GROUPING_OPTIONS.filter((option) => !hide.includes(option.value));
 }

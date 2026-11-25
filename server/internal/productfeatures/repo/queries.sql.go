@@ -101,8 +101,8 @@ type EnableFeatureIfNeverConfiguredParams struct {
 	FeatureName    string
 }
 
-// PAYG activation grants purchased capabilities to legacy organizations while
-// preserving a soft-deleted row as an explicit administrator choice.
+// Paid-tier activation grants enterprise-access capabilities while preserving
+// a soft-deleted row as an explicit administrator choice.
 func (q *Queries) EnableFeatureIfNeverConfigured(ctx context.Context, arg EnableFeatureIfNeverConfiguredParams) (int64, error) {
 	result, err := q.db.Exec(ctx, enableFeatureIfNeverConfigured, arg.OrganizationID, arg.FeatureName)
 	if err != nil {
@@ -130,13 +130,19 @@ func (q *Queries) HasDeviceAgentSync(ctx context.Context, organizationID string)
 }
 
 const isFeatureEnabled = `-- name: IsFeatureEnabled :one
-SELECT EXISTS (
-        SELECT 1
-        FROM organization_features
-        WHERE organization_id = $1
-            AND feature_name = $2
-            AND deleted IS FALSE
-) AS enabled
+SELECT COALESCE(EXISTS (
+    SELECT 1 FROM organization_features AS active_feature
+    WHERE active_feature.organization_id = $1
+      AND active_feature.feature_name = $2
+      AND active_feature.deleted IS FALSE
+) OR (
+    $2::text = 'organization_gateway_disabled'
+    AND NOT EXISTS (
+        SELECT 1 FROM organization_features AS configured_feature
+        WHERE configured_feature.organization_id = $1
+          AND configured_feature.feature_name = $2
+    )
+), FALSE)::boolean AS enabled
 `
 
 type IsFeatureEnabledParams struct {
@@ -144,11 +150,54 @@ type IsFeatureEnabledParams struct {
 	FeatureName    string
 }
 
+// The inverted gateway setting defaults to disabled until a soft-deleted
+// flag records an administrator's explicit opt-in.
 func (q *Queries) IsFeatureEnabled(ctx context.Context, arg IsFeatureEnabledParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isFeatureEnabled, arg.OrganizationID, arg.FeatureName)
 	var enabled bool
 	err := row.Scan(&enabled)
 	return enabled, err
+}
+
+const listProOrganizations = `-- name: ListProOrganizations :many
+SELECT id
+FROM organization_metadata
+WHERE gram_account_type = 'pro'
+ORDER BY id
+`
+
+func (q *Queries) ListProOrganizations(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listProOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockAndCheckProOrganization = `-- name: LockAndCheckProOrganization :one
+SELECT gram_account_type = 'pro' AS is_pro
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockAndCheckProOrganization(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, lockAndCheckProOrganization, organizationID)
+	var is_pro bool
+	err := row.Scan(&is_pro)
+	return is_pro, err
 }
 
 const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one

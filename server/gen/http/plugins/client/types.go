@@ -21,6 +21,13 @@ type CreatePluginRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Defaults to true. When false, the plugin stays out of the marketplace until
+	// someone syncs it by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Defaults to false.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 }
 
 // UpdatePluginRequestBody is the type of the "plugins" service "updatePlugin"
@@ -33,20 +40,32 @@ type UpdatePluginRequestBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Updated description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Omit to keep the current setting. Turning it off is refused while the plugin
+	// has changes that haven't been synced, and the slug can't change while it is
+	// off.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Omit to keep the current setting. Turning it on adds the MCP
+	// servers its assigned roles can use now, except ones an admin removed before.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 }
 
 // AddPluginServerRequestBody is the type of the "plugins" service
 // "addPluginServer" endpoint HTTP request body.
 type AddPluginServerRequestBody struct {
 	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
-	// Gram toolset ID for a toolset-backed MCP server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
+	// meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may
+	// both be sent when equal.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Speakeasy MCP server ID. Provide exactly one backend ID; a hosted MCP
+	// server's toolset_id and mcp_server_id may both be sent when equal.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Display name for the server. Defaults to the backing toolset or mcp_server
-	// name when omitted.
+	// MCP gateway ID. Provide exactly one backend ID.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Display name for the server. Defaults to the backing server name when
+	// omitted.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	Policy      string  `form:"policy" json:"policy" xml:"policy"`
 	SortOrder   int32   `form:"sort_order" json:"sort_order" xml:"sort_order"`
@@ -68,6 +87,17 @@ type SetPluginAssignmentsRequestBody struct {
 	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
 	// List of principal URNs to assign.
 	PrincipalUrns []string `form:"principal_urns" json:"principal_urns" xml:"principal_urns"`
+	// Install mode per principal URN in principal_urns. A principal missing from
+	// this map keeps its current mode, or gets `default` when it is newly assigned.
+	InstallModes map[string]string `form:"install_modes,omitempty" json:"install_modes,omitempty" xml:"install_modes,omitempty"`
+}
+
+// RotateObservabilityCredentialRequestBody is the type of the "plugins"
+// service "rotateObservabilityCredential" endpoint HTTP request body.
+type RotateObservabilityCredentialRequestBody struct {
+	// What happens to existing observability plugin hooks keys after the
+	// replacement is minted.
+	PreviousKeyFate string `form:"previous_key_fate" json:"previous_key_fate" xml:"previous_key_fate"`
 }
 
 // PublishPluginsRequestBody is the type of the "plugins" service
@@ -81,9 +111,31 @@ type PublishPluginsRequestBody struct {
 // "updateMarketplaceSettings" endpoint HTTP request body.
 type UpdateMarketplaceSettingsRequestBody struct {
 	// Override for the marketplace name (the identifier users type as
-	// `<plugin>@<marketplace>`). Pass an empty string or omit to clear the
-	// override and fall back to the default.
+	// `<plugin>@<marketplace>`). Pass an empty string to clear the override and
+	// fall back to the default. Omit to leave the current override unchanged.
 	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Omit to leave the current
+	// value unchanged.
+	ObservabilityEnabled *bool `form:"observability_enabled,omitempty" json:"observability_enabled,omitempty" xml:"observability_enabled,omitempty"`
+}
+
+// ListDistributionPluginsResponseBody is the type of the "plugins" service
+// "listDistributionPlugins" endpoint HTTP response body.
+type ListDistributionPluginsResponseBody struct {
+	Plugins []*DistributionPluginResponseBody `form:"plugins,omitempty" json:"plugins,omitempty" xml:"plugins,omitempty"`
+}
+
+// GetDistributionPluginResponseBody is the type of the "plugins" service
+// "getDistributionPlugin" endpoint HTTP response body.
+type GetDistributionPluginResponseBody struct {
+	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name        *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	IsDefault   *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -106,6 +158,16 @@ type GetPluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -136,6 +198,16 @@ type CreatePluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -166,6 +238,16 @@ type UpdatePluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -188,12 +270,16 @@ type UpdatePluginResponseBody struct {
 type AddPluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server
+	// sets toolset_id and mcp_server_id to the same id; otherwise exactly one
+	// backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP
+	// server sets toolset_id and mcp_server_id to the same id; otherwise exactly
+	// one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// MCP gateway ID. When set, no other backend ID is set.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -208,12 +294,16 @@ type AddPluginServerResponseBody struct {
 type UpdatePluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server
+	// sets toolset_id and mcp_server_id to the same id; otherwise exactly one
+	// backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP
+	// server sets toolset_id and mcp_server_id to the same id; otherwise exactly
+	// one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// MCP gateway ID. When set, no other backend ID is set.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -235,6 +325,35 @@ type SetPluginAssignmentsResponseBody struct {
 type ListAudiencesResponseBody struct {
 	// Audiences that can be assigned to plugins.
 	Audiences []*PluginAudienceResponseBody `form:"audiences,omitempty" json:"audiences,omitempty" xml:"audiences,omitempty"`
+}
+
+// RotateObservabilityCredentialResponseBody is the type of the "plugins"
+// service "rotateObservabilityCredential" endpoint HTTP response body.
+type RotateObservabilityCredentialResponseBody struct {
+	// The newly minted hooks-scoped API key. Returned only on this response.
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// The recognizable prefix of the new key.
+	KeyPrefix *string `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
+	// What happened to previous observability plugin hooks keys.
+	PreviousKeyFate *string `form:"previous_key_fate,omitempty" json:"previous_key_fate,omitempty" xml:"previous_key_fate,omitempty"`
+	// Previous observability plugin hooks keys that were revoked or scheduled to
+	// expire.
+	PreviousKeys []*RotatedObservabilityKeyResponseBody `form:"previous_keys,omitempty" json:"previous_keys,omitempty" xml:"previous_keys,omitempty"`
+	// The latest deadline among previous keys when previous_key_fate is grace.
+	// Individual keys can expire earlier, so this is an upper bound rather than a
+	// shared deadline; per-key deadlines are on previous_keys.
+	PreviousKeysExpireAt *string `form:"previous_keys_expire_at,omitempty" json:"previous_keys_expire_at,omitempty" xml:"previous_keys_expire_at,omitempty"`
+	// Whether the chosen fate was applied to the previous keys. False means the
+	// replacement was created and published but retiring the previous keys failed,
+	// so they are still valid and the rotation should be retried.
+	PreviousKeysRetired *bool `form:"previous_keys_retired,omitempty" json:"previous_keys_retired,omitempty" xml:"previous_keys_retired,omitempty"`
+	// Whether the published marketplace was updated with the new credential.
+	MarketplaceRepublished *bool `form:"marketplace_republished,omitempty" json:"marketplace_republished,omitempty" xml:"marketplace_republished,omitempty"`
+	// True when a marketplace exists but could not be updated yet (for example the
+	// organization is not approved for the latest hooks version, or GitHub
+	// publishing is unavailable). Existing marketplace installs keep the previous
+	// credential until the marketplace is republished.
+	MarketplaceUpdateDeferred *bool `form:"marketplace_update_deferred,omitempty" json:"marketplace_update_deferred,omitempty" xml:"marketplace_update_deferred,omitempty"`
 }
 
 // GetPublishStatusResponseBody is the type of the "plugins" service
@@ -261,14 +380,37 @@ type GetPublishStatusResponseBody struct {
 	// Slug of the generated Codex observability plugin in the published
 	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
 	CodexObservabilityPlugin *string `form:"codex_observability_plugin,omitempty" json:"codex_observability_plugin,omitempty" xml:"codex_observability_plugin,omitempty"`
+	// Slug of the generated Cursor observability plugin in the published
+	// marketplace — the value to mark required in Cursor's team marketplace.
+	// Present when connected.
+	CursorObservabilityPlugin *string `form:"cursor_observability_plugin,omitempty" json:"cursor_observability_plugin,omitempty" xml:"cursor_observability_plugin,omitempty"`
+	// Whether the Mistral Vibe observability plugin ZIP can be downloaded right
+	// now: the pinned hooks release's relay carries the vibe provider and the org
+	// name satisfies the Agent Plugins 1.0 name schema. Present (true or false)
+	// when connected and observability is enabled for the project.
+	VibeObservabilityAvailable *bool `form:"vibe_observability_available,omitempty" json:"vibe_observability_available,omitempty" xml:"vibe_observability_available,omitempty"`
+	// Slug of the generated Mistral Vibe observability plugin's install directory
+	// (`~/.vibe/plugins/<slug>`) — present only when connected, observability is
+	// enabled, the vibe package is available, and the stored published hooks
+	// version equals the current generator version, i.e. the published marketplace
+	// repo actually carries the package. The marketplace repo directory is
+	// `<slug>-vibe`.
+	VibeObservabilityPlugin *string `form:"vibe_observability_plugin,omitempty" json:"vibe_observability_plugin,omitempty" xml:"vibe_observability_plugin,omitempty"`
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
 	HasCollaborators *bool `form:"has_collaborators,omitempty" json:"has_collaborators,omitempty" xml:"has_collaborators,omitempty"`
 	// Whether the project's current plugin state matches what was last published
-	// to GitHub. Absent when the project is not connected, or when the connection
-	// predates content fingerprinting (freshness can't be determined).
+	// to GitHub, including changes of plugins whose auto sync is off that wait for
+	// a manual sync. Absent when the project is not connected, or when the
+	// connection predates content fingerprinting (freshness can't be determined).
 	UpToDate *bool `form:"up_to_date,omitempty" json:"up_to_date,omitempty" xml:"up_to_date,omitempty"`
+	// Whether an automatic publish would change the published marketplace. False
+	// while the only pending changes belong to plugins whose auto sync is off,
+	// which publish only on a manual sync. Absent when up_to_date is absent.
+	AutomaticSyncPending *bool `form:"automatic_sync_pending,omitempty" json:"automatic_sync_pending,omitempty" xml:"automatic_sync_pending,omitempty"`
+	// Each live plugin's own freshness. Absent when up_to_date is absent.
+	Plugins []*PluginPublishStatusResponseBody `form:"plugins,omitempty" json:"plugins,omitempty" xml:"plugins,omitempty"`
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string `form:"last_published_at,omitempty" json:"last_published_at,omitempty" xml:"last_published_at,omitempty"`
@@ -297,6 +439,9 @@ type GetMarketplaceSettingsResponseBody struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName *string `form:"effective_name,omitempty" json:"effective_name,omitempty" xml:"effective_name,omitempty"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled *bool `form:"observability_enabled,omitempty" json:"observability_enabled,omitempty" xml:"observability_enabled,omitempty"`
 }
 
 // UpdateMarketplaceSettingsResponseBody is the type of the "plugins" service
@@ -312,6 +457,424 @@ type UpdateMarketplaceSettingsResponseBody struct {
 	// organization is not approved for the latest hooks version; it will update
 	// automatically once the organization is rolled forward.
 	HooksUpdateDeferred *bool `form:"hooks_update_deferred,omitempty" json:"hooks_update_deferred,omitempty" xml:"hooks_update_deferred,omitempty"`
+}
+
+// ListDistributionPluginsUnauthorizedResponseBody is the type of the "plugins"
+// service "listDistributionPlugins" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListDistributionPluginsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDistributionPluginsForbiddenResponseBody is the type of the "plugins"
+// service "listDistributionPlugins" endpoint HTTP response body for the
+// "forbidden" error.
+type ListDistributionPluginsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDistributionPluginsBadRequestResponseBody is the type of the "plugins"
+// service "listDistributionPlugins" endpoint HTTP response body for the
+// "bad_request" error.
+type ListDistributionPluginsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDistributionPluginsNotFoundResponseBody is the type of the "plugins"
+// service "listDistributionPlugins" endpoint HTTP response body for the
+// "not_found" error.
+type ListDistributionPluginsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDistributionPluginsConflictResponseBody is the type of the "plugins"
+// service "listDistributionPlugins" endpoint HTTP response body for the
+// "conflict" error.
+type ListDistributionPluginsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDistributionPluginsUnsupportedMediaResponseBody is the type of the
+// "plugins" service "listDistributionPlugins" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListDistributionPluginsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDistributionPluginsInvalidResponseBody is the type of the "plugins"
+// service "listDistributionPlugins" endpoint HTTP response body for the
+// "invalid" error.
+type ListDistributionPluginsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDistributionPluginsInvariantViolationResponseBody is the type of the
+// "plugins" service "listDistributionPlugins" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListDistributionPluginsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDistributionPluginsUnexpectedResponseBody is the type of the "plugins"
+// service "listDistributionPlugins" endpoint HTTP response body for the
+// "unexpected" error.
+type ListDistributionPluginsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDistributionPluginsGatewayErrorResponseBody is the type of the "plugins"
+// service "listDistributionPlugins" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDistributionPluginsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDistributionPluginsUnavailableResponseBody is the type of the "plugins"
+// service "listDistributionPlugins" endpoint HTTP response body for the
+// "unavailable" error.
+type ListDistributionPluginsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDistributionPluginUnauthorizedResponseBody is the type of the "plugins"
+// service "getDistributionPlugin" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetDistributionPluginUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDistributionPluginForbiddenResponseBody is the type of the "plugins"
+// service "getDistributionPlugin" endpoint HTTP response body for the
+// "forbidden" error.
+type GetDistributionPluginForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDistributionPluginBadRequestResponseBody is the type of the "plugins"
+// service "getDistributionPlugin" endpoint HTTP response body for the
+// "bad_request" error.
+type GetDistributionPluginBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDistributionPluginNotFoundResponseBody is the type of the "plugins"
+// service "getDistributionPlugin" endpoint HTTP response body for the
+// "not_found" error.
+type GetDistributionPluginNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDistributionPluginConflictResponseBody is the type of the "plugins"
+// service "getDistributionPlugin" endpoint HTTP response body for the
+// "conflict" error.
+type GetDistributionPluginConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDistributionPluginUnsupportedMediaResponseBody is the type of the
+// "plugins" service "getDistributionPlugin" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetDistributionPluginUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDistributionPluginInvalidResponseBody is the type of the "plugins"
+// service "getDistributionPlugin" endpoint HTTP response body for the
+// "invalid" error.
+type GetDistributionPluginInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDistributionPluginInvariantViolationResponseBody is the type of the
+// "plugins" service "getDistributionPlugin" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetDistributionPluginInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDistributionPluginUnexpectedResponseBody is the type of the "plugins"
+// service "getDistributionPlugin" endpoint HTTP response body for the
+// "unexpected" error.
+type GetDistributionPluginUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDistributionPluginGatewayErrorResponseBody is the type of the "plugins"
+// service "getDistributionPlugin" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetDistributionPluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDistributionPluginUnavailableResponseBody is the type of the "plugins"
+// service "getDistributionPlugin" endpoint HTTP response body for the
+// "unavailable" error.
+type GetDistributionPluginUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
 // ListPluginsUnauthorizedResponseBody is the type of the "plugins" service
@@ -495,6 +1058,24 @@ type ListPluginsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListPluginsUnavailableResponseBody is the type of the "plugins" service
+// "listPlugins" endpoint HTTP response body for the "unavailable" error.
+type ListPluginsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetPluginUnauthorizedResponseBody is the type of the "plugins" service
 // "getPlugin" endpoint HTTP response body for the "unauthorized" error.
 type GetPluginUnauthorizedResponseBody struct {
@@ -660,6 +1241,24 @@ type GetPluginUnexpectedResponseBody struct {
 // GetPluginGatewayErrorResponseBody is the type of the "plugins" service
 // "getPlugin" endpoint HTTP response body for the "gateway_error" error.
 type GetPluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPluginUnavailableResponseBody is the type of the "plugins" service
+// "getPlugin" endpoint HTTP response body for the "unavailable" error.
+type GetPluginUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -857,6 +1456,43 @@ type CreatePluginGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreatePluginUnavailableResponseBody is the type of the "plugins" service
+// "createPlugin" endpoint HTTP response body for the "unavailable" error.
+type CreatePluginUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePluginFailedPreconditionResponseBody is the type of the "plugins"
+// service "updatePlugin" endpoint HTTP response body for the
+// "failed_precondition" error.
+type UpdatePluginFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UpdatePluginUnauthorizedResponseBody is the type of the "plugins" service
 // "updatePlugin" endpoint HTTP response body for the "unauthorized" error.
 type UpdatePluginUnauthorizedResponseBody struct {
@@ -1024,6 +1660,24 @@ type UpdatePluginUnexpectedResponseBody struct {
 // UpdatePluginGatewayErrorResponseBody is the type of the "plugins" service
 // "updatePlugin" endpoint HTTP response body for the "gateway_error" error.
 type UpdatePluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePluginUnavailableResponseBody is the type of the "plugins" service
+// "updatePlugin" endpoint HTTP response body for the "unavailable" error.
+type UpdatePluginUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1221,6 +1875,24 @@ type DeletePluginGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DeletePluginUnavailableResponseBody is the type of the "plugins" service
+// "deletePlugin" endpoint HTTP response body for the "unavailable" error.
+type DeletePluginUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AddPluginServerUnauthorizedResponseBody is the type of the "plugins" service
 // "addPluginServer" endpoint HTTP response body for the "unauthorized" error.
 type AddPluginServerUnauthorizedResponseBody struct {
@@ -1388,6 +2060,24 @@ type AddPluginServerUnexpectedResponseBody struct {
 // AddPluginServerGatewayErrorResponseBody is the type of the "plugins" service
 // "addPluginServer" endpoint HTTP response body for the "gateway_error" error.
 type AddPluginServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AddPluginServerUnavailableResponseBody is the type of the "plugins" service
+// "addPluginServer" endpoint HTTP response body for the "unavailable" error.
+type AddPluginServerUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1589,6 +2279,25 @@ type UpdatePluginServerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpdatePluginServerUnavailableResponseBody is the type of the "plugins"
+// service "updatePluginServer" endpoint HTTP response body for the
+// "unavailable" error.
+type UpdatePluginServerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RemovePluginServerUnauthorizedResponseBody is the type of the "plugins"
 // service "removePluginServer" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1760,6 +2469,25 @@ type RemovePluginServerUnexpectedResponseBody struct {
 // service "removePluginServer" endpoint HTTP response body for the
 // "gateway_error" error.
 type RemovePluginServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemovePluginServerUnavailableResponseBody is the type of the "plugins"
+// service "removePluginServer" endpoint HTTP response body for the
+// "unavailable" error.
+type RemovePluginServerUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1964,6 +2692,25 @@ type SetPluginAssignmentsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SetPluginAssignmentsUnavailableResponseBody is the type of the "plugins"
+// service "setPluginAssignments" endpoint HTTP response body for the
+// "unavailable" error.
+type SetPluginAssignmentsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListAudiencesUnauthorizedResponseBody is the type of the "plugins" service
 // "listAudiences" endpoint HTTP response body for the "unauthorized" error.
 type ListAudiencesUnauthorizedResponseBody struct {
@@ -2131,6 +2878,24 @@ type ListAudiencesUnexpectedResponseBody struct {
 // ListAudiencesGatewayErrorResponseBody is the type of the "plugins" service
 // "listAudiences" endpoint HTTP response body for the "gateway_error" error.
 type ListAudiencesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListAudiencesUnavailableResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "unavailable" error.
+type ListAudiencesUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2355,6 +3120,234 @@ type DownloadPluginPackageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DownloadPluginPackageUnavailableResponseBody is the type of the "plugins"
+// service "downloadPluginPackage" endpoint HTTP response body for the
+// "unavailable" error.
+type DownloadPluginPackageUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialUnauthorizedResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unauthorized" error.
+type RotateObservabilityCredentialUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialForbiddenResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "forbidden" error.
+type RotateObservabilityCredentialForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialBadRequestResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "bad_request" error.
+type RotateObservabilityCredentialBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialNotFoundResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "not_found" error.
+type RotateObservabilityCredentialNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialConflictResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "conflict" error.
+type RotateObservabilityCredentialConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialUnsupportedMediaResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unsupported_media" error.
+type RotateObservabilityCredentialUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialInvalidResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "invalid" error.
+type RotateObservabilityCredentialInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialInvariantViolationResponseBody is the type of
+// the "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "invariant_violation" error.
+type RotateObservabilityCredentialInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialUnexpectedResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unexpected" error.
+type RotateObservabilityCredentialUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialGatewayErrorResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "gateway_error" error.
+type RotateObservabilityCredentialGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialUnavailableResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unavailable" error.
+type RotateObservabilityCredentialUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DownloadObservabilityPluginUnauthorizedResponseBody is the type of the
 // "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -2530,6 +3523,25 @@ type DownloadObservabilityPluginUnexpectedResponseBody struct {
 // "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
 // for the "gateway_error" error.
 type DownloadObservabilityPluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadObservabilityPluginUnavailableResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "unavailable" error.
+type DownloadObservabilityPluginUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2735,6 +3747,25 @@ type DownloadCodexInstallScriptGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DownloadCodexInstallScriptUnavailableResponseBody is the type of the
+// "plugins" service "downloadCodexInstallScript" endpoint HTTP response body
+// for the "unavailable" error.
+type DownloadCodexInstallScriptUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetPublishStatusUnauthorizedResponseBody is the type of the "plugins"
 // service "getPublishStatus" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2919,6 +3950,24 @@ type GetPublishStatusGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetPublishStatusUnavailableResponseBody is the type of the "plugins" service
+// "getPublishStatus" endpoint HTTP response body for the "unavailable" error.
+type GetPublishStatusUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // PublishPluginsUnauthorizedResponseBody is the type of the "plugins" service
 // "publishPlugins" endpoint HTTP response body for the "unauthorized" error.
 type PublishPluginsUnauthorizedResponseBody struct {
@@ -3086,6 +4135,24 @@ type PublishPluginsUnexpectedResponseBody struct {
 // PublishPluginsGatewayErrorResponseBody is the type of the "plugins" service
 // "publishPlugins" endpoint HTTP response body for the "gateway_error" error.
 type PublishPluginsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PublishPluginsUnavailableResponseBody is the type of the "plugins" service
+// "publishPlugins" endpoint HTTP response body for the "unavailable" error.
+type PublishPluginsUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3291,6 +4358,25 @@ type GetMarketplaceSettingsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetMarketplaceSettingsUnavailableResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "unavailable" error.
+type GetMarketplaceSettingsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UpdateMarketplaceSettingsUnauthorizedResponseBody is the type of the
 // "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -3481,6 +4567,37 @@ type UpdateMarketplaceSettingsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpdateMarketplaceSettingsUnavailableResponseBody is the type of the
+// "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
+// for the "unavailable" error.
+type UpdateMarketplaceSettingsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DistributionPluginResponseBody is used to define fields on response body
+// types.
+type DistributionPluginResponseBody struct {
+	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name        *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	IsDefault   *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+}
+
 // PluginResponseBody is used to define fields on response body types.
 type PluginResponseBody struct {
 	// Unique plugin identifier.
@@ -3493,6 +4610,16 @@ type PluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -3514,12 +4641,16 @@ type PluginResponseBody struct {
 type PluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server
+	// sets toolset_id and mcp_server_id to the same id; otherwise exactly one
+	// backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP
+	// server sets toolset_id and mcp_server_id to the same id; otherwise exactly
+	// one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// MCP gateway ID. When set, no other backend ID is set.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -3535,7 +4666,11 @@ type PluginAssignmentResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
-	CreatedAt    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// How the device agent installs the plugin for this audience. `required`:
+	// installed, and the user can't turn it off. `default`: installed, and the
+	// user can turn it off. `available`: not installed until the user turns it on.
+	InstallMode *string `form:"install_mode,omitempty" json:"install_mode,omitempty" xml:"install_mode,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
 // PluginAudienceResponseBody is used to define fields on response body types.
@@ -3550,6 +4685,36 @@ type PluginAudienceResponseBody struct {
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 }
 
+// RotatedObservabilityKeyResponseBody is used to define fields on response
+// body types.
+type RotatedObservabilityKeyResponseBody struct {
+	// The API key ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The API key name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The recognizable prefix of the previous key.
+	KeyPrefix *string `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
+	// When this key stops authenticating. A key already inside a shorter grace
+	// window keeps its earlier deadline, so this can precede the rotation's own
+	// deadline. Absent when the key was revoked immediately.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
+// PluginPublishStatusResponseBody is used to define fields on response body
+// types.
+type PluginPublishStatusResponseBody struct {
+	// The plugin's slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Whether the plugin's published package is current. With auto sync on: an
+	// automatic publish would push nothing new for it, its package and the
+	// marketplace manifests alike. With auto sync off: its package matches what it
+	// was last published with.
+	UpToDate *bool `form:"up_to_date,omitempty" json:"up_to_date,omitempty" xml:"up_to_date,omitempty"`
+	// Whether the plugin's auto sync is off and it has changes, or has never been
+	// published, so only a manual sync publishes it.
+	AwaitingManualSync *bool `form:"awaiting_manual_sync,omitempty" json:"awaiting_manual_sync,omitempty" xml:"awaiting_manual_sync,omitempty"`
+}
+
 // MarketplaceSettingsResultResponseBody is used to define fields on response
 // body types.
 type MarketplaceSettingsResultResponseBody struct {
@@ -3561,15 +4726,20 @@ type MarketplaceSettingsResultResponseBody struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName *string `form:"effective_name,omitempty" json:"effective_name,omitempty" xml:"effective_name,omitempty"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled *bool `form:"observability_enabled,omitempty" json:"observability_enabled,omitempty" xml:"observability_enabled,omitempty"`
 }
 
 // NewCreatePluginRequestBody builds the HTTP request body from the payload of
 // the "createPlugin" endpoint of the "plugins" service.
 func NewCreatePluginRequestBody(p *plugins.CreatePluginPayload) *CreatePluginRequestBody {
 	body := &CreatePluginRequestBody{
-		Name:        p.Name,
-		Slug:        p.Slug,
-		Description: p.Description,
+		Name:                  p.Name,
+		Slug:                  p.Slug,
+		Description:           p.Description,
+		AutoSyncEnabled:       p.AutoSyncEnabled,
+		AutoAddServersEnabled: p.AutoAddServersEnabled,
 	}
 	return body
 }
@@ -3578,10 +4748,12 @@ func NewCreatePluginRequestBody(p *plugins.CreatePluginPayload) *CreatePluginReq
 // the "updatePlugin" endpoint of the "plugins" service.
 func NewUpdatePluginRequestBody(p *plugins.UpdatePluginPayload) *UpdatePluginRequestBody {
 	body := &UpdatePluginRequestBody{
-		ID:          p.ID,
-		Name:        p.Name,
-		Slug:        p.Slug,
-		Description: p.Description,
+		ID:                    p.ID,
+		Name:                  p.Name,
+		Slug:                  p.Slug,
+		Description:           p.Description,
+		AutoSyncEnabled:       p.AutoSyncEnabled,
+		AutoAddServersEnabled: p.AutoAddServersEnabled,
 	}
 	return body
 }
@@ -3590,12 +4762,13 @@ func NewUpdatePluginRequestBody(p *plugins.UpdatePluginPayload) *UpdatePluginReq
 // of the "addPluginServer" endpoint of the "plugins" service.
 func NewAddPluginServerRequestBody(p *plugins.AddPluginServerPayload) *AddPluginServerRequestBody {
 	body := &AddPluginServerRequestBody{
-		PluginID:    p.PluginID,
-		ToolsetID:   p.ToolsetID,
-		McpServerID: p.McpServerID,
-		DisplayName: p.DisplayName,
-		Policy:      p.Policy,
-		SortOrder:   p.SortOrder,
+		PluginID:        p.PluginID,
+		ToolsetID:       p.ToolsetID,
+		McpServerID:     p.McpServerID,
+		MetaMcpServerID: p.MetaMcpServerID,
+		DisplayName:     p.DisplayName,
+		Policy:          p.Policy,
+		SortOrder:       p.SortOrder,
 	}
 	{
 		var zero string
@@ -3651,6 +4824,24 @@ func NewSetPluginAssignmentsRequestBody(p *plugins.SetPluginAssignmentsPayload) 
 	} else {
 		body.PrincipalUrns = []string{}
 	}
+	if p.InstallModes != nil {
+		body.InstallModes = make(map[string]string, len(p.InstallModes))
+		for key, val := range p.InstallModes {
+			tk := key
+			tv := val
+			body.InstallModes[tk] = tv
+		}
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialRequestBody builds the HTTP request body
+// from the payload of the "rotateObservabilityCredential" endpoint of the
+// "plugins" service.
+func NewRotateObservabilityCredentialRequestBody(p *plugins.RotateObservabilityCredentialPayload) *RotateObservabilityCredentialRequestBody {
+	body := &RotateObservabilityCredentialRequestBody{
+		PreviousKeyFate: p.PreviousKeyFate,
+	}
 	return body
 }
 
@@ -3672,9 +4863,370 @@ func NewPublishPluginsRequestBody(p *plugins.PublishPluginsPayload) *PublishPlug
 // service.
 func NewUpdateMarketplaceSettingsRequestBody(p *plugins.UpdateMarketplaceSettingsPayload) *UpdateMarketplaceSettingsRequestBody {
 	body := &UpdateMarketplaceSettingsRequestBody{
-		MarketplaceName: p.MarketplaceName,
+		MarketplaceName:      p.MarketplaceName,
+		ObservabilityEnabled: p.ObservabilityEnabled,
 	}
 	return body
+}
+
+// NewListDistributionPluginsResultOK builds a "plugins" service
+// "listDistributionPlugins" endpoint result from a HTTP "OK" response.
+func NewListDistributionPluginsResultOK(body *ListDistributionPluginsResponseBody) *plugins.ListDistributionPluginsResult {
+	v := &plugins.ListDistributionPluginsResult{}
+	v.Plugins = make([]*plugins.DistributionPlugin, len(body.Plugins))
+	for i, val := range body.Plugins {
+		if val == nil {
+			v.Plugins[i] = nil
+			continue
+		}
+		v.Plugins[i] = unmarshalDistributionPluginResponseBodyToPluginsDistributionPlugin(val)
+	}
+
+	return v
+}
+
+// NewListDistributionPluginsUnauthorized builds a plugins service
+// listDistributionPlugins endpoint unauthorized error.
+func NewListDistributionPluginsUnauthorized(body *ListDistributionPluginsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDistributionPluginsForbidden builds a plugins service
+// listDistributionPlugins endpoint forbidden error.
+func NewListDistributionPluginsForbidden(body *ListDistributionPluginsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDistributionPluginsBadRequest builds a plugins service
+// listDistributionPlugins endpoint bad_request error.
+func NewListDistributionPluginsBadRequest(body *ListDistributionPluginsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDistributionPluginsNotFound builds a plugins service
+// listDistributionPlugins endpoint not_found error.
+func NewListDistributionPluginsNotFound(body *ListDistributionPluginsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDistributionPluginsConflict builds a plugins service
+// listDistributionPlugins endpoint conflict error.
+func NewListDistributionPluginsConflict(body *ListDistributionPluginsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDistributionPluginsUnsupportedMedia builds a plugins service
+// listDistributionPlugins endpoint unsupported_media error.
+func NewListDistributionPluginsUnsupportedMedia(body *ListDistributionPluginsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDistributionPluginsInvalid builds a plugins service
+// listDistributionPlugins endpoint invalid error.
+func NewListDistributionPluginsInvalid(body *ListDistributionPluginsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDistributionPluginsInvariantViolation builds a plugins service
+// listDistributionPlugins endpoint invariant_violation error.
+func NewListDistributionPluginsInvariantViolation(body *ListDistributionPluginsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDistributionPluginsUnexpected builds a plugins service
+// listDistributionPlugins endpoint unexpected error.
+func NewListDistributionPluginsUnexpected(body *ListDistributionPluginsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDistributionPluginsGatewayError builds a plugins service
+// listDistributionPlugins endpoint gateway_error error.
+func NewListDistributionPluginsGatewayError(body *ListDistributionPluginsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDistributionPluginsUnavailable builds a plugins service
+// listDistributionPlugins endpoint unavailable error.
+func NewListDistributionPluginsUnavailable(body *ListDistributionPluginsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginDistributionPluginOK builds a "plugins" service
+// "getDistributionPlugin" endpoint result from a HTTP "OK" response.
+func NewGetDistributionPluginDistributionPluginOK(body *GetDistributionPluginResponseBody) *plugins.DistributionPlugin {
+	v := &plugins.DistributionPlugin{
+		ID:          *body.ID,
+		Name:        *body.Name,
+		Description: body.Description,
+		AutoCreated: *body.AutoCreated,
+		IsDefault:   *body.IsDefault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginUnauthorized builds a plugins service
+// getDistributionPlugin endpoint unauthorized error.
+func NewGetDistributionPluginUnauthorized(body *GetDistributionPluginUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginForbidden builds a plugins service
+// getDistributionPlugin endpoint forbidden error.
+func NewGetDistributionPluginForbidden(body *GetDistributionPluginForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginBadRequest builds a plugins service
+// getDistributionPlugin endpoint bad_request error.
+func NewGetDistributionPluginBadRequest(body *GetDistributionPluginBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginNotFound builds a plugins service
+// getDistributionPlugin endpoint not_found error.
+func NewGetDistributionPluginNotFound(body *GetDistributionPluginNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginConflict builds a plugins service
+// getDistributionPlugin endpoint conflict error.
+func NewGetDistributionPluginConflict(body *GetDistributionPluginConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginUnsupportedMedia builds a plugins service
+// getDistributionPlugin endpoint unsupported_media error.
+func NewGetDistributionPluginUnsupportedMedia(body *GetDistributionPluginUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginInvalid builds a plugins service
+// getDistributionPlugin endpoint invalid error.
+func NewGetDistributionPluginInvalid(body *GetDistributionPluginInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginInvariantViolation builds a plugins service
+// getDistributionPlugin endpoint invariant_violation error.
+func NewGetDistributionPluginInvariantViolation(body *GetDistributionPluginInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginUnexpected builds a plugins service
+// getDistributionPlugin endpoint unexpected error.
+func NewGetDistributionPluginUnexpected(body *GetDistributionPluginUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginGatewayError builds a plugins service
+// getDistributionPlugin endpoint gateway_error error.
+func NewGetDistributionPluginGatewayError(body *GetDistributionPluginGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDistributionPluginUnavailable builds a plugins service
+// getDistributionPlugin endpoint unavailable error.
+func NewGetDistributionPluginUnavailable(body *GetDistributionPluginUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
 }
 
 // NewListPluginsResultOK builds a "plugins" service "listPlugins" endpoint
@@ -3843,6 +5395,21 @@ func NewListPluginsGatewayError(body *ListPluginsGatewayErrorResponseBody) *goa.
 	return v
 }
 
+// NewListPluginsUnavailable builds a plugins service listPlugins endpoint
+// unavailable error.
+func NewListPluginsUnavailable(body *ListPluginsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetPluginPluginOK builds a "plugins" service "getPlugin" endpoint result
 // from a HTTP "OK" response.
 func NewGetPluginPluginOK(body *GetPluginResponseBody) *plugins.Plugin {
@@ -3852,6 +5419,9 @@ func NewGetPluginPluginOK(body *GetPluginResponseBody) *plugins.Plugin {
 		Slug:                     *body.Slug,
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
+		AutoCreated:              *body.AutoCreated,
+		AutoSyncEnabled:          *body.AutoSyncEnabled,
+		AutoAddServersEnabled:    *body.AutoAddServersEnabled,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -4033,6 +5603,21 @@ func NewGetPluginGatewayError(body *GetPluginGatewayErrorResponseBody) *goa.Serv
 	return v
 }
 
+// NewGetPluginUnavailable builds a plugins service getPlugin endpoint
+// unavailable error.
+func NewGetPluginUnavailable(body *GetPluginUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCreatePluginPluginCreated builds a "plugins" service "createPlugin"
 // endpoint result from a HTTP "Created" response.
 func NewCreatePluginPluginCreated(body *CreatePluginResponseBody) *plugins.Plugin {
@@ -4042,6 +5627,9 @@ func NewCreatePluginPluginCreated(body *CreatePluginResponseBody) *plugins.Plugi
 		Slug:                     *body.Slug,
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
+		AutoCreated:              *body.AutoCreated,
+		AutoSyncEnabled:          *body.AutoSyncEnabled,
+		AutoAddServersEnabled:    *body.AutoAddServersEnabled,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -4223,6 +5811,21 @@ func NewCreatePluginGatewayError(body *CreatePluginGatewayErrorResponseBody) *go
 	return v
 }
 
+// NewCreatePluginUnavailable builds a plugins service createPlugin endpoint
+// unavailable error.
+func NewCreatePluginUnavailable(body *CreatePluginUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdatePluginPluginOK builds a "plugins" service "updatePlugin" endpoint
 // result from a HTTP "OK" response.
 func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
@@ -4232,6 +5835,9 @@ func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
 		Slug:                     *body.Slug,
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
+		AutoCreated:              *body.AutoCreated,
+		AutoSyncEnabled:          *body.AutoSyncEnabled,
+		AutoAddServersEnabled:    *body.AutoAddServersEnabled,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -4258,6 +5864,21 @@ func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
 			}
 			v.Assignments[i] = unmarshalPluginAssignmentResponseBodyToPluginsPluginAssignment(val)
 		}
+	}
+
+	return v
+}
+
+// NewUpdatePluginFailedPrecondition builds a plugins service updatePlugin
+// endpoint failed_precondition error.
+func NewUpdatePluginFailedPrecondition(body *UpdatePluginFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -4401,6 +6022,21 @@ func NewUpdatePluginUnexpected(body *UpdatePluginUnexpectedResponseBody) *goa.Se
 // NewUpdatePluginGatewayError builds a plugins service updatePlugin endpoint
 // gateway_error error.
 func NewUpdatePluginGatewayError(body *UpdatePluginGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdatePluginUnavailable builds a plugins service updatePlugin endpoint
+// unavailable error.
+func NewUpdatePluginUnavailable(body *UpdatePluginUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4563,17 +6199,33 @@ func NewDeletePluginGatewayError(body *DeletePluginGatewayErrorResponseBody) *go
 	return v
 }
 
+// NewDeletePluginUnavailable builds a plugins service deletePlugin endpoint
+// unavailable error.
+func NewDeletePluginUnavailable(body *DeletePluginUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewAddPluginServerPluginServerCreated builds a "plugins" service
 // "addPluginServer" endpoint result from a HTTP "Created" response.
 func NewAddPluginServerPluginServerCreated(body *AddPluginServerResponseBody) *plugins.PluginServer {
 	v := &plugins.PluginServer{
-		ID:          *body.ID,
-		ToolsetID:   body.ToolsetID,
-		McpServerID: body.McpServerID,
-		DisplayName: *body.DisplayName,
-		Policy:      *body.Policy,
-		SortOrder:   *body.SortOrder,
-		CreatedAt:   *body.CreatedAt,
+		ID:              *body.ID,
+		ToolsetID:       body.ToolsetID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		DisplayName:     *body.DisplayName,
+		Policy:          *body.Policy,
+		SortOrder:       *body.SortOrder,
+		CreatedAt:       *body.CreatedAt,
 	}
 
 	return v
@@ -4729,17 +6381,33 @@ func NewAddPluginServerGatewayError(body *AddPluginServerGatewayErrorResponseBod
 	return v
 }
 
+// NewAddPluginServerUnavailable builds a plugins service addPluginServer
+// endpoint unavailable error.
+func NewAddPluginServerUnavailable(body *AddPluginServerUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdatePluginServerPluginServerOK builds a "plugins" service
 // "updatePluginServer" endpoint result from a HTTP "OK" response.
 func NewUpdatePluginServerPluginServerOK(body *UpdatePluginServerResponseBody) *plugins.PluginServer {
 	v := &plugins.PluginServer{
-		ID:          *body.ID,
-		ToolsetID:   body.ToolsetID,
-		McpServerID: body.McpServerID,
-		DisplayName: *body.DisplayName,
-		Policy:      *body.Policy,
-		SortOrder:   *body.SortOrder,
-		CreatedAt:   *body.CreatedAt,
+		ID:              *body.ID,
+		ToolsetID:       body.ToolsetID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		DisplayName:     *body.DisplayName,
+		Policy:          *body.Policy,
+		SortOrder:       *body.SortOrder,
+		CreatedAt:       *body.CreatedAt,
 	}
 
 	return v
@@ -4895,6 +6563,21 @@ func NewUpdatePluginServerGatewayError(body *UpdatePluginServerGatewayErrorRespo
 	return v
 }
 
+// NewUpdatePluginServerUnavailable builds a plugins service updatePluginServer
+// endpoint unavailable error.
+func NewUpdatePluginServerUnavailable(body *UpdatePluginServerUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewRemovePluginServerUnauthorized builds a plugins service
 // removePluginServer endpoint unauthorized error.
 func NewRemovePluginServerUnauthorized(body *RemovePluginServerUnauthorizedResponseBody) *goa.ServiceError {
@@ -5033,6 +6716,21 @@ func NewRemovePluginServerUnexpected(body *RemovePluginServerUnexpectedResponseB
 // NewRemovePluginServerGatewayError builds a plugins service
 // removePluginServer endpoint gateway_error error.
 func NewRemovePluginServerGatewayError(body *RemovePluginServerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemovePluginServerUnavailable builds a plugins service removePluginServer
+// endpoint unavailable error.
+func NewRemovePluginServerUnavailable(body *RemovePluginServerUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5211,6 +6909,21 @@ func NewSetPluginAssignmentsGatewayError(body *SetPluginAssignmentsGatewayErrorR
 	return v
 }
 
+// NewSetPluginAssignmentsUnavailable builds a plugins service
+// setPluginAssignments endpoint unavailable error.
+func NewSetPluginAssignmentsUnavailable(body *SetPluginAssignmentsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListAudiencesResultOK builds a "plugins" service "listAudiences" endpoint
 // result from a HTTP "OK" response.
 func NewListAudiencesResultOK(body *ListAudiencesResponseBody) *plugins.ListAudiencesResult {
@@ -5365,6 +7078,21 @@ func NewListAudiencesUnexpected(body *ListAudiencesUnexpectedResponseBody) *goa.
 // NewListAudiencesGatewayError builds a plugins service listAudiences endpoint
 // gateway_error error.
 func NewListAudiencesGatewayError(body *ListAudiencesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListAudiencesUnavailable builds a plugins service listAudiences endpoint
+// unavailable error.
+func NewListAudiencesUnavailable(body *ListAudiencesUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5552,6 +7280,210 @@ func NewDownloadPluginPackageGatewayError(body *DownloadPluginPackageGatewayErro
 	return v
 }
 
+// NewDownloadPluginPackageUnavailable builds a plugins service
+// downloadPluginPackage endpoint unavailable error.
+func NewDownloadPluginPackageUnavailable(body *DownloadPluginPackageUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialResultOK builds a "plugins" service
+// "rotateObservabilityCredential" endpoint result from a HTTP "OK" response.
+func NewRotateObservabilityCredentialResultOK(body *RotateObservabilityCredentialResponseBody) *plugins.RotateObservabilityCredentialResult {
+	v := &plugins.RotateObservabilityCredentialResult{
+		Key:                       *body.Key,
+		KeyPrefix:                 *body.KeyPrefix,
+		PreviousKeyFate:           *body.PreviousKeyFate,
+		PreviousKeysExpireAt:      body.PreviousKeysExpireAt,
+		PreviousKeysRetired:       *body.PreviousKeysRetired,
+		MarketplaceRepublished:    *body.MarketplaceRepublished,
+		MarketplaceUpdateDeferred: body.MarketplaceUpdateDeferred,
+	}
+	v.PreviousKeys = make([]*plugins.RotatedObservabilityKey, len(body.PreviousKeys))
+	for i, val := range body.PreviousKeys {
+		if val == nil {
+			v.PreviousKeys[i] = nil
+			continue
+		}
+		v.PreviousKeys[i] = unmarshalRotatedObservabilityKeyResponseBodyToPluginsRotatedObservabilityKey(val)
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialUnauthorized builds a plugins service
+// rotateObservabilityCredential endpoint unauthorized error.
+func NewRotateObservabilityCredentialUnauthorized(body *RotateObservabilityCredentialUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialForbidden builds a plugins service
+// rotateObservabilityCredential endpoint forbidden error.
+func NewRotateObservabilityCredentialForbidden(body *RotateObservabilityCredentialForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialBadRequest builds a plugins service
+// rotateObservabilityCredential endpoint bad_request error.
+func NewRotateObservabilityCredentialBadRequest(body *RotateObservabilityCredentialBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialNotFound builds a plugins service
+// rotateObservabilityCredential endpoint not_found error.
+func NewRotateObservabilityCredentialNotFound(body *RotateObservabilityCredentialNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialConflict builds a plugins service
+// rotateObservabilityCredential endpoint conflict error.
+func NewRotateObservabilityCredentialConflict(body *RotateObservabilityCredentialConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialUnsupportedMedia builds a plugins service
+// rotateObservabilityCredential endpoint unsupported_media error.
+func NewRotateObservabilityCredentialUnsupportedMedia(body *RotateObservabilityCredentialUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialInvalid builds a plugins service
+// rotateObservabilityCredential endpoint invalid error.
+func NewRotateObservabilityCredentialInvalid(body *RotateObservabilityCredentialInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialInvariantViolation builds a plugins service
+// rotateObservabilityCredential endpoint invariant_violation error.
+func NewRotateObservabilityCredentialInvariantViolation(body *RotateObservabilityCredentialInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialUnexpected builds a plugins service
+// rotateObservabilityCredential endpoint unexpected error.
+func NewRotateObservabilityCredentialUnexpected(body *RotateObservabilityCredentialUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialGatewayError builds a plugins service
+// rotateObservabilityCredential endpoint gateway_error error.
+func NewRotateObservabilityCredentialGatewayError(body *RotateObservabilityCredentialGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialUnavailable builds a plugins service
+// rotateObservabilityCredential endpoint unavailable error.
+func NewRotateObservabilityCredentialUnavailable(body *RotateObservabilityCredentialUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDownloadObservabilityPluginResultOK builds a "plugins" service
 // "downloadObservabilityPlugin" endpoint result from a HTTP "OK" response.
 func NewDownloadObservabilityPluginResultOK(contentType string, contentDisposition string) *plugins.DownloadObservabilityPluginResult {
@@ -5700,6 +7632,21 @@ func NewDownloadObservabilityPluginUnexpected(body *DownloadObservabilityPluginU
 // NewDownloadObservabilityPluginGatewayError builds a plugins service
 // downloadObservabilityPlugin endpoint gateway_error error.
 func NewDownloadObservabilityPluginGatewayError(body *DownloadObservabilityPluginGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadObservabilityPluginUnavailable builds a plugins service
+// downloadObservabilityPlugin endpoint unavailable error.
+func NewDownloadObservabilityPluginUnavailable(body *DownloadObservabilityPluginUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5872,22 +7819,51 @@ func NewDownloadCodexInstallScriptGatewayError(body *DownloadCodexInstallScriptG
 	return v
 }
 
+// NewDownloadCodexInstallScriptUnavailable builds a plugins service
+// downloadCodexInstallScript endpoint unavailable error.
+func NewDownloadCodexInstallScriptUnavailable(body *DownloadCodexInstallScriptUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetPublishStatusPublishStatusResultOK builds a "plugins" service
 // "getPublishStatus" endpoint result from a HTTP "OK" response.
 func NewGetPublishStatusPublishStatusResultOK(body *GetPublishStatusResponseBody) *plugins.PublishStatusResult {
 	v := &plugins.PublishStatusResult{
-		Configured:                *body.Configured,
-		Connected:                 *body.Connected,
-		RepoOwner:                 body.RepoOwner,
-		RepoName:                  body.RepoName,
-		RepoURL:                   body.RepoURL,
-		MarketplaceURL:            body.MarketplaceURL,
-		ClaudeObservabilityPlugin: body.ClaudeObservabilityPlugin,
-		CodexObservabilityPlugin:  body.CodexObservabilityPlugin,
-		HasCollaborators:          body.HasCollaborators,
-		UpToDate:                  body.UpToDate,
-		LastPublishedAt:           body.LastPublishedAt,
-		LiveVersion:               body.LiveVersion,
+		Configured:                 *body.Configured,
+		Connected:                  *body.Connected,
+		RepoOwner:                  body.RepoOwner,
+		RepoName:                   body.RepoName,
+		RepoURL:                    body.RepoURL,
+		MarketplaceURL:             body.MarketplaceURL,
+		ClaudeObservabilityPlugin:  body.ClaudeObservabilityPlugin,
+		CodexObservabilityPlugin:   body.CodexObservabilityPlugin,
+		CursorObservabilityPlugin:  body.CursorObservabilityPlugin,
+		VibeObservabilityAvailable: body.VibeObservabilityAvailable,
+		VibeObservabilityPlugin:    body.VibeObservabilityPlugin,
+		HasCollaborators:           body.HasCollaborators,
+		UpToDate:                   body.UpToDate,
+		AutomaticSyncPending:       body.AutomaticSyncPending,
+		LastPublishedAt:            body.LastPublishedAt,
+		LiveVersion:                body.LiveVersion,
+	}
+	if body.Plugins != nil {
+		v.Plugins = make([]*plugins.PluginPublishStatus, len(body.Plugins))
+		for i, val := range body.Plugins {
+			if val == nil {
+				v.Plugins[i] = nil
+				continue
+			}
+			v.Plugins[i] = unmarshalPluginPublishStatusResponseBodyToPluginsPluginPublishStatus(val)
+		}
 	}
 
 	return v
@@ -6031,6 +8007,21 @@ func NewGetPublishStatusUnexpected(body *GetPublishStatusUnexpectedResponseBody)
 // NewGetPublishStatusGatewayError builds a plugins service getPublishStatus
 // endpoint gateway_error error.
 func NewGetPublishStatusGatewayError(body *GetPublishStatusGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPublishStatusUnavailable builds a plugins service getPublishStatus
+// endpoint unavailable error.
+func NewGetPublishStatusUnavailable(body *GetPublishStatusUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6203,13 +8194,29 @@ func NewPublishPluginsGatewayError(body *PublishPluginsGatewayErrorResponseBody)
 	return v
 }
 
+// NewPublishPluginsUnavailable builds a plugins service publishPlugins
+// endpoint unavailable error.
+func NewPublishPluginsUnavailable(body *PublishPluginsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetMarketplaceSettingsMarketplaceSettingsResultOK builds a "plugins"
 // service "getMarketplaceSettings" endpoint result from a HTTP "OK" response.
 func NewGetMarketplaceSettingsMarketplaceSettingsResultOK(body *GetMarketplaceSettingsResponseBody) *plugins.MarketplaceSettingsResult {
 	v := &plugins.MarketplaceSettingsResult{
-		MarketplaceName: body.MarketplaceName,
-		DefaultName:     *body.DefaultName,
-		EffectiveName:   *body.EffectiveName,
+		MarketplaceName:      body.MarketplaceName,
+		DefaultName:          *body.DefaultName,
+		EffectiveName:        *body.EffectiveName,
+		ObservabilityEnabled: *body.ObservabilityEnabled,
 	}
 
 	return v
@@ -6353,6 +8360,21 @@ func NewGetMarketplaceSettingsUnexpected(body *GetMarketplaceSettingsUnexpectedR
 // NewGetMarketplaceSettingsGatewayError builds a plugins service
 // getMarketplaceSettings endpoint gateway_error error.
 func NewGetMarketplaceSettingsGatewayError(body *GetMarketplaceSettingsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMarketplaceSettingsUnavailable builds a plugins service
+// getMarketplaceSettings endpoint unavailable error.
+func NewGetMarketplaceSettingsUnavailable(body *GetMarketplaceSettingsUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6527,6 +8549,58 @@ func NewUpdateMarketplaceSettingsGatewayError(body *UpdateMarketplaceSettingsGat
 	return v
 }
 
+// NewUpdateMarketplaceSettingsUnavailable builds a plugins service
+// updateMarketplaceSettings endpoint unavailable error.
+func NewUpdateMarketplaceSettingsUnavailable(body *UpdateMarketplaceSettingsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// ValidateListDistributionPluginsResponseBody runs the validations defined on
+// ListDistributionPluginsResponseBody
+func ValidateListDistributionPluginsResponseBody(body *ListDistributionPluginsResponseBody) (err error) {
+	if body.Plugins == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("plugins", "body"))
+	}
+	for _, e := range body.Plugins {
+		if e != nil {
+			if err2 := ValidateDistributionPluginResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetDistributionPluginResponseBody runs the validations defined on
+// GetDistributionPluginResponseBody
+func ValidateGetDistributionPluginResponseBody(body *GetDistributionPluginResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.IsDefault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
+	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateListPluginsResponseBody runs the validations defined on
 // ListPluginsResponseBody
 func ValidateListPluginsResponseBody(body *ListPluginsResponseBody) (err error) {
@@ -6554,6 +8628,15 @@ func ValidateGetPluginResponseBody(body *GetPluginResponseBody) (err error) {
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
+	if body.AutoSyncEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
+	}
+	if body.AutoAddServersEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_add_servers_enabled", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
@@ -6602,6 +8685,15 @@ func ValidateCreatePluginResponseBody(body *CreatePluginResponseBody) (err error
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
+	if body.AutoSyncEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
+	}
+	if body.AutoAddServersEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_add_servers_enabled", "body"))
+	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
 	}
@@ -6648,6 +8740,15 @@ func ValidateUpdatePluginResponseBody(body *UpdatePluginResponseBody) (err error
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
+	if body.AutoSyncEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
+	}
+	if body.AutoAddServersEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_add_servers_enabled", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
@@ -6711,6 +8812,9 @@ func ValidateAddPluginServerResponseBody(body *AddPluginServerResponseBody) (err
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy", *body.Policy, []any{"required", "optional"}))
@@ -6748,6 +8852,9 @@ func ValidateUpdatePluginServerResponseBody(body *UpdatePluginServerResponseBody
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
@@ -6792,6 +8899,45 @@ func ValidateListAudiencesResponseBody(body *ListAudiencesResponseBody) (err err
 	return
 }
 
+// ValidateRotateObservabilityCredentialResponseBody runs the validations
+// defined on RotateObservabilityCredentialResponseBody
+func ValidateRotateObservabilityCredentialResponseBody(body *RotateObservabilityCredentialResponseBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.KeyPrefix == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_prefix", "body"))
+	}
+	if body.PreviousKeyFate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_key_fate", "body"))
+	}
+	if body.PreviousKeys == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_keys", "body"))
+	}
+	if body.PreviousKeysRetired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_keys_retired", "body"))
+	}
+	if body.MarketplaceRepublished == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("marketplace_republished", "body"))
+	}
+	if body.PreviousKeyFate != nil {
+		if !(*body.PreviousKeyFate == "revoke_immediately" || *body.PreviousKeyFate == "grace") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.previous_key_fate", *body.PreviousKeyFate, []any{"revoke_immediately", "grace"}))
+		}
+	}
+	for _, e := range body.PreviousKeys {
+		if e != nil {
+			if err2 := ValidateRotatedObservabilityKeyResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.PreviousKeysExpireAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.previous_keys_expire_at", *body.PreviousKeysExpireAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateGetPublishStatusResponseBody runs the validations defined on
 // GetPublishStatusResponseBody
 func ValidateGetPublishStatusResponseBody(body *GetPublishStatusResponseBody) (err error) {
@@ -6800,6 +8946,13 @@ func ValidateGetPublishStatusResponseBody(body *GetPublishStatusResponseBody) (e
 	}
 	if body.Connected == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connected", "body"))
+	}
+	for _, e := range body.Plugins {
+		if e != nil {
+			if err2 := ValidatePluginPublishStatusResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.LastPublishedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_published_at", *body.LastPublishedAt, goa.FormatDateTime))
@@ -6825,6 +8978,9 @@ func ValidateGetMarketplaceSettingsResponseBody(body *GetMarketplaceSettingsResp
 	if body.EffectiveName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("effective_name", "body"))
 	}
+	if body.ObservabilityEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observability_enabled", "body"))
+	}
 	return
 }
 
@@ -6841,6 +8997,537 @@ func ValidateUpdateMarketplaceSettingsResponseBody(body *UpdateMarketplaceSettin
 		if err2 := ValidateMarketplaceSettingsResultResponseBody(body.Settings); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateListDistributionPluginsUnauthorizedResponseBody runs the validations
+// defined on listDistributionPlugins_unauthorized_response_body
+func ValidateListDistributionPluginsUnauthorizedResponseBody(body *ListDistributionPluginsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDistributionPluginsForbiddenResponseBody runs the validations
+// defined on listDistributionPlugins_forbidden_response_body
+func ValidateListDistributionPluginsForbiddenResponseBody(body *ListDistributionPluginsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDistributionPluginsBadRequestResponseBody runs the validations
+// defined on listDistributionPlugins_bad_request_response_body
+func ValidateListDistributionPluginsBadRequestResponseBody(body *ListDistributionPluginsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDistributionPluginsNotFoundResponseBody runs the validations
+// defined on listDistributionPlugins_not_found_response_body
+func ValidateListDistributionPluginsNotFoundResponseBody(body *ListDistributionPluginsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDistributionPluginsConflictResponseBody runs the validations
+// defined on listDistributionPlugins_conflict_response_body
+func ValidateListDistributionPluginsConflictResponseBody(body *ListDistributionPluginsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDistributionPluginsUnsupportedMediaResponseBody runs the
+// validations defined on
+// listDistributionPlugins_unsupported_media_response_body
+func ValidateListDistributionPluginsUnsupportedMediaResponseBody(body *ListDistributionPluginsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDistributionPluginsInvalidResponseBody runs the validations
+// defined on listDistributionPlugins_invalid_response_body
+func ValidateListDistributionPluginsInvalidResponseBody(body *ListDistributionPluginsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDistributionPluginsInvariantViolationResponseBody runs the
+// validations defined on
+// listDistributionPlugins_invariant_violation_response_body
+func ValidateListDistributionPluginsInvariantViolationResponseBody(body *ListDistributionPluginsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDistributionPluginsUnexpectedResponseBody runs the validations
+// defined on listDistributionPlugins_unexpected_response_body
+func ValidateListDistributionPluginsUnexpectedResponseBody(body *ListDistributionPluginsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDistributionPluginsGatewayErrorResponseBody runs the validations
+// defined on listDistributionPlugins_gateway_error_response_body
+func ValidateListDistributionPluginsGatewayErrorResponseBody(body *ListDistributionPluginsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDistributionPluginsUnavailableResponseBody runs the validations
+// defined on listDistributionPlugins_unavailable_response_body
+func ValidateListDistributionPluginsUnavailableResponseBody(body *ListDistributionPluginsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDistributionPluginUnauthorizedResponseBody runs the validations
+// defined on getDistributionPlugin_unauthorized_response_body
+func ValidateGetDistributionPluginUnauthorizedResponseBody(body *GetDistributionPluginUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDistributionPluginForbiddenResponseBody runs the validations
+// defined on getDistributionPlugin_forbidden_response_body
+func ValidateGetDistributionPluginForbiddenResponseBody(body *GetDistributionPluginForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDistributionPluginBadRequestResponseBody runs the validations
+// defined on getDistributionPlugin_bad_request_response_body
+func ValidateGetDistributionPluginBadRequestResponseBody(body *GetDistributionPluginBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDistributionPluginNotFoundResponseBody runs the validations
+// defined on getDistributionPlugin_not_found_response_body
+func ValidateGetDistributionPluginNotFoundResponseBody(body *GetDistributionPluginNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDistributionPluginConflictResponseBody runs the validations
+// defined on getDistributionPlugin_conflict_response_body
+func ValidateGetDistributionPluginConflictResponseBody(body *GetDistributionPluginConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDistributionPluginUnsupportedMediaResponseBody runs the
+// validations defined on getDistributionPlugin_unsupported_media_response_body
+func ValidateGetDistributionPluginUnsupportedMediaResponseBody(body *GetDistributionPluginUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDistributionPluginInvalidResponseBody runs the validations
+// defined on getDistributionPlugin_invalid_response_body
+func ValidateGetDistributionPluginInvalidResponseBody(body *GetDistributionPluginInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDistributionPluginInvariantViolationResponseBody runs the
+// validations defined on
+// getDistributionPlugin_invariant_violation_response_body
+func ValidateGetDistributionPluginInvariantViolationResponseBody(body *GetDistributionPluginInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDistributionPluginUnexpectedResponseBody runs the validations
+// defined on getDistributionPlugin_unexpected_response_body
+func ValidateGetDistributionPluginUnexpectedResponseBody(body *GetDistributionPluginUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDistributionPluginGatewayErrorResponseBody runs the validations
+// defined on getDistributionPlugin_gateway_error_response_body
+func ValidateGetDistributionPluginGatewayErrorResponseBody(body *GetDistributionPluginGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDistributionPluginUnavailableResponseBody runs the validations
+// defined on getDistributionPlugin_unavailable_response_body
+func ValidateGetDistributionPluginUnavailableResponseBody(body *GetDistributionPluginUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
 	}
 	return
 }
@@ -7064,6 +9751,30 @@ func ValidateListPluginsUnexpectedResponseBody(body *ListPluginsUnexpectedRespon
 // ValidateListPluginsGatewayErrorResponseBody runs the validations defined on
 // listPlugins_gateway_error_response_body
 func ValidateListPluginsGatewayErrorResponseBody(body *ListPluginsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPluginsUnavailableResponseBody runs the validations defined on
+// listPlugins_unavailable_response_body
+func ValidateListPluginsUnavailableResponseBody(body *ListPluginsUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7325,6 +10036,30 @@ func ValidateGetPluginGatewayErrorResponseBody(body *GetPluginGatewayErrorRespon
 	return
 }
 
+// ValidateGetPluginUnavailableResponseBody runs the validations defined on
+// getPlugin_unavailable_response_body
+func ValidateGetPluginUnavailableResponseBody(body *GetPluginUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCreatePluginUnauthorizedResponseBody runs the validations defined on
 // createPlugin_unauthorized_response_body
 func ValidateCreatePluginUnauthorizedResponseBody(body *CreatePluginUnauthorizedResponseBody) (err error) {
@@ -7544,6 +10279,54 @@ func ValidateCreatePluginUnexpectedResponseBody(body *CreatePluginUnexpectedResp
 // ValidateCreatePluginGatewayErrorResponseBody runs the validations defined on
 // createPlugin_gateway_error_response_body
 func ValidateCreatePluginGatewayErrorResponseBody(body *CreatePluginGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreatePluginUnavailableResponseBody runs the validations defined on
+// createPlugin_unavailable_response_body
+func ValidateCreatePluginUnavailableResponseBody(body *CreatePluginUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePluginFailedPreconditionResponseBody runs the validations
+// defined on updatePlugin_failed_precondition_response_body
+func ValidateUpdatePluginFailedPreconditionResponseBody(body *UpdatePluginFailedPreconditionResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7805,6 +10588,30 @@ func ValidateUpdatePluginGatewayErrorResponseBody(body *UpdatePluginGatewayError
 	return
 }
 
+// ValidateUpdatePluginUnavailableResponseBody runs the validations defined on
+// updatePlugin_unavailable_response_body
+func ValidateUpdatePluginUnavailableResponseBody(body *UpdatePluginUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDeletePluginUnauthorizedResponseBody runs the validations defined on
 // deletePlugin_unauthorized_response_body
 func ValidateDeletePluginUnauthorizedResponseBody(body *DeletePluginUnauthorizedResponseBody) (err error) {
@@ -8024,6 +10831,30 @@ func ValidateDeletePluginUnexpectedResponseBody(body *DeletePluginUnexpectedResp
 // ValidateDeletePluginGatewayErrorResponseBody runs the validations defined on
 // deletePlugin_gateway_error_response_body
 func ValidateDeletePluginGatewayErrorResponseBody(body *DeletePluginGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeletePluginUnavailableResponseBody runs the validations defined on
+// deletePlugin_unavailable_response_body
+func ValidateDeletePluginUnavailableResponseBody(body *DeletePluginUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8285,6 +11116,30 @@ func ValidateAddPluginServerGatewayErrorResponseBody(body *AddPluginServerGatewa
 	return
 }
 
+// ValidateAddPluginServerUnavailableResponseBody runs the validations defined
+// on addPluginServer_unavailable_response_body
+func ValidateAddPluginServerUnavailableResponseBody(body *AddPluginServerUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUpdatePluginServerUnauthorizedResponseBody runs the validations
 // defined on updatePluginServer_unauthorized_response_body
 func ValidateUpdatePluginServerUnauthorizedResponseBody(body *UpdatePluginServerUnauthorizedResponseBody) (err error) {
@@ -8504,6 +11359,30 @@ func ValidateUpdatePluginServerUnexpectedResponseBody(body *UpdatePluginServerUn
 // ValidateUpdatePluginServerGatewayErrorResponseBody runs the validations
 // defined on updatePluginServer_gateway_error_response_body
 func ValidateUpdatePluginServerGatewayErrorResponseBody(body *UpdatePluginServerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePluginServerUnavailableResponseBody runs the validations
+// defined on updatePluginServer_unavailable_response_body
+func ValidateUpdatePluginServerUnavailableResponseBody(body *UpdatePluginServerUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8765,6 +11644,30 @@ func ValidateRemovePluginServerGatewayErrorResponseBody(body *RemovePluginServer
 	return
 }
 
+// ValidateRemovePluginServerUnavailableResponseBody runs the validations
+// defined on removePluginServer_unavailable_response_body
+func ValidateRemovePluginServerUnavailableResponseBody(body *RemovePluginServerUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSetPluginAssignmentsUnauthorizedResponseBody runs the validations
 // defined on setPluginAssignments_unauthorized_response_body
 func ValidateSetPluginAssignmentsUnauthorizedResponseBody(body *SetPluginAssignmentsUnauthorizedResponseBody) (err error) {
@@ -9005,6 +11908,30 @@ func ValidateSetPluginAssignmentsGatewayErrorResponseBody(body *SetPluginAssignm
 	return
 }
 
+// ValidateSetPluginAssignmentsUnavailableResponseBody runs the validations
+// defined on setPluginAssignments_unavailable_response_body
+func ValidateSetPluginAssignmentsUnavailableResponseBody(body *SetPluginAssignmentsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListAudiencesUnauthorizedResponseBody runs the validations defined
 // on listAudiences_unauthorized_response_body
 func ValidateListAudiencesUnauthorizedResponseBody(body *ListAudiencesUnauthorizedResponseBody) (err error) {
@@ -9224,6 +12151,30 @@ func ValidateListAudiencesUnexpectedResponseBody(body *ListAudiencesUnexpectedRe
 // ValidateListAudiencesGatewayErrorResponseBody runs the validations defined
 // on listAudiences_gateway_error_response_body
 func ValidateListAudiencesGatewayErrorResponseBody(body *ListAudiencesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListAudiencesUnavailableResponseBody runs the validations defined on
+// listAudiences_unavailable_response_body
+func ValidateListAudiencesUnavailableResponseBody(body *ListAudiencesUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9511,6 +12462,300 @@ func ValidateDownloadPluginPackageGatewayErrorResponseBody(body *DownloadPluginP
 	return
 }
 
+// ValidateDownloadPluginPackageUnavailableResponseBody runs the validations
+// defined on downloadPluginPackage_unavailable_response_body
+func ValidateDownloadPluginPackageUnavailableResponseBody(body *DownloadPluginPackageUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialUnauthorizedResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_unauthorized_response_body
+func ValidateRotateObservabilityCredentialUnauthorizedResponseBody(body *RotateObservabilityCredentialUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialForbiddenResponseBody runs the
+// validations defined on rotateObservabilityCredential_forbidden_response_body
+func ValidateRotateObservabilityCredentialForbiddenResponseBody(body *RotateObservabilityCredentialForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialBadRequestResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_bad_request_response_body
+func ValidateRotateObservabilityCredentialBadRequestResponseBody(body *RotateObservabilityCredentialBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialNotFoundResponseBody runs the
+// validations defined on rotateObservabilityCredential_not_found_response_body
+func ValidateRotateObservabilityCredentialNotFoundResponseBody(body *RotateObservabilityCredentialNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialConflictResponseBody runs the
+// validations defined on rotateObservabilityCredential_conflict_response_body
+func ValidateRotateObservabilityCredentialConflictResponseBody(body *RotateObservabilityCredentialConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialUnsupportedMediaResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_unsupported_media_response_body
+func ValidateRotateObservabilityCredentialUnsupportedMediaResponseBody(body *RotateObservabilityCredentialUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialInvalidResponseBody runs the
+// validations defined on rotateObservabilityCredential_invalid_response_body
+func ValidateRotateObservabilityCredentialInvalidResponseBody(body *RotateObservabilityCredentialInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialInvariantViolationResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_invariant_violation_response_body
+func ValidateRotateObservabilityCredentialInvariantViolationResponseBody(body *RotateObservabilityCredentialInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialUnexpectedResponseBody runs the
+// validations defined on rotateObservabilityCredential_unexpected_response_body
+func ValidateRotateObservabilityCredentialUnexpectedResponseBody(body *RotateObservabilityCredentialUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialGatewayErrorResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_gateway_error_response_body
+func ValidateRotateObservabilityCredentialGatewayErrorResponseBody(body *RotateObservabilityCredentialGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialUnavailableResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_unavailable_response_body
+func ValidateRotateObservabilityCredentialUnavailableResponseBody(body *RotateObservabilityCredentialUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDownloadObservabilityPluginUnauthorizedResponseBody runs the
 // validations defined on downloadObservabilityPlugin_unauthorized_response_body
 func ValidateDownloadObservabilityPluginUnauthorizedResponseBody(body *DownloadObservabilityPluginUnauthorizedResponseBody) (err error) {
@@ -9733,6 +12978,30 @@ func ValidateDownloadObservabilityPluginUnexpectedResponseBody(body *DownloadObs
 // validations defined on
 // downloadObservabilityPlugin_gateway_error_response_body
 func ValidateDownloadObservabilityPluginGatewayErrorResponseBody(body *DownloadObservabilityPluginGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadObservabilityPluginUnavailableResponseBody runs the
+// validations defined on downloadObservabilityPlugin_unavailable_response_body
+func ValidateDownloadObservabilityPluginUnavailableResponseBody(body *DownloadObservabilityPluginUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9996,6 +13265,30 @@ func ValidateDownloadCodexInstallScriptGatewayErrorResponseBody(body *DownloadCo
 	return
 }
 
+// ValidateDownloadCodexInstallScriptUnavailableResponseBody runs the
+// validations defined on downloadCodexInstallScript_unavailable_response_body
+func ValidateDownloadCodexInstallScriptUnavailableResponseBody(body *DownloadCodexInstallScriptUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetPublishStatusUnauthorizedResponseBody runs the validations
 // defined on getPublishStatus_unauthorized_response_body
 func ValidateGetPublishStatusUnauthorizedResponseBody(body *GetPublishStatusUnauthorizedResponseBody) (err error) {
@@ -10215,6 +13508,30 @@ func ValidateGetPublishStatusUnexpectedResponseBody(body *GetPublishStatusUnexpe
 // ValidateGetPublishStatusGatewayErrorResponseBody runs the validations
 // defined on getPublishStatus_gateway_error_response_body
 func ValidateGetPublishStatusGatewayErrorResponseBody(body *GetPublishStatusGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPublishStatusUnavailableResponseBody runs the validations defined
+// on getPublishStatus_unavailable_response_body
+func ValidateGetPublishStatusUnavailableResponseBody(body *GetPublishStatusUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10476,6 +13793,30 @@ func ValidatePublishPluginsGatewayErrorResponseBody(body *PublishPluginsGatewayE
 	return
 }
 
+// ValidatePublishPluginsUnavailableResponseBody runs the validations defined
+// on publishPlugins_unavailable_response_body
+func ValidatePublishPluginsUnavailableResponseBody(body *PublishPluginsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetMarketplaceSettingsUnauthorizedResponseBody runs the validations
 // defined on getMarketplaceSettings_unauthorized_response_body
 func ValidateGetMarketplaceSettingsUnauthorizedResponseBody(body *GetMarketplaceSettingsUnauthorizedResponseBody) (err error) {
@@ -10696,6 +14037,30 @@ func ValidateGetMarketplaceSettingsUnexpectedResponseBody(body *GetMarketplaceSe
 // ValidateGetMarketplaceSettingsGatewayErrorResponseBody runs the validations
 // defined on getMarketplaceSettings_gateway_error_response_body
 func ValidateGetMarketplaceSettingsGatewayErrorResponseBody(body *GetMarketplaceSettingsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMarketplaceSettingsUnavailableResponseBody runs the validations
+// defined on getMarketplaceSettings_unavailable_response_body
+func ValidateGetMarketplaceSettingsUnavailableResponseBody(body *GetMarketplaceSettingsUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10959,6 +14324,51 @@ func ValidateUpdateMarketplaceSettingsGatewayErrorResponseBody(body *UpdateMarke
 	return
 }
 
+// ValidateUpdateMarketplaceSettingsUnavailableResponseBody runs the
+// validations defined on updateMarketplaceSettings_unavailable_response_body
+func ValidateUpdateMarketplaceSettingsUnavailableResponseBody(body *UpdateMarketplaceSettingsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDistributionPluginResponseBody runs the validations defined on
+// DistributionPluginResponseBody
+func ValidateDistributionPluginResponseBody(body *DistributionPluginResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.IsDefault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
+	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidatePluginResponseBody runs the validations defined on PluginResponseBody
 func ValidatePluginResponseBody(body *PluginResponseBody) (err error) {
 	if body.ID == nil {
@@ -10969,6 +14379,15 @@ func ValidatePluginResponseBody(body *PluginResponseBody) (err error) {
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
+	if body.AutoSyncEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
+	}
+	if body.AutoAddServersEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_add_servers_enabled", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
@@ -11032,6 +14451,9 @@ func ValidatePluginServerResponseBody(body *PluginServerResponseBody) (err error
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy", *body.Policy, []any{"required", "optional"}))
@@ -11052,11 +14474,19 @@ func ValidatePluginAssignmentResponseBody(body *PluginAssignmentResponseBody) (e
 	if body.PrincipalUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}
+	if body.InstallMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("install_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.InstallMode != nil {
+		if !(*body.InstallMode == "required" || *body.InstallMode == "default" || *body.InstallMode == "available") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.install_mode", *body.InstallMode, []any{"required", "default", "available"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -11084,6 +14514,42 @@ func ValidatePluginAudienceResponseBody(body *PluginAudienceResponseBody) (err e
 	return
 }
 
+// ValidateRotatedObservabilityKeyResponseBody runs the validations defined on
+// RotatedObservabilityKeyResponseBody
+func ValidateRotatedObservabilityKeyResponseBody(body *RotatedObservabilityKeyResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.KeyPrefix == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_prefix", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidatePluginPublishStatusResponseBody runs the validations defined on
+// PluginPublishStatusResponseBody
+func ValidatePluginPublishStatusResponseBody(body *PluginPublishStatusResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.UpToDate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("up_to_date", "body"))
+	}
+	if body.AwaitingManualSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("awaiting_manual_sync", "body"))
+	}
+	return
+}
+
 // ValidateMarketplaceSettingsResultResponseBody runs the validations defined
 // on MarketplaceSettingsResultResponseBody
 func ValidateMarketplaceSettingsResultResponseBody(body *MarketplaceSettingsResultResponseBody) (err error) {
@@ -11092,6 +14558,9 @@ func ValidateMarketplaceSettingsResultResponseBody(body *MarketplaceSettingsResu
 	}
 	if body.EffectiveName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("effective_name", "body"))
+	}
+	if body.ObservabilityEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observability_enabled", "body"))
 	}
 	return
 }

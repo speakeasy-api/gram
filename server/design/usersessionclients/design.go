@@ -8,12 +8,84 @@ import (
 )
 
 var _ = Service("userSessionClients", func() {
-	Description("Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.")
+	Description("Operator management of MCP clients registered against a user-session issuer (user_session_clients). Registrations are written by /mcp/{slug}/register (RFC 7591 DCR), resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD), or created by an operator through createUserSessionClient; client_id_metadata_uri distinguishes CIMD clients from the rest.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
+
+	Method("createUserSessionClient", func() {
+		Description("Register a confidential client against a user-session issuer on an operator's behalf, for a client that cannot register itself. Speakeasy mints the client_id and client_secret; the secret is returned once and only its hash is stored. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.")
+
+		Payload(func() {
+			Attribute("user_session_issuer_id", String, "The issuer the client signs in through.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("client_name", String, "Display name shown in client listings and on the consent screen.", func() {
+				MinLength(1)
+				MaxLength(255)
+			})
+			Attribute("redirect_uris", ArrayOf(String), "Redirect URIs validated on every /authorize. At least one is required.", func() {
+				MinLength(1)
+				MaxLength(32)
+			})
+			Attribute("token_endpoint_auth_method", String, "How the client presents its secret at the token endpoint (RFC 7591).", func() {
+				Enum("client_secret_basic", "client_secret_post")
+				Default("client_secret_basic")
+			})
+			Required("user_session_issuer_id", "client_name", "redirect_uris")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(CreateUserSessionClientResult)
+
+		HTTP(func() {
+			POST("/rpc/userSessionClients.create")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createUserSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateUserSessionClient"}`)
+	})
+
+	Method("updateUserSessionClientRedirectURIs", func() {
+		Description("Replace a client's redirect URIs. Applies to the next /authorize; sessions already issued are unaffected. Rejected for CIMD clients, whose metadata document owns their redirect URIs. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.")
+
+		Payload(func() {
+			Attribute("id", String, "The user_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("redirect_uris", ArrayOf(String), "The complete new list of redirect URIs. At least one is required.", func() {
+				MinLength(1)
+				MaxLength(32)
+			})
+			Required("id", "redirect_uris")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(UserSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/userSessionClients.updateRedirectURIs")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateUserSessionClientRedirectURIs")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateRedirectURIs")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateUserSessionClientRedirectURIs"}`)
+	})
 
 	Method("listUserSessionClients", func() {
 		Description("List user_session_clients in the caller's project.")
@@ -147,7 +219,7 @@ var UserSessionClient = Type("UserSessionClient", func() {
 	Attribute("user_session_issuer_id", String, "The owning user_session_issuer id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("client_id", String, "The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.")
+	Attribute("client_id", String, "The client_id. Minted by Speakeasy for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.")
 	Attribute("client_id_metadata_uri", String, "When set, the client was resolved from a Client ID Metadata Document (CIMD) hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR clients. The URL is the client's identity, so its origin -- not client_name, which the client chooses -- is the trustworthy label.")
 	Attribute("client_id_metadata_fetched_at", String, "When the metadata document was last successfully read. A 304 revalidation counts as a read, so this is not necessarily when the body was last fetched. Null for DCR clients.", func() {
 		Format(FormatDateTime)
@@ -177,6 +249,15 @@ var UserSessionClient = Type("UserSessionClient", func() {
 	Attribute("active_session_count", Int, "How many live user_sessions this client currently holds. Counted the same way the sessions listing's active filter counts: not revoked, and the refresh token has not expired.")
 
 	Required("id", "user_session_issuer_id", "client_id", "client_name", "credential_kind", "redirect_uris", "client_id_issued_at", "created_at", "updated_at", "active_session_count")
+})
+
+var CreateUserSessionClientResult = Type("CreateUserSessionClientResult", func() {
+	Description("A newly registered client and its secret. The secret is returned only here.")
+
+	Attribute("client", UserSessionClient)
+	Attribute("client_secret", String, "The minted client secret. Not retrievable again.")
+
+	Required("client", "client_secret")
 })
 
 var ListUserSessionClientsResult = Type("ListUserSessionClientsResult", func() {

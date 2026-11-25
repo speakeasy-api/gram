@@ -29,7 +29,7 @@ func NewService(db database.DBTX) *Service {
 	return &Service{db: db}
 }
 
-// GetUserProfile returns the current directory profile linked to a Gram user
+// GetUserProfile returns the current directory profile linked to a Speakeasy user
 // in an organization. When multiple active profiles are linked to the same
 // user, the most recently synchronized profile wins as a complete snapshot.
 func (s *Service) GetUserProfile(ctx context.Context, organizationID, userID string) (*UserProfile, error) {
@@ -161,6 +161,20 @@ func (s *Service) ListActiveGroups(ctx context.Context, organizationID string) (
 		})
 	}
 	return groups, nil
+}
+
+// ListActiveGroupMemberEmails returns the normalized (lowercased) emails of
+// the active members of one active directory group. A missing group or a
+// group with no members both yield an empty slice.
+func (s *Service) ListActiveGroupMemberEmails(ctx context.Context, organizationID string, groupID uuid.UUID) ([]string, error) {
+	emails, err := repo.New(s.db).ListActiveDirectoryGroupMemberEmails(ctx, repo.ListActiveDirectoryGroupMemberEmailsParams{
+		DirectoryGroupID: groupID,
+		OrganizationID:   organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list active directory group member emails: %w", err)
+	}
+	return normalizeEmails(emails), nil
 }
 
 // ListActiveAttributeValues returns active, non-null directory attribute

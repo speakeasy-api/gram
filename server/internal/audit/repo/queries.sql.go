@@ -90,7 +90,8 @@ INSERT INTO audit_logs (
   after_snapshot,
   metadata,
   acting_surface,
-  acting_client_id
+  acting_client_id,
+  is_internal
 ) VALUES (
   $1,
   $2,
@@ -107,7 +108,8 @@ INSERT INTO audit_logs (
   $13,
   $14,
   $15,
-  $16
+  $16,
+  $17
 )
 RETURNING id, organization_id
 `
@@ -129,6 +131,7 @@ type InsertAuditLogParams struct {
 	Metadata           []byte
 	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
+	IsInternal         bool
 }
 
 type InsertAuditLogRow struct {
@@ -154,6 +157,7 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 		arg.Metadata,
 		arg.ActingSurface,
 		arg.ActingClientID,
+		arg.IsInternal,
 	)
 	var i InsertAuditLogRow
 	err := row.Scan(&i.ID, &i.OrganizationID)
@@ -168,9 +172,14 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
+  AND NOT is_internal
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
+  )
+  AND (
+    $3::text IS NULL
+    OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
   )
 GROUP BY action
 ORDER BY count DESC, action ASC
@@ -179,6 +188,7 @@ ORDER BY count DESC, action ASC
 type ListAuditActionFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListAuditActionFacetsRow struct {
@@ -187,10 +197,10 @@ type ListAuditActionFacetsRow struct {
 	Count       int64
 }
 
-// Assistant activity events are excluded: facets power the platform audit
-// feed, which hides them (see ListAuditLogs).
+// Assistant activity and internal events are excluded:
+// facets power the platform audit feed, which hides them (see ListAuditLogs).
 func (q *Queries) ListAuditActionFacets(ctx context.Context, arg ListAuditActionFacetsParams) ([]ListAuditActionFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}
@@ -215,9 +225,14 @@ WITH filtered_logs AS (
   FROM audit_logs
   WHERE organization_id = $1
     AND subject_type <> 'assistant'
+    AND NOT is_internal
     AND (
       $2::uuid IS NULL
       OR project_id = $2::uuid
+    )
+    AND (
+      $3::text IS NULL
+      OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
     )
 ), actor_counts AS (
   SELECT
@@ -226,7 +241,7 @@ WITH filtered_logs AS (
     -- Flags actor ids that appear as user actors, so callers can restrict
     -- user-specific treatment (e.g. Speakeasy staff masking) to them.
     BOOL_OR(actor_type = 'user')::boolean AS is_user_actor,
-    BOOL_OR(COALESCE(acting_surface = 'admin', FALSE))::boolean AS is_admin_actor
+    BOOL_OR(COALESCE(acting_surface IN ('admin', 'admin_mcp'), FALSE))::boolean AS is_admin_actor
   FROM filtered_logs
   GROUP BY actor_id
 ), latest_actor_names AS (
@@ -240,18 +255,31 @@ WITH filtered_logs AS (
 )
 SELECT
   actor_counts.actor_id AS value,
-  COALESCE(latest_actor_names.actor_display_name, actor_counts.actor_id) AS display_name,
+  -- Directory name first, for the same reason ListAuditLogs joins it: the
+  -- stored value is the acting user's email, so the filter dropdown would
+  -- otherwise list addresses while the feed beside it lists names.
+  COALESCE(
+    NULLIF(u.display_name, ''),
+    latest_actor_names.actor_display_name,
+    actor_counts.actor_id
+  ) AS display_name,
   actor_counts.count,
   actor_counts.is_user_actor,
   actor_counts.is_admin_actor
 FROM actor_counts
 LEFT JOIN latest_actor_names ON latest_actor_names.actor_id = actor_counts.actor_id
+LEFT JOIN organization_user_relationships actor_membership
+  ON actor_counts.is_user_actor
+  AND actor_membership.organization_id = $1
+  AND actor_membership.user_id = actor_counts.actor_id
+LEFT JOIN users u ON u.id = actor_membership.user_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC
 `
 
 type ListAuditActorFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListAuditActorFacetsRow struct {
@@ -262,10 +290,13 @@ type ListAuditActorFacetsRow struct {
 	IsAdminActor bool
 }
 
-// Assistant activity events are excluded: facets power the platform audit
-// feed, which hides them (see ListAuditLogs).
+// Assistant activity and internal events are excluded:
+// facets power the platform audit feed, which hides them (see ListAuditLogs).
+// Scoped through this organization's memberships for the same reason
+// ListAuditLogs is: the directory spans every tenant, and a facet label is
+// read by whoever can read the feed.
 func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFacetsParams) ([]ListAuditActorFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditActorFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditActorFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}
@@ -290,10 +321,80 @@ func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFa
 	return items, nil
 }
 
+const listAuditActorsOnSubjects = `-- name: ListAuditActorsOnSubjects :many
+SELECT subject_id, action, actor_type, actor_id, is_internal, created_at
+FROM audit_logs
+WHERE organization_id = $1
+  AND (
+    subject_id = ANY($2::text[])
+    OR (subject_type = ANY($3::text[]) AND action = ANY($4::text[]))
+  )
+  AND created_at > $5
+  AND created_at < $6
+`
+
+type ListAuditActorsOnSubjectsParams struct {
+	OrganizationID string
+	SubjectIds     []string
+	SubjectTypes   []string
+	Actions        []string
+	After          pgtype.Timestamptz
+	Before         pgtype.Timestamptz
+}
+
+type ListAuditActorsOnSubjectsRow struct {
+	SubjectID  string
+	Action     string
+	ActorType  string
+	ActorID    string
+	IsInternal bool
+	CreatedAt  pgtype.Timestamptz
+}
+
+// Who changed any of these subjects, or did any of these actions, in an organization within a time range.
+func (q *Queries) ListAuditActorsOnSubjects(ctx context.Context, arg ListAuditActorsOnSubjectsParams) ([]ListAuditActorsOnSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, listAuditActorsOnSubjects,
+		arg.OrganizationID,
+		arg.SubjectIds,
+		arg.SubjectTypes,
+		arg.Actions,
+		arg.After,
+		arg.Before,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuditActorsOnSubjectsRow
+	for rows.Next() {
+		var i ListAuditActorsOnSubjectsRow
+		if err := rows.Scan(
+			&i.SubjectID,
+			&i.Action,
+			&i.ActorType,
+			&i.ActorID,
+			&i.IsInternal,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuditLogs = `-- name: ListAuditLogs :many
-SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug
+SELECT a.id, a.is_internal, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
 FROM audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id
+LEFT JOIN organization_user_relationships actor_membership
+  ON a.actor_type = 'user'
+  AND actor_membership.organization_id = a.organization_id
+  AND actor_membership.user_id = a.actor_id
+LEFT JOIN users u ON u.id = actor_membership.user_id
 WHERE a.organization_id = $1
   AND (
     $2::uuid IS NULL
@@ -318,22 +419,40 @@ WHERE a.organization_id = $1
     )
     OR a.subject_type = $6::text
   )
+  -- Internal activity is visible only to the private staff caller.
+  AND ($8::boolean OR NOT a.is_internal)
   AND (
-    $8::text IS NULL
-    OR a.subject_id = $8::text
+    $9::text IS NULL
+    OR a.subject_id = $9::text
   )
   -- An empty or absent list is no filter, so a caller composing filters can
   -- always send the parameter.
   AND (
-    coalesce(cardinality($9::text[]), 0) = 0
-    OR a.subject_id = ANY($9::text[])
+    coalesce(cardinality($10::text[]), 0) = 0
+    OR a.subject_id = ANY($10::text[])
   )
   -- A row written before attribution existed has no surface. Coalescing here
   -- means filtering for 'unknown' finds those rows too, instead of returning
   -- nothing and implying the organization has no unattributed history.
   AND (
-    $10::text IS NULL
-    OR COALESCE(a.acting_surface, 'unknown') = $10::text
+    $11::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = $11::text
+  )
+  -- Origin splits the log by who initiated a change: 'system' is Speakeasy
+  -- acting on its own (background jobs), 'user' is everything else.
+  AND (
+    $12::text IS NULL
+    OR ($12::text = 'system') = (a.acting_surface IS NOT DISTINCT FROM 'system')
+  )
+  -- Half-open window, so consecutive ranges neither double-count a row nor
+  -- drop one that lands exactly on a boundary.
+  AND (
+    $13::timestamptz IS NULL
+    OR a.created_at >= $13::timestamptz
+  )
+  AND (
+    $14::timestamptz IS NULL
+    OR a.created_at < $14::timestamptz
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -347,37 +466,57 @@ type ListAuditLogsParams struct {
 	Action                 pgtype.Text
 	SubjectType            pgtype.Text
 	IncludeAssistantEvents bool
+	IncludeInternalEvents  bool
 	SubjectID              pgtype.Text
 	SubjectIds             []string
 	ActingSurface          pgtype.Text
+	Origin                 pgtype.Text
+	CreatedFrom            pgtype.Timestamptz
+	CreatedTo              pgtype.Timestamptz
 }
 
 type ListAuditLogsRow struct {
-	ID                 uuid.UUID
-	Seq                int64
-	OrganizationID     string
-	ProjectID          uuid.NullUUID
-	ActorID            string
-	ActorType          string
-	ActorDisplayName   pgtype.Text
-	ActorSlug          pgtype.Text
-	Action             string
-	SubjectID          string
-	SubjectType        string
-	SubjectDisplayName pgtype.Text
-	SubjectSlug        pgtype.Text
-	BeforeSnapshot     []byte
-	AfterSnapshot      []byte
-	Metadata           []byte
-	ActingSurface      pgtype.Text
-	ActingClientID     pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	ProjectSlug        pgtype.Text
+	ID                   uuid.UUID
+	IsInternal           bool
+	Seq                  int64
+	OrganizationID       string
+	ProjectID            uuid.NullUUID
+	ActorID              string
+	ActorType            string
+	ActorDisplayName     pgtype.Text
+	ActorSlug            pgtype.Text
+	Action               string
+	SubjectID            string
+	SubjectType          string
+	SubjectDisplayName   pgtype.Text
+	SubjectSlug          pgtype.Text
+	BeforeSnapshot       []byte
+	AfterSnapshot        []byte
+	Metadata             []byte
+	ActingSurface        pgtype.Text
+	ActingClientID       pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	ProjectSlug          pgtype.Text
+	ActorUserDisplayName pgtype.Text
 }
 
 // When no subject_type filter is given, assistant activity events (one per
 // assistant tool call) are excluded so they don't drown out the platform
 // audit feed. The private admin caller can explicitly include all events.
+// The actor name is resolved at read time rather than trusted from the row.
+// Every writer stores the acting user's EMAIL in actor_display_name, so the
+// stored value renders the feed as a column of addresses; joining the
+// directory repairs the rows already written, and keeps names current when
+// someone is renamed. The stored value remains the fallback for actors with
+// no directory row: API keys and system actors. A soft-deleted user still
+// resolves, deliberately — they really did perform the action, and their name
+// is both more useful and less identifying than the email the row stored.
+// The directory is global, so the lookup goes through this organization's
+// memberships rather than straight at users.id: an actor id that never
+// belonged here resolves to no name at all instead of naming a stranger from
+// another tenant. Soft-deleted memberships count — a departed member is
+// exactly the actor whose name this is meant to keep resolving — and the
+// unique (organization_id, user_id) pair means the join cannot fan a row out.
 func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogs,
 		arg.OrganizationID,
@@ -387,9 +526,13 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.Action,
 		arg.SubjectType,
 		arg.IncludeAssistantEvents,
+		arg.IncludeInternalEvents,
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,
+		arg.Origin,
+		arg.CreatedFrom,
+		arg.CreatedTo,
 	)
 	if err != nil {
 		return nil, err
@@ -400,6 +543,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		var i ListAuditLogsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.IsInternal,
 			&i.Seq,
 			&i.OrganizationID,
 			&i.ProjectID,
@@ -419,6 +563,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 			&i.ActingClientID,
 			&i.CreatedAt,
 			&i.ProjectSlug,
+			&i.ActorUserDisplayName,
 		); err != nil {
 			return nil, err
 		}
@@ -438,9 +583,14 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
+  AND NOT is_internal
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
+  )
+  AND (
+    $3::text IS NULL
+    OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
   )
 GROUP BY COALESCE(acting_surface, 'unknown')
 ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
@@ -449,6 +599,7 @@ ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
 type ListAuditSurfaceFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListAuditSurfaceFacetsRow struct {
@@ -457,8 +608,8 @@ type ListAuditSurfaceFacetsRow struct {
 	Count       int64
 }
 
-// Assistant activity events are excluded: facets power the platform audit
-// feed, which hides them (see ListAuditLogs).
+// Assistant activity and internal events are excluded:
+// facets power the platform audit feed, which hides them (see ListAuditLogs).
 // Rows predating attribution have no surface and are counted as 'unknown',
 // so the facet totals reconcile with the unfiltered feed rather than silently
 // omitting an organization's older history.
@@ -466,7 +617,7 @@ type ListAuditSurfaceFacetsRow struct {
 // nulls from before attribution and rows the application wrote as 'unknown',
 // and grouping on the raw column would return two facets with the same label.
 func (q *Queries) ListAuditSurfaceFacets(ctx context.Context, arg ListAuditSurfaceFacetsParams) ([]ListAuditSurfaceFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditSurfaceFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditSurfaceFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}

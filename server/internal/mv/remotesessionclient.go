@@ -29,34 +29,52 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		organizationID = row.OrganizationID.String
 	}
 
-	var issuedAt string
+	var issuedAt *string
 	if row.ClientIDIssuedAt.Valid {
-		issuedAt = row.ClientIDIssuedAt.Time.Format(time.RFC3339)
+		v := row.ClientIDIssuedAt.Time.Format(time.RFC3339)
+		issuedAt = &v
 	}
 	var expiresAt *string
 	if row.ClientSecretExpiresAt.Valid {
 		s := row.ClientSecretExpiresAt.Time.Format(time.RFC3339)
 		expiresAt = &s
 	}
+	var upstreamRejectedAt *string
+	if row.UpstreamRejectedAt.Valid {
+		s := row.UpstreamRejectedAt.Time.Format(time.RFC3339)
+		upstreamRejectedAt = &s
+	}
 	issuerIDs := make([]string, 0, len(userSessionIssuerIDs))
 	for _, id := range userSessionIssuerIDs {
 		issuerIDs = append(issuerIDs, id.String())
 	}
 	return &types.RemoteSessionClient{
-		ID:                      row.ID.String(),
-		ProjectID:               projectID,
-		OrganizationID:          organizationID,
-		RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
-		UserSessionIssuerIds:    issuerIDs,
-		ClientID:                row.ClientID,
-		ClientIDMetadataURI:     conv.FromPGText[string](row.ClientIDMetadataUri),
-		ClientIDIssuedAt:        issuedAt,
-		ClientSecretExpiresAt:   expiresAt,
-		TokenEndpointAuthMethod: conv.FromPGText[string](row.TokenEndpointAuthMethod),
-		Scope:                   row.Scope,
-		Audience:                conv.FromPGText[string](row.Audience),
-		CreatedAt:               row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:               row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                              row.ID.String(),
+		ProjectID:                       projectID,
+		OrganizationID:                  organizationID,
+		RemoteSessionIssuerID:           row.RemoteSessionIssuerID.String(),
+		UserSessionIssuerIds:            issuerIDs,
+		ClientID:                        row.ClientID,
+		DisplayName:                     conv.FromPGText[string](row.DisplayName),
+		ClientIDMetadataURI:             conv.FromPGText[string](row.ClientIDMetadataUri),
+		ClientIDIssuedAt:                issuedAt,
+		ClientSecretExpiresAt:           expiresAt,
+		UpstreamRejectedAt:              upstreamRejectedAt,
+		TokenEndpointAuthMethod:         conv.FromPGText[string](row.TokenEndpointAuthMethod),
+		TokenEndpointAuthAudienceFormat: conv.FromPGText[string](row.TokenEndpointAuthAudienceFormat),
+		JSONWebKeySetID:                 conv.FromNullableUUID(row.JsonWebKeySetID),
+		IdentityProviderConnectionID:    conv.FromNullableUUID(row.IdentityProviderConnectionID),
+		Scope:                           row.Scope,
+		Audience:                        conv.FromPGText[string](row.Audience),
+		LegacyCallbackURL:               row.LegacyCallbackUrl,
+		ForwardClientName:               row.ForwardClientName,
+		CredentialOwner:                 row.CredentialOwner,
+		CreatedAt:                       row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
+		GrantTypes:                      row.GrantTypes,
+		// The owning service fills this in from its pinned callback origins.
+		CallbackURL:          nil,
+		FederatedCallbackURL: nil,
 	}, nil
 }
 
@@ -76,30 +94,48 @@ func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.Rem
 		organizationID = row.OrganizationID.String
 	}
 
-	var issuedAt string
+	var issuedAt *string
 	if row.ClientIDIssuedAt.Valid {
-		issuedAt = row.ClientIDIssuedAt.Time.Format(time.RFC3339)
+		v := row.ClientIDIssuedAt.Time.Format(time.RFC3339)
+		issuedAt = &v
 	}
 	var expiresAt *string
 	if row.ClientSecretExpiresAt.Valid {
 		s := row.ClientSecretExpiresAt.Time.Format(time.RFC3339)
 		expiresAt = &s
 	}
+	var upstreamRejectedAt *string
+	if row.UpstreamRejectedAt.Valid {
+		s := row.UpstreamRejectedAt.Time.Format(time.RFC3339)
+		upstreamRejectedAt = &s
+	}
 
 	return &types.RemoteSessionClient{
-		ID:                      row.ID.String(),
-		ProjectID:               projectID,
-		OrganizationID:          organizationID,
-		RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
-		UserSessionIssuerIds:    []string{},
-		ClientID:                row.ClientID,
-		ClientIDMetadataURI:     conv.FromPGText[string](row.ClientIDMetadataUri),
-		ClientIDIssuedAt:        issuedAt,
-		ClientSecretExpiresAt:   expiresAt,
-		TokenEndpointAuthMethod: conv.FromPGText[string](row.TokenEndpointAuthMethod),
-		Scope:                   row.Scope,
-		Audience:                conv.FromPGText[string](row.Audience),
-		CreatedAt:               row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:               row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                              row.ID.String(),
+		ProjectID:                       projectID,
+		OrganizationID:                  organizationID,
+		RemoteSessionIssuerID:           row.RemoteSessionIssuerID.String(),
+		UserSessionIssuerIds:            []string{},
+		ClientID:                        row.ClientID,
+		DisplayName:                     conv.FromPGText[string](row.DisplayName),
+		ClientIDMetadataURI:             conv.FromPGText[string](row.ClientIDMetadataUri),
+		ClientIDIssuedAt:                issuedAt,
+		ClientSecretExpiresAt:           expiresAt,
+		UpstreamRejectedAt:              upstreamRejectedAt,
+		TokenEndpointAuthMethod:         conv.FromPGText[string](row.TokenEndpointAuthMethod),
+		TokenEndpointAuthAudienceFormat: conv.FromPGText[string](row.TokenEndpointAuthAudienceFormat),
+		JSONWebKeySetID:                 conv.FromNullableUUID(row.JsonWebKeySetID),
+		IdentityProviderConnectionID:    conv.FromNullableUUID(row.IdentityProviderConnectionID),
+		Scope:                           row.Scope,
+		Audience:                        conv.FromPGText[string](row.Audience),
+		LegacyCallbackURL:               row.LegacyCallbackUrl,
+		ForwardClientName:               row.ForwardClientName,
+		CredentialOwner:                 row.CredentialOwner,
+		CreatedAt:                       row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
+		GrantTypes:                      row.GrantTypes,
+		// Global clients are shared and keep the pinned outbound origin.
+		CallbackURL:          nil,
+		FederatedCallbackURL: nil,
 	}
 }

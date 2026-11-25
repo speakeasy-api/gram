@@ -1,6 +1,7 @@
 package openrouter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
@@ -59,6 +61,14 @@ func (m *mockProvisioner) ProvisionedKeyTypes() []KeyType {
 	out := make([]KeyType, len(m.provisionKeyTypes))
 	copy(out, m.provisionKeyTypes)
 	return out
+}
+
+func (m *mockProvisioner) AddAPIKeyDisableCause(context.Context, string, KeyType, DisableCause) (DisableCauseChange, error) {
+	return DisableCauseChange{}, nil
+}
+
+func (m *mockProvisioner) RemoveAPIKeyDisableCause(context.Context, string, KeyType, DisableCause, *int) (int, DisableCauseChange, error) {
+	return 0, DisableCauseChange{}, nil
 }
 
 func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
@@ -198,6 +208,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"id": "msg_123",
+			"provider": "Amazon Bedrock",
 			"model": "openai/gpt-5.4",
 			"choices": [{
 				"message": {
@@ -237,6 +248,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -272,6 +284,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	// Verify response
 	assert.Equal(t, "msg_123", resp.MessageID)
 	assert.Equal(t, "openai/gpt-5.4", resp.Model)
+	assert.Equal(t, "Amazon Bedrock", resp.Provider)
 	assert.Equal(t, "Hello, world!", resp.Content)
 	assert.Equal(t, 10, resp.Usage.PromptTokens)
 	assert.Equal(t, 5, resp.Usage.CompletionTokens)
@@ -309,6 +322,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 
 	// Verify captured data - inline usage payload flows through to the tracker.
 	assert.Equal(t, "msg_123", captureStrategy.capturedResponse.MessageID)
+	assert.Equal(t, "Amazon Bedrock", captureStrategy.capturedResponse.Provider)
 	require.NotNil(t, trackingStrategy.usage)
 	assert.Equal(t, "openai/gpt-5.4", trackingStrategy.usage.Model)
 	assert.Equal(t, 10, trackingStrategy.usage.TokensPrompt)
@@ -353,7 +367,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		}
 
 		// Send initial chunk with ID and model
-		_, _ = fmt.Fprintf(w, "data: {\"id\":\"msg_456\",\"model\":\"openai/gpt-5.4\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
+		_, _ = fmt.Fprintf(w, "data: {\"id\":\"msg_456\",\"model\":\"openai/gpt-5.4\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
 		flusher.Flush()
 
 		// Send content chunk
@@ -384,6 +398,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -461,6 +476,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	// Verify captured data
 	assert.Equal(t, "msg_456", captureStrategy.capturedResponse.MessageID)
 	assert.Equal(t, "openai/gpt-5.4", captureStrategy.capturedResponse.Model)
+	assert.Equal(t, "Amazon Bedrock", captureStrategy.capturedResponse.Provider)
 	assert.Equal(t, "Hello streaming", captureStrategy.capturedResponse.Content)
 	assert.Equal(t, 10, captureStrategy.capturedResponse.Usage.PromptTokens)
 	assert.Equal(t, 5, captureStrategy.capturedResponse.Usage.CompletionTokens)
@@ -510,6 +526,7 @@ func TestChatClient_GetCompletionStream_FetchesFallbackUsageWhenFinalUsageChunkM
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		&mockMessageCaptureStrategy{},
@@ -605,6 +622,7 @@ func TestChatClient_GetCompletion_FetchesFallbackUsageWhenInlineCostMissing(t *t
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		&mockMessageCaptureStrategy{},
@@ -714,6 +732,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -813,6 +832,7 @@ func TestChatClient_NormalizesMixedAssistantOnlyForOpenRouterRequest(t *testing.
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		captureStrategy,
@@ -894,6 +914,7 @@ func TestChatClient_PassesMixedAssistantThroughWhenNormalizeFlagUnset(t *testing
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
@@ -975,6 +996,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 			client := NewUnifiedClient(
 				testenv.NewLogger(t),
 				guardianPolicy,
+				EndpointsFor(partition.US),
 				provisioner,
 				&PlatformKeyResolver{Provisioner: provisioner},
 				captureStrategy,
@@ -1046,6 +1068,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -1211,6 +1234,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
@@ -1258,6 +1282,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		tracker,
@@ -1323,6 +1348,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		tracker,
@@ -1452,6 +1478,7 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -1568,6 +1595,7 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -1608,12 +1636,21 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 
 func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
 	t.Parallel()
+	require.Equal(t, "anthropic/claude-opus-5.5", ResolveModel("anthropic/claude-opus-5.5"))
 	require.Equal(t, "anthropic/claude-opus-5", ResolveModel("anthropic/claude-opus-5"))
+	require.Equal(t, "anthropic/claude-sonnet-5.5", ResolveModel("anthropic/claude-sonnet-5.5"))
 }
 
 func TestDefaultChatModel_UsesClaudeOpus5(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "anthropic/claude-opus-5", DefaultChatModel)
+}
+
+func TestResolveModel_Gemini35FlashLiteReturnedAsIs(t *testing.T) {
+	t.Parallel()
+	const model = "google/gemini-3.5-flash-lite"
+	require.True(t, IsModelAllowed(model))
+	require.Equal(t, model, ResolveModel(model))
 }
 
 func TestResolveModel_UnsupportedOpenAIFallback(t *testing.T) {
@@ -1690,6 +1727,7 @@ func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
@@ -1748,6 +1786,7 @@ func TestChatClient_GetCompletion_AttributionFields(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
@@ -1868,4 +1907,84 @@ func TestChatClient_InitializeRequest_EmptyKeySlotFallsBackToUsageSource(t *test
 	require.NoError(t, err)
 	require.Equal(t, billing.ModelUsageSourceSlack, resolver.slot,
 		"trusted callers set UsageSource server-side; it doubles as the slot when KeySlot is unset")
+}
+
+// TestChatClient_GetCompletion_ForwardsMaxTokens pins the wire contract. The
+// key must be absent when nil: OpenRouter reserves max_tokens against the
+// key's remaining limit, so an uninvited value would refuse working calls.
+func TestChatClient_GetCompletion_ForwardsMaxTokens(t *testing.T) {
+	t.Parallel()
+
+	cap2048 := 2048
+	tests := []struct {
+		name      string
+		maxTokens *int
+		wantKey   bool
+		wantValue string
+	}{
+		{name: "set", maxTokens: &cap2048, wantKey: true, wantValue: "2048"},
+		{name: "unset", maxTokens: nil, wantKey: false, wantValue: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var rawBody []byte
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if !assert.NoError(t, err) {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				rawBody = body
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{
+					"id": "msg_max_tokens",
+					"model": "openai/gpt-5.4-mini",
+					"choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+					"usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+				}`))
+			}))
+			defer server.Close()
+
+			provisioner := &mockProvisioner{apiKey: "test-api-key"}
+			tracerProvider := testenv.NewTracerProvider(t)
+			guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+			require.NoError(t, err)
+
+			client := NewUnifiedClient(
+				testenv.NewLogger(t),
+				guardianPolicy,
+				EndpointsFor(partition.US),
+				provisioner,
+				&PlatformKeyResolver{Provisioner: provisioner},
+				&mockMessageCaptureStrategy{},
+				&mockUsageTrackingStrategy{},
+				&mockChatTitleGenerator{},
+				&mockTelemetryLogger{},
+			)
+			client.httpClient = &http.Client{Transport: &testTransport{server: server}}
+
+			_, err = client.GetCompletion(context.Background(), CompletionRequest{
+				OrgID:       "test-org",
+				ProjectID:   uuid.New().String(),
+				Messages:    []or.ChatMessages{CreateMessageUser("hello")},
+				MaxTokens:   tt.maxTokens,
+				UsageSource: billing.ModelUsageSourcePlayground,
+			})
+			require.NoError(t, err)
+
+			// UseNumber compares the integer exactly rather than by delta.
+			decoder := json.NewDecoder(bytes.NewReader(rawBody))
+			decoder.UseNumber()
+			var wire map[string]any
+			require.NoError(t, decoder.Decode(&wire))
+			value, present := wire["max_tokens"]
+			require.Equal(t, tt.wantKey, present, "max_tokens presence on the wire")
+			if tt.wantKey {
+				require.Equal(t, json.Number(tt.wantValue), value)
+			}
+		})
+	}
 }

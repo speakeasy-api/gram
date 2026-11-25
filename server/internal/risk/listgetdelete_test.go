@@ -251,25 +251,6 @@ func TestListRiskResults_EmptyProject(t *testing.T) {
 	require.Empty(t, result.Results)
 }
 
-func TestGetRiskPolicyStatus_Success(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Status Test")})
-	require.NoError(t, err)
-
-	status, err := ti.service.GetRiskPolicyStatus(ctx, &gen.GetRiskPolicyStatusPayload{ID: created.ID})
-	require.NoError(t, err)
-	require.Equal(t, created.ID, status.PolicyID)
-	require.Equal(t, int64(1), status.PolicyVersion)
-	require.Equal(t, int64(0), status.FindingsCount)
-}
-
 func TestTriggerRiskAnalysis_NotSupported(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

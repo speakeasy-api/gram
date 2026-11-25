@@ -9,98 +9,79 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type BillingCycleUsage struct {
-	ID              uuid.UUID
-	OrganizationID  pgtype.Text
-	CycleStart      pgtype.Timestamptz
-	CycleEnd        pgtype.Timestamptz
-	TumTokens       int64
-	BilledTumTokens pgtype.Int8
-	BilledFrozenAt  pgtype.Timestamptz
-	FinalizedAt     pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+type BillingMetadatum struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: restricted
+	StripeCustomerID pgtype.Text
+	// @access: restricted
+	StripeSubscriptionID pgtype.Text
+	// @access: confidential
+	StripeBillingCycleAnchor pgtype.Timestamptz
+	// Stripe checkout idempotency key. Encodes the organization, billing anchor, trial fingerprint and possibly a base64 return URL.
+	// @access: restricted
+	StripeCheckoutIdempotencyKey pgtype.Text
+	// @access: confidential
+	StripeCheckoutBillingCycleAnchor pgtype.Timestamptz
+	// @access: confidential
+	StripeCheckoutTrialEnd pgtype.Timestamptz
+	// @access: confidential
+	StripeCheckoutExpiresAt pgtype.Timestamptz
+	// @access: restricted
+	StripeCheckoutSessionID pgtype.Text
+	// @access: restricted
+	TumMonthlyTokenLimit pgtype.Int8
+	// @access: confidential-pii
+	AlertEmail pgtype.Text
+	// @access: confidential
+	BillingCycleAnchorDay int32
+	// Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.
+	// @access: restricted
+	TunneledMcpServerLimit pgtype.Int4
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
-type BillingMetadatum struct {
-	ID                               uuid.UUID
-	OrganizationID                   string
-	StripeCustomerID                 pgtype.Text
-	StripeSubscriptionID             pgtype.Text
-	StripeBillingCycleAnchor         pgtype.Timestamptz
-	StripeCheckoutIdempotencyKey     pgtype.Text
-	StripeCheckoutBillingCycleAnchor pgtype.Timestamptz
-	StripeCheckoutTrialEnd           pgtype.Timestamptz
-	StripeCheckoutExpiresAt          pgtype.Timestamptz
-	StripeCheckoutSessionID          pgtype.Text
-	TumMonthlyTokenLimit             pgtype.Int8
-	AlertEmail                       pgtype.Text
-	BillingCycleAnchorDay            int32
-	// Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.
-	TunneledMcpServerLimit pgtype.Int4
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
+type OrganizationPromotionApplication struct {
+	// @access: confidential
+	RedeemedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: restricted
+	StripePromotionCodeID string
+	// @access: restricted
+	StripeSubscriptionID pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
 }
 
 type StripeInvoice struct {
-	StripeInvoiceID      string
-	OrganizationID       pgtype.Text
-	StripeCustomerID     string
+	// @access: restricted
+	StripeInvoiceID string
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: restricted
+	StripeCustomerID string
+	// @access: restricted
 	StripeSubscriptionID string
-	ServicePeriodStart   pgtype.Timestamptz
-	ServicePeriodEnd     pgtype.Timestamptz
-	InvoiceState         string
-	FinalizedAt          pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-}
-
-type StripeInvoiceAllocation struct {
-	ID                      uuid.UUID
-	OrganizationID          pgtype.Text
-	SourceKind              string
-	SourceKey               string
-	Seq                     int32
-	SourceDay               pgtype.Date
-	SourcePeriodStart       pgtype.Timestamptz
-	SourcePeriodEnd         pgtype.Timestamptz
-	SourceSnapshotUsd       pgtype.Numeric
-	DeltaTokens             pgtype.Int8
-	OriginalTumUnitPriceUsd pgtype.Numeric
-	AmountUsd               pgtype.Numeric
-	OriginalInvoiceID       pgtype.Text
-	DestinationInvoiceID    pgtype.Text
-	StripeInvoiceItemID     pgtype.Text
-	StripeCreditNoteID      pgtype.Text
-	IdempotencyKey          string
-	DeliveryState           string
-	FirstAttemptedAt        pgtype.Timestamptz
-	LastAttemptedAt         pgtype.Timestamptz
-	ConfirmedAt             pgtype.Timestamptz
-	AmbiguousAt             pgtype.Timestamptz
-	ReconciledAt            pgtype.Timestamptz
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-}
-
-type StripeMeterReport struct {
-	ID                   uuid.UUID
-	OrganizationID       pgtype.Text
-	BillingCycleUsageID  uuid.NullUUID
-	CycleStart           pgtype.Timestamptz
-	CycleEnd             pgtype.Timestamptz
-	Seq                  int32
-	StripeCustomerID     pgtype.Text
-	StripeMeterEventName pgtype.Text
-	StripeIdentifier     pgtype.Text
-	DeltaTokens          int64
-	EventTimestamp       pgtype.Timestamptz
-	DeliveryState        string
-	FirstAttemptedAt     pgtype.Timestamptz
-	LastAttemptedAt      pgtype.Timestamptz
-	ConfirmedAt          pgtype.Timestamptz
-	AmbiguousAt          pgtype.Timestamptz
-	ReconciledAt         pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	// @access: confidential
+	ServicePeriodStart pgtype.Timestamptz
+	// @access: confidential
+	ServicePeriodEnd pgtype.Timestamptz
+	// @access: confidential
+	InvoiceState string
+	// @access: confidential
+	FinalizedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

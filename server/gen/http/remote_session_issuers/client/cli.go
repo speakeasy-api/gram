@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	remotesessionissuers "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	goa "goa.design/goa/v3/pkg"
@@ -108,10 +109,13 @@ func BuildCreateRemoteSessionIssuerPayload(remoteSessionIssuersCreateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionIssuersCreateRemoteSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_grant_profiles_supported\": [\n         \"abc123\"\n      ],\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"omit_scope_fallback\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"userinfo_endpoint\": \"abc123\"\n   }'")
 		}
 		if body.LogoAssetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+		}
+		if body.TunneledMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -152,6 +156,13 @@ func BuildCreateRemoteSessionIssuerPayload(remoteSessionIssuersCreateRemoteSessi
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               body.TunneledMcpServerID,
+		UserinfoEndpoint:                  body.UserinfoEndpoint,
+		IntrospectionEndpoint:             body.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          body.OmitScopeFallback,
+		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -163,6 +174,12 @@ func BuildCreateRemoteSessionIssuerPayload(remoteSessionIssuersCreateRemoteSessi
 		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
 		for i, val := range body.GrantTypesSupported {
 			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.AuthorizationGrantProfilesSupported != nil {
+		v.AuthorizationGrantProfilesSupported = make([]string, len(body.AuthorizationGrantProfilesSupported))
+		for i, val := range body.AuthorizationGrantProfilesSupported {
+			v.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if body.ResponseTypesSupported != nil {
@@ -183,6 +200,30 @@ func BuildCreateRemoteSessionIssuerPayload(remoteSessionIssuersCreateRemoteSessi
 			v.CodeChallengeMethodsSupported[i] = val
 		}
 	}
+	if body.IntrospectionEndpointAuthMethodsSupported != nil {
+		v.IntrospectionEndpointAuthMethodsSupported = make([]string, len(body.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range body.IntrospectionEndpointAuthMethodsSupported {
+			v.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if body.IDTokenSigningAlgValuesSupported != nil {
+		v.IDTokenSigningAlgValuesSupported = make([]string, len(body.IDTokenSigningAlgValuesSupported))
+		for i, val := range body.IDTokenSigningAlgValuesSupported {
+			v.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if body.ClaimsSupported != nil {
+		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
+		for i, val := range body.ClaimsSupported {
+			v.ClaimsSupported[i] = val
+		}
+	}
+	if body.ScopeOverride != nil {
+		v.ScopeOverride = make([]string, len(body.ScopeOverride))
+		for i, val := range body.ScopeOverride {
+			v.ScopeOverride[i] = val
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -198,7 +239,7 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionIssuersUpdateRemoteSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_grant_profiles_supported\": [\n         \"abc123\"\n      ],\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"omit_scope_fallback\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"abc123\",\n      \"userinfo_endpoint\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -241,6 +282,13 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               body.TunneledMcpServerID,
+		UserinfoEndpoint:                  body.UserinfoEndpoint,
+		IntrospectionEndpoint:             body.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          body.OmitScopeFallback,
+		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -252,6 +300,12 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
 		for i, val := range body.GrantTypesSupported {
 			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.AuthorizationGrantProfilesSupported != nil {
+		v.AuthorizationGrantProfilesSupported = make([]string, len(body.AuthorizationGrantProfilesSupported))
+		for i, val := range body.AuthorizationGrantProfilesSupported {
+			v.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if body.ResponseTypesSupported != nil {
@@ -272,6 +326,30 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 			v.CodeChallengeMethodsSupported[i] = val
 		}
 	}
+	if body.IntrospectionEndpointAuthMethodsSupported != nil {
+		v.IntrospectionEndpointAuthMethodsSupported = make([]string, len(body.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range body.IntrospectionEndpointAuthMethodsSupported {
+			v.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if body.IDTokenSigningAlgValuesSupported != nil {
+		v.IDTokenSigningAlgValuesSupported = make([]string, len(body.IDTokenSigningAlgValuesSupported))
+		for i, val := range body.IDTokenSigningAlgValuesSupported {
+			v.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if body.ClaimsSupported != nil {
+		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
+		for i, val := range body.ClaimsSupported {
+			v.ClaimsSupported[i] = val
+		}
+	}
+	if body.ScopeOverride != nil {
+		v.ScopeOverride = make([]string, len(body.ScopeOverride))
+		for i, val := range body.ScopeOverride {
+			v.ScopeOverride[i] = val
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -281,7 +359,7 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 
 // BuildListRemoteSessionIssuersPayload builds the payload for the
 // remoteSessionIssuers listRemoteSessionIssuers endpoint from CLI flags.
-func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionIssuersCursor string, remoteSessionIssuersListRemoteSessionIssuersLimit string, remoteSessionIssuersListRemoteSessionIssuersSessionToken string, remoteSessionIssuersListRemoteSessionIssuersApikeyToken string, remoteSessionIssuersListRemoteSessionIssuersProjectSlugInput string) (*remotesessionissuers.ListRemoteSessionIssuersPayload, error) {
+func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionIssuersCursor string, remoteSessionIssuersListRemoteSessionIssuersLimit string, remoteSessionIssuersListRemoteSessionIssuersSearch string, remoteSessionIssuersListRemoteSessionIssuersUpstreamHost string, remoteSessionIssuersListRemoteSessionIssuersTier string, remoteSessionIssuersListRemoteSessionIssuersSessionToken string, remoteSessionIssuersListRemoteSessionIssuersApikeyToken string, remoteSessionIssuersListRemoteSessionIssuersProjectSlugInput string) (*remotesessionissuers.ListRemoteSessionIssuersPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -298,6 +376,42 @@ func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionI
 			limit = &val
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var search *string
+	{
+		if remoteSessionIssuersListRemoteSessionIssuersSearch != "" {
+			search = &remoteSessionIssuersListRemoteSessionIssuersSearch
+			if utf8.RuneCountInString(*search) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 256, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var upstreamHost *string
+	{
+		if remoteSessionIssuersListRemoteSessionIssuersUpstreamHost != "" {
+			upstreamHost = &remoteSessionIssuersListRemoteSessionIssuersUpstreamHost
+			if utf8.RuneCountInString(*upstreamHost) > 260 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("upstream_host", *upstreamHost, utf8.RuneCountInString(*upstreamHost), 260, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var tier *string
+	{
+		if remoteSessionIssuersListRemoteSessionIssuersTier != "" {
+			tier = &remoteSessionIssuersListRemoteSessionIssuersTier
+			if !(*tier == "project" || *tier == "organization" || *tier == "platform") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tier", *tier, []any{"project", "organization", "platform"}))
+			}
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -322,6 +436,9 @@ func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionI
 	v := &remotesessionissuers.ListRemoteSessionIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Search = search
+	v.UpstreamHost = upstreamHost
+	v.Tier = tier
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

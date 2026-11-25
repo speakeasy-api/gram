@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * deleteMcpServer mcpServers
  *
  * @remarks
- * Delete an MCP server
+ * Delete an MCP server. A toolset's own hosted server (its id equals the toolset id) is disabled instead, as turning MCP off on the toolset does, and stays listed with visibility disabled. Other servers, including other toolset-backed ones, are deleted.
  */
 export function mcpServersDelete(
   client: GramCore,
@@ -210,7 +210,7 @@ async function $do(
   >(
     M.nil(200, z.void()),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
-    M.jsonErr([500, 502], ServiceError$inboundSchema),
+    M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

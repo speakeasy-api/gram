@@ -15,13 +15,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// SessionEpochChecker checks the parent dashboard session against user-wide revocation.
+type SessionEpochChecker interface {
+	// SessionPredatesEpoch applies the user cutoff to the parent session issuance.
+	SessionPredatesEpoch(ctx context.Context, userID, sessionID string) (bool, error)
+}
 
 // Manager handles chat session token lifecycle
 type Manager struct {
 	logger             *slog.Logger
 	revokedTokensCache cache.TypedCacheObject[RevokedToken]
 	jwtSecret          string
+	sessionEpochs      SessionEpochChecker
 }
 
 // RevokedToken represents a revoked chat session token in the cache
@@ -41,13 +49,14 @@ func (r RevokedToken) TTL() time.Duration {
 }
 
 // NewManager creates a new chat sessions manager
-func NewManager(logger *slog.Logger, redisClient *redis.Client, jwtSecret string) *Manager {
+func NewManager(logger *slog.Logger, redisClient *redis.Client, jwtSecret string, sessionEpochs SessionEpochChecker) *Manager {
 	logger = logger.With(attr.SlogComponent("chat_sessions"))
 
 	return &Manager{
 		logger:             logger,
 		revokedTokensCache: cache.NewTypedObjectCache[RevokedToken](logger.With(attr.SlogCacheNamespace("chat_session_revoked")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		jwtSecret:          jwtSecret,
+		sessionEpochs:      sessionEpochs,
 	}
 }
 
@@ -94,6 +103,27 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		return ctx, oops.E(oops.CodeUnexpected, err, "validate chat session token").LogError(ctx, m.logger)
 	}
 
+	// API-key tokens can carry their creator's user ID, but do not inherit a
+	// dashboard session. User tokens without a session ID have unknown issuance.
+	if claims.APIKeyID == "" && claims.UserID != "" {
+		if m.sessionEpochs == nil {
+			return ctx, oops.E(oops.CodeUnexpected, nil, "session epoch checker is not configured").LogError(ctx, m.logger)
+		}
+
+		sessionID := ""
+		if claims.SessionID != nil {
+			sessionID = *claims.SessionID
+		}
+
+		predates, err := m.sessionEpochs.SessionPredatesEpoch(ctx, claims.UserID, sessionID)
+		if err != nil {
+			return ctx, oops.E(oops.CodeUnavailable, err, "error checking session validity").LogError(ctx, m.logger)
+		}
+		if predates {
+			return ctx, oops.C(oops.CodeUnauthorized)
+		}
+	}
+
 	// Parse project ID from string to UUID
 	projectID, err := uuid.Parse(claims.ProjectID)
 	if err != nil {
@@ -126,5 +156,20 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		SupportOrganizationID: "",
 	}
 
-	return contextvalues.SetAuthContext(ctx, authCtx), nil
+	// API-key-minted chat sessions intentionally delegate the legacy key's
+	// authorization profile so MCP calls retain their existing permissions. They
+	// carry no direct key scopes, which lets chat access distinguish them from a
+	// direct key and enforce project and owner boundaries. M2 must reject
+	// principal-backed keys at token issuance or add an explicit versioned profile
+	// before they can reach here.
+	switch {
+	case authCtx.APIKeyID != "":
+		return contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx), nil
+	case authCtx.UserID != "":
+		return contextvalues.WithAuthenticatedActor(
+			ctx, authCtx, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		), nil
+	default:
+		return contextvalues.SetAuthContext(ctx, authCtx), nil
+	}
 }

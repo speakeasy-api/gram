@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -33,6 +34,30 @@ vi.mock("@/hooks/useProductTier", () => ({
 
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => mocks.session(),
+}));
+
+vi.mock("@/pages/demo/components/booking-calendar/BookingCalendarLink", () => ({
+  BookingCalendarLink: ({
+    children,
+    eventLabel,
+    formDefaults,
+    telemetrySource,
+  }: {
+    children: ReactNode;
+    eventLabel?: string;
+    formDefaults?: Record<string, string | undefined>;
+    telemetrySource?: string;
+  }) => (
+    <button
+      type="button"
+      data-event-label={eventLabel}
+      data-form-source={formDefaults?.source}
+      data-form-notes={formDefaults?.notes}
+      data-telemetry-source={telemetrySource}
+    >
+      {children}
+    </button>
+  ),
 }));
 
 vi.mock("@gram/client/react-query/getInferenceSpendCaps.js", () => ({
@@ -382,7 +407,7 @@ describe("InferenceCapsSection", () => {
     }
   });
 
-  // The endpoint answers with the materialized Gram-managed keys — two, one, or
+  // The endpoint answers with the materialized Speakeasy-managed keys — two, one, or
   // none — so the section renders what it was given rather than a shape it
   // assumed.
   describe("one control per key the API returned", () => {
@@ -429,7 +454,7 @@ describe("InferenceCapsSection", () => {
       expect(saveButton(absent)).toBeNull();
     });
 
-    // An empty list says only that no Gram-managed key has been materialized
+    // An empty list says only that no Speakeasy-managed key has been materialized
     // for this organization yet. It says nothing about what the organization
     // runs, and the copy must not read as if it did.
     it("states plainly that there is nothing to configure yet", () => {
@@ -452,7 +477,7 @@ describe("InferenceCapsSection", () => {
     });
 
     // An empty list is not evidence of a customer-supplied key, and not
-    // evidence that Gram runs no inference for this organization.
+    // evidence that Speakeasy runs no inference for this organization.
     it("draws no conclusion about what the organization runs", () => {
       loadedCaps([]);
 
@@ -1137,17 +1162,29 @@ describe("InferenceCapsSection", () => {
 
   // $10,000 is the ceiling the endpoint enforces, so an admin who needs more
   // has to be pointed at a conversation rather than left retrying an amount
-  // that will never be accepted. The gate is the in-app booking route, which
-  // prefills from the session — not the marketing site.
-  it("points an admin needing a larger cap at the in-app sales gate", () => {
+  // that will never be accepted.
+  it("offers an admin needing a larger cap the sales calendar", () => {
     loadedCaps([otherCap()]);
 
     render(<InferenceCapsSection />);
 
     expect(screen.getByText(/need a cap above \$10,000/i)).toBeTruthy();
-    const salesLink = screen.getByRole("link", { name: "Talk to us" });
-    expect(salesLink.getAttribute("href")).toBe("/talk-to-us");
-    expect(salesLink.getAttribute("target")).toBeNull();
+    const salesTrigger = screen.getByRole("button", {
+      name: "Talk to us",
+    });
+    expect(salesTrigger.getAttribute("type")).toBe("button");
+    expect(salesTrigger.getAttribute("data-event-label")).toBe(
+      "Inference caps — 30 min",
+    );
+    expect(salesTrigger.getAttribute("data-form-source")).toBe(
+      "Dashboard: Inference caps",
+    );
+    expect(salesTrigger.getAttribute("data-form-notes")).toBe(
+      "Request inference cap above $10,000",
+    );
+    expect(salesTrigger.getAttribute("data-telemetry-source")).toBe(
+      "inference_cap",
+    );
   });
 
   // The endpoint is admin-only, so a member gets the amounts they are spending
@@ -1186,6 +1223,45 @@ describe("InferenceCapsSection", () => {
     expect(otherField()).not.toBeNull();
     fireEvent.click(saveButton(OTHER_LABEL)!);
     expect(lastSentCap()).toEqual({ keyType: "chat", monthlyCredits: 250 });
+  });
+
+  it("keeps an unknown inference cap read-only without blocking known caps", () => {
+    loadedCaps([
+      otherCap(),
+      cap({ keyType: unrecognized("future_inference") }),
+    ]);
+    render(<InferenceCapsSection />);
+    expect(
+      screen.getByText(
+        /Refresh the page before editing this unsupported inference cap/,
+      ),
+    ).toBeTruthy();
+    expect(saveButton("Unknown inference cap")).toBeNull();
+    expect(meters()).toHaveLength(2);
+    fireEvent.click(saveButton(OTHER_LABEL)!);
+    expect(lastSentCap()).toEqual({ keyType: "chat", monthlyCredits: 250 });
+  });
+
+  it("keeps unknown caps free of duplicate anchors and announces through a known editable cap", () => {
+    loadedCaps([
+      cap({ keyType: unrecognized("future_inference") }),
+      cap({ keyType: unrecognized("another_future_inference") }),
+      otherCap(),
+    ]);
+    subscriptionState({ data: { status: "active" }, isFetching: true });
+    render(<InferenceCapsSection />);
+    expect(document.querySelectorAll(`#${INFERENCE_CAPS_ANCHOR}`)).toHaveLength(
+      1,
+    );
+    const ids = Array.from(
+      document.querySelectorAll("[id]"),
+      (element) => element.id,
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.some((id) => id.includes("future_inference"))).toBe(false);
+    const statuses = screen.getAllByRole("status");
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]!.textContent).toMatch(/checking your subscription/i);
   });
 
   it("mounts no mutation when every key is disabled", () => {

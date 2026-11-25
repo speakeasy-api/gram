@@ -19,9 +19,7 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
-	adminecgen "github.com/speakeasy-api/gram/server/gen/admin_external_credentials"
 	gen "github.com/speakeasy-api/gram/server/gen/external_credentials"
-	adminecsrv "github.com/speakeasy-api/gram/server/gen/http/admin_external_credentials/server"
 	srv "github.com/speakeasy-api/gram/server/gen/http/external_credentials/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -42,16 +40,16 @@ import (
 )
 
 // verifyRatePerMin and verifyRateBurst bound how often one organization can run
-// the verify probe. Verify makes an authenticated outbound call using Gram's own
+// the verify probe. Verify makes an authenticated outbound call using Speakeasy's own
 // identity against a caller-supplied service account, so an unbounded endpoint
-// would double as an oracle for which service accounts Gram can impersonate.
+// would double as an oracle for which service accounts Speakeasy can impersonate.
 const (
 	verifyRatePerMin = 10
 	verifyRateBurst  = 5
 )
 
-// impersonationRole is the IAM role a customer must grant Gram's own service
-// account on the service account they want Gram to impersonate.
+// impersonationRole is the IAM role a customer must grant Speakeasy's own service
+// account on the service account they want Speakeasy to impersonate.
 const impersonationRole = "roles/iam.serviceAccountTokenCreator"
 
 type Service struct {
@@ -67,10 +65,8 @@ type Service struct {
 }
 
 var (
-	_ gen.Service        = (*Service)(nil)
-	_ gen.Auther         = (*Service)(nil)
-	_ adminecgen.Service = (*Service)(nil)
-	_ adminecgen.Auther  = (*Service)(nil)
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
 )
 
 func NewService(
@@ -106,7 +102,7 @@ func NewService(
 // organization-tier handler needs: the RBAC scope and the customer-managed-keys
 // entitlement. Routing all of them through one function keeps the entitlement
 // from being reachable by an endpoint that simply forgot to check it.
-func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireOrgAccess(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
@@ -114,7 +110,7 @@ func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*con
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, logger, err
 	}
 
@@ -160,10 +156,10 @@ type impersonationDecision struct {
 }
 
 // resolveOrgImpersonationTarget validates the service account an organization
-// credential wants Gram to impersonate, returning the trimmed target and
+// credential wants Speakeasy to impersonate, returning the trimmed target and
 // whether the row should record an exemption from the own-project refusal.
 //
-// Two callers may name a service account in Gram's own project. A platform
+// Two callers may name a service account in Speakeasy's own project. A platform
 // administrator may, which is how Speakeasy staff dogfood the feature against
 // an internal service account. And anyone may keep one a platform administrator
 // already approved, so long as they submit it unchanged: the update payload
@@ -173,9 +169,9 @@ type impersonationDecision struct {
 //
 // Carrying the exemption forward does not let it be laundered onto a different
 // identity, because it is pinned to the target rather than to the credential.
-// Naming any other service account in Gram's own project is screened as an
+// Naming any other service account in Speakeasy's own project is screened as an
 // ordinary caller and refused, so the edit path cannot be used to probe which
-// internal service accounts Gram can impersonate. Moving the target away and
+// internal service accounts Speakeasy can impersonate. Moving the target away and
 // back refuses too: the intervening write records no exemption.
 func (s *Service) resolveOrgImpersonationTarget(ctx context.Context, logger *slog.Logger, raw string, isPlatformAdmin bool, prior priorTarget) (impersonationDecision, error) {
 	target := strings.TrimSpace(raw)
@@ -255,14 +251,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	}
 	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 
-	// The platform-admin (adminExternalCredentials) surface shares this Service
-	// struct; its handlers live in adminhandlers.go and gate on the platform-admin
-	// flag rather than an org RBAC scope.
-	adminEndpoints := adminecgen.NewEndpoints(service)
-	for _, m := range mw {
-		adminEndpoints.Use(m)
-	}
-	adminecsrv.Mount(mux, adminecsrv.New(adminEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -270,7 +258,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) CreateAwsIamCredential(ctx context.Context, payload *gen.CreateAwsIamCredentialPayload) (*gen.AwsIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +327,7 @@ func (s *Service) CreateAwsIamCredential(ctx context.Context, payload *gen.Creat
 }
 
 func (s *Service) UpdateAwsIamCredential(ctx context.Context, payload *gen.UpdateAwsIamCredentialPayload) (*gen.AwsIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -429,7 +417,7 @@ func (s *Service) UpdateAwsIamCredential(ctx context.Context, payload *gen.Updat
 }
 
 func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.CreateGcpIamCredentialPayload) (*gen.GcpIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -440,8 +428,7 @@ func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.Creat
 	}
 
 	// The organization tier is impersonation-only, so the WIF columns are never
-	// written here and resolveGcpColumns (which infers between all three modes)
-	// does not apply.
+	// written here.
 	decision, err := s.resolveOrgImpersonationTarget(ctx, logger, payload.ImpersonateServiceAccount, authCtx.IsAdmin, priorTarget{
 		ImpersonateServiceAccount: "",
 		SkipProjectVerification:   false,
@@ -503,7 +490,7 @@ func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.Creat
 }
 
 func (s *Service) UpdateGcpIamCredential(ctx context.Context, payload *gen.UpdateGcpIamCredentialPayload) (*gen.GcpIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -629,7 +616,7 @@ func (s *Service) ListGcpIamCredentials(ctx context.Context, payload *gen.ListGc
 // listCredentials returns the org's credential summaries, optionally filtered to
 // a single provider (invalid pgtype.Text = no filter).
 func (s *Service) listCredentials(ctx context.Context, provider pgtype.Text) (*gen.ListExternalCredentialsResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -648,7 +635,7 @@ func (s *Service) listCredentials(ctx context.Context, provider pgtype.Text) (*g
 }
 
 func (s *Service) GetAwsIamCredential(ctx context.Context, payload *gen.GetAwsIamCredentialPayload) (*gen.AwsIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -673,7 +660,7 @@ func (s *Service) GetAwsIamCredential(ctx context.Context, payload *gen.GetAwsIa
 }
 
 func (s *Service) GetGcpIamCredential(ctx context.Context, payload *gen.GetGcpIamCredentialPayload) (*gen.GcpIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -697,14 +684,14 @@ func (s *Service) GetGcpIamCredential(ctx context.Context, payload *gen.GetGcpIa
 	return mv.BuildGcpIamCredentialView(row.ExternalCredential, row.GcpIamCredential), nil
 }
 
-// VerifyGcpIamCredential probes that Gram can impersonate the service account the
+// VerifyGcpIamCredential probes that Speakeasy can impersonate the service account the
 // credential names. Unlike the platform equivalent this is a real authorization
 // check rather than a "who am I": impersonation only succeeds when the customer
-// has granted Gram's service account roles/iam.serviceAccountTokenCreator on the
+// has granted Speakeasy's service account roles/iam.serviceAccountTokenCreator on the
 // target. The probe is ephemeral — nothing is persisted — and a resolution
 // failure is a reportable outcome (verified=false), not a request error.
 func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.VerifyGcpIamCredentialPayload) (*gen.VerifyCredentialResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -736,7 +723,7 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 
 	// Rows written before this tier became impersonation-only can name no target,
 	// or name one alongside Workload Identity Federation columns. Neither can be
-	// probed honestly: an empty target would resolve Gram's own ambient identity
+	// probed honestly: an empty target would resolve Speakeasy's own ambient identity
 	// and report success, and a WIF row's real resolution mode is WIF (which
 	// gcpauth reports as unsupported), so probing its impersonation hop in
 	// isolation would claim the credential works when nothing else can use it.
@@ -758,10 +745,10 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 
 	// Re-screen the stored target. The write-time guard was added with this
 	// endpoint, so rows created earlier were never screened and would otherwise
-	// make verify an oracle for which service accounts in Gram's own project Gram
+	// make verify an oracle for which service accounts in Speakeasy's own project Speakeasy
 	// can impersonate. A screening the server cannot evaluate is an error rather
 	// than an unverified result: reporting "not verified" would blame the
-	// customer's configuration for a fault on Gram's side.
+	// customer's configuration for a fault on Speakeasy's side.
 	//
 	// A row a platform administrator exempted is forgiven the own-project
 	// refusal, so probing it reports what it can actually do rather than a
@@ -805,7 +792,7 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 // rights to. It is deliberately readable before any credential exists, because
 // making that grant is a precondition of creating one at all.
 func (s *Service) GetGcpSetupInfo(ctx context.Context, payload *gen.GetGcpSetupInfoPayload) (*gen.GcpSetupInfo, error) {
-	_, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	_, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -843,14 +830,15 @@ func (s *Service) DeleteGcpIamCredential(ctx context.Context, payload *gen.Delet
 // pointing at a tombstone — the key still lists and still looks healthy, but
 // nothing can reach it, and the failure only surfaces at signing time.
 //
-// The platform tier has its own delete path in adminhandlers.go and no such
-// guard. That is sound rather than an oversight: an external key is written with
-// a non-NULL organization_id and validated against a credential in that same
-// organization, while platform credentials carry organization_id IS NULL, so no
-// key can name one. Giving the platform tier keys of its own (AGE-3069) would
-// end that, and would need this guard mirrored there.
+// Platform credentials are deleted through the admin service
+// (server/internal/admin/externalcredentials.go), not here. A customer-managed
+// external key is validated against a credential in its own organization, so it
+// can never name a platform credential (organization_id IS NULL). The keys
+// Speakeasy provisions itself do name one — managed signing keys, issuer keys
+// and managed organization encryption keys — and the admin delete refuses
+// while any of them still depend on it.
 func (s *Service) deleteExternalCredential(ctx context.Context, provider, rawID string) error {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -958,7 +946,7 @@ type awsColumns struct {
 // resolveAwsColumns validates the AWS form and produces the subtype column
 // values. The authentication approach is inferred from which fields are set:
 // assume_role_arn + oidc_audience assumes the role with a web identity;
-// assume_role_arn alone assumes the role with a Gram-generated ExternalId
+// assume_role_arn alone assumes the role with a Speakeasy-generated ExternalId
 // (preserved on update); no fields records a KMS key-policy grant.
 func (s *Service) resolveAwsColumns(ctx context.Context, logger *slog.Logger, in awsCredentialInput, existingExternalID pgtype.Text) (awsColumns, error) {
 	arn := conv.PtrToPGTextTrimmed(in.assumeRoleArn)
@@ -993,54 +981,10 @@ func (s *Service) resolveAwsColumns(ctx context.Context, logger *slog.Logger, in
 		}
 	}
 
-	// sts_region only applies when Gram assumes a role; reject it for the
+	// sts_region only applies when Speakeasy assumes a role; reject it for the
 	// key-policy grant approach (no assume_role_arn).
 	if region.Valid && !arn.Valid {
 		return cols, oops.E(oops.CodeBadRequest, nil, "sts_region requires assume_role_arn").LogError(ctx, logger)
-	}
-
-	return cols, nil
-}
-
-type gcpCredentialInput struct {
-	impersonateServiceAccount *string
-	wifPoolID                 *string
-	wifProviderID             *string
-	wifProjectNumber          *string
-}
-
-type gcpColumns struct {
-	ImpersonateServiceAccount pgtype.Text
-	WifPoolID                 pgtype.Text
-	WifProviderID             pgtype.Text
-	WifProjectNumber          pgtype.Text
-}
-
-// resolveGcpColumns validates the GCP form and produces the subtype column
-// values. The wif_* fields must be provided together; the approach (Workload
-// Identity Federation, impersonation, or ambient) follows from which fields are
-// set.
-func (s *Service) resolveGcpColumns(ctx context.Context, logger *slog.Logger, in gcpCredentialInput) (gcpColumns, error) {
-	impersonate := conv.PtrToPGTextTrimmed(in.impersonateServiceAccount)
-	poolID := conv.PtrToPGTextTrimmed(in.wifPoolID)
-	providerID := conv.PtrToPGTextTrimmed(in.wifProviderID)
-	projectNumber := conv.PtrToPGTextTrimmed(in.wifProjectNumber)
-
-	cols := gcpColumns{
-		ImpersonateServiceAccount: impersonate,
-		WifPoolID:                 poolID,
-		WifProviderID:             providerID,
-		WifProjectNumber:          projectNumber,
-	}
-
-	wifSet := 0
-	for _, f := range []pgtype.Text{poolID, providerID, projectNumber} {
-		if f.Valid {
-			wifSet++
-		}
-	}
-	if wifSet != 0 && wifSet != 3 {
-		return cols, oops.E(oops.CodeBadRequest, nil, "wif_pool_id, wif_provider_id, and wif_project_number must be set together").LogError(ctx, logger)
 	}
 
 	return cols, nil

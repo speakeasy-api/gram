@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -32,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -330,7 +330,7 @@ func (l *LocalRunner) handleLocalProxyRequest(action string) http.HandlerFunc {
 			http.Error(w, "local function invocation failed", http.StatusBadGateway)
 			return
 		}
-		defer o11y.LogDefer(ctx, l.logger, func() error { return resp.Body.Close() })
+		defer o11y.LogDefer(ctx, l.logger, "failed to close local function runner response body", func() error { return resp.Body.Close() })
 
 		for key, values := range resp.Header {
 			if strings.EqualFold(key, "Content-Length") || strings.EqualFold(key, "Transfer-Encoding") {
@@ -545,9 +545,14 @@ func (l *LocalRunner) ensureRunnerBinary(ctx context.Context) (string, error) {
 		}
 
 		l.binaryPath = filepath.Join(binDir, localRunnerBinaryName)
+		root, err := testenv.FindRepoRoot(ctx)
+		if err != nil {
+			l.binaryErr = fmt.Errorf("locate local runner source: %w", err)
+			return
+		}
 		//nolint:gosec // builds the checked-out local runner from a fixed repo-relative package path.
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", l.binaryPath, "./functions/cmd/runner")
-		cmd.Dir = localFunctionsRepoRoot()
+		cmd := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-o", l.binaryPath, "./functions/cmd/runner")
+		cmd.Dir = root
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			l.binaryErr = fmt.Errorf("build local runner binary: %w\n%s", err, string(output))
@@ -563,7 +568,7 @@ func (l *LocalRunner) copyAsset(ctx context.Context, assetURL *url.URL, dst stri
 	if err != nil {
 		return fmt.Errorf("open asset: %w", err)
 	}
-	defer o11y.LogDefer(ctx, l.logger, func() error { return src.Close() })
+	defer o11y.LogDefer(ctx, l.logger, "failed to close function asset reader", func() error { return src.Close() })
 
 	tmpPath := dst + ".tmp"
 	//nolint:gosec // temporary destination lives under the orchestrator-managed local function directory.
@@ -576,7 +581,7 @@ func (l *LocalRunner) copyAsset(ctx context.Context, assetURL *url.URL, dst stri
 		if closed {
 			return
 		}
-		_ = o11y.LogDefer(ctx, l.logger, func() error { return dstFile.Close() })
+		_ = o11y.LogDefer(ctx, l.logger, "failed to close local function asset file", func() error { return dstFile.Close() })
 	}()
 
 	if _, err := io.Copy(dstFile, src); err != nil {
@@ -707,11 +712,6 @@ func waitForLocalRunner(ctx context.Context, client *guardian.HTTPClient, health
 	}
 
 	return fmt.Errorf("timed out waiting for local runner health endpoint")
-}
-
-func localFunctionsRepoRoot() string {
-	_, filename, _, _ := runtime.Caller(0)
-	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
 }
 
 func waitForLocalRunnerAddrFile(ctx context.Context, path string) (string, error) {

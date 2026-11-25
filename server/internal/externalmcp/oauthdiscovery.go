@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -35,6 +33,18 @@ type OAuthDiscoveryResult struct {
 	RegistrationEndpoint  string
 	ScopesSupported       []string
 
+	// ClientIDMetadataDocumentSupported reports whether the authorization
+	// server advertises client_id_metadata_document_supported (OAuth CIMD
+	// draft). When true, a client may send a metadata-document URL as
+	// client_id instead of dynamically registering.
+	ClientIDMetadataDocumentSupported bool
+
+	// TokenEndpointAuthMethodsSupported is the authorization server's
+	// advertised token_endpoint_auth_methods_supported. Empty means the
+	// document omitted the field; CIMD public clients require "none" only
+	// when the server enumerated methods.
+	TokenEndpointAuthMethodsSupported []string
+
 	// ProbeIncomplete reports that at least one discovery request failed
 	// without the server cleanly saying the document is not there (only a
 	// 404 or 410 says that): unreachable host, TLS failure, auth or
@@ -43,56 +53,6 @@ type OAuthDiscoveryResult struct {
 	// completion — callers that treat "none" as "publishes no OAuth
 	// metadata" must keep that case distinct.
 	ProbeIncomplete bool
-}
-
-// ExternalMCPOAuthConfig contains OAuth configuration extracted from an external MCP tool
-// that requires OAuth authentication.
-type ExternalMCPOAuthConfig struct {
-	// RemoteURL is the parsed URL of the external MCP server
-	RemoteURL *url.URL
-	// RegistryID is the ID of the MCP registry the server belongs to
-	RegistryID string
-	// Slug is the tool prefix slug (e.g., "github")
-	Slug string
-	// Name is the reverse-DNS server name (e.g., "ai.exa/exa")
-	Name string
-
-	// OAuth metadata from the external server
-	OAuthVersion          string   // "2.1", "2.0", or "none"
-	AuthorizationEndpoint string   // OAuth authorization endpoint URL
-	TokenEndpoint         string   // OAuth token endpoint URL
-	RegistrationEndpoint  string   // OAuth dynamic client registration endpoint URL
-	ScopesSupported       []string // OAuth scopes supported by the server
-}
-
-// ResolveOAuthConfig returns the OAuth configuration from the first external MCP tool
-// in the toolset that requires OAuth, or nil if none found.
-func ResolveOAuthConfig(toolset *types.Toolset) *ExternalMCPOAuthConfig {
-	for _, tool := range toolset.Tools {
-		if tool.ExternalMcpToolDefinition == nil || !tool.ExternalMcpToolDefinition.RequiresOauth {
-			continue
-		}
-
-		remoteURL, err := url.Parse(tool.ExternalMcpToolDefinition.RemoteURL)
-		if err != nil {
-			continue
-		}
-
-		def := tool.ExternalMcpToolDefinition
-		return &ExternalMCPOAuthConfig{
-			RemoteURL:             remoteURL,
-			RegistryID:            def.RegistryID,
-			Slug:                  def.Slug,
-			Name:                  def.Name,
-			OAuthVersion:          def.OauthVersion,
-			AuthorizationEndpoint: conv.PtrValOr(def.OauthAuthorizationEndpoint, ""),
-			TokenEndpoint:         conv.PtrValOr(def.OauthTokenEndpoint, ""),
-			RegistrationEndpoint:  conv.PtrValOr(def.OauthRegistrationEndpoint, ""),
-			ScopesSupported:       def.OauthScopesSupported,
-		}
-	}
-
-	return nil
 }
 
 // errWellKnownAbsent marks a well-known fetch the server answered with a
@@ -107,6 +67,17 @@ type authServerMetadata struct {
 	TokenEndpoint         string   `json:"token_endpoint"`
 	RegistrationEndpoint  string   `json:"registration_endpoint,omitempty"`
 	ScopesSupported       []string `json:"scopes_supported,omitempty"`
+
+	// TokenEndpointAuthMethodsSupported is omitted when the document does
+	// not advertise the field. An empty slice after a present field is
+	// distinct from omission only on the wire; encoding/json collapses both
+	// to nil/empty, which matches the CIMD preflight (empty means "do not
+	// second-guess").
+	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported,omitempty"`
+
+	// ClientIDMetadataDocumentSupported reports the CIMD draft advertisement.
+	// Absent from the document unmarshals as false.
+	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
 }
 
 // protectedResourceMetadata represents OAuth 2.0 Protected Resource Metadata (RFC 9728).
@@ -230,13 +201,15 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 
 	// Determine the OAuth version based on what we found
 	result := &OAuthDiscoveryResult{
-		Version:               OAuthVersionNone,
-		Issuer:                "",
-		AuthorizationEndpoint: "",
-		TokenEndpoint:         "",
-		RegistrationEndpoint:  "",
-		ScopesSupported:       nil,
-		ProbeIncomplete:       probeFailed,
+		Version:                           OAuthVersionNone,
+		Issuer:                            "",
+		AuthorizationEndpoint:             "",
+		TokenEndpoint:                     "",
+		RegistrationEndpoint:              "",
+		ScopesSupported:                   nil,
+		ClientIDMetadataDocumentSupported: false,
+		TokenEndpointAuthMethodsSupported: nil,
+		ProbeIncomplete:                   probeFailed,
 	}
 
 	if authServerMeta != nil {
@@ -245,6 +218,8 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 		result.TokenEndpoint = authServerMeta.TokenEndpoint
 		result.RegistrationEndpoint = authServerMeta.RegistrationEndpoint
 		result.ScopesSupported = authServerMeta.ScopesSupported
+		result.ClientIDMetadataDocumentSupported = authServerMeta.ClientIDMetadataDocumentSupported
+		result.TokenEndpointAuthMethodsSupported = authServerMeta.TokenEndpointAuthMethodsSupported
 		if resourceMeta != nil && len(resourceMeta.ScopesSupported) > 0 {
 			// Protected-resource scopes describe the permissions accepted by
 			// this MCP server. Prefer them over the authorization server's
@@ -254,7 +229,8 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 		}
 
 		// If we have a registration endpoint, it's full MCP OAuth (2.1)
-		// Otherwise it's legacy OAuth 2.0
+		// Otherwise it's legacy OAuth 2.0. CIMD support is reported on its
+		// own field; callers that can act on it check that directly.
 		if authServerMeta.RegistrationEndpoint != "" {
 			result.Version = OAuthVersion21
 		} else {
@@ -341,7 +317,7 @@ func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *
 	}
 	req.Header.Set("Accept", "application/json")
 
-	client := guardianPolicy.Client()
+	client := guardianPolicy.Client(guardian.WithInternalCatalog())
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return fmt.Errorf("stopped after 10 redirects")
@@ -355,7 +331,7 @@ func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return resp.Body.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close oauth discovery response body", func() error { return resp.Body.Close() })
 
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
 		// The server deliberately answering that this well-known document is

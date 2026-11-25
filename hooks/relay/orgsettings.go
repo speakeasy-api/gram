@@ -39,7 +39,7 @@ const orgSettingsMaxAge = 14 * 24 * time.Hour
 const orgSettingsRefreshAge = 24 * time.Hour
 
 // orgSettingsPath returns the settings cache location, a sibling of the
-// credential cache so it follows the GRAM_HOOKS_AUTH_FILE override. It is
+// credential cache so it follows the SPEAKEASY_AI_HOOKS_AUTH_FILE override. It is
 // deliberately not removed by forgetAuth: losing a credential must not flip
 // the org's enforcement posture.
 func orgSettingsPath() string {
@@ -102,7 +102,7 @@ func writeOrgSettings(cfg Config, failOpen bool) {
 }
 
 // failOpenAllowed reports whether an unobtainable verdict (server unreachable
-// or 5xx) may fail open: the GRAM_HOOKS_FAIL_OPEN escape hatch, the legacy
+// or 5xx) may fail open: the SPEAKEASY_AI_HOOKS_FAIL_OPEN escape hatch, the legacy
 // nonblocking flag still baked into plugins published before observability
 // mode was removed, the org's last server-confirmed setting, or a true cold
 // start. Absent all of those, gating events fail closed.
@@ -110,7 +110,7 @@ func failOpenAllowed(cfg Config) bool {
 	if cfg.Nonblocking {
 		return true
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_FAIL_OPEN")); v == "1" || strings.EqualFold(v, "true") {
+	if v := Env("HOOKS_FAIL_OPEN"); v == "1" || strings.EqualFold(v, "true") {
 		return true
 	}
 	if s, ok := readOrgSettings(cfg); ok {

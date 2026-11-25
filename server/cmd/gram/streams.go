@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -12,12 +13,20 @@ import (
 	"syscall"
 	"time"
 
+	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
+	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
+	"github.com/speakeasy-api/gram/server/internal/classifier/jev"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
+
+	"cloud.google.com/go/pubsub/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
@@ -28,12 +37,20 @@ import (
 	"github.com/speakeasy-api/gram/infra/gen"
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	networkingressv1 "github.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
+	pluginsv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	roledistributionv1 "github.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
+	tunnelv1 "github.com/speakeasy-api/gram/infra/gen/gram/tunnel/v1"
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/storage"
+	"github.com/speakeasy-api/gram/infra/pkg/storagebindings"
+	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -44,33 +61,80 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	meteringchrepo "github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/must"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/ping"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/roledistribution"
+	"github.com/speakeasy-api/gram/server/internal/scanners/accountidentity"
+	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/presidiostub"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
+	"github.com/speakeasy-api/gram/server/internal/scanners/toolcall"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/sigint"
+	sigintchrepo "github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	tunnelrepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/tunnelmetrics"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay"
 )
+
+const (
+	// spanEventWriterBatchMessages gives a single receiver headroom above a
+	// sizing target of 1,000 spans per second while keeping insert batches bounded.
+	spanEventWriterBatchMessages = 2000
+
+	// spanEventWriterBatchBytes flushes large spans when their batch payload
+	// reaches the 10 MiB insert budget.
+	spanEventWriterBatchBytes = 10 * constants.MiB
+
+	// spanEventWriterBatchLatency bounds the wait for a partial batch so sparse
+	// traffic and byte-limited deliveries are acknowledged promptly.
+	spanEventWriterBatchLatency = time.Second
+
+	// spanEventWriterOutstandingBatches allows one batch to fill while another
+	// is being inserted and acknowledged by the Pub/Sub service.
+	spanEventWriterOutstandingBatches = 2
+)
+
+// checkPystreamsStub enforces that the pystreams stub only runs in local
+// development. Elsewhere it would silently skip Presidio scanning and answer
+// enforcement requests with no findings.
+func checkPystreamsStub(environment string, enabled bool) error {
+	if enabled && environment != "local" {
+		return fmt.Errorf("--pystreams-stub is only allowed in the local environment, not %q", environment)
+	}
+	return nil
+}
 
 func newStreamsCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
@@ -144,40 +208,6 @@ func newStreamsCommand() *cli.Command {
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 		},
-		&cli.StringFlag{
-			Name:    "stripe-api-key",
-			Usage:   "The Stripe API key",
-			EnvVars: []string{"STRIPE_API_KEY"},
-		},
-		&cli.StringFlag{
-			Name:    "stripe-webhook-secret",
-			Usage:   "The Stripe webhook signing secret",
-			EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
-		},
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-price-id-tum",
-			Aliases: []string{"stripe.price_id_tum"},
-			Usage:   "The Stripe metered TUM price ID",
-			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-meter-id-tum",
-			Aliases: []string{"stripe.meter_id_tum"},
-			Usage:   "The Stripe TUM billing meter ID",
-			EnvVars: []string{"STRIPE_METER_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-meter-event-name",
-			Aliases: []string{"stripe.meter_event_name"},
-			Usage:   "The Stripe TUM meter event name",
-			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-portal-configuration-id",
-			Aliases: []string{"stripe.portal_configuration_id"},
-			Usage:   "The controlled Stripe customer portal configuration ID",
-			EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
-		}),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
@@ -264,6 +294,55 @@ func newStreamsCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
+		internalCatalogFlag(),
+		&cli.StringFlag{
+			Name:    "site-url",
+			Usage:   "The URL of the dashboard site, used to deep link from growth activity events",
+			EnvVars: []string{"GRAM_SITE_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "server-url",
+			Usage:   "The public URL of the server, trusted as a Speakeasy-hosted MCP host by the shadow MCP scanner",
+			EnvVars: []string{"GRAM_SERVER_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "sigint-openrouter-api-key",
+			Usage:   "Platform OpenRouter inference key for sensor evaluation; unset leaves the receiver stopped unless sigint-ack-only is enabled",
+			EnvVars: []string{"GRAM_SIGINT_OPENROUTER_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "storage-buckets",
+			Usage:   "Logical-to-physical storage bucket mapping as JSON; required outside local development",
+			EnvVars: []string{"GRAM_STORAGE_BUCKETS"},
+		},
+		&cli.PathFlag{
+			Name:    "lake-directory",
+			Usage:   "Filesystem object storage directory for local development",
+			EnvVars: []string{"GRAM_LAKE_DIRECTORY"},
+			Value:   "local/lake",
+		},
+		&cli.BoolFlag{
+			Name:    "pystreams-stub",
+			Usage:   "Consume the pystreams subscriptions here with no-op stubs instead of running pystreams: acknowledge Presidio analysis and Python ping messages, and answer Presidio enforcement with no findings. For local development only",
+			EnvVars: []string{"GRAM_PYSTREAMS_STUB"},
+		},
+		&cli.BoolFlag{
+			Name:    "sigint-ack-only",
+			Usage:   "Temporarily drain the sensor evaluation subscription: acknowledge all messages without evaluation or reading publication",
+			EnvVars: []string{"GRAM_SIGINT_ACK_ONLY"},
+		},
+		&cli.StringFlag{
+			Name:     "assets-backend",
+			Usage:    "Asset storage backend for conversation snapshots",
+			EnvVars:  []string{"GRAM_ASSETS_BACKEND"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "assets-uri",
+			Usage:    "Asset storage URI for conversation snapshots",
+			EnvVars:  []string{"GRAM_ASSETS_URI"},
+			Required: true,
+		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -272,10 +351,16 @@ func newStreamsCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, staffFlags()...)
+	flags = append(flags, stripeFlags()...)
+	flags = append(flags, networkIngressQueueFlags()...)
+	flags = append(flags, pluginPublicationEmitFlag())
+	flags = append(flags, pluginPublicationConsumeFlag())
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskIngestFlags()...)
+	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 
 	return &cli.Command{
@@ -285,6 +370,13 @@ func newStreamsCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-streams"
 			serviceEnv := c.String("environment")
+			if err := checkPystreamsStub(serviceEnv, c.Bool("pystreams-stub")); err != nil {
+				return err
+			}
+			staffOrg, err := staffOrganizationFromCLI(c)
+			if err != nil {
+				return err
+			}
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "streams"
 			logger := PullLogger(c.Context).With(
@@ -304,6 +396,7 @@ func newStreamsCommand() *cli.Command {
 				ServiceName:    serviceName,
 				ServiceVersion: shortGitSHA(),
 				GitSHA:         GitSHA,
+				Partition:      PullPartition(ctx),
 				EnableTracing:  c.Bool("with-otel-tracing"),
 				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
@@ -343,6 +436,9 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			defer db.Close()
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+				return err
+			}
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
 			if err != nil {
@@ -372,34 +468,49 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
-			var featureFlags feature.Provider = posthogClient
-			if c.String("environment") == "local" {
-				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
-			}
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			assetStorage, assetShutdown, err := newAssetStorage(ctx, logger, assetStorageOptions{assetsBackend: c.String("assets-backend"), assetsURI: c.String("assets-uri")})
+			if err != nil {
+				return fmt.Errorf("initialize evaluation asset storage: %w", err)
+			}
+
+			shutdownFuncs = append(shutdownFuncs, assetShutdown)
+
 			stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
+			stripeMeterEvents, err := newStripeMeterEventClient(logger, guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create Stripe meter event client: %w", err)
+			}
+			stripeCatalog := newStripeCatalog(c)
 
-			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
+			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
+			// Streams does not configure organization encryption: organizations
+			// still on the platform key work, and enrolled ones fail closed.
+			// TODO(DNO-1571): wire organization encryption before enrolling an
+			// organization in ai-provider-keys.
+			aiProviderKeys := aiproviderkeys.WithoutOrganizationEncryption(logger, db, encryptionClient)
+			orEndpoints := openrouter.EndpointsFor(PullPartition(ctx))
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker, encryptionClient)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), PullPartition(ctx), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
 			}
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
+				orEndpoints,
 				openRouter,
-				modelkeys.NewResolver(db, encryptionClient, openRouter),
+				modelkeys.NewResolver(db, aiProviderKeys, openRouter),
 				nil,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				nil,
@@ -412,13 +523,17 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 			var (
-				findingsPub gcp.Publisher[*riskv1.Finding]
-				logPub      gcp.Publisher[*otelv1.LogRecord]
-				metricPub   gcp.Publisher[*otelv1.Metric]
-				spanPub     gcp.Publisher[*otelv1.Span]
+				findingsPub   gcp.Publisher[*riskv1.Finding]
+				logPub        gcp.Publisher[*otelv1.LogRecord]
+				metricPub     gcp.Publisher[*otelv1.Metric]
+				spanPub       gcp.Publisher[*otelv1.Span]
+				riskMeterPub  gcp.Publisher[*meteringv1.MeterReading]
+				sessionLogPub gcp.Publisher[*telemetryv1.LogRecord]
+				readingsPub   gcp.Publisher[*sigintv1.Reading]
+				outcomesPub   gcp.Publisher[*sigintv1.Outcome]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub, readingsPub, outcomesPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -427,11 +542,24 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
+			var builtinPresets *presetlib.Library
+			if enableCHRiskWrites {
+				builtinPresets, err = presetlib.New()
+				if err != nil {
+					return fmt.Errorf("load built-in exclusion library: %w", err)
+				}
+			}
 			chConn, shutdown, err := newClickhouseClient(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("failed to create clickhouse client: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			meterPublishSettings := pubsub.DefaultPublishSettings
+			meterPublishSettings.Timeout = 10 * time.Second
+			meterPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+			meterPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+			meterPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
 
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
 			// scan over GitleaksAnalysis requests and publishes any matches into
@@ -440,14 +568,129 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
 			}
+			riskMeterPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
+				gcp.WithPubSubPublishSettings(&meterPublishSettings),
+			)
+			if err != nil {
+				return fmt.Errorf("create risk meter publisher: %w", err)
+			}
+			riskRecorder := metering.NewRiskRecorder(riskMeterPub)
+			var serverURL *url.URL
+			if raw := c.String("server-url"); raw != "" {
+				serverURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("parse server url: %w", err)
+				}
+			}
+			shadowMCPClient := shadowmcp.NewClient(logger, replicaDB, cache.NewRedisCacheAdapter(redisClient), serverURL)
+			toolCallHandler := toolcall.NewHandler(
+				logger,
+				shadowmcpscan.NewScanner(
+					logger,
+					shadowMCPClient,
+					shadowMCPClient,
+					telemetryrepo.New(chConn),
+					nil,
+					shadowmcpscan.WithShadowMCPBypass(background.NewShadowMCPPolicyBypassChecker(logger, replicaDB)),
+				),
+				destructivetool.NewScanner(shadowMCPClient),
+				clidestructive.NewScanner(),
+				findingsPub,
+				riskRecorder,
+			)
+			accountIdentityHandler := accountidentity.NewHandler(logger, findingsPub)
+			readingsPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &sigintv1.Reading{}, gcp.WithPubSubPublishSettings(&meterPublishSettings))
+			if err != nil {
+				return fmt.Errorf("create sensor readings publisher: %w", err)
+			}
+			outcomesPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &sigintv1.Outcome{}, gcp.WithPubSubPublishSettings(&meterPublishSettings))
+			if err != nil {
+				return fmt.Errorf("create sensor outcomes publisher: %w", err)
+			}
 
-			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
-			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
-			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
-			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
+			// Sensor evaluation classifies with Jev through System One. Where
+			// OpenRouter serves no System One models, the key is ignored so the
+			// receiver stays stopped instead of failing every batch.
+			sigintKey := c.String("sigint-openrouter-api-key")
+			if sigintKey != "" && !orEndpoints.ServesDecisionModels {
+				logger.WarnContext(ctx, "sensor evaluation is unavailable: OpenRouter serves no System One models in this partition, ignoring sigint-openrouter-api-key")
+				sigintKey = ""
+			}
+
+			sensorClassifier, err := jev.New(guardianPolicy, conv.NewSecret([]byte(sigintKey)), jev.WithEndpoint(orEndpoints.Inference+"/v1/systemone"))
+			if err != nil {
+				return fmt.Errorf("create sensor classifier: %w", err)
+			}
+
+			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, outcomesPub, sensorClassifier)
+			if err != nil {
+				return fmt.Errorf("create sensor evaluator: %w", err)
+			}
+
+			lakeStore, lakeBuckets, lakeShutdown, err := newLakeStorage(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("initialize lake storage: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, lakeShutdown)
+
+			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
+			replyWriter := enforcereply.NewWriter(redisClient)
+			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(
+				logger,
+				meterProvider,
+				replyWriter,
+				func(tenantID string, message []byte) (string, error) {
+					sum, _, fingerprintErr := riskFingerprinter.TenantedHS256(tenantID, message)
+					return risk.EncodeFingerprint(sum), fingerprintErr
+				},
+				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge, MaxContentBytes: 0},
+				riskRecorder,
+			)
+			if err != nil {
+				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
+			}
+			promptInjectionScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db).Classify)
+			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, findingsPub, riskRecorder)
+			promptInjectionEnforceHandler, err := promptinjection.NewEnforceHandler(
+				logger,
+				meterProvider,
+				promptInjectionScanner,
+				replyWriter,
+				riskRecorder,
+				promptinjection.EnforceHandlerConfig{MaxRequestAge: 0, MaxContentBytes: 0},
+			)
+			if err != nil {
+				return fmt.Errorf("create prompt injection enforcement handler: %w", err)
+			}
 			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
-			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
-			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
+			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, findingsPub, riskRecorder)
+			promptPolicyEnforceHandler, err := promptpolicy.NewEnforceHandler(
+				logger,
+				meterProvider,
+				promptPolicyScanner,
+				replyWriter,
+				riskRecorder,
+				promptpolicy.EnforceHandlerConfig{MaxRequestAge: 0, MaxContentBytes: 0},
+			)
+			if err != nil {
+				return fmt.Errorf("create prompt policy enforcement handler: %w", err)
+			}
+
+			// Fine-tuned risk model analyzer: both its lanes run here. Without a
+			// model URL the analyzer is disabled and its handlers ack untouched.
+			riskLLMConfig := llmAnalyzerConfigFromCLI(c)
+			var riskLLMCompleter llmanalyzer.Completer
+			if riskLLMConfig.Enabled() {
+				riskLLMClient, err := llmanalyzer.NewClient(logger, tracerProvider, meterProvider, guardianPolicy, riskLLMConfig)
+				if err != nil {
+					return fmt.Errorf("create risk llm client: %w", err)
+				}
+				riskLLMCompleter = riskLLMClient
+			} else {
+				logger.WarnContext(ctx, "LLM analyzer disabled: GRAM_RISK_LLM_URL empty")
+			}
+			llmAnalyzer := llmanalyzer.NewAnalyzer(logger, tracerProvider, riskLLMCompleter)
+			llmAnalyzerHandler := llmanalyzer.NewHandler(logger, meterProvider, llmAnalyzer, findingsPub, riskRecorder)
 
 			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
 			// detection rules from the read replica (caching their compilation) and
@@ -456,7 +699,18 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create custom rules scanner: %w", err)
 			}
-			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub)
+			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub, riskRecorder)
+			customRulesEnforceHandler, err := customruleanalyzer.NewEnforceHandler(
+				logger,
+				meterProvider,
+				scanner,
+				replyWriter,
+				riskRecorder,
+				customruleanalyzer.EnforceHandlerConfig{MaxRequestAge: 0, MaxContentBytes: 0},
+			)
+			if err != nil {
+				return fmt.Errorf("create custom rules enforcement handler: %w", err)
+			}
 
 			{
 				controlServer := control.Server{
@@ -490,11 +744,14 @@ func newStreamsCommand() *cli.Command {
 			// so subscriptions get reconciled afresh.
 			group, gctx := errgroup.WithContext(ctx)
 			rg := receiverGroup{
-				group:      group,
-				getContext: func() context.Context { return gctx },
-				tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/cmd/gram/streams"),
-				logger:     logger,
-				broker:     psbroker,
+				group:          group,
+				getContext:     func() context.Context { return gctx },
+				tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/cmd/gram/streams"),
+				logger:         logger,
+				broker:         psbroker,
+				meterProvider:  meterProvider,
+				storageStore:   lakeStore,
+				storageBuckets: lakeBuckets,
 			}
 
 			svixClient, svixShutdown, err := newSvixClient(c, logger, guardianPolicy)
@@ -505,7 +762,27 @@ func newStreamsCommand() *cli.Command {
 
 			svixRelayHandler := svixrelay.NewHandler(logger, meterProvider, db, svixClient)
 			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
+			trialConversionKeyReconcileHandler := usage.NewEnterpriseTrialConversionKeyReconcileHandler(logger, openRouterKeyRefresher)
 			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
+			approvalSlackHandler := slackapproval.NewEventHandler(logger, &background.TemporalRiskApprovalSlackScheduler{TemporalEnv: temporalEnv})
+			accessRequestSlackHandler := slackrequests.NewEventHandler(logger, &background.TemporalAccessRequestSlackScheduler{TemporalEnv: temporalEnv})
+
+			var siteURL *url.URL
+			if raw := c.String("site-url"); raw != "" {
+				siteURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("parse site url: %w", err)
+				}
+				// url.Parse accepts a bare path or a custom scheme, and either
+				// would produce a link Slack rejects. A site URL that cannot
+				// address the dashboard is a misconfiguration worth failing on
+				// rather than discovering one dead button at a time.
+				if (siteURL.Scheme != "http" && siteURL.Scheme != "https") || siteURL.Host == "" {
+					return fmt.Errorf("site url must be an absolute http(s) URL, got %q", raw)
+				}
+			}
+			growthSignalHandler := growthsignals.NewEventHandler(logger, newGrowthSignalsEmitter(logger, posthogClient, replicaDB, siteURL))
+
 			webhookEventHandler := streams.HandlerFunc[*webhooksv1.Event](func(ctx context.Context, event *webhooksv1.Event, metadata gcp.MessageMetadata) error {
 				var handlerErrors []error
 				if err := svixRelayHandler.Handle(ctx, event, metadata); err != nil {
@@ -514,8 +791,20 @@ func newStreamsCommand() *cli.Command {
 				if err := paygKeyRefreshHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("schedule PAYG key refresh: %w", err))
 				}
+				if err := trialConversionKeyReconcileHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("schedule enterprise trial conversion key reconciliation: %w", err))
+				}
 				if err := billingNotificationHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("schedule billing notification: %w", err))
+				}
+				if err := growthSignalHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("report growth activity: %w", err))
+				}
+				if err := approvalSlackHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("send approval requests to Slack: %w", err))
+				}
+				if err := accessRequestSlackHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("send access requests to Slack: %w", err))
 				}
 				return errors.Join(handlerErrors...)
 			})
@@ -538,16 +827,15 @@ func newStreamsCommand() *cli.Command {
 			logRelayHandler := otelsvc.NewLogRelayHandler(
 				logger,
 				meterProvider,
-				replicaDB,
+				db,
 				encryptionClient,
 				guardianPolicy,
-				featureFlags,
 			)
 
 			metricRelayHandler := otelsvc.NewMetricRelayHandler(
 				logger,
 				meterProvider,
-				replicaDB,
+				db,
 				encryptionClient,
 				guardianPolicy,
 			)
@@ -555,26 +843,115 @@ func newStreamsCommand() *cli.Command {
 			spanRelayHandler := otelsvc.NewSpanRelayHandler(
 				logger,
 				meterProvider,
-				replicaDB,
+				db,
 				encryptionClient,
 				guardianPolicy,
 			)
 
+			riskFindingRelayHandler := otelsvc.NewRiskFindingRelayHandler(
+				logger,
+				meterProvider,
+				db,
+				encryptionClient,
+				guardianPolicy,
+			)
+
+			toolCallLogRelayHandler := otelsvc.NewToolCallLogRelayHandler(
+				logger,
+				meterProvider,
+				db,
+				encryptionClient,
+				guardianPolicy,
+			)
+
+			sessionLogPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &telemetryv1.LogRecord{})
+			if err != nil {
+				return fmt.Errorf("create session telemetry publisher: %w", err)
+			}
+			sessionLogger, stopSessionLogger := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chConn,
+				newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs),
+				newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs),
+				telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, sessionLogPub))
+			shutdownFuncs = append(shutdownFuncs, stopSessionLogger)
+
 			// Start subscription receivers in this block
 			{
+				// newLakeStorage returns no store when the lake is disabled.
+				if lakeStore != nil {
+					mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
+				}
+				mustReceiveBatch(rg, &sigintv1.Reading{}, &sigintv1.ReadingCHWriter{}, sigint.NewReadingCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatch(rg, &sigintv1.Outcome{}, &sigintv1.OutcomeCHWriter{}, sigint.NewOutcomeCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
+				roleDistributionGuard := admission.NewGuard()
+				roleDistributionHandler := roledistribution.NewHandler(logger, roledistribution.Processors{
+					Setup: func(ctx context.Context, roleURN, organizationID string) (bool, error) {
+						return roledistribution.ProcessRoleDistributionSetup(ctx, db, plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}, roleDistributionGuard, roleURN, organizationID)
+					},
+					GlobalFanout: func(ctx context.Context, roleID uuid.UUID, cursor string) error {
+						return roledistribution.ProcessGlobalFanout(ctx, db, roleID, cursor)
+					},
+					OrganizationBootstrap: func(ctx context.Context, organizationID, cursor string) error {
+						return roledistribution.ProcessOrganizationBootstrap(ctx, db, organizationID, cursor)
+					},
+				})
+				mustReceive(rg, &roledistributionv1.RoleDistributionSetupRequestedV1{}, &roledistributionv1.RoleDistributionSetupHandler{}, streams.HandlerFunc[*roledistributionv1.RoleDistributionSetupRequestedV1](roleDistributionHandler.HandleRoleDistributionSetupRequested))
+				if c.Bool(pluginPublicationConsumeFlagName) {
+					publicationHandler := plugins.NewPublicationHandler(logger, db, &background.TemporalPluginPublisher{TemporalEnv: temporalEnv})
+					organizationPublicationHandler := plugins.NewOrganizationPublicationHandler(logger, db)
+					settings := gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0}
+					mustReceiveBatchWithResult(rg, &pluginsv1.PublicationRequested{}, &pluginsv1.PublicationScheduler{}, publicationHandler, settings)
+					mustReceiveBatchWithResult(rg, &pluginsv1.OrganizationPublicationRequested{}, &pluginsv1.OrganizationPublicationScheduler{}, organizationPublicationHandler, settings)
+				}
+				if queue := c.String(networkIngressQueueFlag); queue != "" {
+					client := &background.NetworkIngressClient{Client: temporalEnv.Client(), Queue: queue}
+					mustReceiveBatchWithResult(rg, &networkingressv1.ReconcileRequested{}, &networkingressv1.Reconciler{}, networkingress.NewReconcileHandler(logger, queue, client.SignalNetworkIngress), gcp.BatchReceiveSettings{MaxMessages: 100, MaxBytes: constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				}
+
+				if c.Bool("pystreams-stub") {
+					// Stand in for pystreams. Running both would split each
+					// subscription's messages between real and stubbed consumers.
+					logger.WarnContext(ctx, "pystreams stubbed: Presidio scans are skipped")
+					mustReceive(rg, &pingv2.Message{}, &pingv2.PyProcessor{}, new(subscribers.NoopHandler[*pingv2.Message]))
+					mustReceive(rg, &riskv1.PresidioAnalysis{}, &riskv1.PresidioAnalyzer{}, new(subscribers.NoopHandler[*riskv1.PresidioAnalysis]))
+					mustReceive(rg, &riskv1.PresidioEnforcement{}, &riskv1.PresidioEnforcer{}, presidiostub.NewEnforceHandler(logger, replyWriter))
+				}
 
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
+				mustReceive(rg, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{}, gitleaksEnforceHandler)
+				mustReceive(rg, &riskv1.LLMEnforcement{}, &riskv1.LLMEnforcer{}, llmanalyzer.NewEnforceHandler(logger, tracerProvider, meterProvider, llmAnalyzer, replyWriter, llmanalyzer.WithRiskRecorder(riskRecorder)))
+				mustReceive(rg, &riskv1.PromptInjectionEnforcement{}, &riskv1.PromptInjectionEnforcer{}, promptInjectionEnforceHandler)
+				mustReceive(rg, &riskv1.CustomRulesEnforcement{}, &riskv1.CustomRulesEnforcer{}, customRulesEnforceHandler)
+				mustReceive(rg, &riskv1.PromptPolicyEnforcement{}, &riskv1.PromptPolicyEnforcer{}, promptPolicyEnforceHandler)
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
+				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
+				mustReceive(rg, &riskv1.ToolCallAnalysis{}, &riskv1.ToolCallAnalyzer{}, toolCallHandler)
+				mustReceive(rg, &riskv1.AccountIdentityAnalysis{}, &riskv1.AccountIdentityAnalyzer{}, accountIdentityHandler)
+
+				mustReceiveBatch(rg, &telemetryv1.SessionObserved{}, &telemetryv1.SessionObservedCHWriter{}, telemetry.NewSessionObservedHandler(db, sessionLogger), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
-				mustReceive(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, chConn))
-				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
+				if c.Bool("sigint-ack-only") || sigintKey != "" {
+					var handler streams.BatchResultHandler[*conversationv1.MessageEvent] = evaluation.NewConversationHandler(sensorEvaluator, assetStorage, evaluation.NewRepository(db))
+					if c.Bool("sigint-ack-only") {
+						// A successful batch with no staged failures acknowledges every
+						// message, without entering the evaluation path.
+						handler = streams.BatchResultHandlerFunc[*conversationv1.MessageEvent](func(context.Context, []streams.BatchMessage[*conversationv1.MessageEvent]) error {
+							return nil
+						})
+					}
+					mustReceiveBatchWithResult(rg, &conversationv1.MessageEvent{}, &sigintv1.Evaluator{}, handler, gcp.BatchReceiveSettings{MaxMessages: 20, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				}
+				mustReceiveBatch(rg, &tunnelv1.MetricsSnapshot{}, &tunnelv1.MetricsCHWriter{}, tunnelmetrics.NewWriter(chConn, logger, tunnelrepo.New(db).ListMetricSourceOwners), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents, stripeCatalog, c.Bool(stripeMeterEventExportFlagName)))
 
 				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(
 					logger,
@@ -595,17 +972,34 @@ func newStreamsCommand() *cli.Command {
 					replicaDB,
 					cache.NewRedisCacheAdapter(redisClient),
 				))
-				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
-				mustReceiveBatchWithResult(rg, &otelv1.Metric{}, &otelv1.MetricRelay{}, metricRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
-				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatchWithResult(rg, &otelv1.Metric{}, &otelv1.MetricRelay{}, metricRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingOTELRelay{}, riskFindingRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatchWithResult(rg, &telemetryv1.LogRecord{}, &telemetryv1.ToolCallLogRelay{}, toolCallLogRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				// Event feed tee: mirror the normalized OTEL topics into the
 				// otel_logs / otel_traces ClickHouse tables.
-				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.LogEventCHWriter{}, otelsvc.NewLogEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
-				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.LogEventCHWriter{}, otelsvc.NewLogEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				spanEventReceiveSettings := pubsub.DefaultReceiveSettings
+				spanEventReceiveSettings.MaxOutstandingMessages = spanEventWriterOutstandingBatches * spanEventWriterBatchMessages
+				spanEventReceiveSettings.MaxOutstandingBytes = spanEventWriterOutstandingBatches * spanEventWriterBatchBytes
+				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{
+					MaxMessages:         spanEventWriterBatchMessages,
+					MaxBytes:            spanEventWriterBatchBytes,
+					MaxLatency:          spanEventWriterBatchLatency,
+					MaxBufferedMessages: 0,
+					MaxBufferedBytes:    0,
+				}, gcp.WithPubSubReceiveSettings(&spanEventReceiveSettings))
+
+				// Agent session tee: project the same normalized OTEL topics into
+				// agent_events, in agent vocabulary, for the semantic query layer.
+				// Its own subscriptions, so it fails independently of the event feed.
+				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.AgentEventLogCHWriter{}, otelsvc.NewAgentEventLogCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.AgentEventSpanCHWriter{}, otelsvc.NewAgentEventSpanCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				if enableCHRiskWrites {
-					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
+					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter, builtinPresets, risk.NewOutboxRiskFindingCreatedEmitter(db)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				}
 			}
 
@@ -664,11 +1058,62 @@ func shutdownPubSubPublishers(
 }
 
 type receiverGroup struct {
-	group      *errgroup.Group
-	getContext func() context.Context
-	tracer     trace.Tracer
-	logger     *slog.Logger
-	broker     gcp.SubscriberBroker
+	group          *errgroup.Group
+	getContext     func() context.Context
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	broker         pubSubBroker
+	meterProvider  metric.MeterProvider
+	storageStore   storage.Store
+	storageBuckets map[string]string
+}
+
+// streamToStorage registers a generated storage consumer with the shared receiver
+// lifecycle. Runtime failures cancel sibling receivers through the group's context.
+func streamToStorage(g receiverGroup, definition storage.Definition) error {
+	if g.storageStore == nil {
+		return errors.New("storage store is required")
+	}
+	if g.storageBuckets[definition.Bucket] == "" {
+		return fmt.Errorf("storage bucket mapping is required for %q", definition.Bucket)
+	}
+
+	ctx := contextvalues.SetPubSubSubscriberContext(g.getContext(), contextvalues.PubSubSubscriberContext{
+		TopicProtoName:        string(proto.MessageName(definition.Payload)),
+		SubscriptionProtoName: string(proto.MessageName(definition.Marker)),
+	})
+
+	g.group.Go(func() error {
+		if err := storage.Run(ctx, definition, storage.Config{
+			Broker:  g.broker,
+			Store:   g.storageStore,
+			Buckets: g.storageBuckets,
+			Settings: storage.Settings{
+				MaxMessages:         0,
+				MaxBytes:            0,
+				MaxLatency:          0,
+				MaxPartitions:       0,
+				Concurrency:         0,
+				ProcessTimeout:      0,
+				MaxExtension:        0,
+				OutstandingMessages: 0,
+				OutstandingBytes:    0,
+			},
+			TempDir:       "",
+			MeterProvider: g.meterProvider,
+			Logger:        g.logger,
+		}); err != nil {
+			return fmt.Errorf("stream %s to storage: %w", definition.ProtoName, err)
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
+func mustStreamToStorage(g receiverGroup, definition storage.Definition) {
+	must.Nil(streamToStorage(g, definition))
 }
 
 // setupSubscriber resolves the subscriber for a message/subscription pair and

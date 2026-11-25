@@ -1,0 +1,1286 @@
+import type { ToolSource } from "@/pages/access/useServerTools";
+import { supportsAudienceReading } from "./manageAccessState";
+import {
+  InlineChoice,
+  type InlineChoiceOption,
+} from "@/components/access/AccessListRow";
+import { IdentityLink } from "@/components/identity-link";
+import {
+  MemberFacepile,
+  type FacepileMember,
+} from "@/components/member-facepile";
+import { RequireScope } from "@/components/require-scope";
+import { useRBAC } from "@/hooks/useRBAC";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { Text } from "@/components/ui/Text";
+import { useOrgRoutes } from "@/routes";
+import { useNavigate } from "react-router";
+import type { SetResourceAudienceEntry } from "@gram/client/models/components/setresourceaudienceentry.js";
+import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
+import { invalidateAllExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
+import { useSetResourceAudienceMutation } from "@gram/client/react-query/setResourceAudience.js";
+import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
+import { invalidateAllPlugin } from "@gram/client/react-query/plugin.js";
+import { invalidateAllPlugins } from "@gram/client/react-query/plugins.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useDirectoryRoleMappings } from "@gram/client/react-query/directoryRoleMappings.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRoles } from "@gram/client/react-query/roles.js";
+import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
+import { useOrganization, useProject } from "@/contexts/Auth";
+import { convertWildcardGrants, holdsWildcard } from "./wildcardConversion";
+import { useProjectServerIds } from "./useProjectServerIds";
+import {
+  type RoleDirectorySource,
+  roleDirectorySources,
+} from "@/pages/access/directorySourcesForRole";
+import { RoleDirectorySourceLine } from "./RoleDirectorySourceLine";
+import {
+  Ban,
+  Bot,
+  ChevronLeft,
+  ChevronRight,
+  Lock,
+  Pencil,
+  PencilOff,
+  Plus,
+  Shield,
+  Trash2,
+  User,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/Dropdown";
+import { cn } from "@/lib/utils";
+import { useMemo, useState, type JSX } from "react";
+import { toast } from "sonner";
+import { RolePluginLinks } from "./RolePluginLinks";
+import type { ResourceAudienceRolePlugin } from "@gram/client/models/components/resourceaudienceroleplugin.js";
+import { AddAudienceDialog } from "./AddAudienceDialog";
+import { RemoveAudienceDialog } from "./RemoveAudienceDialog";
+import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
+import { ToolNarrowingDialog } from "./ToolNarrowingDialog";
+import { ConvertWildcardDialog } from "./ConvertWildcardDialog";
+import { pageCount, pageOf } from "./manageAccessState";
+import {
+  accessSummary,
+  blockedScopes,
+  buildAccessRows,
+  cappingBlocks,
+  keptIndividually,
+  reachableTools,
+  inheritedGrants,
+  openedElsewhere,
+  scopeState,
+  type ScopeState,
+  SCOPE_ROWS,
+  BLOCK_LEVEL,
+  lineLabels,
+  type AccessRow,
+  type ScopeKey,
+} from "./accessRows";
+import {
+  addPrincipalsWrite,
+  allowDestructiveWrite,
+  allowWrite,
+  clearScopeWrite,
+  blockDestructiveWrite,
+  narrowingSeed,
+  narrowWrite,
+  revokeRowWrite,
+  revokeScopeWrite,
+  type AudienceWrite,
+} from "./accessWrites";
+import { PrincipalBadge } from "./PrincipalBadge";
+import { RoleLink } from "@/components/role-link";
+import { isUnnarrowed, ownRules, LEVEL_VERB } from "./serverAudience";
+
+/** Narrowing the tool dialog is currently editing, and the row it belongs to. */
+/** A clear or removal that rewrites a role's rule covering every server. */
+interface WildcardChange {
+  row: AccessRow;
+  lines: ScopeKey[];
+  action: "clear" | "remove";
+}
+
+const ALL_LINES: ScopeKey[] = SCOPE_ROWS.map((line) => line.key);
+
+interface NarrowingTarget {
+  row: AccessRow;
+  tools: string[];
+  dispositions: string[];
+  /** The tools this row could reach, when something caps it below the whole
+   * catalogue. Offering the rest would let an administrator pick tools the
+   * server will refuse anyway. */
+  catalog?: ToolSelectionTool[];
+  /** The principal whose block caps it, for the dialog to name. */
+  limitedBy?: string;
+}
+
+/**
+ * Manage access for one resource. One list, one row per principal — a person,
+ * everyone, or a role — and inside each row a line for every scope the server
+ * has: connect, view and manage. Rules naming this resource are written here;
+ * an organization-wide rule is narrowed by subtracting from it, which is the
+ * only per-server edit that leaves every other server alone.
+ */
+export function ManageAccess({
+  resourceId,
+  resourceName,
+  entries,
+  version,
+  toolCatalog,
+  toolSource,
+  isLoading,
+  rolePlugins,
+  description,
+}: {
+  resourceId: string;
+  resourceName?: string;
+  entries: ResourceAudienceEntry[];
+  /** Fingerprint of the rules this list was read from. */
+  version: string;
+  /** The server's tools, when this backend exposes a catalogue. */
+  toolCatalog?: ToolSelectionTool[];
+  toolSource?: ToolSource;
+  isLoading: boolean;
+  rolePlugins?: ResourceAudienceRolePlugin[];
+  /** Says who this panel controls and where the access applies. */
+  description?: React.ReactNode;
+}): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  // The row controls are gated by RequireScope; the remove button carries the
+  // same gate as a disabled state so it cannot be clicked without the scope.
+  const { hasAnyScope } = useRBAC();
+  const direct = useMemo(() => ownRules(entries), [entries]);
+  const supportsEditing = useMemo(
+    () => supportsAudienceReading(entries),
+    [entries],
+  );
+  const isAdmin = hasAnyScope(["org:admin"]);
+  const canManage = isAdmin && supportsEditing;
+  const showPlugins = isAdmin && rolePlugins !== undefined;
+  const [page, setPage] = useState(0);
+  // Which kind of principal the picker is open for.
+  const [adding, setAdding] = useState<"user" | "agent" | "role" | null>(null);
+  const [narrowing, setNarrowing] = useState<NarrowingTarget | null>(null);
+  // The row whose removal is waiting to be confirmed, when the write is not
+  // the plain deletion the button looks like.
+  const [removing, setRemoving] = useState<AccessRow | null>(null);
+  // A clear or removal that has to turn a role's rule covering every server
+  // into rules naming servers, waiting to be confirmed.
+  const [converting, setConverting] = useState<WildcardChange | null>(null);
+  const project = useProject();
+  const organization = useOrganization();
+  const { data: rolesData } = useRoles(undefined, undefined, {
+    enabled: isAdmin,
+    throwOnError: false,
+  });
+  const roleFor = (row: AccessRow) =>
+    row.kind === "role"
+      ? rolesData?.roles.find((role) => role.principalUrn === row.principalUrn)
+      : undefined;
+  const projectServers = useProjectServerIds(
+    project.id,
+    resourceId,
+    converting !== null,
+  );
+
+  // The organization's members, so a role row can show who it reaches. The
+  // audience entries carry ids; the names and photos live here.
+  const { data: membersData } = useMembers();
+  const facesById = useMemo(() => {
+    const members = membersData?.members ?? [];
+    return new Map(
+      members.map((member) => [
+        member.id,
+        {
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          photoUrl: member.photoUrl,
+        },
+      ]),
+    );
+  }, [membersData]);
+
+  // Where the directory hands out each role. Administrators only: the
+  // mappings name attribute values, which can carry personal data.
+  const { data: mappingsData } = useDirectoryRoleMappings(
+    undefined,
+    undefined,
+    { enabled: isAdmin, throwOnError: false },
+  );
+  const sourcesFor = useMemo(() => {
+    const members = membersData?.members ?? [];
+    // Disabling the query keeps cached data, so a lost admin scope hides it
+    // here too rather than waiting for the cache to go.
+    const data = isAdmin ? mappingsData : undefined;
+    return (row: AccessRow): RoleDirectorySource[] =>
+      data && row.kind === "role"
+        ? roleDirectorySources(data, members, row)
+        : [];
+  }, [isAdmin, mappingsData, membersData]);
+
+  const rows = useMemo(() => buildAccessRows(entries), [entries]);
+
+  // Agents a role's or everyone's unnarrowed connect block reaches. Unlike a
+  // person's, an agent's own rule here does not outrank that block, so the
+  // agent picker withholds them rather than writing a rule that does nothing.
+  const agentBlockedReason = useMemo(() => {
+    const byAgent = new Map<string, string>();
+    let everyone: string | undefined;
+    for (const entry of entries) {
+      if (entry.level !== "blocked" || !isUnnarrowed(entry)) continue;
+      if (entry.kind === "agent") continue;
+      if (entry.kind === "everyone") everyone ??= entry.displayName;
+      for (const agentId of entry.agentIds ?? []) {
+        if (!byAgent.has(agentId)) byAgent.set(agentId, entry.displayName);
+      }
+    }
+    return (principalUrn: string): string | undefined => {
+      const by = byAgent.get(principalUrn.replace(/^agent:/, "")) ?? everyone;
+      return by ? `Blocked by ${by} on this server` : undefined;
+    };
+  }, [entries]);
+
+  // Rules covering every server, which a rule added here cannot narrow.
+  const orgWide = useMemo(
+    () => entries.filter((entry) => entry.appliesTo !== "resource"),
+    [entries],
+  );
+
+  const visible = pageOf(rows, page);
+  const pages = pageCount(rows.length);
+
+  // Check access answers from the same rules, so an open answer is redone.
+  const invalidateAccess = () =>
+    Promise.all([
+      invalidateAllResourceAudience(queryClient),
+      queryClient.invalidateQueries({ queryKey: ["mcpAssignments"] }),
+      invalidateAllExplainResourceAccess(queryClient),
+      invalidateAllRoles(queryClient),
+      invalidateAllPlugin(queryClient),
+      invalidateAllPlugins(queryClient),
+    ]);
+
+  const updateRole = useUpdateRoleMutation({
+    onSuccess: async () => {
+      await invalidateAccess();
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : "Could not save access. Please try again.",
+      ),
+  });
+
+  const setAudience = useSetResourceAudienceMutation({
+    onSuccess: async () => {
+      await invalidateAccess();
+      setAdding(null);
+    },
+    // The server refuses some writes for a reason worth reading — blocking
+    // your own access, or a list that changed underneath this one — so its
+    // message is shown rather than a generic failure.
+    onError: (error) =>
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : "Could not save access. Please try again.",
+      ),
+  });
+
+  const save = (next: SetResourceAudienceEntry[], message: string) => {
+    setAudience.mutate(
+      {
+        request: {
+          setResourceAudienceForm: {
+            resourceKind: "mcp",
+            resourceId,
+            entries: next,
+            // The list this edit was based on. A save against a stale one is
+            // refused rather than quietly replacing someone else's work.
+            expectedVersion: version,
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success(message);
+        },
+      },
+    );
+  };
+
+  const applyWrite = (buildWrite: () => AudienceWrite) => {
+    if (!canManage) return;
+    const write = buildWrite();
+    save(write.entries, write.message);
+  };
+
+  const changeNarrowing = (
+    target: NarrowingTarget,
+    next: { tools: string[]; dispositions: string[] },
+  ) => {
+    setNarrowing(null);
+    applyWrite(() =>
+      narrowWrite(direct, target.row, next, toolCatalog, resourceName),
+    );
+  };
+
+  const openNarrowing = (row: AccessRow) => {
+    if (!canManage) return;
+    // A block this row cannot lift caps what it can reach, so the picker
+    // leaves those tools out rather than accepting a choice that does
+    // nothing — and it opens on what the row reaches today, so saving
+    // without touching anything cannot widen access.
+    const cell = row.cells.use;
+    const capped = scopeState(row, "use", toolCatalog ?? []).capped;
+    const reachable = capped
+      ? new Set(reachableTools(cell, toolCatalog ?? []) ?? [])
+      : null;
+    const limitedBy = capped
+      ? cappingBlocks(row, cell)[0]?.displayName
+      : undefined;
+
+    setNarrowing({
+      row,
+      ...narrowingSeed(row, toolCatalog),
+      ...(reachable
+        ? {
+            catalog: (toolCatalog ?? []).filter((tool) =>
+              reachable.has(tool.name),
+            ),
+            limitedBy,
+          }
+        : {}),
+    });
+  };
+
+  // An organization-wide rule belongs to the role that holds it.
+  const editRole = (row: AccessRow) => {
+    const roleId = row.principalUrn.split(":").pop();
+    if (!roleId) return;
+    void navigate(`${orgRoutes.access.roles.href()}/${roleId}/edit`);
+  };
+
+  // Removing a rule this page owns is what the button says it is. Removing a
+  // principal an organization-wide rule still reaches is not: it writes a
+  // block, which outranks every grant but the ones people were given here by
+  // name. Only that case is worth a dialog.
+  const removeRow = (row: AccessRow) => {
+    if (!canManage) return;
+    if (holdsOwnWildcard(row, ALL_LINES)) {
+      setConverting({ row, lines: ALL_LINES, action: "remove" });
+      return;
+    }
+    if (inheritedGrants(row).length === 0) {
+      applyWrite(() => revokeRowWrite(direct, row, resourceName));
+      return;
+    }
+    setRemoving(row);
+  };
+
+  const confirmRemove = () => {
+    if (!removing || !canManage) return;
+    applyWrite(() => revokeRowWrite(direct, removing, resourceName));
+    setRemoving(null);
+  };
+
+  // A role's own rule covering every server, for any of these lines. Only a
+  // role's can be rewritten here: its rules live on the role.
+  const holdsOwnWildcard = (row: AccessRow, lines: ScopeKey[]) =>
+    row.kind === "role" &&
+    orgWide.some(
+      (entry) =>
+        entry.principalUrn === row.principalUrn &&
+        lines.some(
+          (line) => entry.level === line || entry.level === BLOCK_LEVEL[line],
+        ),
+    );
+
+  const clearScope = (row: AccessRow, scope: ScopeKey) => {
+    if (!canManage) return;
+    if (holdsOwnWildcard(row, [scope])) {
+      setConverting({ row, lines: [scope], action: "clear" });
+      return;
+    }
+    applyWrite(() => clearScopeWrite(direct, row, scope, resourceName));
+  };
+
+  const conversion = useMemo(() => {
+    if (!converting || !projectServers.settled) return null;
+    const role = rolesData?.roles.find(
+      (candidate) => candidate.principalUrn === converting.row.principalUrn,
+    );
+    if (!role) return null;
+    return {
+      role,
+      ...convertWildcardGrants({
+        grants: role.grants ?? [],
+        lines: converting.lines,
+        resourceId,
+        resourceIds: projectServers.resourceIds,
+        projectId: project.id,
+        projectServerIds: projectServers.serverIds,
+        otherProjectIds: organization.projects
+          .map((p) => p.id)
+          .filter((id) => id !== project.id),
+      }),
+    };
+  }, [
+    converting,
+    projectServers.settled,
+    projectServers.serverIds,
+    projectServers.resourceIds,
+    rolesData,
+    resourceId,
+    project.id,
+    organization.projects,
+  ]);
+
+  const confirmConvert = () => {
+    if (!converting || !conversion || !canManage) return;
+    const { row, lines, action } = converting;
+    const server = resourceName ?? "this server";
+    updateRole.mutate(
+      {
+        request: {
+          updateRoleForm: {
+            id: conversion.role.id,
+            addGrants: conversion.addGrants,
+            removeGrants: conversion.removeGrants,
+          },
+        },
+      },
+      {
+        onSuccess: (saved) => {
+          setConverting(null);
+          // The rewrite is worked out from the role as last read. If a rule
+          // covering every server here survived it, the role still reaches
+          // this server, and saying it was cleared would be wrong.
+          if (holdsWildcard(saved.grants, lines, project.id)) {
+            toast.error(
+              `${row.displayName} still has a rule covering every server, so ${server} is unchanged. Change it in Role Manager.`,
+            );
+            return;
+          }
+          toast.success(
+            action === "remove"
+              ? `${row.displayName} no longer has access to ${server}. It now names its servers individually.`
+              : `Cleared ${row.displayName}'s ${lineLabels(lines)} setting on ${server}. It now names its servers individually.`,
+          );
+        },
+      },
+    );
+  };
+
+  const addPrincipals = (principalUrns: string[]) => {
+    setPage(0);
+    applyWrite(() => addPrincipalsWrite(direct, principalUrns, resourceName));
+  };
+
+  if (isLoading) return <SkeletonTable />;
+
+  return (
+    <div>
+      {!supportsEditing && (
+        <p className="text-muted-foreground mb-3 text-sm">
+          Some access rules are not supported by this version. Refresh the page
+          before editing.
+        </p>
+      )}
+      <Card.Dashboard
+        title="Manage access to this server"
+        description={description}
+        // Rows run edge to edge under the header.
+        bodyClassName="p-0"
+        action={
+          <RequireScope
+            scope="org:admin"
+            level="component"
+            reason="Only organization admins can change access."
+          >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="sm" disabled={!canManage}>
+                  <Button.LeftIcon>
+                    <Plus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Grant access</Button.Text>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                // The menu belongs to the button above it, so it takes the
+                // trigger's width rather than sizing itself to its rows. Set
+                // as a style so it cannot be merged away by the content's own
+                // min-width.
+                className="min-w-0"
+                style={{ width: "var(--radix-dropdown-menu-trigger-width)" }}
+              >
+                <DropdownMenuItem onSelect={() => setAdding("user")}>
+                  <User className="h-4 w-4" />
+                  Person
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setAdding("role")}>
+                  <Shield className="h-4 w-4" />
+                  Role
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setAdding("agent")}>
+                  <Bot className="h-4 w-4" />
+                  Agent
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </RequireScope>
+        }
+      >
+        {visible.length === 0 ? (
+          <div className="px-4 py-12 text-center">
+            <Text muted small>
+              Nobody reaches {resourceName ?? "this server"} yet.
+            </Text>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "grid",
+              showPlugins
+                ? "grid-cols-[auto_repeat(3,minmax(0,1fr))_max-content_auto]"
+                : "grid-cols-[auto_repeat(2,minmax(0,1fr))_max-content_auto]",
+            )}
+          >
+            <div className="text-muted-foreground border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2 text-xs">
+              <span>Type</span>
+              <span>Name</span>
+              <span>Access</span>
+              {showPlugins && <span>Distributed via</span>}
+              <span>Members</span>
+              <span />
+            </div>
+            {visible.map((row) => (
+              <PrincipalRow
+                key={row.principalUrn}
+                row={row}
+                rolePlugins={showPlugins ? rolePlugins : undefined}
+                directorySources={sourcesFor(row)}
+                reviewHref={orgRoutes.identity.href()}
+                faces={row.memberIds
+                  .map((id) => facesById.get(id))
+                  .filter((member) => member !== undefined)}
+                catalog={toolCatalog ?? []}
+                onAllow={(scope) =>
+                  applyWrite(() => allowWrite(direct, row, scope, resourceName))
+                }
+                onRevokeScope={(scope) =>
+                  applyWrite(() =>
+                    revokeScopeWrite(direct, row, scope, resourceName),
+                  )
+                }
+                onClearScope={(scope) => clearScope(row, scope)}
+                clearableWildcards={ALL_LINES.filter((line) =>
+                  holdsOwnWildcard(row, [line]),
+                )}
+                managedInRoleManager={roleFor(row)?.slug === "admin"}
+                onNarrow={() => openNarrowing(row)}
+                onBlockDestructive={() =>
+                  applyWrite(() =>
+                    blockDestructiveWrite(direct, row, resourceName),
+                  )
+                }
+                onAllowDestructive={() =>
+                  applyWrite(() =>
+                    allowDestructiveWrite(direct, row, resourceName),
+                  )
+                }
+                onRevoke={() => removeRow(row)}
+                onEditRole={() => editRole(row)}
+                // Which role is Admin is only known once roles load, so a
+                // role row stays read-only until then rather than briefly
+                // offering controls the Admin row should not have.
+                canManage={
+                  canManage && (row.kind !== "role" || rolesData !== undefined)
+                }
+                isAdmin={isAdmin}
+                pending={setAudience.isPending}
+              />
+            ))}
+          </div>
+        )}
+      </Card.Dashboard>
+
+      {pages > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-4">
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={page === 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+          >
+            <Button.LeftIcon>
+              <ChevronLeft className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Previous</Button.Text>
+          </Button>
+          <Text muted small>
+            {page + 1} of {pages}
+          </Text>
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={page >= pages - 1}
+            onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
+          >
+            <Button.Text>Next</Button.Text>
+            <Button.RightIcon>
+              <ChevronRight className="h-4 w-4" />
+            </Button.RightIcon>
+          </Button>
+        </div>
+      )}
+
+      {narrowing && canManage && (
+        <ToolNarrowingDialog
+          serverId={resourceId}
+          serverName={resourceName}
+          catalog={narrowing.catalog ?? toolCatalog}
+          toolSource={toolSource}
+          limitedBy={narrowing.limitedBy}
+          tools={narrowing.tools}
+          dispositions={narrowing.dispositions}
+          pending={setAudience.isPending}
+          onSave={(next) => changeNarrowing(narrowing, next)}
+          onClose={() => setNarrowing(null)}
+        />
+      )}
+
+      {removing && canManage && (
+        <RemoveAudienceDialog
+          row={removing}
+          keptBy={keptIndividually(removing, rows, toolCatalog ?? []).map(
+            (row) => row.displayName,
+          )}
+          serverName={resourceName}
+          pending={setAudience.isPending}
+          onConfirm={confirmRemove}
+          onClose={() => setRemoving(null)}
+        />
+      )}
+
+      {converting && (
+        <ConvertWildcardDialog
+          change={converting}
+          serverName={resourceName ?? "this server"}
+          projectName={project.name}
+          otherServers={
+            projectServers.settled ? projectServers.otherServerCount : undefined
+          }
+          coveredEveryProject={conversion?.coveredEveryProject ?? false}
+          ready={conversion !== null}
+          pending={updateRole.isPending}
+          onConfirm={confirmConvert}
+          onClose={() => setConverting(null)}
+        />
+      )}
+
+      {adding && canManage && (
+        <AddAudienceDialog
+          title={
+            adding === "agent"
+              ? "Grant agent access"
+              : adding === "role"
+                ? "Grant role access"
+                : "Grant access"
+          }
+          description={
+            adding === "agent"
+              ? `Give agents access to ${resourceName ?? "this server"} only. An agent still cannot do more here than its own policy and its owner allow.`
+              : adding === "role"
+                ? `Give roles access to ${resourceName ?? "this server"} only.`
+                : `Give people access to ${resourceName ?? "this server"} only.`
+          }
+          kinds={[adding]}
+          alreadyAdded={direct.map((entry) => entry.principalUrn)}
+          blockedReason={adding === "agent" ? agentBlockedReason : undefined}
+          // A principal an organization-wide rule already covers cannot be
+          // narrowed by adding a rule here — grants add, they never subtract
+          // — so say what it already has instead of offering a no-op. People
+          // a role's or everyone's block reaches stay on offer: their own rule
+          // here outranks that block.
+          alreadyReaches={orgWide
+            // A narrowed organization rule leaves room to grant more here, so
+            // only unrestricted ones make a principal unaddable.
+            .filter(
+              (entry) =>
+                (entry.tools ?? []).length === 0 &&
+                (entry.dispositions ?? []).length === 0,
+            )
+            .map((entry) => ({
+              principalUrn: entry.principalUrn,
+              reason: `Already can ${LEVEL_VERB[entry.level]} on every server`,
+            }))}
+          pending={setAudience.isPending}
+          onAdd={addPrincipals}
+          onClose={() => setAdding(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * One principal, as a row in the list's shared column grid: what it is, what
+ * it can do here, who it reaches, and the controls. Columns line up down the
+ * list, so an administrator compares rows by reading straight down rather
+ * than re-parsing a sentence each time.
+ */
+function PrincipalRow({
+  row,
+  rolePlugins,
+  directorySources,
+  reviewHref,
+  faces,
+  catalog,
+  onAllow,
+  onRevokeScope,
+  onClearScope,
+  clearableWildcards,
+  managedInRoleManager,
+  onNarrow,
+  onBlockDestructive,
+  onAllowDestructive,
+  onRevoke,
+  onEditRole,
+  canManage,
+  isAdmin,
+  pending,
+}: {
+  row: AccessRow;
+  rolePlugins?: ResourceAudienceRolePlugin[];
+  /** The directory groups and attribute values that give out a role. */
+  directorySources: RoleDirectorySource[];
+  /** The IDP and SSO tab, where a removed source's review item waits. */
+  reviewHref: string;
+  /** The people a role reaches, for the facepile on its row. */
+  faces: FacepileMember[];
+  /** The server's tools, for resolving what a rule and a block leave. */
+  catalog: ToolSelectionTool[];
+  onAllow: (scope: ScopeKey) => void;
+  onRevokeScope: (scope: ScopeKey) => void;
+  onClearScope: (scope: ScopeKey) => void;
+  /** Lines held by the row's own rule covering every server. */
+  clearableWildcards: ScopeKey[];
+  /**
+   * The Admin role: its access covers every server and is changed in Role
+   * Manager only, so the row offers no controls here.
+   */
+  managedInRoleManager: boolean;
+  onNarrow: () => void;
+  onBlockDestructive: () => void;
+  onAllowDestructive: () => void;
+  onRevoke: () => void;
+  onEditRole: () => void;
+  canManage: boolean;
+  isAdmin: boolean;
+  pending: boolean;
+}): JSX.Element {
+  // Collapsed by default: an administrator scanning the list wants to know
+  // who reaches the server, and only opens the row they came to change.
+  const [open, setOpen] = useState(false);
+  const userId =
+    row.kind === "user" ? row.principalUrn.replace(/^user:/, "") : null;
+  const reaches = inheritedGrants(row).length > 0;
+  const canRemove = canManage;
+  const showFaces = row.kind === "role" && faces.length > 0;
+  const blocked = blockedScopes(row, catalog).length > 0;
+
+  return (
+    <div className="border-border col-span-full grid grid-cols-subgrid border-b last:border-b-0">
+      <div className="col-span-full grid grid-cols-subgrid items-center gap-x-6 px-4 py-3">
+        <div>
+          <PrincipalBadge kind={row.kind} />
+        </div>
+        <div className="min-w-0">
+          <span className="block truncate font-medium">
+            {userId ? (
+              <IdentityLink identifier={{ userId }}>
+                {row.displayName}
+              </IdentityLink>
+            ) : row.kind === "role" ? (
+              <RoleLink principalUrn={row.principalUrn}>
+                {row.displayName}
+              </RoleLink>
+            ) : (
+              row.displayName
+            )}
+          </span>
+          <RoleDirectorySourceLine
+            sources={directorySources}
+            reviewHref={reviewHref}
+          />
+        </div>
+
+        {/* A blocking row outranks grants reaching the same people, so it
+            reads as an exception rather than as an empty row. */}
+        {blocked ? (
+          <Text small destructive className="flex min-w-0 items-center gap-1.5">
+            <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{accessSummary(row, catalog)}</span>
+          </Text>
+        ) : (
+          <Text muted small className="min-w-0 truncate">
+            {accessSummary(row, catalog)}
+          </Text>
+        )}
+
+        {rolePlugins !== undefined && (
+          <div className="min-w-0">
+            {row.kind === "role" ? (
+              <RolePluginLinks
+                principalUrn={row.principalUrn}
+                plugins={rolePlugins}
+              />
+            ) : (
+              <span className="text-muted-foreground text-sm">—</span>
+            )}
+          </div>
+        )}
+
+        {/* Who a role reaches, as the faces themselves: an administrator
+            checks that before changing what the role can do, and "2 members"
+            does not answer it. */}
+        <div className="text-muted-foreground text-sm">
+          {showFaces ? <MemberFacepile members={faces} maxFaces={5} /> : "—"}
+        </div>
+
+        {managedInRoleManager ? (
+          // Admin is the one role that should cover every server, so its
+          // access is not narrowed per server: it is changed where the role
+          // is defined.
+          <div className="flex items-center justify-end">
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={onEditRole}
+              className="hover:bg-transparent h-auto px-0 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid"
+            >
+              <Button.LeftIcon>
+                <Lock className="h-3.5 w-3.5" />
+              </Button.LeftIcon>
+              <Button.Text className="font-sans normal-case tracking-normal">
+                Managed in Role Manager
+              </Button.Text>
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-1">
+            <IconAction
+              label={open ? "Done editing" : "Edit access"}
+              onClick={() => setOpen((was) => !was)}
+              expanded={open}
+            >
+              {/* A pencil says the row is editable, and the struck-through
+                pencil says the editing is what stops. */}
+              {open ? (
+                <PencilOff className="h-4 w-4" />
+              ) : (
+                <Pencil className="h-4 w-4" />
+              )}
+            </IconAction>
+            <IconAction
+              // A role reached by an organization-wide rule is not removed
+              // here, it is subtracted — so the label says what it does.
+              label={
+                !isAdmin
+                  ? "Only organization admins can change access."
+                  : !canManage
+                    ? "Access cannot be changed here."
+                    : reaches
+                      ? `Remove ${row.displayName} from this server`
+                      : `Remove ${row.displayName}`
+              }
+              onClick={onRevoke}
+              disabled={pending || !canRemove}
+            >
+              <Trash2 className="h-4 w-4" />
+            </IconAction>
+          </div>
+        )}
+      </div>
+
+      {/* Animated by rows rather than height, so the panel can size itself
+          and still slide. Collapsed it is inert, so its controls are not
+          reachable by keyboard or read out. */}
+      <div
+        className={cn(
+          "col-span-full grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+          open && !managedInRoleManager ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+        inert={!open || managedInRoleManager}
+        aria-hidden={!open || managedInRoleManager}
+      >
+        <div className="overflow-hidden">
+          <div className="border-border bg-muted/15 mx-4 mb-3 flex items-end justify-between gap-6 border p-4">
+            <div className="space-y-3">
+              {SCOPE_ROWS.map(({ key, label, hint }) => (
+                <ScopeLine
+                  key={key}
+                  label={label}
+                  hint={hint}
+                  row={row}
+                  scope={key}
+                  catalog={catalog}
+                  onAllow={() => onAllow(key)}
+                  onRevoke={() => onRevokeScope(key)}
+                  onClear={() => onClearScope(key)}
+                  clearable={clearableWildcards.includes(key)}
+                  onNarrow={onNarrow}
+                  onBlockDestructive={onBlockDestructive}
+                  onAllowDestructive={onAllowDestructive}
+                  pending={pending}
+                  canManage={canManage}
+                />
+              ))}
+            </div>
+            {row.kind === "role" && (
+              // The rule this row edits lives on the role; the link out sits
+              // with the controls, out of the way of the lines being read.
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={onEditRole}
+                className="hover:bg-transparent h-auto shrink-0 px-0 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid"
+              >
+                <Button.Text className="font-sans normal-case tracking-normal">
+                  Edit in Role Manager
+                </Button.Text>
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScopeLine({
+  label,
+  hint,
+  row,
+  scope,
+  catalog,
+  onAllow,
+  onRevoke,
+  onClear,
+  clearable,
+  onNarrow,
+  onBlockDestructive,
+  onAllowDestructive,
+  pending,
+  canManage,
+}: {
+  label: string;
+  /** What this scope lets the principal do, in one line. */
+  hint: string;
+  row: AccessRow;
+  scope: ScopeKey;
+  /** The server's tools, for resolving what a rule and a block leave. */
+  catalog: ToolSelectionTool[];
+  onAllow: () => void;
+  onRevoke: () => void;
+  onClear: () => void;
+  /** True when a rule covering every server can be cleared from this line. */
+  clearable: boolean;
+  onNarrow: () => void;
+  onBlockDestructive: () => void;
+  onAllowDestructive: () => void;
+  pending: boolean;
+  canManage: boolean;
+}): JSX.Element {
+  const state = scopeState(row, scope, catalog);
+  const options = scopeOptions({
+    row,
+    scope,
+    catalog,
+    onAllow,
+    onRevoke,
+    onClear,
+    clearable,
+    onNarrow,
+    onBlockDestructive,
+    onAllowDestructive,
+  });
+
+  return (
+    <div className="flex items-baseline gap-2">
+      <div className="w-44 shrink-0">
+        <Text small>{label}</Text>
+        <Text as="div" muted small className="text-xs">
+          {hint}
+        </Text>
+      </div>
+      {options.length === 0 ? (
+        <Text
+          small
+          destructive={state.blocked}
+          muted={state.unset}
+          className="px-1"
+        >
+          {state.value}
+        </Text>
+      ) : (
+        <RequireScope
+          scope="org:admin"
+          level="component"
+          reason="Only organization admins can change access."
+        >
+          <InlineChoice
+            value={state.value}
+            disabled={pending || !canManage}
+            options={options}
+            className={
+              state.blocked
+                ? "text-default-destructive hover:text-default-destructive"
+                : state.unset
+                  ? "text-muted-foreground"
+                  : undefined
+            }
+          />
+        </RequireScope>
+      )}
+      {state.via && (
+        <Text muted small>
+          {state.granted ? "via " : "blocked by "}
+          {state.viaPrincipalUrn?.startsWith("role:") ? (
+            <RoleLink principalUrn={state.viaPrincipalUrn}>
+              {state.via}
+            </RoleLink>
+          ) : (
+            state.via
+          )}
+        </Text>
+      )}
+      {state.note && (
+        <Text muted small>
+          {state.granted ? state.note : `blocked ${state.note}`}
+        </Text>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What one scope line can be changed to. Every line an administrator can act
+ * on offers a choice, whatever wrote the rule behind it: a grant covering
+ * every server is edited here by subtracting from it for this server alone.
+ */
+function scopeOptions({
+  row,
+  scope,
+  catalog,
+  onAllow,
+  onRevoke,
+  onClear,
+  clearable,
+  onNarrow,
+  onBlockDestructive,
+  onAllowDestructive,
+}: {
+  row: AccessRow;
+  scope: ScopeKey;
+  catalog: ToolSelectionTool[];
+  onAllow: () => void;
+  onRevoke: () => void;
+  onClear: () => void;
+  clearable: boolean;
+  onNarrow: () => void;
+  onBlockDestructive: () => void;
+  onAllowDestructive: () => void;
+}): InlineChoiceOption[] {
+  const state = scopeState(row, scope, catalog);
+  const offersClear = state.canClear || clearable;
+  // With another rule opening the whole line, opening it here only lifts this
+  // row's own block and drops its own rule: the same write as Clear, so it is
+  // offered once, as Clear. Clearing a rule covering every server writes
+  // something else, so both stay on offer then.
+  const allowIsClear =
+    state.canClear &&
+    !clearable &&
+    !state.granted &&
+    openedElsewhere(row, scope);
+  const options = choiceOptions({
+    row,
+    scope,
+    state,
+    onAllow,
+    onRevoke,
+    onNarrow,
+    onBlockDestructive,
+    onAllowDestructive,
+  }).filter((option) => !(allowIsClear && option.onSelect === onAllow));
+  // Clearing deletes this row's own grant and block for the line and writes
+  // nothing in their place, so the line is left unset rather than flipped. A
+  // rule covering every server is cleared too, after a confirmation.
+  if (offersClear) {
+    options.push({
+      label: "Clear",
+      onSelect: onClear,
+      separatorBefore: options.length > 0,
+    });
+  }
+  return options;
+}
+
+/** The grant and block choices for one scope line, before clearing. */
+function choiceOptions({
+  row,
+  scope,
+  state,
+  onAllow,
+  onRevoke,
+  onNarrow,
+  onBlockDestructive,
+  onAllowDestructive,
+}: {
+  row: AccessRow;
+  scope: ScopeKey;
+  state: ScopeState;
+  onAllow: () => void;
+  onRevoke: () => void;
+  onNarrow: () => void;
+  onBlockDestructive: () => void;
+  onAllowDestructive: () => void;
+}): InlineChoiceOption[] {
+  // A block this row cannot lift closes the line, and nothing granted here
+  // would survive it: the change has to be made where the block is.
+  if (!state.granted && state.capped) return [];
+  // Closing a line something else grants writes a block, which then
+  // outranks those grants. Without anything else granting it, closing it
+  // only deletes this row's own rule, which is what Clear does, so it is not
+  // offered twice.
+  const revoke: InlineChoiceOption[] = state.subtracts
+    ? [{ label: "Blocked", onSelect: onRevoke }]
+    : [];
+
+  if (scope !== "use") {
+    // View and manage cover the server itself; there is nothing inside one
+    // to narrow, so the line is on or off.
+    if (state.granted) return revoke;
+    return [{ label: "Allowed", onSelect: onAllow }];
+  }
+
+  // Widening to every tool is only on offer when nothing above this line
+  // caps it: a block on the role this person is in is not ours to lift.
+  const options: InlineChoiceOption[] = state.capped
+    ? []
+    : [{ label: "All tools", onSelect: onAllow }];
+  options.push({ label: "Specific tools\u2026", onSelect: onNarrow });
+  // Keeping someone off the destructive tools is the common restriction, and
+  // an annotation expresses it without a catalogue: it keeps covering tools
+  // added later, so it is offered on every server rather than only the ones
+  // that publish their tools.
+  // Both forms rewrite the whole block, so neither is offered while another
+  // restriction is standing there — the shortcut would take that restriction
+  // away without saying so. "Specific tools…" edits those rows instead.
+  if (state.granted) {
+    if (ownDestructiveBlockOnly(row)) {
+      options.push({
+        label: "Allow destructive tools",
+        onSelect: onAllowDestructive,
+      });
+    } else if (!destructiveBlock(row) && !row.cells.use.ownBlock) {
+      options.push({
+        label: "Block destructive tools",
+        onSelect: onBlockDestructive,
+      });
+    }
+  }
+  if (state.canRevoke) options.push(...revoke);
+  return options;
+}
+
+/** A block on this row's connect line that names the destructive annotation. */
+function destructiveBlock(row: AccessRow) {
+  return row.cells.use.blocks.find((block) =>
+    (block.dispositions ?? []).includes("destructive"),
+  );
+}
+
+/**
+ * Whether this row's own block is exactly "no destructive tools" and nothing
+ * else. A principal holds one block per level, so lifting it lifts everything
+ * it names — fine when destructive is all it names, and a silent widening when
+ * it names anything more.
+ */
+function ownDestructiveBlockOnly(row: AccessRow): boolean {
+  const own = row.cells.use.ownBlock;
+  if (!own) return false;
+  return (
+    (own.tools ?? []).length === 0 &&
+    (own.dispositions ?? []).length === 1 &&
+    (own.dispositions ?? []).includes("destructive")
+  );
+}
+
+/**
+ * An icon-only row control. The icon carries the whole label, so the tooltip
+ * opens without a delay — a reader hovering to find out what a button does
+ * should not have to wait to be told.
+ */
+function IconAction({
+  label,
+  onClick,
+  disabled,
+  expanded,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  expanded?: boolean;
+  children: JSX.Element;
+}): JSX.Element {
+  return (
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        {/* A disabled button fires no pointer events, so the tooltip needs a
+            wrapper to hover — which is exactly when the label matters most. */}
+        <span>
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={onClick}
+            disabled={disabled}
+            aria-expanded={expanded}
+            aria-label={label}
+          >
+            <Button.LeftIcon>{children}</Button.LeftIcon>
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * A role name that goes to the role. The rule behind a line often lives on a
+ * role, and the name is what a reader reaches for to go and change it.
+ */

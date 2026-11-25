@@ -1,12 +1,12 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react";
 import { CalendarIcon, ChevronDown, Zap } from "lucide-react";
-import { generateText, LanguageModel, Output } from "ai";
+import type { LanguageModel } from "ai";
+import { generateText, Output } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
 import { cn } from "@/lib/utils";
-import { trackError } from "@/elements/lib/errorTracking";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { Calendar } from "./calendar";
 
@@ -51,6 +51,44 @@ function formatDate(date: Date, pattern: "short" | "medium" = "short"): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function isLocalMidnight(date: Date): boolean {
+  return (
+    date.getHours() === 0 &&
+    date.getMinutes() === 0 &&
+    date.getSeconds() === 0 &&
+    date.getMilliseconds() === 0
+  );
+}
+
+/** 23:59:59, at any sub-second: the AI parser ends whole days on the second. */
+function isLocalEndOfDay(date: Date): boolean {
+  return (
+    date.getHours() === 23 &&
+    date.getMinutes() === 59 &&
+    date.getSeconds() === 59
+  );
+}
+
+/**
+ * A range that starts and ends on day boundaries reads as days. Anything else
+ * (a range dragged across a chart, say) names its times, or "Nov 16 – Nov 17"
+ * hides that the window opens at 11:34 AM and closes at 11:34 PM. The end may
+ * be the final day's midnight or its last second.
+ */
+export function formatTimeRangeLabel(from: Date, to: Date): string {
+  const wholeDays =
+    isLocalMidnight(from) && (isLocalMidnight(to) || isLocalEndOfDay(to));
+  if (wholeDays) return `${formatDate(from)} – ${formatDate(to)}`;
+  const withTime = (date: Date) =>
+    date.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  return `${withTime(from)} – ${withTime(to)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -425,9 +463,7 @@ User input: ${input}`,
     // Returning null keeps the UI graceful on an unparseable string, but the
     // failure must not be invisible — a 401/gateway error here looks identical
     // to "couldn't parse" to the user. Surface it so it's diagnosable.
-    trackError(error, {
-      source: "custom",
-      location: "TimeRangePicker.parseWithAI",
+    console.error("TimeRangePicker.parseWithAI failed:", error, {
       hasAuthHeaders: Boolean(authHeaders),
     });
     return null;
@@ -447,6 +483,11 @@ export interface TimeRangePickerProps {
   onPresetChange?: (preset: DateRangePreset) => void;
   /** Called when a custom range is selected */
   onCustomRangeChange?: (from: Date, to: Date, label?: string) => void;
+  /**
+   * Replaces onCustomRangeChange for calendar picks when supplied.
+   * Both dates are local midnight; to is the final selected day, inclusive.
+   */
+  onCalendarRangeChange?: (from: Date, to: Date) => void;
   /** Called to clear custom range */
   onClearCustomRange?: () => void;
   /** Initial label for custom range (from URL params) */
@@ -461,7 +502,7 @@ export interface TimeRangePickerProps {
   availablePresets?: readonly DateRangePreset[];
   /** Disabled state */
   disabled?: boolean;
-  /** Timezone display (e.g., "UTC-08:00") */
+  /** Timezone display; "UTC" also bounds the calendar by the current UTC day. */
   timezone?: string;
   /** API URL for AI parsing (defaults to window.location.origin) */
   apiUrl?: string;
@@ -483,6 +524,7 @@ function TimeRangePicker({
   customRange,
   onPresetChange,
   onCustomRangeChange,
+  onCalendarRangeChange,
   onClearCustomRange,
   customRangeLabel: initialCustomLabel,
   showLive = false,
@@ -506,6 +548,15 @@ function TimeRangePicker({
   );
   const inputRef = React.useRef<HTMLInputElement>(null);
   const triggerRef = React.useRef<HTMLDivElement>(null);
+  const now = new Date();
+  let maxCalendarDate = now;
+  if (timezone === "UTC") {
+    maxCalendarDate = new Date(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+    );
+  }
 
   // Sync custom label from props (e.g., when URL changes)
   React.useEffect(() => {
@@ -547,7 +598,8 @@ function TimeRangePicker({
 
   const handleCalendarSelect = (range: { start: Date; end: Date | null }) => {
     if (range.start && range.end) {
-      onCustomRangeChange?.(range.start, range.end);
+      if (onCalendarRangeChange) onCalendarRangeChange(range.start, range.end);
+      else onCustomRangeChange?.(range.start, range.end);
       setCustomLabel(null); // Calendar selections don't have AI labels
       setIsOpen(false);
       setShowCalendar(false);
@@ -643,7 +695,7 @@ function TimeRangePicker({
   // Get label text (preset label or custom range description)
   const getLabelText = () => {
     if (customRange) {
-      return `${formatDate(customRange.from)} – ${formatDate(customRange.to)}`;
+      return formatTimeRangeLabel(customRange.from, customRange.to);
     }
     if (preset) {
       const presetObj = getPresetByValue(preset);
@@ -673,7 +725,7 @@ function TimeRangePicker({
             "relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all outline-none",
             "border-border hover:border-border/80",
             disabled && "cursor-not-allowed opacity-50",
-            timezone && "pt-4",
+            timezone && "py-1.5",
             className,
           )}
         >
@@ -706,6 +758,9 @@ function TimeRangePicker({
             ref={inputRef}
             type="text"
             value={isEditing ? inputValue : getLabelText()}
+            // An input does not grow to its value; without this a range that
+            // names its times is cut off at the browser's 20-character default.
+            size={Math.max(20, getLabelText().length)}
             onChange={handleInputChange}
             onClick={handleInputClick}
             onFocus={handleInputFocus}
@@ -781,7 +836,7 @@ function TimeRangePicker({
                   end: currentRange?.to ?? null,
                 }}
                 onSelect={handleCalendarSelect}
-                maxDate={new Date()}
+                maxDate={maxCalendarDate}
               />
               {customRange && onClearCustomRange && (
                 <div className="border-t border-border/50 p-2">

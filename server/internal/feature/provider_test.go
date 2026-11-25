@@ -31,6 +31,26 @@ func TestEvaluateFlagInMemory(t *testing.T) {
 	require.Equal(t, feature.EvaluationIndeterminate, missing)
 }
 
+func TestInMemoryAnyDistinctIDFallback(t *testing.T) {
+	t.Parallel()
+
+	provider := &feature.InMemory{}
+	provider.SetFlag(testFeatureFlag, feature.AnyDistinctID, true)
+	provider.SetFlag(testFeatureFlag, "opted-out", false)
+
+	enabled, err := provider.IsFlagEnabled(t.Context(), testFeatureFlag, "anyone", nil)
+	require.NoError(t, err)
+	require.True(t, enabled)
+
+	evaluation, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "anyone", nil)
+	require.NoError(t, err)
+	require.Equal(t, feature.EvaluationEnabled, evaluation)
+
+	evaluation, err = feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "opted-out", nil)
+	require.NoError(t, err)
+	require.Equal(t, feature.EvaluationDisabled, evaluation)
+}
+
 func TestEvaluateFlagLegacyProviderIsIndeterminate(t *testing.T) {
 	t.Parallel()
 
@@ -75,4 +95,23 @@ func TestOrgProjectGroups_NoOrgReturnsNil(t *testing.T) {
 
 	require.Nil(t, feature.OrgProjectGroups("", "default"))
 	require.Nil(t, feature.OrgProjectGroups("", ""))
+}
+
+func TestFlagVariantLocal(t *testing.T) {
+	t.Parallel()
+
+	provider := &feature.InMemory{}
+	provider.SetFlagVariant(testFeatureFlag, "organization", "treatment")
+
+	variant, err := feature.FlagVariantLocal(t.Context(), provider, testFeatureFlag, "organization", nil, map[string]string{"harness": "codex"})
+	require.NoError(t, err)
+	require.Equal(t, feature.Variant("treatment"), variant)
+
+	variant, err = feature.FlagVariantLocal(t.Context(), legacyProvider{}, testFeatureFlag, "organization", nil, nil)
+	require.NoError(t, err)
+	require.Empty(t, variant, "a provider without local variants serves no variant")
+
+	variant, err = feature.FlagVariantLocal(t.Context(), nil, testFeatureFlag, "organization", nil, nil)
+	require.NoError(t, err)
+	require.Empty(t, variant)
 }

@@ -33,7 +33,7 @@ export type ListToolUsageTracesPayloadSort = ClosedEnum<
 /**
  * Tool usage trace outcome
  */
-export const Statuses = {
+export const ListToolUsageTracesPayloadStatuses = {
   Error: "error",
   Success: "success",
   Blocked: "blocked",
@@ -42,7 +42,9 @@ export const Statuses = {
 /**
  * Tool usage trace outcome
  */
-export type Statuses = ClosedEnum<typeof Statuses>;
+export type ListToolUsageTracesPayloadStatuses = ClosedEnum<
+  typeof ListToolUsageTracesPayloadStatuses
+>;
 
 /**
  * Tool usage target type
@@ -50,6 +52,7 @@ export type Statuses = ClosedEnum<typeof Statuses>;
 export const ListToolUsageTracesPayloadTargetTypes = {
   HostedMcpServer: "hosted_mcp_server",
   TunneledMcpServer: "tunneled_mcp_server",
+  MetaMcpServer: "meta_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
   LocalTool: "local_tool",
   Skill: "skill",
@@ -70,6 +73,14 @@ export type ListToolUsageTracesPayload = {
    */
   accountType?: string | undefined;
   /**
+   * Agent identities to include. Combined with user_filters by AND, so an agent and a person select the calls that agent made on that person's behalf.
+   */
+  agentIds?: Array<string> | undefined;
+  /**
+   * MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Speakeasy never saw an initialize handshake for) to include
+   */
+  clientKeys?: Array<string> | undefined;
+  /**
    * Cursor for pagination
    */
   cursor?: string | undefined;
@@ -86,7 +97,7 @@ export type ListToolUsageTracesPayload = {
    */
   hookSources?: Array<string> | undefined;
   /**
-   * Hosted MCP toolset slugs to include
+   * Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
    */
   hostedToolsetSlugs?: Array<string> | undefined;
   /**
@@ -94,7 +105,15 @@ export type ListToolUsageTracesPayload = {
    */
   limit?: number | undefined;
   /**
-   * Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.
+   * MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.
+   */
+  mcpServerIds?: Array<string> | undefined;
+  /**
+   * Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself
+   */
+  metaMcpServerIds?: Array<string> | undefined;
+  /**
+   * Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Speakeasy URN, conversation ID, and trigger instance ID.
    */
   query?: string | undefined;
   /**
@@ -108,7 +127,7 @@ export type ListToolUsageTracesPayload = {
   /**
    * Trace outcomes to include (error, success, blocked, pending). Empty means all.
    */
-  statuses?: Array<Statuses> | undefined;
+  statuses?: Array<ListToolUsageTracesPayloadStatuses> | undefined;
   /**
    * Target types to include. Empty means all target types.
    */
@@ -118,7 +137,7 @@ export type ListToolUsageTracesPayload = {
    */
   to: Date;
   /**
-   * Typed user identities to include
+   * Typed user identities to include. An email also matches the calls an agent made on that person's behalf.
    */
   userFilters?: Array<ToolUsageUserFilter> | undefined;
 };
@@ -129,9 +148,9 @@ export const ListToolUsageTracesPayloadSort$outboundSchema: z.ZodMiniEnum<
 > = z.enum(ListToolUsageTracesPayloadSort);
 
 /** @internal */
-export const Statuses$outboundSchema: z.ZodMiniEnum<typeof Statuses> = z.enum(
-  Statuses,
-);
+export const ListToolUsageTracesPayloadStatuses$outboundSchema: z.ZodMiniEnum<
+  typeof ListToolUsageTracesPayloadStatuses
+> = z.enum(ListToolUsageTracesPayloadStatuses);
 
 /** @internal */
 export const ListToolUsageTracesPayloadTargetTypes$outboundSchema:
@@ -142,12 +161,16 @@ export const ListToolUsageTracesPayloadTargetTypes$outboundSchema:
 /** @internal */
 export type ListToolUsageTracesPayload$Outbound = {
   account_type?: string | undefined;
+  agent_ids?: Array<string> | undefined;
+  client_keys?: Array<string> | undefined;
   cursor?: string | undefined;
   filters?: Array<LogFilter$Outbound> | undefined;
   from: string;
   hook_sources?: Array<string> | undefined;
   hosted_toolset_slugs?: Array<string> | undefined;
   limit: number;
+  mcp_server_ids?: Array<string> | undefined;
+  meta_mcp_server_ids?: Array<string> | undefined;
   query?: string | undefined;
   shadow_server_names?: Array<string> | undefined;
   sort: string;
@@ -164,16 +187,22 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     accountType: z.optional(z.string()),
+    agentIds: z.optional(z.array(z.string())),
+    clientKeys: z.optional(z.array(z.string())),
     cursor: z.optional(z.string()),
     filters: z.optional(z.array(LogFilter$outboundSchema)),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     hookSources: z.optional(z.array(z.string())),
     hostedToolsetSlugs: z.optional(z.array(z.string())),
     limit: z._default(z.int(), 100),
+    mcpServerIds: z.optional(z.array(z.string())),
+    metaMcpServerIds: z.optional(z.array(z.string())),
     query: z.optional(z.string()),
     shadowServerNames: z.optional(z.array(z.string())),
     sort: z._default(ListToolUsageTracesPayloadSort$outboundSchema, "desc"),
-    statuses: z.optional(z.array(Statuses$outboundSchema)),
+    statuses: z.optional(
+      z.array(ListToolUsageTracesPayloadStatuses$outboundSchema),
+    ),
     targetTypes: z.optional(
       z.array(ListToolUsageTracesPayloadTargetTypes$outboundSchema),
     ),
@@ -183,8 +212,12 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       accountType: "account_type",
+      agentIds: "agent_ids",
+      clientKeys: "client_keys",
       hookSources: "hook_sources",
       hostedToolsetSlugs: "hosted_toolset_slugs",
+      mcpServerIds: "mcp_server_ids",
+      metaMcpServerIds: "meta_mcp_server_ids",
       shadowServerNames: "shadow_server_names",
       targetTypes: "target_types",
       userFilters: "user_filters",

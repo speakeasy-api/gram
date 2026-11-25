@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Management projections intentionally omit documented optional fields.
+//nolint:exhaustruct_v5 // Management projections intentionally omit documented optional fields.
 package platformmcp
 
 import (
@@ -96,7 +96,7 @@ func (s *ManagementService) APIKeyAuth(ctx context.Context, key string, schema *
 }
 
 func (s *ManagementService) GetOnboarding(ctx context.Context, _ *platformmcpgen.GetOnboardingPayload) (*platformmcpgen.PlatformMCPOnboardingState, error) {
-	authCtx, err := s.authorizedContext(ctx)
+	authCtx, admin, err := s.memberContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -105,11 +105,14 @@ func (s *ManagementService) GetOnboarding(ctx context.Context, _ *platformmcpgen
 		return nil, err
 	}
 	if !enabled {
-		return s.disabledState(), nil
+		return s.disabledState(ctx), nil
 	}
 	projection, err := s.onboarding.Get(ctx, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
 		return nil, s.mapOnboardingError(err)
+	}
+	if !admin {
+		return s.memberState(ctx, projection, true), nil
 	}
 	readiness, found := s.currentReadiness(ctx, authCtx, projection)
 	return s.state(ctx, authCtx, projection, true, readiness, found), nil
@@ -119,7 +122,7 @@ func (s *ManagementService) StartOnboarding(ctx context.Context, payload *platfo
 	if payload == nil {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
-	authCtx, err := s.enabledContext(ctx)
+	authCtx, admin, err := s.enabledMemberContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +137,9 @@ func (s *ManagementService) StartOnboarding(ctx context.Context, payload *platfo
 	if err != nil {
 		return nil, s.mapOnboardingError(err)
 	}
+	if !admin {
+		return s.memberState(ctx, projection, true), nil
+	}
 	return s.state(ctx, authCtx, projection, true, nil, false), nil
 }
 
@@ -141,7 +147,7 @@ func (s *ManagementService) RecordDashboardCtaEvent(ctx context.Context, payload
 	if payload == nil {
 		return oops.C(oops.CodeBadRequest)
 	}
-	authCtx, err := s.enabledContext(ctx)
+	authCtx, _, err := s.enabledMemberContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -166,7 +172,7 @@ func (s *ManagementService) RecordInstallIntent(ctx context.Context, payload *pl
 	if payload == nil {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
-	authCtx, err := s.enabledContext(ctx)
+	authCtx, admin, err := s.enabledMemberContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -174,17 +180,23 @@ func (s *ManagementService) RecordInstallIntent(ctx context.Context, payload *pl
 	if err != nil {
 		return nil, s.mapOnboardingError(err)
 	}
+	if !admin {
+		return s.memberState(ctx, projection, true), nil
+	}
 	return s.state(ctx, authCtx, projection, true, nil, false), nil
 }
 
 func (s *ManagementService) RecordAgentConfigurationCopied(ctx context.Context, _ *platformmcpgen.RecordAgentConfigurationCopiedPayload) (*platformmcpgen.PlatformMCPOnboardingState, error) {
-	authCtx, err := s.enabledContext(ctx)
+	authCtx, admin, err := s.enabledMemberContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 	projection, err := s.onboarding.RecordAgentConfigurationCopied(ctx, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
 		return nil, s.mapOnboardingError(err)
+	}
+	if !admin {
+		return s.memberState(ctx, projection, true), nil
 	}
 	readiness, found := s.currentReadiness(ctx, authCtx, projection)
 	return s.state(ctx, authCtx, projection, true, readiness, found), nil
@@ -211,7 +223,7 @@ func (s *ManagementService) StartOnboardingSetup(ctx context.Context, _ *platfor
 		return nil, s.mapOnboardingError(err)
 	}
 	if isBrowserCatalogProviderKey(candidate.ProviderKey) || candidate.ProviderKey == directRemoteProviderKey {
-		setupURL, err := s.registrations.DashboardSetupURL(ctx, principal, IssueSetupHandoffInput{ProjectSlug: projection.SelectedProject.Slug, RegistrationID: projection.Workflow.SelectedRegistrationID.String(), ProviderKey: candidate.ProviderKey, CatalogRef: candidate.CatalogRef})
+		setupURL, err := s.registrations.DashboardSetupURL(ctx, principal, IssueSetupHandoffInput{ProjectSlug: projection.SelectedProject.Slug, RegistrationID: projection.Workflow.SelectedRegistrationID.String(), ProviderKey: candidate.ProviderKey, CatalogRef: candidate.CatalogRef, NextAction: ""})
 		if err != nil {
 			return nil, s.mapOnboardingError(err)
 		}
@@ -305,7 +317,7 @@ func (s *ManagementService) mutateDistribution(ctx context.Context, projectSlug,
 }
 
 func (s *ManagementService) DismissOnboarding(ctx context.Context, _ *platformmcpgen.DismissOnboardingPayload) error {
-	authCtx, err := s.enabledContext(ctx)
+	authCtx, _, err := s.enabledMemberContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -313,6 +325,41 @@ func (s *ManagementService) DismissOnboarding(ctx context.Context, _ *platformmc
 		return s.mapOnboardingError(err)
 	}
 	return nil
+}
+
+func (s *ManagementService) memberContext(ctx context.Context) (*contextvalues.AuthContext, bool, error) {
+	if s == nil || s.authorizer == nil || s.gate == nil || s.onboarding == nil {
+		return nil, false, oops.C(oops.CodeUnexpected)
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.UserID == "" || authCtx.ActiveOrganizationID == "" {
+		return nil, false, oops.C(oops.CodeUnauthorized)
+	}
+	principal := Principal{UserID: authCtx.UserID, OrganizationID: authCtx.ActiveOrganizationID}
+	if err := s.authorizer.RequireLiveMembership(ctx, principal); err != nil {
+		if isAuthorizationDenied(err) {
+			return nil, false, oops.C(oops.CodeForbidden)
+		}
+		return nil, false, oops.E(oops.CodeUnexpected, err, "authorize platform mcp member access")
+	}
+	if capability, ok := s.authorizer.(interface {
+		HasLiveOrgAdmin(context.Context, Principal) (bool, error)
+	}); ok {
+		admin, err := capability.HasLiveOrgAdmin(ctx, principal)
+		if err != nil {
+			return nil, false, oops.E(oops.CodeUnexpected, err, "check platform mcp management capability")
+		}
+		return authCtx, admin, nil
+	}
+	// Test and alternate authorizers may not expose the presentation-only probe.
+	// Their required check remains fail-closed; production uses the branch above
+	// so opening member onboarding does not create a denied admin challenge.
+	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err == nil {
+		return authCtx, true, nil
+	} else if !isAuthorizationDenied(err) {
+		return nil, false, oops.E(oops.CodeUnexpected, err, "authorize platform mcp management access")
+	}
+	return authCtx, false, nil
 }
 
 func (s *ManagementService) authorizedContext(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -323,15 +370,29 @@ func (s *ManagementService) authorizedContext(ctx context.Context) (*contextvalu
 	if !ok || authCtx == nil || authCtx.UserID == "" || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	err := s.authorizer.RequireLiveOrgAdmin(ctx, Principal{UserID: authCtx.UserID, OrganizationID: authCtx.ActiveOrganizationID})
-	if err == nil {
-		return authCtx, nil
+	principal := Principal{UserID: authCtx.UserID, OrganizationID: authCtx.ActiveOrganizationID}
+	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
+		if isAuthorizationDenied(err) {
+			return nil, oops.C(oops.CodeForbidden)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "authorize platform mcp management access")
 	}
-	if isAuthorizationDenied(err) {
-		return nil, oops.C(oops.CodeForbidden)
-	}
-	return nil, oops.E(oops.CodeUnexpected, err, "authorize platform mcp management access")
+	return authCtx, nil
 }
+
+func (s *ManagementService) enabledMemberContext(ctx context.Context) (*contextvalues.AuthContext, bool, error) {
+	authCtx, admin, err := s.memberContext(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	if enabled, err := s.enabled(ctx, authCtx); err != nil {
+		return nil, false, err
+	} else if !enabled {
+		return nil, false, oops.C(oops.CodeForbidden)
+	}
+	return authCtx, admin, nil
+}
+
 func (s *ManagementService) enabledContext(ctx context.Context) (*contextvalues.AuthContext, error) {
 	authCtx, err := s.authorizedContext(ctx)
 	if err != nil {
@@ -354,8 +415,45 @@ func (s *ManagementService) enabled(ctx context.Context, authCtx *contextvalues.
 	return enabled, nil
 }
 
-func (s *ManagementService) disabledState() *platformmcpgen.PlatformMCPOnboardingState {
-	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: false, Stage: string(OnboardingStageNotStarted), McpURL: s.mcpURL, WorkflowActive: false, OrganizationSetupComplete: false, ClientFamily: "", AgentConfigurationCopied: false, ConnectionAuthorized: false, ConnectionAuthState: ConnectionAuthStateNotConnected, ReauthorizationReason: "", ConnectionReady: false, CatalogExplored: false, SelectedProjectName: "", SelectedProjectSlug: "", RegistrationComplete: false, ReadinessState: "", ReadinessFreshness: "", DistributionState: "", DistributionAttached: false, DistributionToolSucceeded: false, ReadinessVerified: false, DistributionPublicationState: "", SelectedUseVerified: false, DistributionExpectedVersion: "", RepairAction: repairActionEnablePlatformMCP}
+func (s *ManagementService) memberState(ctx context.Context, projection OnboardingProjection, enabled bool) *platformmcpgen.PlatformMCPOnboardingState {
+	connectionReady := false
+	if connection, found := projection.connectionForEvidence(); found {
+		connectionReady = connection.Ready
+	}
+	clientFamily := ""
+	workflowActive := projection.Workflow != nil
+	if projection.Workflow != nil {
+		clientFamily = string(projection.Workflow.ClientFamily)
+	}
+	repairAction := ""
+	if projection.ConnectionAuthState == ConnectionAuthStateReauthorizationRequired || (workflowActive && !connectionReady) {
+		repairAction = repairActionAuthorizePlatformMCP
+	}
+	return &platformmcpgen.PlatformMCPOnboardingState{
+		Enabled: enabled, Stage: string(projection.Stage), McpURL: s.requestMCPURL(ctx),
+		WorkflowActive: workflowActive, OrganizationSetupComplete: false,
+		ClientFamily: clientFamily, AgentConfigurationCopied: agentConfigurationReady(projection),
+		ConnectionAuthorized: projection.ConnectionAuthState == ConnectionAuthStateActive,
+		ConnectionAuthState:  projection.ConnectionAuthState, ReauthorizationReason: projection.ReauthorizationReason,
+		ConnectionReady: connectionReady, CatalogExplored: false,
+		SelectedProjectName: "", SelectedProjectSlug: "", RegistrationComplete: false,
+		ReadinessState: "", ReadinessFreshness: "", DistributionState: "", DistributionAttached: false,
+		DistributionToolSucceeded: false, ReadinessVerified: false, DistributionPublicationState: "",
+		SelectedUseVerified: false, DistributionExpectedVersion: "", RepairAction: repairAction,
+	}
+}
+
+// requestMCPURL is the Platform MCP endpoint on the platform host the
+// dashboard request arrived on, or the configured endpoint otherwise.
+func (s *ManagementService) requestMCPURL(ctx context.Context) string {
+	if base := requestPlatformBaseURL(ctx); base != nil {
+		return platformResource(base)
+	}
+	return s.mcpURL
+}
+
+func (s *ManagementService) disabledState(ctx context.Context) *platformmcpgen.PlatformMCPOnboardingState {
+	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: false, Stage: string(OnboardingStageNotStarted), McpURL: s.requestMCPURL(ctx), WorkflowActive: false, OrganizationSetupComplete: false, ClientFamily: "", AgentConfigurationCopied: false, ConnectionAuthorized: false, ConnectionAuthState: ConnectionAuthStateNotConnected, ReauthorizationReason: "", ConnectionReady: false, CatalogExplored: false, SelectedProjectName: "", SelectedProjectSlug: "", RegistrationComplete: false, ReadinessState: "", ReadinessFreshness: "", DistributionState: "", DistributionAttached: false, DistributionToolSucceeded: false, ReadinessVerified: false, DistributionPublicationState: "", SelectedUseVerified: false, DistributionExpectedVersion: "", RepairAction: repairActionEnablePlatformMCP}
 }
 
 func (s *ManagementService) state(ctx context.Context, authCtx *contextvalues.AuthContext, projection OnboardingProjection, enabled bool, readiness *Readiness, readinessFound bool) *platformmcpgen.PlatformMCPOnboardingState {
@@ -415,14 +513,14 @@ func (s *ManagementService) state(ctx context.Context, authCtx *contextvalues.Au
 			repairAction = "contact_support"
 		}
 	case registrationComplete && readiness != nil:
-		actions := repairActions(readiness.State)
+		actions := setupRepairActions(setupCategoryFromReadiness(*readiness), readiness.State)
 		if len(actions) > 0 {
 			repairAction = actions[0].Kind
 		}
 	case registrationComplete:
 		repairAction = repairActionStartSetup
 	}
-	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: enabled, Stage: string(projection.Stage), McpURL: s.mcpURL, WorkflowActive: workflowActive, OrganizationSetupComplete: projection.OrganizationSetupComplete, ClientFamily: clientFamily, AgentConfigurationCopied: agentConfigurationReady(projection), ConnectionAuthorized: projection.ConnectionAuthState == ConnectionAuthStateActive, ConnectionAuthState: projection.ConnectionAuthState, ReauthorizationReason: projection.ReauthorizationReason, ConnectionReady: connectionReady, CatalogExplored: projection.CatalogExplored, SelectedProjectName: selectedProjectName, SelectedProjectSlug: selectedProjectSlug, RegistrationComplete: registrationComplete, ReadinessState: readinessState, ReadinessFreshness: freshness, DistributionState: distributionState, DistributionAttached: distributionAttached, DistributionToolSucceeded: projection.DistributionToolSucceeded, ReadinessVerified: readinessVerified || projection.ReadinessVerified, DistributionPublicationState: distributionPublicationState, SelectedUseVerified: selectedUseVerified, DistributionExpectedVersion: distributionExpectedVersion, RepairAction: repairAction}
+	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: enabled, Stage: string(projection.Stage), McpURL: s.requestMCPURL(ctx), WorkflowActive: workflowActive, OrganizationSetupComplete: projection.OrganizationSetupComplete, ClientFamily: clientFamily, AgentConfigurationCopied: agentConfigurationReady(projection), ConnectionAuthorized: projection.ConnectionAuthState == ConnectionAuthStateActive, ConnectionAuthState: projection.ConnectionAuthState, ReauthorizationReason: projection.ReauthorizationReason, ConnectionReady: connectionReady, CatalogExplored: projection.CatalogExplored, SelectedProjectName: selectedProjectName, SelectedProjectSlug: selectedProjectSlug, RegistrationComplete: registrationComplete, ReadinessState: readinessState, ReadinessFreshness: freshness, DistributionState: distributionState, DistributionAttached: distributionAttached, DistributionToolSucceeded: projection.DistributionToolSucceeded, ReadinessVerified: readinessVerified || projection.ReadinessVerified, DistributionPublicationState: distributionPublicationState, SelectedUseVerified: selectedUseVerified, DistributionExpectedVersion: distributionExpectedVersion, RepairAction: repairAction}
 }
 func agentConfigurationReady(projection OnboardingProjection) bool {
 	if projection.Workflow == nil {
@@ -449,7 +547,7 @@ func (s *ManagementService) currentDistribution(ctx context.Context, authCtx *co
 	// The dashboard onboarding surface asks about the project's default plugin,
 	// which is the plugin its own action distributes to. Naming a target is the
 	// agent-facing tools' concern.
-	distribution, err := s.distributions.Current(ctx, principal, projection.SelectedProject.Slug, "")
+	distribution, err := s.distributions.Current(ctx, principal, projection.SelectedProject.Slug, uuid.Nil, "")
 	if err != nil {
 		return Distribution{}, false
 	}
@@ -512,6 +610,8 @@ func (s *ManagementService) mapOnboardingError(err error) error {
 		return oops.C(oops.CodeForbidden)
 	case errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrReadinessRateLimited):
 		return oops.C(oops.CodeRateLimitExceeded)
+	case errors.Is(err, ErrDistributionAdmissionUnavailable):
+		return oops.E(oops.CodeUnavailable, err, "distribution approval could not be verified safely")
 	case errors.Is(err, ErrUnavailable), errors.Is(err, ErrRegistrationUnavailable), errors.Is(err, ErrOperationBudgetUnavailable):
 		return oops.C(oops.CodeUnexpected)
 	default:

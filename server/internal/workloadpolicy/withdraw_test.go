@@ -1,0 +1,354 @@
+package workloadpolicy_test
+
+import (
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	securityrepo "github.com/speakeasy-api/gram/server/internal/audit/securityevent/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
+	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
+)
+
+func TestWithdrawSubject_StopsItAuthenticatingAndClearsItsAgent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+	policy, err := admit(t, ctx, ti, fleetRule, string(workloadidentity.MatchKindWildcard), agentID)
+	require.NoError(t, err)
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+
+	after, err := ti.service.WithdrawSubject(ctx, &gen.WithdrawSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               policy.Admissions[0].ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "organization", after.WithdrawnTier)
+	require.Empty(t, after.Admissions)
+	// The issuer survives its subject: withdrawing one machine is not a reason
+	// to stop trusting the platform that vouched for it.
+	require.Len(t, after.Issuers, 1)
+
+	// The assignment is keyed independently of the admission, so leaving it
+	// behind would keep the tuple resolving to an agent after withdrawal.
+	assignments, err := repo.New(ti.conn).SoftDeleteWorkloadAgentAssignmentForSubject(ctx, repo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{
+		OrganizationID:   ti.orgID,
+		WorkloadIssuerID: uuid.MustParse(policy.Admissions[0].WorkloadIssuerID),
+		MatchKind:        string(workloadidentity.MatchKindWildcard),
+		Subject:          fleetRule,
+	})
+	require.NoError(t, err)
+	require.Empty(t, assignments, "the withdrawal should already have tombstoned the assignment")
+
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, before+1, count)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	snapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, agentID.String(), snapshot["assigned_agent_id"])
+}
+
+func TestWithdrawIssuer_CascadesToItsAdmittedSubjects(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	policy := registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	_, err := admit(t, ctx, ti, fleetRule, string(workloadidentity.MatchKindWildcard), agentID)
+	require.NoError(t, err)
+	_, err = admit(t, ctx, ti, channelOne, string(workloadidentity.MatchKindExact), agentID)
+	require.NoError(t, err)
+
+	withdrawn, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+
+	after, err := ti.service.WithdrawIssuer(ctx, &gen.WithdrawIssuerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               policy.Issuers[0].ID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, after.Issuers)
+	// ON DELETE CASCADE only fires on a hard delete, so without the explicit
+	// cascade these rows would stay in the active set pointing at a tombstone:
+	// invisible in the list, and still matching.
+	require.Empty(t, after.Admissions)
+
+	// One entry per affected row. A single +1 on the issuer's own action would
+	// not catch the per-subject events silently stopping.
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, withdrawn+2, count)
+
+	issuerEvents, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWorkloadIssuerDelete)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), issuerEvents)
+
+	// The assignments are keyed independently of the admissions, so every
+	// assertion above would still pass while the tuples kept resolving to an
+	// agent. Mirrors what the single-subject withdrawal test checks.
+	assignments, err := repo.New(ti.conn).SoftDeleteWorkloadAgentAssignmentsByIssuer(ctx, repo.SoftDeleteWorkloadAgentAssignmentsByIssuerParams{
+		OrganizationID:   ti.orgID,
+		WorkloadIssuerID: uuid.MustParse(policy.Issuers[0].ID),
+	})
+	require.NoError(t, err)
+	require.Empty(t, assignments, "withdrawing the issuer should already have tombstoned every assignment under it")
+}
+
+// Withdrawing the issuer is a configuration change. The cascaded entry for an
+// admission the Kit runtime admitted for itself goes to the security log, with
+// the runtime's own admit and withdraw entries. The signal is the audit trail,
+// not the admission's tags: a customer can tag an admission "kit-runtime", and
+// that must not move its withdrawal out of the configuration audit log.
+func TestWithdrawIssuer_CascadedRuntimeAdmissionsGoToTheSecurityLog(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	policy := registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	_, err := admit(t, ctx, ti, fleetRule, string(workloadidentity.MatchKindWildcard), agentID)
+	require.NoError(t, err)
+	admitted, err := admitWithTags(t, ctx, ti, agentID, []string{"kit-runtime"})
+	require.NoError(t, err)
+
+	ids := make(map[string]string, len(admitted.Admissions))
+	for _, admission := range admitted.Admissions {
+		ids[admission.Subject] = admission.ID
+	}
+	require.Len(t, ids, 2)
+
+	// The fleet rule stands in for a runtime-created admission from before Kit
+	// runtimes stopped auditing their own admits: its admit is in the security
+	// log, attributed to the assistant's agent.
+	_, err = securityrepo.New(ti.conn).InsertSecurityAuditLog(ctx, securityrepo.InsertSecurityAuditLogParams{
+		OrganizationID: ti.orgID,
+		ActorID:        agentID.String(),
+		ActorType:      string(urn.PrincipalTypeAgent),
+		Action:         string(audit.ActionWorkloadAdmissionAdmit),
+		SubjectID:      ids[fleetRule],
+		SubjectType:    "workload_admission",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.WithdrawIssuer(ctx, &gen.WithdrawIssuerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               policy.Issuers[0].ID,
+	})
+	require.NoError(t, err)
+
+	runtime, err := audittest.LatestSecurityAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, ids[fleetRule], runtime.SubjectID)
+	require.Equal(t, string(urn.PrincipalTypeUser), runtime.ActorType, "the person who withdrew the issuer is still the actor")
+	_, err = audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[fleetRule])
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the runtime admission's withdrawal is not in the configuration log")
+
+	_, err = audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[channelOne])
+	require.NoError(t, err, "a customer-set tag must not move a withdrawal out of the configuration log")
+
+	_, err = audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadIssuerDelete)
+	require.NoError(t, err, "the issuer withdrawal is a configuration change")
+}
+
+func TestWithdrawIssuer_RefusesAnIssuerOutsideTheCallersTenancy(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.WithdrawIssuer(ctx, &gen.WithdrawIssuerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               uuid.NewString(),
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestWithdrawIssuer_RequiresWorkloadWrite(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	policy := registerAnthropic(t, ctx, ti, true)
+
+	readOnly := withScopes(t, ctx, ti, authz.ScopeWorkloadRead)
+	_, err := ti.service.WithdrawIssuer(readOnly, &gen.WithdrawIssuerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               policy.Issuers[0].ID,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestList_RequiresWorkloadRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	// Reading the policy discloses which machines the organization recognises,
+	// so it is withheld from members rather than riding on project:read.
+	noScopes := withScopes(t, ctx, ti, authz.ScopeProjectRead)
+	_, err := ti.service.List(noScopes, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = asAPIKey(t, ctx)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	// The same tuple admitted at both tiers. They share one agent assignment,
+	// because the assignment is keyed on (issuer, match_kind, subject) while an
+	// admission is tiered.
+	orgTier, err := admit(t, ctx, ti, channelOne, string(workloadidentity.MatchKindExact), agentID)
+	require.NoError(t, err)
+	require.Len(t, orgTier.Admissions, 1)
+
+	_, err = ti.service.AdmitSubject(ctx, &gen.AdmitSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Issuer:           anthropicIssuer,
+		Subject:          channelOne,
+		MatchKind:        string(workloadidentity.MatchKindExact),
+		Name:             nil,
+		Tags:             nil,
+		AgentID:          agentID.String(),
+		ProjectScoped:    true,
+	})
+	require.NoError(t, err)
+
+	after, err := ti.service.WithdrawSubject(ctx, &gen.WithdrawSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               orgTier.Admissions[0].ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "organization", after.WithdrawnTier)
+
+	// The surviving admission must keep its agent. Without it the workload
+	// authenticates and is then refused for having no agent, which reads as a
+	// broken rule rather than a withdrawn one.
+	require.Len(t, after.Admissions, 1)
+	require.Equal(t, agentID.String(), after.Admissions[0].AgentID,
+		"the remaining tier's admission lost its agent when the other tier was withdrawn")
+	// And it must be the OTHER tier that survived. Both admissions share one
+	// agent assignment, so the agent assertion alone cannot tell which row is
+	// left: withdrawing the wrong tier would satisfy it too.
+	require.Equal(t, ti.projectID.String(), after.Admissions[0].ProjectID,
+		"the project-tier admission should have survived withdrawing the organization-tier one")
+
+	// The before-snapshot has to say which agent the withdrawn admission ran
+	// under, whether or not the shared assignment went with it. Reading the agent
+	// only on the branch that deletes the assignment left exactly this case — the
+	// other tier surviving — with no agent recorded.
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	snapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, agentID.String(), snapshot["assigned_agent_id"],
+		"the withdrawal's snapshot lost the agent because the other tier kept the assignment")
+}
+
+// The response names the tier that was withdrawn, so a client can tell whether
+// the same subject is still admitted at the other tier.
+func TestWithdrawSubject_NamesTheProjectTier(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = asAPIKey(t, ctx)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	projectTier, err := ti.service.AdmitSubject(ctx, &gen.AdmitSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Issuer:           anthropicIssuer,
+		Subject:          channelOne,
+		MatchKind:        string(workloadidentity.MatchKindExact),
+		Name:             nil,
+		Tags:             nil,
+		AgentID:          agentID.String(),
+		ProjectScoped:    true,
+	})
+	require.NoError(t, err)
+	require.Len(t, projectTier.Admissions, 1)
+	require.Equal(t, ti.projectID.String(), projectTier.Admissions[0].ProjectID)
+
+	after, err := ti.service.WithdrawSubject(ctx, &gen.WithdrawSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               projectTier.Admissions[0].ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "project", after.WithdrawnTier)
+	require.Empty(t, after.Admissions)
+}
+
+// A sibling project's issuer is invisible in the caller's list, so it must not be
+// withdrawable by supplying its UUID. GetWorkloadIssuer and SoftDeleteWorkloadIssuer
+// once scoped on organization alone, which let a caller destroy a row it could
+// not see.
+func TestWithdrawIssuer_RefusesASiblingProjectsIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	// Same organization, a different project than the one the caller has selected.
+	siblingProject := uuid.New()
+	_, err := testrepo.New(ti.conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID:             siblingProject,
+		Name:           "sibling",
+		Slug:           "sibling-" + siblingProject.String()[:8],
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+
+	siblingIssuer, err := testrepo.New(ti.conn).CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: ti.orgID,
+		ProjectID:      uuid.NullUUID{UUID: siblingProject, Valid: true},
+		Name:           "sibling-ci",
+		Issuer:         "https://sibling.example.com",
+		JwksUri:        "https://sibling.example.com/.well-known/jwks.json",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.WithdrawIssuer(ctx, &gen.WithdrawIssuerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               siblingIssuer.String(),
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	// Still live, so the refusal was a refusal and not a silent no-op.
+	deleted, err := repo.New(ti.conn).GetWorkloadIssuerDeletedFixture(ctx, siblingIssuer)
+	require.NoError(t, err)
+	require.False(t, deleted, "a sibling project's issuer must survive a withdrawal it was never visible to")
+}

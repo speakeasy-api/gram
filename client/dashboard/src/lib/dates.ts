@@ -1,7 +1,7 @@
 // TODO: Move file to better home
 
 import React, { useEffect, useReducer } from "react";
-import { formatDistance } from "date-fns";
+import { formatDistance } from "date-fns/formatDistance";
 
 export const HumanizeDateTime = React.memo(
   ({
@@ -105,6 +105,14 @@ export const dateTimeFormatters = {
   }),
   monthDay: new Intl.DateTimeFormat(undefined, {
     month: "long",
+    day: "numeric",
+  }),
+  // Day precision, for dates a table states rather than counts from: an
+  // issue date or an expiry, where the minute is noise and a numeric
+  // locale string ("22/12/2026, 13:48:30") is unreadable at a glance.
+  day: new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
     day: "numeric",
   }),
   time: new Intl.DateTimeFormat(undefined, {

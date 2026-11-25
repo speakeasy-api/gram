@@ -1,3 +1,15 @@
+-- name: ListProOrganizations :many
+SELECT id
+FROM organization_metadata
+WHERE gram_account_type = 'pro'
+ORDER BY id;
+
+-- name: LockAndCheckProOrganization :one
+SELECT gram_account_type = 'pro' AS is_pro
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE;
+
 -- name: LockOrganizationMetadata :one
 SELECT id
 FROM organization_metadata
@@ -13,13 +25,21 @@ SELECT pg_advisory_lock(hashtextextended('product-feature:' || @organization_id:
 SELECT pg_advisory_unlock(hashtextextended('product-feature:' || @organization_id::text || ':' || @feature_name::text, 0)) AS unlocked;
 
 -- name: IsFeatureEnabled :one
-SELECT EXISTS (
-        SELECT 1
-        FROM organization_features
-        WHERE organization_id = @organization_id
-            AND feature_name = @feature_name
-            AND deleted IS FALSE
-) AS enabled;
+-- The inverted gateway setting defaults to disabled until a soft-deleted
+-- flag records an administrator's explicit opt-in.
+SELECT COALESCE(EXISTS (
+    SELECT 1 FROM organization_features AS active_feature
+    WHERE active_feature.organization_id = @organization_id
+      AND active_feature.feature_name = @feature_name
+      AND active_feature.deleted IS FALSE
+) OR (
+    @feature_name::text = 'organization_gateway_disabled'
+    AND NOT EXISTS (
+        SELECT 1 FROM organization_features AS configured_feature
+        WHERE configured_feature.organization_id = @organization_id
+          AND configured_feature.feature_name = @feature_name
+    )
+), FALSE)::boolean AS enabled;
 
 -- name: HasDeviceAgentSync :one
 -- Whether any device has polled agent.getPlugins for the org — the member-
@@ -43,8 +63,8 @@ ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
 DO NOTHING;
 
 -- name: EnableFeatureIfNeverConfigured :execrows
--- PAYG activation grants purchased capabilities to legacy organizations while
--- preserving a soft-deleted row as an explicit administrator choice.
+-- Paid-tier activation grants enterprise-access capabilities while preserving
+-- a soft-deleted row as an explicit administrator choice.
 INSERT INTO organization_features (
     organization_id,
     feature_name

@@ -9,9 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -19,6 +25,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+type adminOrganizationFeaturesResponse = adminserver.GetOrganizationFeaturesResponseBody
+
+var adminGenericWritableFeatures = []productfeatures.Feature{
+	productfeatures.FeatureLogs,
+	productfeatures.FeatureToolIOLogs,
+	productfeatures.FeatureSessionCapture,
+	productfeatures.FeatureAuthzChallengeLogging,
+	productfeatures.FeatureSSO,
+	productfeatures.FeatureSCIM,
+	productfeatures.FeatureHooksBrowserLogin,
+	productfeatures.FeatureHooksFailOpen,
+	productfeatures.FeatureCustomModelKeys,
+	productfeatures.FeatureSkillCaptureMetadataOnly,
+	productfeatures.FeatureAIPlatformPushIntegrations,
+	productfeatures.FeaturePlatformMCP,
+	productfeatures.FeatureCustomerManagedEncryptionKeys,
+	productfeatures.FeatureSessionPortability,
+}
 
 func TestAttach_MountsOrganizationFeaturesRoutes(t *testing.T) {
 	t.Parallel()
@@ -29,13 +54,77 @@ func TestAttach_MountsOrganizationFeaturesRoutes(t *testing.T) {
 	Attach(mux, svc)
 
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
-		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest(method, "/admin/organization.features", nil))
-		require.Equal(t, http.StatusUnauthorized, rec.Code)
+		for _, cookie := range []string{"", constants.SessionCookie} {
+			req := httptest.NewRequest(method, "/admin/organization.features", bytes.NewBufferString(`{"organization_id":"org_role_rollout","feature_name":"sso","enabled":true}`))
+			if cookie != "" {
+				req.AddCookie(&http.Cookie{Name: cookie, Value: "customer-session"})
+				req.Header.Set("Authorization", "Bearer customer-key")
+			}
+			rec := httptest.NewRecorder()
+			SessionMiddleware(mux).ServeHTTP(rec, req)
+			require.Equal(t, http.StatusUnauthorized, rec.Code)
+		}
 	}
+
+	// A stored admin cookie is not enough: the identity provider must still
+	// attest that its owner belongs to an allowed staff domain.
+	nonstaff := newTestSessionService(t, newTestOIDCClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"sub":"sub-admin","email":"person@external.test","email_verified":true,"hd":"external.test"}`))
+		assert.NoError(t, err)
+	}))
+	nonstaff.tracer = testenv.NewTracerProvider(t).Tracer("admin_test")
+	sessionID := makeAdminFeatureSession(t, t.Context(), nonstaff, "person@external.test")
+	nonstaffMux := goahttp.NewMuxer()
+	Attach(nonstaffMux, nonstaff)
+	req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(`{"organization_id":"org_role_rollout","feature_name":"sso","enabled":true}`))
+	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+	rec := httptest.NewRecorder()
+	SessionMiddleware(nonstaffMux).ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestOrganizationFeatures_MatchesPlatformAdminAndUpdatesCuratedFlags(t *testing.T) {
+func TestGetOrganizationFeatures_ReturnsEveryField(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	orgID := "org_admin_features_contract"
+	now := time.Now().UTC()
+	require.NoError(t, testrepo.New(conn).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID: orgID, Name: "Admin Features Contract Org", Slug: "admin-features-contract", GramAccountType: "enterprise",
+		FreeTrialStartedAt: conv.ToPGTimestamptz(now), FreeTrialEndsAt: conv.ToPGTimestamptz(now.Add(14 * 24 * time.Hour)),
+	}))
+
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
+	handler := SessionMiddleware(mux)
+	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
+	req := httptest.NewRequest(http.MethodGet, "/admin/organization.features?organization_id="+orgID, nil)
+	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var result map[string]bool
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	wantKeys := map[string]struct{}{
+		"logs_enabled": {}, "tool_io_logs_enabled": {}, "session_capture_enabled": {},
+		"authz_challenge_logging_enabled": {}, "sso_enabled": {}, "scim_enabled": {},
+		"hooks_browser_login_enabled": {}, "hooks_fail_open_enabled": {}, "custom_model_keys_enabled": {},
+		"skills_enabled": {}, "skill_capture_metadata_only": {}, "ai_platform_push_integrations_enabled": {},
+		"platform_mcp_enabled": {}, "customer_managed_encryption_keys_enabled": {},
+		"remote_session_auto_refresh_enabled": {}, "remote_session_auto_refresh_enforced_enabled": {},
+		"network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
+		"signals_intelligence_enabled": {}, "organization_gateway_disabled": {}, "code_mode_enabled": {},
+	}
+	gotKeys := make(map[string]struct{}, len(result))
+	for key := range result {
+		gotKeys[key] = struct{}{}
+	}
+	require.Equal(t, wantKeys, gotKeys)
+}
+
+func TestSetOrganizationFeature_SkillsAndRefreshSemantics(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -49,47 +138,83 @@ func TestOrganizationFeatures_MatchesPlatformAdminAndUpdatesCuratedFlags(t *test
 		FreeTrialStartedAt: conv.ToPGTimestamptz(now),
 		FreeTrialEndsAt:    conv.ToPGTimestamptz(now.Add(14 * 24 * time.Hour)),
 	}))
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, orgID))
 
 	mux := goahttp.NewMuxer()
 	Attach(mux, svc)
 	handler := SessionMiddleware(mux)
 	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
 
-	result := getAdminOrganizationFeatures(t, handler, sessionID, orgID)
-	require.Equal(t, adminOrganizationFeaturesResponse{}, result)
+	result := setAdminOrganizationFeature(t, handler, sessionID, orgID, productfeatures.FeatureSkills, false)
+	require.True(t, result.SkillsEnabled)
+	result = setAdminOrganizationFeature(t, handler, sessionID, orgID, productfeatures.FeatureSkills, true)
+	require.True(t, result.SkillsEnabled)
 
-	for _, feature := range adminOrganizationFeatures {
-		result = setAdminOrganizationFeature(t, handler, sessionID, orgID, feature, true)
-	}
-
-	require.True(t, result.AuthzChallengeLoggingEnabled)
-	require.True(t, result.CustomerManagedEncryptionKeysEnabled)
-	require.True(t, result.CustomModelKeysEnabled)
-	require.True(t, result.PlatformMcpEnabled)
-	require.True(t, result.RemoteSessionAutoRefreshEnabled)
-	require.True(t, result.SessionPortabilityEnabled)
-	require.True(t, result.SsoEnabled)
-	require.True(t, result.ScimEnabled)
-
-	// The binary standalone-admin control must also clear the legacy enforced
-	// state so the displayed value and runtime policy cannot disagree.
 	_, err := featurerepo.New(conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{
 		OrganizationID: orgID, FeatureName: string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced),
 	})
 	require.NoError(t, err)
 	svc.productFeatures.UpdateFeatureCache(ctx, orgID, productfeatures.FeatureRemoteSessionAutoRefreshEnforced, true)
 
-	for _, feature := range adminOrganizationFeatures {
-		result = setAdminOrganizationFeature(t, handler, sessionID, orgID, feature, false)
-	}
-	require.Equal(t, adminOrganizationFeaturesResponse{}, result)
-
-	enforced, err := svc.productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureRemoteSessionAutoRefreshEnforced)
-	require.NoError(t, err)
-	require.False(t, enforced)
+	result = setAdminOrganizationFeature(t, handler, sessionID, orgID, productfeatures.FeatureRemoteSessionAutoRefresh, true)
+	require.True(t, result.RemoteSessionAutoRefreshEnabled)
+	require.False(t, result.RemoteSessionAutoRefreshEnforcedEnabled)
+	result = setAdminOrganizationFeature(t, handler, sessionID, orgID, productfeatures.FeatureRemoteSessionAutoRefresh, false)
+	require.False(t, result.RemoteSessionAutoRefreshEnabled)
+	require.False(t, result.RemoteSessionAutoRefreshEnforcedEnabled)
 }
 
-func TestSetOrganizationFeature_RejectsFeatureOutsidePlatformAdminList(t *testing.T) {
+func TestSetOrganizationFeature_RejectsDirectEnforcementMutation(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	orgID := "org_admin_feature_enforcement"
+	now := time.Now().UTC()
+	require.NoError(t, testrepo.New(conn).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID: orgID, Name: "Admin Feature Enforcement Org", Slug: "admin-feature-enforcement", GramAccountType: "enterprise",
+		FreeTrialStartedAt: conv.ToPGTimestamptz(now), FreeTrialEndsAt: conv.ToPGTimestamptz(now.Add(14 * 24 * time.Hour)),
+	}))
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
+	handler := SessionMiddleware(mux)
+	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
+	enabled := true
+	feature := string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced)
+	body, err := json.Marshal(adminserver.SetOrganizationFeatureRequestBody{
+		OrganizationID: &orgID, FeatureName: &feature, Enabled: &enabled,
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewReader(body))
+	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+}
+
+func TestSetOrganizationFeature_RecordsAdminActor(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	const orgID = "org_admin_feature_actor"
+	now := time.Now().UTC()
+	require.NoError(t, testrepo.New(conn).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID: orgID, Name: "Admin Feature Actor Org", Slug: "admin-feature-actor", GramAccountType: "enterprise",
+		FreeTrialStartedAt: conv.ToPGTimestamptz(now), FreeTrialEndsAt: conv.ToPGTimestamptz(now.Add(14 * 24 * time.Hour)),
+	}))
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
+	handler := SessionMiddleware(mux)
+	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
+	setAdminOrganizationFeature(t, handler, sessionID, orgID, productfeatures.FeatureLogs, true)
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationProductFeatureEnabled)
+	require.NoError(t, err)
+	require.Equal(t, "sub-admin", entry.ActorID)
+	require.NotNil(t, entry.ActorDisplayName)
+	require.Equal(t, "Test Operator", *entry.ActorDisplayName)
+}
+
+func TestSetOrganizationFeature_EnableThenDisableEveryGenericWritableFeature(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -99,21 +224,64 @@ func TestSetOrganizationFeature_RejectsFeatureOutsidePlatformAdminList(t *testin
 		ID: orgID, Name: "Admin Features Org", Slug: "admin-features-allowlist", GramAccountType: "enterprise",
 		FreeTrialStartedAt: conv.ToPGTimestamptz(now), FreeTrialEndsAt: conv.ToPGTimestamptz(now.Add(14 * 24 * time.Hour)),
 	}))
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, orgID))
 
 	mux := goahttp.NewMuxer()
 	Attach(mux, svc)
 	handler := SessionMiddleware(mux)
 	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
-	body := []byte(`{"organization_id":"` + orgID + `","feature_name":"hooks_fail_open","enabled":true}`)
-	req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewReader(body))
-	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusBadRequest, rec.Code)
-
-	enabled, err := svc.productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureHooksFailOpen)
+	require.Len(t, adminGenericWritableFeatures, 14)
+	for _, feature := range adminGenericWritableFeatures {
+		setAdminOrganizationFeature(t, handler, sessionID, orgID, feature, true)
+	}
+	var result adminOrganizationFeaturesResponse
+	for _, feature := range adminGenericWritableFeatures {
+		result = setAdminOrganizationFeature(t, handler, sessionID, orgID, feature, false)
+	}
+	response, err := json.Marshal(result)
 	require.NoError(t, err)
-	require.False(t, enabled)
+	var states map[string]bool
+	require.NoError(t, json.Unmarshal(response, &states))
+	for _, feature := range adminGenericWritableFeatures {
+		key := string(feature) + "_enabled"
+		if feature == productfeatures.FeatureSkillCaptureMetadataOnly {
+			key = string(feature)
+		}
+		require.False(t, states[key], "feature=%s", feature)
+	}
+}
+
+func TestSetOrganizationFeature_RejectsInvalidRequests(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	const orgID = "org_admin_feature_strict_json"
+	now := time.Now().UTC()
+	require.NoError(t, testrepo.New(conn).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID: orgID, Name: "Admin Feature Strict JSON Org", Slug: "admin-feature-strict-json", GramAccountType: "enterprise",
+		FreeTrialStartedAt: conv.ToPGTimestamptz(now), FreeTrialEndsAt: conv.ToPGTimestamptz(now.Add(14 * 24 * time.Hour)),
+	}))
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
+	handler := SessionMiddleware(mux)
+	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
+
+	for name, body := range map[string]string{
+		"retired feature": `{ "organization_id":"` + orgID + `","feature_name":"automatic-role-distribution","enabled":true}`,
+		"invalid feature": `{"organization_id":"` + orgID + `","feature_name":"not_a_feature","enabled":true}`,
+		"missing enabled": `{"organization_id":"` + orgID + `","feature_name":"logs"}`,
+		"unknown field":   `{"organization_id":"` + orgID + `","feature_name":"logs","enabled":true,"extra":true}`,
+		"trailing JSON":   `{"organization_id":"` + orgID + `","feature_name":"logs","enabled":true}{}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(body))
+			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+		})
+	}
 }
 
 func setAdminOrganizationFeature(
@@ -125,28 +293,16 @@ func setAdminOrganizationFeature(
 	enabled bool,
 ) adminOrganizationFeaturesResponse {
 	t.Helper()
-	body, err := json.Marshal(setAdminOrganizationFeatureRequest{
-		OrganizationID: orgID, FeatureName: string(feature), Enabled: &enabled,
+	featureName := string(feature)
+	body, err := json.Marshal(adminserver.SetOrganizationFeatureRequestBody{
+		OrganizationID: &orgID, FeatureName: &featureName, Enabled: &enabled,
 	})
 	require.NoError(t, err)
 	req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewReader(body))
 	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	var result adminOrganizationFeaturesResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
-	return result
-}
-
-func getAdminOrganizationFeatures(t *testing.T, handler http.Handler, sessionID, orgID string) adminOrganizationFeaturesResponse {
-	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/admin/organization.features?organization_id="+orgID, nil)
-	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code, "feature=%s body=%s", feature, rec.Body.String())
 
 	var result adminOrganizationFeaturesResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))

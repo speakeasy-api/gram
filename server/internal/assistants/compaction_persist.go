@@ -13,8 +13,10 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -104,68 +106,74 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		return oops.E(oops.CodeUnexpected, err, "load assistant chat").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	// Concurrent compaction posts for the same chat must serialize so they
-	// don't both land at the same max+1 generation. A row-level lock on
-	// chats.id is the cheapest fence available here: it blocks racing
-	// compactions for this chat without affecting any other chat or any
-	// non-locking reader, and the lock releases on COMMIT/ROLLBACK.
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").LogError(ctx, s.logger, logAttrs...)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	if _, err := tx.Exec(ctx, "SELECT 1 FROM chats WHERE id = $1 FOR UPDATE", threadRow.ChatID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").LogError(ctx, s.logger, logAttrs...)
-	}
-
-	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{
-		ChatID:    threadRow.ChatID,
-		ProjectID: projectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load chat generation").LogError(ctx, s.logger, logAttrs...)
-	}
-	nextGen := currentGen + 1
-
-	params := make([]chatrepo.CreateChatMessageParams, 0, len(messages))
+	writes := make([]chat.MessageWrite, 0, len(messages))
 	for _, m := range messages {
 		toolCallsJSON, err := encodeRuntimeToolCalls(m.ToolCalls)
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "encode tool_calls").LogError(ctx, s.logger, logAttrs...)
 		}
 		empty := pgtype.Text{String: "", Valid: false}
-		params = append(params, chatrepo.CreateChatMessageParams{
-			ID:               uuid.Nil,
-			Replayed:         false,
-			CreatedAt:        conv.PtrToPGTimestamptz(nil),
-			ChatID:           threadRow.ChatID,
-			Role:             m.Role,
-			ProjectID:        chatRow.ProjectID,
-			Content:          m.Content.Text(),
-			ContentRaw:       nil,
-			ContentAssetUrl:  empty,
-			StorageError:     empty,
-			Model:            empty,
-			MessageID:        empty,
-			ToolCallID:       conv.ToPGTextEmpty(m.ToolCallID),
-			UserID:           chatRow.UserID,
-			ExternalUserID:   chatRow.ExternalUserID,
-			FinishReason:     empty,
-			ToolCalls:        toolCallsJSON,
-			PromptTokens:     0,
-			CompletionTokens: 0,
-			TotalTokens:      0,
-			Origin:           empty,
-			UserAgent:        empty,
-			IpAddress:        empty,
-			Source:           conv.ToPGText(compactionMessageSource),
-			ContentHash:      nil,
-			Generation:       nextGen,
+		writes = append(writes, chat.MessageWrite{
+			Params: chatrepo.CreateChatMessageParams{
+				ID:               uuid.Nil,
+				Replayed:         false,
+				CreatedAt:        conv.PtrToPGTimestamptz(nil),
+				ChatID:           threadRow.ChatID,
+				Role:             m.Role,
+				ProjectID:        chatRow.ProjectID,
+				Content:          m.Content.Text(),
+				ContentRaw:       nil,
+				ContentAssetUrl:  empty,
+				StorageError:     empty,
+				Model:            empty,
+				MessageID:        empty,
+				ToolCallID:       conv.ToPGTextEmpty(m.ToolCallID),
+				UserID:           empty,
+				ExternalUserID:   empty,
+				FinishReason:     empty,
+				ToolCalls:        toolCallsJSON,
+				PromptTokens:     0,
+				CompletionTokens: 0,
+				TotalTokens:      0,
+				Origin:           empty,
+				UserAgent:        empty,
+				IpAddress:        empty,
+				Source:           conv.ToPGText(compactionMessageSource),
+				ContentHash:      nil,
+				Generation:       0,
+			},
+			BillingUserID:     conv.FromPGTextOrEmpty[string](chatRow.UserID),
+			AssistantID:       principalAssistantID,
+			WorkloadSource:    metering.WorkloadSourceAssistant,
+			UserEmail:         "",
+			Provider:          "",
+			InferenceProvider: "",
+			Lineage:           nil,
+			HookHostname:      "",
+			AccountType:       chatRow.AccountType,
+			BillingMode:       "",
 		})
 	}
 
-	n, err := s.chatWriter.WriteInTx(ctx, tx, params)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").LogError(ctx, s.logger, logAttrs...)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	if err := chatrepo.New(tx).LockChatForCompaction(ctx, chatrepo.LockChatForCompactionParams{ID: threadRow.ChatID, ProjectID: projectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").LogError(ctx, s.logger, logAttrs...)
+	}
+	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{ChatID: threadRow.ChatID, ProjectID: projectID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load chat generation").LogError(ctx, s.logger, logAttrs...)
+	}
+	for i := range writes {
+		writes[i].Params.Generation = currentGen + 1
+	}
+	if err := chat.MarkCompactedLineage(ctx, tx, projectID, threadRow.ChatID, currentGen, writes); err != nil {
+		return fmt.Errorf("capture compacted lineage: %w", err)
+	}
+	n, err := s.chatWriter.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "write compacted chat messages").LogError(ctx, s.logger, logAttrs...)
 	}

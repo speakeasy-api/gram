@@ -1,10 +1,60 @@
 package authz
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"maps"
+	"slices"
+
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+)
 
 type contextKey string
 
-const grantsContextKey contextKey = "authz_grants"
+type admissionBoundaryKey struct{}
+type withoutCredentialCeilingKey struct{}
+
+const (
+	grantsContextKey contextKey = "authz_grants"
+	// admittedPoliciesContextKey holds the policy sets of whichever admission
+	// ran last. Principal credential and workload admission share it, so a
+	// later admission always replaces an earlier one instead of being shadowed
+	// by it.
+	admittedPoliciesContextKey contextKey = "authz_admitted_policies"
+	admittedCeilingContextKey  contextKey = "authz_admitted_ceiling"
+)
+
+// grantAuthorization is the set of independent policies a caller acts under.
+// Every set must allow a check for it to pass.
+type grantAuthorization struct {
+	policies [][]Grant
+	// representedUser binds $represented_user in every policy, so an agent
+	// owner's grants resolve to the user the agent acts for.
+	representedUser string
+	// representedPolicies are the represented user's own policies when that
+	// user is not the caller: the live policy, plus the admitted one under an
+	// admission boundary. Auth-client checks must pass every one.
+	representedPolicies [][]Grant
+	// legacyAuthCeiling marks a stored policy older than version 5, whose
+	// auth client ceiling admission derived from its server access.
+	legacyAuthCeiling bool
+	// attached is consent to an agent using a connection its owner attached
+	// to it, set only by MandatoryAuthorization.WithAttachedConnection for an
+	// agent with a represented user. A check on that connection binds
+	// $represented_user to its owner and must also pass the owner's live
+	// policy.
+	attached *attachedConnection
+	// credentialRemoved records that the credential policy, always the first
+	// admitted set, was taken out, so removing it again leaves the agent and
+	// owner policies in place.
+	credentialRemoved bool
+}
+
+// RepresentedUserPolicy is the trusted represented-user binding of an admission.
+type RepresentedUserPolicy struct {
+	UserID string
+	Policy []Grant
+}
 
 // GrantsToContext stores resolved grants on the request context.
 func GrantsToContext(ctx context.Context, grants []Grant) context.Context {
@@ -15,4 +65,266 @@ func GrantsToContext(ctx context.Context, grants []Grant) context.Context {
 func GrantsFromContext(ctx context.Context) ([]Grant, bool) {
 	grants, ok := ctx.Value(grantsContextKey).([]Grant)
 	return grants, ok
+}
+
+// WithoutAdmittedPolicies drops the admission result a parent request
+// established, so Require evaluates only the grants stored with
+// GrantsToContext. Use it only after replacing the auth context with a user's
+// own and loading that user's grants; otherwise Require has nothing to evaluate.
+func WithoutAdmittedPolicies(ctx context.Context) context.Context {
+	ctx = context.WithValue(ctx, admittedPoliciesContextKey, struct{}{})
+	return context.WithValue(ctx, admittedCeilingContextKey, struct{}{})
+}
+
+// RefreshContext reloads authorization for a new operation within a long-lived
+// request. Immutable credential constraints remain attached to the context.
+func (e *Engine) RefreshContext(ctx context.Context) (context.Context, error) {
+	ctx = context.WithValue(ctx, grantsContextKey, struct{}{})
+	ctx = context.WithValue(ctx, admittedPoliciesContextKey, struct{}{})
+	ctx = context.WithValue(ctx, admittedCeilingContextKey, struct{}{})
+	return e.PrepareContext(ctx)
+}
+
+// AdmissionBoundary retains only authorization policies for an admitted job.
+// A newly granted permission cannot expand the running job's authority.
+type AdmissionBoundary struct {
+	policies grantAuthorization
+	valid    bool
+}
+
+// CaptureAdmissionBoundary captures prepared policies without retaining a request.
+func (e *Engine) CaptureAdmissionBoundary(ctx context.Context) (AdmissionBoundary, error) {
+	policies, valid := grantAuthorizationFromContext(ctx)
+	if !valid {
+		enforce, err := e.ShouldEnforce(ctx)
+		if err != nil {
+			return AdmissionBoundary{policies: policies, valid: false}, fmt.Errorf("check admission enforcement: %w", err)
+		}
+		if enforce {
+			return AdmissionBoundary{policies: policies, valid: false}, fmt.Errorf("admission requires prepared authorization")
+		}
+	}
+	return AdmissionBoundary{policies: policies, valid: valid}, nil
+}
+
+// Apply intersects all later grant refreshes with the original admission.
+func (b AdmissionBoundary) Apply(ctx context.Context) context.Context {
+	if !b.valid {
+		return ctx
+	}
+	return context.WithValue(ctx, admissionBoundaryKey{}, b.policies)
+}
+
+func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserPolicy, legacyAuthCeiling bool, sets ...[]Grant) context.Context {
+	policies := grantAuthorization{
+		policies:            make([][]Grant, 0, len(sets)),
+		representedUser:     represented.UserID,
+		representedPolicies: nil,
+		legacyAuthCeiling:   legacyAuthCeiling,
+		attached:            nil,
+		credentialRemoved:   false,
+	}
+	if represented.UserID != "" {
+		policies.representedPolicies = [][]Grant{append([]Grant{}, represented.Policy...)}
+	}
+	for _, set := range sets {
+		policies.policies = append(policies.policies, cloneGrants(set))
+	}
+	ctx = context.WithValue(ctx, admittedPoliciesContextKey, policies)
+	if len(sets) == 0 {
+		return context.WithValue(ctx, admittedCeilingContextKey, []Grant{})
+	}
+	return context.WithValue(ctx, admittedCeilingContextKey, cloneGrants(sets[0]))
+}
+
+// WithoutCredentialCeiling keeps live admitted policies but removes the
+// credential policy after it has authorized a gateway entry target. Member
+// authorization can then evaluate the live agent and owner policies without
+// treating the gateway identifier as a member-server grant.
+func WithoutCredentialCeiling(ctx context.Context) context.Context {
+	policies, ok := ctx.Value(admittedPoliciesContextKey).(grantAuthorization)
+	if !ok || len(policies.policies) == 0 || policies.credentialRemoved {
+		return ctx
+	}
+	policies.credentialRemoved = true
+	policies.legacyAuthCeiling = false
+	policies.policies = append([][]Grant{}, policies.policies[1:]...)
+	ctx = context.WithValue(ctx, admittedPoliciesContextKey, policies)
+	ctx = context.WithValue(ctx, admittedCeilingContextKey, []Grant{})
+	return context.WithValue(ctx, withoutCredentialCeilingKey{}, true)
+}
+
+// CredentialCeilingFromContext returns the immutable credential policy loaded
+// by the most recent principal or workload admission. Live agent and owner
+// policies are deliberately excluded.
+func CredentialCeilingFromContext(ctx context.Context) ([]Grant, bool) {
+	ceiling, ok := ctx.Value(admittedCeilingContextKey).([]Grant)
+	return cloneGrants(ceiling), ok
+}
+
+func cloneGrants(grants []Grant) []Grant {
+	if grants == nil {
+		return nil
+	}
+	cloned := make([]Grant, len(grants))
+	for i, grant := range grants {
+		cloned[i] = grant
+		if grant.Selector == nil {
+			continue
+		}
+		cloned[i].Selector = make(Selector, len(grant.Selector))
+		maps.Copy(cloned[i].Selector, grant.Selector)
+	}
+	return cloned
+}
+
+func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, bool) {
+	current, ok := currentGrantAuthorizationFromContext(ctx)
+	if !ok {
+		return current, false
+	}
+	if boundary, bounded := ctx.Value(admissionBoundaryKey{}).(grantAuthorization); bounded {
+		policies := make([][]Grant, 0, len(current.policies)+len(boundary.policies))
+		policies = append(policies, current.policies...)
+		policies = append(policies, boundary.policies...)
+		representedPolicies := make([][]Grant, 0, len(current.representedPolicies)+len(boundary.representedPolicies))
+		representedPolicies = append(representedPolicies, current.representedPolicies...)
+		representedPolicies = append(representedPolicies, boundary.representedPolicies...)
+		return grantAuthorization{policies: policies, representedUser: current.representedUser, representedPolicies: representedPolicies, legacyAuthCeiling: current.legacyAuthCeiling || boundary.legacyAuthCeiling, attached: nil, credentialRemoved: current.credentialRemoved}, true
+	}
+	return current, true
+}
+
+func currentGrantAuthorizationFromContext(ctx context.Context) (grantAuthorization, bool) {
+	if policies, ok := ctx.Value(admittedPoliciesContextKey).(grantAuthorization); ok {
+		return policies, true
+	}
+	if _, principalCredential := contextvalues.PrincipalCredentialAuthorization(ctx); principalCredential {
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil, credentialRemoved: false}, false
+	}
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil, credentialRemoved: false}, false
+	}
+	grants, ok := GrantsFromContext(ctx)
+	if !ok {
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil, credentialRemoved: false}, false
+	}
+	return grantAuthorization{policies: [][]Grant{grants}, representedUser: loadedGrantsUser(ctx), representedPolicies: nil, legacyAuthCeiling: false, attached: nil, credentialRemoved: false}, true
+}
+
+// loadedGrantsUser is the user whose own grants PrepareContext loaded. API
+// keys, assistant tokens and embedded chat sessions represent no user: their
+// owner or minter is attribution.
+func loadedGrantsUser(ctx context.Context) string {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.APIKeyID != "" || authCtx.ExternalUserID != "" {
+		return ""
+	}
+	if _, assistant := contextvalues.GetAssistantPrincipal(ctx); assistant {
+		return ""
+	}
+	return authCtx.UserID
+}
+
+func loadedGrantAuthorization(grants []Grant) grantAuthorization {
+	return grantAuthorization{policies: [][]Grant{grants}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil, credentialRemoved: false}
+}
+
+// bind applies the trusted represented-user binding to an auth-client check,
+// replacing any binding the caller set.
+//
+// A check on a connection its owner attached to the agent binds the owner
+// instead: the attachment is the owner's consent, so every policy the agent is
+// admitted under decides the use as it would the represented user's own
+// connection. Each policy still bounds which auth clients, projects and
+// upstream clients the agent may use, and any block on the connection still
+// applies.
+func (a grantAuthorization) bind(check Check) Check {
+	if !check.isAuthClientCheck() {
+		return check
+	}
+	check.representedUser = a.representedUser
+	if a.attached.appliesTo(check) {
+		check.representedUser = a.attached.owner
+	}
+	return check
+}
+
+// policiesFor returns every policy check must pass. An agent acting for a user
+// may use an auth client only if that user may use it too.
+//
+// A connection its owner attached to the agent must also be one the owner may
+// still use, so the owner's live policy joins them.
+func (a grantAuthorization) policiesFor(check Check) [][]Grant {
+	if len(a.representedPolicies) == 0 || !check.isAuthClientCheck() {
+		return a.policies
+	}
+	policies := append(append([][]Grant{}, a.policies...), a.representedPolicies...)
+	if a.attached.appliesTo(check) {
+		policies = append(policies, a.attached.policy)
+	}
+	return policies
+}
+
+// keysMissingFrom lists the grant keys the check does not carry, where that
+// alone is why a grant of a scope that would satisfy the check was refused.
+// Only policies that refuse the check are read, since a policy that allows it
+// is not why it was refused. It explains a refusal and decides nothing.
+func (a grantAuthorization) keysMissingFrom(check Check) []string {
+	check = a.bind(check)
+	seen := map[string]bool{}
+	for _, policy := range a.policiesFor(check) {
+		if grant, _ := matchingGrant(policy, check.expand()); grant != nil {
+			continue
+		}
+		for _, grant := range policy {
+			for _, expanded := range check.expand() {
+				if grant.Scope != expanded.Scope {
+					continue
+				}
+				missing, _ := expanded.keysRefusingGrant(grant.Selector)
+				for _, key := range missing {
+					seen[key] = true
+				}
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
+}
+
+func (a grantAuthorization) grantCount() int {
+	total := 0
+	for _, policy := range a.policies {
+		total += len(policy)
+	}
+	return total
+}
+
+func (a grantAuthorization) evaluate(check Check) (grantCheckEvaluation, error) {
+	if len(a.policies) == 0 {
+		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
+	}
+
+	check = a.bind(check)
+	allowed := true
+	denied := false
+	var representative grantCheckEvaluation
+	for _, policy := range a.policiesFor(check) {
+		evaluation, err := evaluateGrantCheck(policy, check)
+		if err != nil {
+			return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, err
+		}
+		denied = denied || evaluation.Denied
+		if evaluation.Grant == nil {
+			allowed = false
+			continue
+		}
+		if representative.Grant == nil {
+			representative = evaluation
+		}
+	}
+	if !allowed {
+		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: denied}, nil
+	}
+	return representative, nil
 }

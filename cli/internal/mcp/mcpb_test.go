@@ -68,8 +68,8 @@ func TestGenerateMCPBManifest_ManifestStructure(t *testing.T) {
 	require.Equal(t, "0.3", manifest.ManifestVersion, "should use current manifest version")
 	require.Equal(t, "test-server", manifest.Name)
 	require.Equal(t, "1.0.0", manifest.Version)
-	require.Equal(t, "Gram MCP server for test-server", manifest.Description)
-	require.Equal(t, "Gram", manifest.Author.Name)
+	require.Equal(t, "MCP server for test-server", manifest.Description)
+	require.Equal(t, "Speakeasy", manifest.Author.Name)
 
 	// Verify server configuration
 	require.Equal(t, "node", manifest.Server.Type)

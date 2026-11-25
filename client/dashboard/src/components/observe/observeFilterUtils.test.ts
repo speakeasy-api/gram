@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { Operator } from "@gram/client/models/components/logfilter.js";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -124,6 +125,7 @@ describe("resolveRoleEmails", () => {
       email: "alice@example.com",
       name: "Alice",
       roleIds: ["role-admin"],
+      directoryRoleIds: [],
       joinedAt: new Date(),
       photoUrl: undefined,
     },
@@ -133,6 +135,7 @@ describe("resolveRoleEmails", () => {
       email: "bob@example.com",
       name: "Bob",
       roleIds: ["role-member"],
+      directoryRoleIds: [],
       joinedAt: new Date(),
       photoUrl: undefined,
     },
@@ -142,6 +145,7 @@ describe("resolveRoleEmails", () => {
       email: "carol@example.com",
       name: "Carol",
       roleIds: ["role-admin"],
+      directoryRoleIds: [],
       joinedAt: new Date(),
       photoUrl: undefined,
     },
@@ -152,6 +156,26 @@ describe("resolveRoleEmails", () => {
       "alice@example.com",
       "carol@example.com",
     ]);
+  });
+
+  it("includes members who hold the role through a directory mapping", () => {
+    expect(
+      resolveRoleEmails(
+        ["role-admin"],
+        [
+          {
+            id: "m5",
+            principalUrn: "user:m5",
+            email: "dana@example.com",
+            name: "Dana",
+            roleIds: ["role-member"],
+            directoryRoleIds: ["role-admin"],
+            joinedAt: new Date(),
+            photoUrl: undefined,
+          },
+        ],
+      ),
+    ).toEqual(["dana@example.com"]);
   });
 
   it("normalizes emails for selected roles", () => {
@@ -165,6 +189,7 @@ describe("resolveRoleEmails", () => {
             email: " Alice@Example.com ",
             name: "Alice",
             roleIds: ["role-admin"],
+            directoryRoleIds: [],
             joinedAt: new Date(),
             photoUrl: undefined,
           },

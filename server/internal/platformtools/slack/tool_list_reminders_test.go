@@ -40,7 +40,6 @@ func TestListRemindersTool_CallsRemindersListWithUserToken(t *testing.T) {
 	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.CIEnvFrom(map[string]string{slackUserTokenEnvVar: "xoxp-user-token"}),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{"team_id":"T123"}`), io.Discard)

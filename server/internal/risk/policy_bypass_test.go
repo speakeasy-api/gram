@@ -22,6 +22,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -114,6 +115,41 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	require.Equal(t, beforeRevokeAuditCount+1, afterRevokeAuditCount)
 }
 
+func TestApproveAndRevokePolicyBypassRequestWaitForShadowAdmissionLock(t *testing.T) {
+	t.Parallel()
+	// probeTimeout bounds acquisition of the held admission lock.
+	const probeTimeout = 100 * time.Millisecond
+	ctx, ti := newTestRiskService(t, func(ti *testInstance) { ti.conn = testenv.NewLockTimeoutPool(t, ti.conn, probeTimeout) })
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Locked bypass approval")})
+	require.NoError(t, err)
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/locked")
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{RequestToken: token})
+	require.NoError(t, err)
+
+	lockTx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, shadowadmission.LockProject(ctx, lockTx, *authCtx.ProjectID))
+	_, err = ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{ID: request.ID})
+	testenv.RequireLockNotAvailable(t, err)
+	require.NoError(t, lockTx.Rollback(ctx))
+	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{ID: request.ID})
+	require.NoError(t, err)
+	require.Equal(t, "approved", approved.Status)
+
+	lockTx = testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, shadowadmission.LockProject(ctx, lockTx, *authCtx.ProjectID))
+	_, err = ti.service.RevokeRiskPolicyBypassRequest(ctx, &gen.RevokeRiskPolicyBypassRequestPayload{ID: request.ID})
+	testenv.RequireLockNotAvailable(t, err)
+	require.NoError(t, lockTx.Rollback(ctx))
+	revoked, err := ti.service.RevokeRiskPolicyBypassRequest(ctx, &gen.RevokeRiskPolicyBypassRequestPayload{ID: request.ID})
+	require.NoError(t, err)
+	require.Equal(t, "revoked", revoked.Status)
+}
+
 func TestCreateApprovePolicyBypassRequest_AddsServerIdentityGrant(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -196,6 +232,35 @@ func TestApprovePolicyBypassRequest_CanGrantAllUsers(t *testing.T) {
 	assert.Equal(t, "revoked", revoked.Status)
 	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, otherUserID, policy.ID, fullURL))
+}
+
+func TestApprovePolicyBypassRequest_RejectsSystemPrincipal(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Policy Bypass System Principal"),
+	})
+	require.NoError(t, err)
+
+	fullURL := "https://mcp.example.com/system-principal"
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
+		ID:                   request.ID,
+		GrantedPrincipalUrns: []string{urn.NewSystemPrincipal("issuer-metadata-refresh").String()},
+	})
+	require.Error(t, err, "a system principal never receives a bypass grant")
+	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 }
 
 func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
@@ -1111,41 +1176,6 @@ func TestCreatePolicyBypassRequest_FallsBackToTheBlockReasonWithoutANote(t *test
 	require.NoError(t, err)
 
 	require.Equal(t, "Blocked by policy: unreviewed MCP server", intake.gotNote)
-}
-
-// An intake that reports the approval feature is unavailable falls back to
-// the legacy bypass request, so organizations without the workflow keep the
-// old flow intact.
-func TestCreatePolicyBypassRequest_FallsBackWhenApprovalUnavailable(t *testing.T) {
-	t.Parallel()
-
-	intake := &fakeApprovalIntake{
-		err:       oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization"),
-		requestID: "", status: "",
-		gotOrganizationID: "", gotProjectID: uuid.Nil, gotServerURL: "", gotRequesterID: "", gotNote: "",
-	}
-	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
-		instance.approvalIntake = intake
-	})
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
-		Scope:    authz.ScopeOrgAdmin,
-		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
-	})
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name: new("Approval Intake Fallback"),
-	})
-	require.NoError(t, err)
-
-	redemption, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
-		RequestToken: riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/fallback"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, "bypass_request", redemption.Kind)
-	require.Equal(t, "requested", redemption.Status)
-	require.Equal(t, authCtx.UserID, redeemedBypassRow(t, ctx, ti, redemption).RequesterUserID)
 }
 
 // withAgentKeyAuth rewrites the auth context to look like an API-key-

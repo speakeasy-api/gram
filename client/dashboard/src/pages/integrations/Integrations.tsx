@@ -12,7 +12,7 @@ import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { HumanizeDateTime } from "@/lib/dates";
-import { IntegrationEntry } from "@gram/client/models/components/integrationentry.js";
+import type { IntegrationEntry } from "@gram/client/models/components/integrationentry.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListIntegrations } from "@gram/client/react-query/listIntegrations.js";
 import { useListPackagesSuspense } from "@gram/client/react-query/listPackages.js";
@@ -47,9 +47,9 @@ export default function Integrations(): JSX.Element {
       <Page.Body>
         <Page.Section>
           {/* The integrations slug isn't in the nav-area map, so the eyebrow
-              can't auto-derive; the page distributes packages, so it reads as
-              Distribute. */}
-          <Page.Section.Title area="Distribute">
+              can't auto-derive; the page belongs to the gateway, so it names
+              that group. */}
+          <Page.Section.Title area="MCP Gateway">
             Integrations
           </Page.Section.Title>
           <Page.Section.Description>

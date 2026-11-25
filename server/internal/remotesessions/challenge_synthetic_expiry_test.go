@@ -1,5 +1,5 @@
 // challenge_synthetic_expiry_test.go is the regression guard for AIS-115:
-// when an upstream token response omits expires_in, Gram must store
+// when an upstream token response omits expires_in, Speakeasy must store
 // access_expires_at as NULL — "no known expiry" — rather than fabricating a
 // now+1h deadline. NULL always means "the provider did not report an access
 // expiry." The request path serves that token as-is regardless of whether a
@@ -15,6 +15,8 @@ package remotesessions_test
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -24,17 +26,29 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 // TestRemoteLoginCallback_NoExpiresIn_NoRefresh_NonExpiring covers the live
@@ -58,7 +72,7 @@ func TestRemoteLoginCallback_NoExpiresIn_NoRefresh_NonExpiring(t *testing.T) {
 	// The gate treats NULL-with-no-refresh as non-expiring and keeps returning
 	// the token, rather than rejecting it as ErrNoValidToken once a synthetic
 	// hour lapses.
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, upstreamAccessToken, resolved, "non-expiring token must keep resolving")
 }
@@ -91,7 +105,7 @@ func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_DoesNotForceRefresh(t *test
 	require.True(t, env.session.RefreshTokenEncrypted.Valid, "refresh token must be persisted")
 
 	// The stored token is served and no refresh is attempted.
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, initialAccess, resolved)
 	require.Equal(t, int64(0), refreshCount.Load())
@@ -103,7 +117,7 @@ func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_DoesNotForceRefresh(t *test
 		ProjectID: conv.ToNullUUID(env.projectID),
 		UpdatedAt: conv.ToPGTimestamptz(time.Now().Add(-48 * time.Hour)),
 	}))
-	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, initialAccess, resolved)
 	require.Equal(t, int64(0), refreshCount.Load(), "unknown access expiry must not force a refresh")
@@ -137,15 +151,27 @@ func TestRemoteLoginCallback_StandardRefreshExpirationFields(t *testing.T) {
 	require.NoError(t, err)
 	state := states[env.clientID]
 	require.True(t, state.CanRefresh)
+	// The two deadlines stay apart rather than collapsing to the earliest.
+	// They behave oppositely — using the session postpones the refresh idle
+	// timeout, while nothing moves the authorization lifetime — so the consent
+	// page states them separately and suppresses only the idle one when auto
+	// refresh is renewing the session.
 	require.NotNil(t, state.RefreshExpiresAt)
-	require.WithinDuration(t, before.Add(time.Hour), *state.RefreshExpiresAt, time.Minute,
-		"the consent tooltip must show the earliest known renewal deadline")
+	require.WithinDuration(t, before.Add(2*time.Hour), *state.RefreshExpiresAt, time.Minute,
+		"refresh expiry is the refresh token's own idle deadline")
+	require.NotNil(t, state.AuthorizationExpiresAt)
+	require.WithinDuration(t, before.Add(time.Hour), *state.AuthorizationExpiresAt, time.Minute,
+		"authorization expiry is the absolute end of the grant")
 }
 
 // syntheticExpiryEnv is the materialized state after a remote-login round trip
 // against a mock upstream token endpoint.
 type syntheticExpiryEnv struct {
 	mgr *remotesessions.ChallengeManager
+
+	// service exposes the management API over the same database as the callback.
+	service *remotesessions.Service
+
 	// refresher shares the manager's database, encryption key, and Redis lock
 	// cache, standing in for the scheduled sweep's caller in concurrency tests.
 	refresher *remotesessions.RefreshService
@@ -153,12 +179,290 @@ type syntheticExpiryEnv struct {
 	// encryption key, with the caller's meter provider and lock cache, so a
 	// test can observe recorded metrics or simulate a degraded lock cache.
 	newRefresher   func(metric.MeterProvider, cache.Cache) *remotesessions.RefreshService
+	db             *pgxpool.Pool
+	enc            *encryption.Client
 	q              *repo.Queries
 	projectID      uuid.UUID
 	organizationID string
+	issuerID       uuid.UUID
 	clientID       uuid.UUID
-	subject        urn.SessionSubject
-	session        repo.RemoteSession
+	// mcpServerID is the remote-backed server withRemoteServer seeded; invalid without one.
+	mcpServerID uuid.NullUUID
+	subject     urn.SessionSubject
+	session     repo.RemoteSession
+	// authURL is the upstream authorize redirect BuildAuthorizationUrl minted
+	// for the login, so a test can assert on its query parameters.
+	authURL string
+	// parentID is the original consent challenge to resume after callback.
+	parentID string
+	// issuerMetadata and issuerMetadataReader are set by withIssuerMetadataRefresh.
+	issuerMetadata       *remotesessions.IssuerMetadataRefresher
+	issuerMetadataReader *sdkmetric.ManualReader
+	// registrationTelemetryReader is set by withRegistrationTelemetry and reads
+	// the meter the manager (and the rotator it builds) records registration
+	// failures on.
+	registrationTelemetryReader *sdkmetric.ManualReader
+
+	// orgEncryption is set by withOrganizationEncryption: the organization's
+	// keys and the transition state the manager and refresher seal under.
+	orgEncryption *syntheticOrgEncryption
+}
+
+// syntheticOrgEncryption is the organization encryption a synthetic login
+// seals its tokens under.
+type syntheticOrgEncryption struct {
+	fixture     *orgencryptiontest.Fixture
+	transitions *orgencryption.Transitions
+	tokens      *upstreamtokens.Tokens
+}
+
+// callback drives HandleRemoteLoginCallback with the given query string, as
+// the upstream provider's redirect would.
+func (env syntheticExpiryEnv) callback(t *testing.T, rawQuery string) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?"+rawQuery, nil)
+	w := httptest.NewRecorder()
+	err := env.mgr.HandleRemoteLoginCallback(w, req)
+	if err != nil {
+		err = fmt.Errorf("handle remote login callback: %w", err)
+	}
+	return w, err
+}
+
+// syntheticLoginOptions shapes the issuer, client, and callback of a
+// synthetic login; the zero value is the plain AIS-115 fixture.
+type syntheticLoginOptions struct {
+	forwardClientName bool
+	parentClientName  string
+	// tokenResponseIssuer sets the provider identifier used to interpret returned scopes.
+	tokenResponseIssuer string
+	legacyCallbackURL   bool
+	issuerScopes        []string
+	clientScope         []string
+	scopeOverride       []string
+	// omitScopeFallback sets the issuer to send no scope where its catalogue is the last resort.
+	omitScopeFallback bool
+	// authorizeQuery is appended to the issuer's authorization endpoint, e.g. a baked-in scope.
+	authorizeQuery             string
+	issParameterSupported      pgtype.Bool
+	resourceIndicatorSupported pgtype.Bool
+	resource                   string
+	// issuerURL is the stored issuer URL; empty uses the fixture default.
+	issuerURL     string
+	callbackQuery func(url.Values)
+	// issuerMetadata is the discovery document stored on the issuer row.
+	issuerMetadata []byte
+	// globalIssuer creates the issuer in the platform catalog (no project, no
+	// organization) instead of the test project.
+	globalIssuer bool
+	// idTokenIssuer, when set, publishes jwks_uri on the fixture and wires a verifier that trusts its TLS cert.
+	idTokenIssuer *idTokenIssuer
+	// wrapVerifier, when set, decorates the verifier so a test can act mid-verification.
+	wrapVerifier func(remotesessions.IDTokenVerifier) remotesessions.IDTokenVerifier
+	// registrationTelemetry gives the manager a readable meter so a test can
+	// assert on recorded client-registration failures.
+	registrationTelemetry bool
+	// orgEncryption seals tokens under organization encryption in dual_write.
+	orgEncryption bool
+	// suspendOrganizationKey suspends the organization's key before the callback.
+	suspendOrganizationKey bool
+	// keyCache, when set, backs the key resolver so a test can seed key-set state.
+	keyCache jwks.Cache
+	// signingAlgs is the issuer row's id_token_signing_alg_values_supported.
+	signingAlgs []string
+	// onAuthorizationURL sees the authorize URL the manager built before the
+	// callback is driven, so a token handler can mint claims that match it.
+	onAuthorizationURL func(*url.URL)
+	// enrichment, when set, advertises its userinfo and introspection endpoints on the issuer and trusts its TLS cert.
+	enrichment *enrichmentAS
+	// enrichmentRate, when set, paces the enricher through a Redis-backed limiter.
+	enrichmentRate *ratelimit.Rate
+	// issuerMetadataRefresh wires an IssuerMetadataRefresher into the manager and the refresher.
+	issuerMetadataRefresh bool
+	// issuerMetadataFetchedAt stamps the issuer row as fetched then, so the on-use cadence stays silent.
+	issuerMetadataFetchedAt time.Time
+	// tunnels, when set, is the back-channel transport every component this
+	// fixture builds carries — the manager, both refreshers, the enricher, and
+	// the metadata refresher — so a tunnel-bound issuer cannot be reported
+	// working by a component that quietly stayed on direct egress.
+	tunnels *tunnelrouting.HTTPClient
+	// maxDBConns constrains the fixture pool for connection-ownership tests.
+	maxDBConns int32
+	// serverURL is the manager's server URL; empty uses http://localhost.
+	serverURL string
+	// callbackOrigins, when set, replaces the manager's default origins.
+	callbackOrigins *remotesessions.CallbackOrigins
+	// clientCallbackBaseURL is the client's recorded callback origin; empty stores NULL.
+	clientCallbackBaseURL string
+	// remoteServerURL, when set, seeds a remote-backed MCP server at that URL
+	// and makes the login for it, so scope resolution consults its resource row.
+	remoteServerURL string
+	// gatewayMember logs in as a gateway would: the seeded server is the
+	// qualified member, not the login's own server.
+	gatewayMember bool
+	// protectedResource, when set, seeds the resource row for remoteServerURL.
+	protectedResource *protectedResourceSeed
+	// prober wires a fresh protected resource prober into the manager.
+	prober bool
+	// logger, when set, replaces the fixture's logger so a test can assert on log output.
+	logger *slog.Logger
+}
+
+// protectedResourceSeed is a remote_protected_resources row as a login finds it.
+type protectedResourceSeed struct {
+	// scopesSupported is the advertised list; nil leaves the member NULL.
+	scopesSupported []string
+	// pin is the operator's scope_override; nil leaves it unset.
+	pin []string
+	// challengeScopes is the last challenge's scope param; nil leaves it unset.
+	challengeScopes []string
+	// fetchedAgo backdates the last successful read; zero leaves it at now.
+	fetchedAgo time.Duration
+	// errorAgo, when set, records a failed read that long ago.
+	errorAgo time.Duration
+}
+
+type syntheticLoginOption func(*syntheticLoginOptions)
+
+func withRemoteServer(serverURL string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.remoteServerURL = serverURL }
+}
+
+func withProtectedResource(seed protectedResourceSeed) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.protectedResource = &seed }
+}
+
+func withLogger(logger *slog.Logger) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.logger = logger }
+}
+
+func withProber() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.prober = true }
+}
+
+func withTunnels(tunnels *tunnelrouting.HTTPClient) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.tunnels = tunnels }
+}
+
+func withMaxDBConns(maxConns int32) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.maxDBConns = maxConns }
+}
+
+func withRegistrationTelemetry() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.registrationTelemetry = true }
+}
+
+// withOrganizationEncryption gives the manager and refresher organization
+// encryption, and moves the test organization's session tokens to dual_write
+// before the sign-in.
+func withOrganizationEncryption() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.orgEncryption = true }
+}
+
+// withSuspendedOrganizationKey is withOrganizationEncryption with the
+// organization's key suspended before the callback.
+func withSuspendedOrganizationKey() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.orgEncryption, o.suspendOrganizationKey = true, true }
+}
+
+func withIssuerScopes(scopes ...string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerScopes = scopes }
+}
+
+func withForwardClientName() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.forwardClientName = true }
+}
+
+func withParentClientName(name string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.parentClientName = name }
+}
+
+func withClientScope(scopes ...string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.clientScope = scopes }
+}
+
+func withScopeOverride(scopes ...string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.scopeOverride = scopes }
+}
+
+func withOmitScopeFallback() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.omitScopeFallback = true }
+}
+
+func withAuthorizeQuery(query string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.authorizeQuery = query }
+}
+
+func withIssParameterSupported(supported bool) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issParameterSupported = pgtype.Bool{Bool: supported, Valid: true} }
+}
+
+func withResourceIndicatorSupported(supported bool) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) {
+		o.resourceIndicatorSupported = pgtype.Bool{Bool: supported, Valid: true}
+	}
+}
+
+func withGatewayMember() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.gatewayMember = true }
+}
+
+func withResource(resource string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.resource = resource }
+}
+
+func withIssuerURL(issuerURL string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerURL = issuerURL }
+}
+
+func withIssuerMetadata(document string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerMetadata = []byte(document) }
+}
+
+func withGlobalIssuer() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.globalIssuer = true }
+}
+
+// withCallbackQuery edits the query the provider's redirect carries before the
+// callback reads it; code and state are already set.
+func withCallbackQuery(edit func(url.Values)) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.callbackQuery = edit }
+}
+
+func withIDTokenIssuer(issuer *idTokenIssuer) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.idTokenIssuer = issuer }
+}
+
+func withIDTokenSigningAlgs(algs ...string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.signingAlgs = algs }
+}
+
+func withIDTokenVerifierWrapper(wrap func(remotesessions.IDTokenVerifier) remotesessions.IDTokenVerifier) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.wrapVerifier = wrap }
+}
+
+func withIDTokenKeyCache(keyCache jwks.Cache) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.keyCache = keyCache }
+}
+
+func withAuthorizationURLObserver(fn func(*url.URL)) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.onAuthorizationURL = fn }
+}
+
+func withEnrichmentAS(as *enrichmentAS) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.enrichment = as }
+}
+
+func withEnrichmentRate(rate ratelimit.Rate) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.enrichmentRate = &rate }
+}
+
+func withIssuerMetadataRefresh() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerMetadataRefresh = true }
+}
+
+func withIssuerMetadataFetchedAt(at time.Time) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerMetadataFetchedAt = at }
 }
 
 // newSyntheticExpiryEnv wires a ChallengeManager to a mock upstream token
@@ -166,10 +470,36 @@ type syntheticExpiryEnv struct {
 // HandleRemoteLoginCallback, returning the request context plus the persisted
 // remote_sessions row and the handles needed to resolve it. slugSuffix keeps
 // fixtures unique per test.
-func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc) (context.Context, syntheticExpiryEnv) {
+func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc, opts ...syntheticLoginOption) (context.Context, syntheticExpiryEnv) {
 	t.Helper()
 
-	ctx, ti := newTestService(t)
+	ctx, env, callback, err := driveSyntheticLogin(t, slugSuffix, tokenHandler, opts...)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, callback.Code)
+
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.NoError(t, err)
+	env.session = session
+
+	return ctx, env
+}
+
+// driveSyntheticLogin is newSyntheticExpiryEnv up to and including the
+// callback. The callback's recorder and error come back unasserted, so a test
+// can exercise a code exchange the callback is expected to reject; the
+// returned env carries no session row.
+func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc, opts ...syntheticLoginOption) (context.Context, syntheticExpiryEnv, *httptest.ResponseRecorder, error) {
+	t.Helper()
+
+	options := syntheticLoginOptions{issuerScopes: []string{"channels:history"}}
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{maxDBConns: options.maxDBConns})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -179,8 +509,26 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 
 	enc := testenv.NewEncryptionClient(t)
 	logger := testenv.NewLogger(t)
+	if options.logger != nil {
+		logger = options.logger
+	}
 	tracerProvider := testenv.NewTracerProvider(t)
-	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	issuerURL, jwksURI := "https://idp.example.com", ""
+	if options.tokenResponseIssuer != "" {
+		issuerURL = options.tokenResponseIssuer
+	}
+	// Every httptest TLS server presents the package's test certificate, so the issuer discovery server is trusted too.
+	trusted := testIssuerTLSRootCAs.Clone()
+	if options.idTokenIssuer != nil {
+		trusted.AddCert(options.idTokenIssuer.cert)
+		issuerURL, jwksURI = options.idTokenIssuer.issuerURL, options.idTokenIssuer.jwksURI
+	}
+	userinfoEndpoint, introspectionEndpoint := "", ""
+	if options.enrichment != nil {
+		trusted.AddCert(options.enrichment.cert)
+		userinfoEndpoint, introspectionEndpoint = options.enrichment.userinfoURL, options.enrichment.introspectionURL
+	}
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardian.WithTLSRootCAs(trusted))
 	require.NoError(t, err)
 
 	// A real Redis-backed cache is required: BuildAuthorizationUrl writes the
@@ -188,41 +536,145 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 	// (used by the URL-shape e2e tests) would drop it.
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
+
+	var managerOptions []remotesessions.ChallengeManagerOption
+	var refreshOptions []remotesessions.RefreshOption
+	var issuerMetadata *remotesessions.IssuerMetadataRefresher
+	var issuerMetadataReader *sdkmetric.ManualReader
+	if options.callbackOrigins != nil {
+		managerOptions = append(managerOptions, remotesessions.WithCallbackOrigins(*options.callbackOrigins))
+	}
+	if options.prober {
+		managerOptions = append(managerOptions, remotesessions.WithProtectedResourceProber(protectedresource.NewProber(ti.conn, policy)))
+	}
+	if options.issuerMetadataRefresh {
+		issuerMetadataReader = sdkmetric.NewManualReader()
+		issuerMetadata = remotesessions.NewIssuerMetadataRefresher(logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(issuerMetadataReader)), ti.conn, policy, options.tunnels, audit.NewLogger())
+		t.Cleanup(issuerMetadata.Shutdown)
+		managerOptions = append(managerOptions, remotesessions.WithIssuerMetadataRefresher(issuerMetadata))
+		refreshOptions = append(refreshOptions, remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadata))
+	}
+	if options.idTokenIssuer != nil {
+		store := ratelimit.NewRedisStore(redisClient)
+		keys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, testenv.NewMeterProvider(t), store)
+		if options.keyCache != nil {
+			keys, err = jwks.NewKeyResolver(jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger), options.keyCache,
+				ratelimit.New(store, "test_id_token_jwks_refresh", remotesessions.IDTokenKeyRefreshRate),
+				ratelimit.New(store, "test_id_token_jwks_fetch", remotesessions.IDTokenKeyFetchRate), logger)
+		}
+		require.NoError(t, err)
+		verifier := remotesessions.NewIDTokenVerifier(keys)
+		if options.wrapVerifier != nil {
+			verifier = options.wrapVerifier(verifier)
+		}
+		managerOptions = append(managerOptions, remotesessions.WithIDTokenVerifier(verifier))
+		refreshOptions = append(refreshOptions, remotesessions.WithRefreshIDTokenVerifier(verifier))
+		var enrichmentLimiter *ratelimit.Limiter
+		if options.enrichmentRate != nil {
+			enrichmentLimiter = ratelimit.New(store, "test_enrichment_"+slugSuffix, *options.enrichmentRate)
+		}
+		enricher := remotesessions.NewSessionEnricher(logger, enc, policy, keys, enrichmentLimiter, options.tunnels, issuerMetadata)
+		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
+		refreshOptions = append(refreshOptions, remotesessions.WithRefreshSessionEnricher(enricher))
+	}
+	var orgEncryption *syntheticOrgEncryption
+	if options.orgEncryption {
+		fixture := orgencryptiontest.New(t, ti.conn)
+		transitions := orgencryption.NewTransitions(logger, ti.conn, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+		tokens := upstreamtokens.New(logger, orgencryption.NewCipher(logger, enc, fixture.Service, transitions), enc)
+		_, err := transitions.Enroll(ctx, authCtx.ActiveOrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+		require.NoError(t, err)
+		if options.suspendOrganizationKey {
+			require.NoError(t, fixture.Provisioner.Suspend(ctx, authCtx.ActiveOrganizationID, "customer disabled the key", orgencryption.SystemActor()))
+		}
+		orgEncryption = &syntheticOrgEncryption{fixture: fixture, transitions: transitions, tokens: tokens}
+		managerOptions = append(managerOptions, remotesessions.WithUpstreamTokens(tokens))
+		refreshOptions = append(refreshOptions, remotesessions.WithRefreshUpstreamTokens(tokens))
+	}
+	managerMeterProvider := testenv.NewMeterProvider(t)
+	var registrationTelemetryReader *sdkmetric.ManualReader
+	if options.registrationTelemetry {
+		registrationTelemetryReader = sdkmetric.NewManualReader()
+		managerMeterProvider = sdkmetric.NewMeterProvider(sdkmetric.WithReader(registrationTelemetryReader))
+	}
 	mgr := remotesessions.NewChallengeManager(
 		logger,
 		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
+		managerMeterProvider,
 		ti.conn,
 		enc,
 		policy,
+		options.tunnels,
 		cache.NewRedisCacheAdapter(redisClient),
-		mustURL(t, "http://localhost"),
+		mustURL(t, conv.Default(options.serverURL, "http://localhost")),
+		managerOptions...,
 	)
-	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, cache.NewRedisCacheAdapter(redisClient))
+	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, options.tunnels, cache.NewRedisCacheAdapter(redisClient), refreshOptions...)
+	// Detached restatements finish before the pool closes.
+	t.Cleanup(mgr.WaitIdentityRestatements)
+	t.Cleanup(refresher.WaitIdentityRestatements)
 
 	q := repo.New(ti.conn)
+	issuerProject := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+	issuerOrganization := conv.ToPGText(authCtx.ActiveOrganizationID)
+	if options.globalIssuer {
+		issuerProject = uuid.NullUUID{}
+		issuerOrganization = pgtype.Text{}
+	}
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		ProjectID:                         issuerProject,
+		OrganizationID:                    issuerOrganization,
 		Slug:                              "synthetic-expiry-issuer-" + slugSuffix,
-		Issuer:                            "https://idp.example.com",
+		Issuer:                            conv.Default(options.issuerURL, issuerURL),
 		Name:                              pgtype.Text{String: "", Valid: false},
 		LogoAssetID:                       uuid.NullUUID{},
-		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
+		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize" + options.authorizeQuery),
 		TokenEndpoint:                     conv.ToPGText(tokenServer.URL),
 		RegistrationEndpoint:              pgtype.Text{String: "", Valid: false},
-		JwksUri:                           pgtype.Text{String: "", Valid: false},
-		ScopesSupported:                   []string{"channels:history"},
+		JwksUri:                           conv.ToPGTextEmpty(jwksURI),
+		UserinfoEndpoint:                  conv.ToPGTextEmpty(userinfoEndpoint),
+		IntrospectionEndpoint:             conv.ToPGTextEmpty(introspectionEndpoint),
+		IDTokenSigningAlgValuesSupported:  options.signingAlgs,
+		ScopesSupported:                   options.issuerScopes,
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
 		ResponseTypesSupported:            []string{"code"},
 		TokenEndpointAuthMethodsSupported: []string{"none"},
 		Oidc:                              false,
 		Passthrough:                       false,
+		AuthorizationResponseIssParameterSupported: options.issParameterSupported,
+		ScopeOverride:              options.scopeOverride,
+		ResourceIndicatorSupported: options.resourceIndicatorSupported,
+		Metadata:                   options.issuerMetadata,
 	})
 	require.NoError(t, err)
+	if options.omitScopeFallback {
+		n, err := testrepo.New(ti.conn).SetRemoteSessionIssuerOmitScopeFallbackFixture(ctx, testrepo.SetRemoteSessionIssuerOmitScopeFallbackFixtureParams{OmitScopeFallback: pgtype.Bool{Bool: true, Valid: true}, ID: issuer.ID, ProjectID: issuerProject, OrganizationID: issuerOrganization})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n, "the fixture must reach the issuer it created")
+	}
+	if !options.issuerMetadataFetchedAt.IsZero() {
+		require.NoError(t, q.SetRemoteSessionIssuerMetadataTracking(ctx, repo.SetRemoteSessionIssuerMetadataTrackingParams{
+			Metadata:             string(options.issuerMetadata),
+			MetadataFetchedAt:    conv.ToPGTimestamptz(options.issuerMetadataFetchedAt),
+			MetadataLastError:    "",
+			MetadataLastErrorAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			MetadataLastErrorUrl: "",
+			ID:                   issuer.ID,
+			ProjectID:            issuer.ProjectID,
+			OrganizationID:       issuer.OrganizationID,
+		}))
+	}
 
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-synthetic-"+slugSuffix)
+	var mcpServerID uuid.NullUUID
+	if options.remoteServerURL != "" {
+		mcpServerID = conv.ToNullUUID(seedRemoteMcpServerForLogin(t, ctx, ti.conn, *authCtx.ProjectID, userIssuer, "synthetic-mcp-"+slugSuffix, options.remoteServerURL))
+		if options.protectedResource != nil {
+			seedProtectedResource(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, options.remoteServerURL, *options.protectedResource)
+		}
+	}
 
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -231,7 +683,10 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 		ClientIDIssuedAt:        pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod: conv.ToPGText("none"),
-		Scope:                   nil,
+		Scope:                   options.clientScope,
+		LegacyCallbackUrl:       options.legacyCallbackURL,
+		ForwardClientName:       options.forwardClientName,
+		CallbackBaseUrl:         conv.ToPGTextEmpty(options.clientCallbackBaseURL),
 	})
 	require.NoError(t, err)
 
@@ -249,46 +704,70 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 	// BuildAuthorizationUrl mints + stores the RemoteLoginState; the returned
 	// URL carries the opaque state id the callback exchanges against.
 	subject := urn.NewUserSubject("synthetic-subject-" + slugSuffix)
-	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+	parent := remotesessions.ParentChallenge{
 		ID:                  uuid.NewString(),
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: userIssuer,
 		Subject:             &subject,
 		McpSlug:             "synthetic-mcp-" + slugSuffix,
+		McpServerID:         mcpServerID,
 		FinalRedirectURI:    "",
-	}, clients[0])
+		Resource:            options.resource,
+		ClientName:          options.parentClientName,
+	}
+	if options.gatewayMember {
+		parent.McpServerID, parent.ResourceMcpServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}, mcpServerID
+	}
+	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
 	require.NoError(t, err)
 
 	parsed, err := url.Parse(authURL)
 	require.NoError(t, err)
 	state := parsed.Query().Get("state")
 	require.NotEmpty(t, state)
+	if options.onAuthorizationURL != nil {
+		options.onAuthorizationURL(parsed)
+	}
 
 	// The upstream code is single-use and opaque to the mock; any non-empty
 	// value drives exchangeCode against the token server.
-	cbReq := httptest.NewRequest(http.MethodGet,
-		"/mcp/remote_login_callback?code=upstream-code&state="+url.QueryEscape(state), nil)
-	cbW := httptest.NewRecorder()
-	require.NoError(t, mgr.HandleRemoteLoginCallback(cbW, cbReq))
-	require.Equal(t, http.StatusSeeOther, cbW.Code)
-
-	session, err := q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
-		SubjectUrn:            subject,
-		RemoteSessionClientID: client.ID,
-	})
-	require.NoError(t, err)
-
-	return ctx, syntheticExpiryEnv{
+	cbQuery := url.Values{}
+	cbQuery.Set("code", "upstream-code")
+	cbQuery.Set("state", state)
+	if options.callbackQuery != nil {
+		options.callbackQuery(cbQuery)
+	}
+	env := syntheticExpiryEnv{
+		parentID:  parent.ID,
 		mgr:       mgr,
+		service:   ti.service,
 		refresher: refresher,
 		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
-			return remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, locks)
+			r := remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, options.tunnels, locks, refreshOptions...)
+			t.Cleanup(r.WaitIdentityRestatements)
+			return r
 		},
+		db:             ti.conn,
+		enc:            enc,
 		q:              q,
 		projectID:      *authCtx.ProjectID,
 		organizationID: authCtx.ActiveOrganizationID,
+		issuerID:       issuer.ID,
 		clientID:       client.ID,
+		mcpServerID:    mcpServerID,
 		subject:        subject,
-		session:        session,
+		session:        repo.RemoteSession{},
+		authURL:        authURL,
+
+		issuerMetadata:       issuerMetadata,
+		issuerMetadataReader: issuerMetadataReader,
+
+		registrationTelemetryReader: registrationTelemetryReader,
+
+		orgEncryption: orgEncryption,
 	}
+	cbW, callbackErr := env.callback(t, cbQuery.Encode())
+
+	return ctx, env, cbW, callbackErr
 }

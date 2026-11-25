@@ -1,11 +1,6 @@
-export type DiscoveredOAuth = {
-  slug: string;
-  name: string;
-  version: string;
-  metadata: Record<string, unknown>;
-};
+import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 
-type ExternalFormKey = "issuerUrl" | "slug" | "metadataJson";
+type ExternalFormKey = "issuerUrl" | "metadataJson";
 
 export type ProxyFormKey =
   | "slug"
@@ -19,14 +14,12 @@ export type ProxyFormKey =
   | "clientSecret";
 
 export type Context = {
-  discovered: DiscoveredOAuth | null;
   initialPath?: "external";
   external: {
     issuerUrl: string;
-    slug: string;
     metadataJson: string;
+    verifiedMetadata: RemoteSessionIssuerDraft | null;
     jsonError: string | null;
-    prefilled: boolean;
   };
   proxy: {
     slug: string;
@@ -38,24 +31,19 @@ export type Context = {
     environmentSlug: string;
     clientId: string;
     clientSecret: string;
-    prefilled: boolean;
   };
   envSlug: string | null;
   error: string | null;
-  // True when the user picked "Fetch Credentials" so submission is driven by
-  // auto-registration. Lets the rendering layer keep the chooser/loading UI
-  // visible during creatingEnvironment + creatingProxy instead of flashing
-  // the manual credentials form.
-  autoRegistering: boolean;
   result: { success: boolean; message: string } | null;
+  toolsetId: string;
   toolsetSlug: string;
   toolsetName: string;
   activeOrganizationId: string;
 };
 
 export type Input = {
-  discovered: DiscoveredOAuth | null;
   initialPath?: "external";
+  toolsetId: string;
   toolsetSlug: string;
   toolsetName: string;
   activeOrganizationId: string;
@@ -64,8 +52,8 @@ export type Input = {
 export type WizardEvent =
   | { type: "SELECT_EXTERNAL" }
   | { type: "SELECT_PROXY" }
-  | { type: "SELECT_PROXY_AUTO" }
-  | { type: "APPLY_DISCOVERED" }
+  | { type: "SELECT_PROVIDER_ISSUER" }
+  | { type: "SELECT_GRAM_HOSTED" }
   | { type: "FIELD_EXTERNAL"; key: ExternalFormKey; value: string }
   | { type: "FIELD_PROXY"; key: ProxyFormKey; value: string }
   | { type: "BACK" }
@@ -78,26 +66,6 @@ export function parseScopes(raw: string): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
-}
-
-/** Token endpoint auth methods, ordered by our preference. */
-const TOKEN_AUTH_METHODS_PRIORITY = [
-  "client_secret_basic",
-  "client_secret_post",
-  "none",
-] as const;
-
-// Picks the most preferred token endpoint auth method advertised by the issuer:
-// client_secret_basic > client_secret_post > none. Falls back to
-// client_secret_basic when the list is empty or holds no recognized method, so
-// DCR always sends one — upstreams like Make reject a registration that omits
-// it or sends an unsupported one ("No supported Token Endpoint Auth Method
-// provided.").
-export function pickAuthMethodFromList(supported: string[]): string {
-  for (const method of TOKEN_AUTH_METHODS_PRIORITY) {
-    if (supported.includes(method)) return method;
-  }
-  return "client_secret_basic";
 }
 
 // Origin (scheme://host) of the first parseable URL, or "" when none parse.

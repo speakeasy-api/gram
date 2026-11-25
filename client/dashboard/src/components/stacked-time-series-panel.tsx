@@ -2,10 +2,13 @@ import {
   BarElement,
   CategoryScale,
   Chart as ChartJS,
+  type ChartDataset,
   type ChartOptions,
-  Tooltip as ChartTooltip,
   Legend,
   LinearScale,
+  LineElement,
+  PointElement,
+  Tooltip as ChartTooltip,
 } from "chart.js";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { Info } from "lucide-react";
@@ -17,7 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Bar } from "react-chartjs-2";
+import { Chart } from "react-chartjs-2";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ToggleButton } from "@/components/ui/SegmentedControl";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
@@ -26,18 +29,28 @@ import {
   useOtherSeriesColor,
   useSeriesColors,
 } from "@/components/chart/useSeriesColors";
+import {
+  type SeriesStyle,
+  useSeriesFocus,
+} from "@/components/chart/seriesFocus";
 import { cn } from "@/lib/utils";
 import { type TimeSeriesStack } from "./stacked-time-series";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ChartTooltip,
+  Legend,
+);
 
-// Vercel-style consumption breakdown panel: a stacked bar chart of a measure
-// over time, stacked by whatever series the caller supplies, with client-side
-// granularity roll-up (the caller feeds daily buckets) and a cumulative view.
-// Measure-agnostic — the caller owns the data shape, labels, and formatting;
-// the panel owns the bucketing, granularity/cumulative controls, drag-to-select
-// drill-down, HTML legend, and theming. Used by the billing page's token-usage
-// breakdown and the costs explorer's cost breakdown.
+// Shared stacked time-series panel with client-side granularity roll-up and a
+// cumulative view. Measure-agnostic: callers own the data, identity, labels,
+// exact-value formatting, and units; the panel owns bucketing, controls,
+// click/drag drill-down, legend interaction, and theming. Meter callers retain
+// decimal integers for rollups/tooltips while plotting Number coordinates.
 
 // Pointer movement under this many pixels counts as a click, not a drag.
 const DRAG_THRESHOLD_PX = 5;
@@ -60,7 +73,22 @@ const monthLabelFormat = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
   timeZone: "UTC",
 });
+const rangeLabelFormat = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
+const rangeTimeLabelFormat = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "UTC",
+  timeZoneName: "short",
+});
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 // Floor a bucket to the selected granularity in UTC (weeks start Monday).
@@ -96,12 +124,46 @@ function bucketLabel(ms: number, granularity: Granularity): string {
     ? monthLabelFormat.format(date)
     : dayLabelFormat.format(date);
 }
+function bucketRangeLabel(from: number, to: number): string {
+  const inclusiveEnd = Math.max(from, to - 1);
+  const fromDate = new Date(from);
+  const toDate = new Date(to);
+  const dayAligned =
+    fromDate.getUTCHours() === 0 &&
+    fromDate.getUTCMinutes() === 0 &&
+    fromDate.getUTCSeconds() === 0 &&
+    toDate.getUTCHours() === 0 &&
+    toDate.getUTCMinutes() === 0 &&
+    toDate.getUTCSeconds() === 0;
+  const formatter = dayAligned ? rangeLabelFormat : rangeTimeLabelFormat;
+  const startLabel = formatter.format(fromDate);
+  const endLabel = formatter.format(new Date(inclusiveEnd));
+  return startLabel === endLabel ? startLabel : `${startLabel} – ${endLabel}`;
+}
 
-type Stack = { label: string; rollup?: boolean; byBucket: Map<number, number> };
+type Stack = {
+  key: string;
+  label: string;
+  paletteIndex?: number;
+  rollup?: boolean;
+  unset?: boolean;
+  byBucket: Map<number, number>;
+  exactByBucket?: Map<number, bigint>;
+};
 
 function addTo(map: Map<number, number>, bucket: number, value: number): void {
   if (value === 0) return;
   map.set(bucket, (map.get(bucket) ?? 0) + value);
+}
+
+function addExact(
+  map: Map<number, bigint>,
+  bucket: number,
+  value: string,
+): void {
+  const exact = BigInt(value);
+  if (exact === 0n) return;
+  map.set(bucket, (map.get(bucket) ?? 0n) + exact);
 }
 
 // The caller's daily series summed into granularity buckets; all-zero stacks
@@ -114,26 +176,79 @@ function rolledUpStacks(
   return stacks
     .map((s) => {
       const byBucket = new Map<number, number>();
+      const exactByBucket = s.exactSeries
+        ? new Map<number, bigint>()
+        : undefined;
       bucketsMs.forEach((ms, i) => {
-        addTo(byBucket, floorBucket(ms, granularity), s.series[i] ?? 0);
+        const bucket = floorBucket(ms, granularity);
+        const exact = s.exactSeries?.[i];
+        if (exactByBucket && exact !== undefined) {
+          addExact(exactByBucket, bucket, exact);
+        } else if (!exactByBucket) {
+          addTo(byBucket, bucket, s.series[i] ?? 0);
+        }
       });
-      return { label: s.label, rollup: s.rollup, byBucket };
+      return {
+        key: s.key ?? s.label,
+        label: s.label,
+        rollup: s.rollup,
+        unset: s.unset,
+        byBucket,
+        paletteIndex: s.paletteIndex,
+        exactByBucket,
+      };
     })
-    .filter((s) => [...s.byBucket.values()].some((v) => v > 0));
+    .filter((s) => {
+      if (s.exactByBucket) {
+        return s.exactByBucket.size > 0;
+      }
+      return s.byBucket.size > 0;
+    });
 }
 
-// The bar color for a stack: an explicitly-flagged top-N roll-up stays
-// neutral (the theme-resolved rollup color), everything else walks the
-// palette — a real group that merely DISPLAYS as "Other" keeps its own color,
-// so callers must mark their rollup series (see TimeSeriesStack.rollup).
-function stackColor(
-  stack: { label: string; rollup?: boolean },
+function stackValues(
+  stack: Stack,
+  buckets: number[],
+  cumulative: boolean,
+): { data: number[]; exactData?: string[] } {
+  if (stack.exactByBucket) {
+    const values = buckets.map(
+      (bucket) => stack.exactByBucket!.get(bucket) ?? 0n,
+    );
+    if (cumulative) {
+      for (let index = 1; index < values.length; index++) {
+        values[index] = values[index]! + values[index - 1]!;
+      }
+    }
+    return {
+      data: values.map(Number),
+      exactData: values.map((value) => value.toString()),
+    };
+  }
+  const data = buckets.map((bucket) => stack.byBucket.get(bucket) ?? 0);
+  if (cumulative) {
+    for (let index = 1; index < data.length; index++) {
+      data[index] = data[index]! + data[index - 1]!;
+    }
+  }
+  return { data };
+}
+
+// How a stack is painted: an explicitly-flagged "unset" group draws hollow in
+// the neutral — it is the absence of a category, so it neither fills nor
+// spends a real hue; an explicitly-flagged top-N roll-up fills with the same
+// neutral; everything else walks the palette. A real group that merely
+// DISPLAYS as "Other" keeps its own color, so callers must mark their rollup
+// and unset series (see TimeSeriesStack.rollup / .unset).
+function stackStyle(
+  stack: { label: string; rollup?: boolean; unset?: boolean },
   index: number,
   colors: string[],
   otherColor: string,
-): string {
-  if (stack.rollup) return otherColor;
-  return colors[index % colors.length]!;
+): SeriesStyle {
+  if (stack.unset) return { color: otherColor, outline: true };
+  if (stack.rollup) return { color: otherColor };
+  return { color: colors[index % colors.length]! };
 }
 
 // A palette color at ~13% alpha, for de-emphasizing non-hovered series.
@@ -145,46 +260,65 @@ export function StackedTimeSeriesPanel({
   title,
   headerHint,
   bucketsMs,
+  totalSeries,
+  bucketEndsMs,
   stacks,
   headerControls,
   formatValue,
+  formatExactValue,
   formatAxisValue,
   emptyMessage,
   loading,
   onSelectRange,
+  inProgressAtMs,
+  tooltipMode = "nearest",
+  tooltipTotalLabel,
+  onSelectSeries,
 }: {
-  // The panel title, with the info-tooltip copy beside it.
   title: string;
   headerHint: ReactNode;
-  // Gap-filled daily UTC bucket start times — the axis grid. Every stack's
-  // series aligns to it by index.
+  /** Gap-filled daily UTC bucket bounds. */
   bucketsMs: number[];
-  // The stacked series (already mode-resolved by the caller). All-zero stacks
-  // are dropped; a stack flagged `rollup` renders in the neutral remainder
-  // color.
+  bucketEndsMs?: number[];
+  /** Optional total line, aligned to the same daily buckets. */
+  totalSeries?: TimeSeriesStack;
   stacks: TimeSeriesStack[];
-  // Caller controls (e.g. a breakdown picker) rendered at the head of the
-  // control row, before the granularity toggles.
   headerControls?: ReactNode;
-  // Formats a value for the tooltip (with units, e.g. "1,234 tokens").
+  /** Existing callers format the plotted Number coordinate. */
   formatValue: (value: number) => string;
-  // Formats a value for the y-axis ticks (compact, e.g. "1.2M" or "$40k").
+  /** Meter callers format the exact rolled-up decimal integer. */
+  formatExactValue?: (value: string) => string;
   formatAxisValue: (value: number) => string;
   emptyMessage: string;
   loading: boolean;
-  // Called when a bar is clicked with the bucket's time range — the caller
-  // narrows the page's period to it (drill-down). Bars aren't clickable
-  // without it.
   onSelectRange?: (start: Date, end: Date) => void;
+  /** Marks the roll-up bucket containing this instant as still in progress. */
+  inProgressAtMs?: number;
+  tooltipMode?: "nearest" | "index";
+  /** When set, add an exact sum of the visible tooltip series. */
+  tooltipTotalLabel?: string;
+  /**
+   * Clicking a bar SEGMENT selects that series — the same act as clicking its
+   * row in the table beside the chart. When set, it takes the click and
+   * `onSelectRange` is left to dragging (and to clicking the empty space above
+   * a bar, which names a bucket but no series).
+   */
+  onSelectSeries?: (key: string) => void;
 }): JSX.Element {
   const [granularity, setGranularity] = useState<Granularity>("day");
   const [cumulative, setCumulative] = useState(false);
-  // Series hidden via the legend, keyed by label so toggles survive
-  // granularity switches. Labels from other stack sets are simply inert.
-  const [hiddenLabels, setHiddenLabels] = useState<Set<string>>(new Set());
-  // The legend item under the pointer; every other series renders dimmed.
-  const [focusLabel, setFocusLabel] = useState<string | null>(null);
-  const chartRef = useRef<ChartJS<"bar"> | null>(null);
+  // Legend state is keyed by stable series identity, never display labels.
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
+  // Focus (the spotlighted series) is shared with a sibling table when a
+  // SeriesFocus provider is above the panel, so hovering a bar segment also
+  // dims the table's other rows. Standalone panels keep it local.
+  const sharedFocus = useSeriesFocus();
+  const [localFocusKey, setLocalFocusKey] = useState<string | null>(null);
+  const focusKey = sharedFocus ? sharedFocus.focusKey : localFocusKey;
+  const setFocusKey = sharedFocus ? sharedFocus.setFocusKey : setLocalFocusKey;
+  const chartRef = useRef<ChartJS<"bar" | "line", number[], string> | null>(
+    null,
+  );
   // Drag-to-select: pixel positions of an in-progress drag over the chart,
   // relative to the chart container. Null when not dragging.
   const [dragX, setDragX] = useState<{ start: number; current: number } | null>(
@@ -211,97 +345,181 @@ export function StackedTimeSeriesPanel({
     const rolledStacks = rolledUpStacks(bucketsMs, stacks, granularity);
     // The time axis comes from every bucket the caller supplied (gap-filled
     // with zeros), not just buckets with usage — zero days must keep their
-    // slot so the axis stays continuous.
     const axisSource = bucketsMs.map((ms) => floorBucket(ms, granularity));
     const buckets = [...new Set(axisSource)].sort((a, b) => a - b);
-
-    const datasets = rolledStacks.map((s, i) => {
-      const values = buckets.map((b) => s.byBucket.get(b) ?? 0);
-      if (cumulative) {
-        for (let j = 1; j < values.length; j++) {
-          values[j] = values[j]! + values[j - 1]!;
+    const starts = buckets.map((bucket) => {
+      let start = bucketEndMs(bucket, granularity);
+      bucketsMs.forEach((candidate) => {
+        if (floorBucket(candidate, granularity) === bucket) {
+          start = Math.min(start, candidate);
         }
-      }
+      });
+      return start;
+    });
+    const ends = buckets.map((bucket) => {
+      let end = bucket;
+      bucketsMs.forEach((start, index) => {
+        if (floorBucket(start, granularity) !== bucket) return;
+        end = Math.max(
+          end,
+          Math.max(start, bucketEndsMs?.[index] ?? start + MS_PER_DAY),
+        );
+      });
+      return Math.min(end, bucketEndMs(bucket, granularity));
+    });
+    const datasets = rolledStacks.map((s, i) => {
       return {
+        key: s.key,
         label: s.label,
-        data: values,
-        base: stackColor(s, i, seriesColors, otherColor),
+        ...stackValues(s, buckets, cumulative),
+        type: "bar" as const,
+        stack: "__series_stack__",
+        order: 2,
+        base: stackStyle(
+          s,
+          s.paletteIndex ?? (totalSeries ? i + 1 : i),
+          seriesColors,
+          otherColor,
+        ),
       };
     });
 
+    const rolledTotal = totalSeries
+      ? rolledUpStacks(bucketsMs, [totalSeries], granularity)[0]
+      : undefined;
+    let totalDataset:
+      | (ChartDataset<"line", number[]> & {
+          key: string;
+          exactData?: string[];
+          base: SeriesStyle;
+        })
+      | undefined;
+    if (rolledTotal) {
+      totalDataset = {
+        key: rolledTotal.key,
+        label: rolledTotal.label,
+        base: stackStyle(rolledTotal, 0, seriesColors, otherColor),
+        ...stackValues(rolledTotal, buckets, cumulative),
+        type: "line",
+        borderColor: seriesColors[0]!,
+        backgroundColor: "transparent",
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        borderWidth: 2,
+        tension: 0,
+        fill: false,
+        order: 1,
+        stack: "__total_line__",
+      };
+    }
+
     return {
-      labels: buckets.map((b) => bucketLabel(b, granularity)),
-      datasets,
-      // Bucket start times parallel to the axis, for bar-click drill-down.
+      labels: buckets.map((bucket) => {
+        const label = bucketLabel(bucket, granularity);
+        const inProgress =
+          inProgressAtMs !== undefined &&
+          bucket <= inProgressAtMs &&
+          inProgressAtMs < bucketEndMs(bucket, granularity);
+        return inProgress ? `${label}*` : label;
+      }),
+      datasets: totalDataset ? [...datasets, totalDataset] : datasets,
       buckets,
+      starts,
+      ends,
     };
-  }, [bucketsMs, stacks, granularity, cumulative, seriesColors, otherColor]);
+  }, [
+    bucketsMs,
+    bucketEndsMs,
+    stacks,
+    granularity,
+    cumulative,
+    seriesColors,
+    otherColor,
+    totalSeries,
+    inProgressAtMs,
+  ]);
 
-  // The resolved hover spotlight, computed outside the chart memo so legend
-  // TOGGLES (hiddenLabels churn) don't rebuild the data object while nothing
-  // is hovered. Focusing a hidden series resolves to no focus — otherwise
-  // hiding an item while hovering it would leave every visible series dimmed.
+  // Publish the color each stack was painted in, so a sibling table can dot
+  // its rows to match. Keyed on the rolled datasets, so it only republishes
+  // when the stacks or the resolved theme actually change.
+  const publishStyles = sharedFocus?.setStyleByKey;
+  useEffect(() => {
+    publishStyles?.(new Map(rolled.datasets.map((d) => [d.key, d.base])));
+  }, [publishStyles, rolled.datasets]);
+
+  // A drill or a range change swaps the whole cast of series. A focus key left
+  // over from the previous set matches nothing in the new one, which would
+  // leave a sibling table fading every one of its rows against a series that
+  // is no longer on screen — so the focus is dropped with the old datasets.
+  useEffect(() => {
+    setFocusKey(null);
+  }, [rolled.datasets, setFocusKey]);
+
   const focus =
-    focusLabel !== null && !hiddenLabels.has(focusLabel) ? focusLabel : null;
-
-  // The cheap pass: map base colors through the hover spotlight.
+    focusKey !== null && !hiddenKeys.has(focusKey) ? focusKey : null;
   const chart = useMemo(
     () => ({
       data: {
         labels: rolled.labels,
-        datasets: rolled.datasets.map(({ base, ...d }) => ({
-          ...d,
-          backgroundColor:
-            focus === null || d.label === focus ? base : dimmed(base),
-        })),
+        datasets: rolled.datasets.map(({ base, ...dataset }) => {
+          const color =
+            focus === null || dataset.key === focus
+              ? base.color
+              : dimmed(base.color);
+          if (dataset.type === "line") {
+            return {
+              ...dataset,
+              hidden: hiddenKeys.has(dataset.key),
+              borderColor: color,
+              backgroundColor: "transparent",
+            };
+          }
+          // An "unset" stack draws hollow: a box outlined in the neutral
+          // rather than filled with it.
+          if (base.outline) {
+            return {
+              ...dataset,
+              hidden: hiddenKeys.has(dataset.key),
+              backgroundColor: "transparent",
+              borderColor: color,
+              borderWidth: 1,
+              // Chart.js skips the shared edge between stacked bars unless
+              // every side is asked for explicitly.
+              borderSkipped: false as const,
+            };
+          }
+          return {
+            ...dataset,
+            hidden: hiddenKeys.has(dataset.key),
+            backgroundColor: color,
+          };
+        }),
       },
       buckets: rolled.buckets,
+      starts: rolled.starts,
+      ends: rolled.ends,
     }),
-    [rolled, focus],
+    [rolled, focus, hiddenKeys],
   );
 
   const hasData = rolled.datasets.length > 0;
 
-  // Sync legend toggles into the chart instance (visibility is imperative
-  // Chart.js state, not part of the data props). Keyed on the label CONTENT,
-  // not the array identity: visibility is index-based on the instance, so it
-  // only needs re-asserting when the set of series changes or a toggle flips
-  // — value-only data changes (granularity, cumulative) and hover recolors
-  // are handled by the Bar component's own update.
-  const datasetLabelsKey = rolled.datasets.map((d) => d.label).join("\u0000");
-  const datasetLabels = useMemo(
-    () => (datasetLabelsKey === "" ? [] : datasetLabelsKey.split("\u0000")),
-    [datasetLabelsKey],
-  );
-  useEffect(() => {
-    const instance = chartRef.current;
-    if (!instance) return;
-    datasetLabels.forEach((label, i) => {
-      instance.setDatasetVisibility(i, !hiddenLabels.has(label));
-    });
-    instance.update();
-  }, [datasetLabels, hiddenLabels]);
-
-  // Narrow the page to the buckets [fromIndex, toIndex] — the shared tail of
-  // the click and drag drills. Re-buckets daily so a week/month bar expands
-  // into its days instead of one lone bar. Stable identity: it sits in the
-  // chartOptions memo's deps.
   const buckets = chart.buckets;
   const drillToBuckets = useCallback(
     (fromIndex: number, toIndex: number): void => {
       if (!onSelectRange) return;
-      const start = buckets[fromIndex];
+      const start = chart.starts[fromIndex] ?? buckets[fromIndex];
       if (start === undefined) return;
-      const end = bucketEndMs(buckets[toIndex] ?? start, granularity);
+      const end =
+        chart.ends[toIndex] ??
+        bucketEndMs(buckets[toIndex] ?? start, granularity);
       setGranularity("day");
       onSelectRange(new Date(start), new Date(end));
     },
-    [buckets, granularity, onSelectRange],
+    [buckets, chart.ends, chart.starts, granularity, onSelectRange],
   );
 
-  // Selects the buckets covered by [x1, x2] (container pixels) as a date
-  // range. Pixel positions map to axis indexes through the Chart.js category
-  // scale.
+  // Pixel positions map to axis indexes through the Chart.js category scale.
   const selectPixelRange = (x1: number, x2: number): void => {
     const scale = chartRef.current?.scales["x"];
     if (!scale || chart.buckets.length === 0) return;
@@ -348,13 +566,13 @@ export function StackedTimeSeriesPanel({
     window.addEventListener("mouseup", onUp);
   };
 
-  const toggleLabel = (label: string) => {
-    setHiddenLabels((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) {
-        next.delete(label);
+  const toggleSeries = (key: string) => {
+    setHiddenKeys((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(label);
+        next.add(key);
       }
       return next;
     });
@@ -371,20 +589,42 @@ export function StackedTimeSeriesPanel({
     return {
       responsive: true,
       maintainAspectRatio: false,
-      // Clicking a bar drills the page's period down to that bucket. The
-      // zoomed view re-buckets daily so a week/month bar expands into its
-      // days instead of one lone bar.
+      // Clicking a bar SEGMENT selects its series when the caller takes
+      // series clicks — the chart's equivalent of clicking that series' row
+      // in the table below. Otherwise (and anywhere no segment was hit) the
+      // click drills the page's period down to that bucket; the zoomed view
+      // re-buckets daily so a week/month bar expands into its days instead of
+      // one lone bar.
       onClick: (_event, elements) => {
         if (didDragRef.current) return;
-        const index = elements[0]?.index;
-        if (index !== undefined) drillToBuckets(index, index);
+        const hit = elements[0];
+        if (hit === undefined) return;
+        if (onSelectSeries) {
+          const key = rolled.datasets[hit.datasetIndex]?.key;
+          if (key !== undefined) {
+            onSelectSeries(key);
+            return;
+          }
+        }
+        drillToBuckets(hit.index, hit.index);
       },
+      // Hovering a bar segment spotlights its series the same way hovering
+      // its legend entry does — and, under a SeriesFocus provider, dims the
+      // sibling table's other rows.
       onHover: (event, elements) => {
         const target = event.native?.target;
         if (target instanceof HTMLElement) {
           target.style.cursor =
-            onSelectRange && elements.length > 0 ? "pointer" : "default";
+            (onSelectRange || onSelectSeries) && elements.length > 0
+              ? "pointer"
+              : "default";
         }
+        const datasetIndex = elements[0]?.datasetIndex;
+        setFocusKey(
+          datasetIndex === undefined
+            ? null
+            : (rolled.datasets[datasetIndex]?.key ?? null),
+        );
       },
       plugins: {
         // The canvas legend can't style hover or read as clickable — an HTML
@@ -392,9 +632,44 @@ export function StackedTimeSeriesPanel({
         legend: { display: false },
         tooltip: {
           ...TOOLTIP,
+          mode: tooltipMode,
+          intersect: tooltipMode !== "index",
           callbacks: {
-            label: (item) =>
-              `${item.dataset.label}: ${formatValue(Number(item.raw))}`,
+            title: (items) => {
+              const index = items[0]?.dataIndex;
+              if (index === undefined) return "";
+              const from = rolled.starts[index];
+              const to = rolled.ends[index];
+              if (from === undefined || to === undefined) return "";
+              const range = bucketRangeLabel(from, to);
+              const inProgress =
+                inProgressAtMs !== undefined &&
+                from <= inProgressAtMs &&
+                inProgressAtMs < to;
+              return inProgress ? `${range} (in progress)` : range;
+            },
+            label: (item) => {
+              const dataset = rolled.datasets[item.datasetIndex];
+              const exact = dataset?.exactData?.[item.dataIndex];
+              const value =
+                exact !== undefined && formatExactValue
+                  ? formatExactValue(exact)
+                  : formatValue(Number(item.raw));
+              return `${item.dataset.label}: ${value}`;
+            },
+            footer:
+              tooltipTotalLabel && formatExactValue
+                ? (items) => {
+                    const total = items.reduce((sum, item) => {
+                      const exact =
+                        rolled.datasets[item.datasetIndex]?.exactData?.[
+                          item.dataIndex
+                        ];
+                      return exact === undefined ? sum : sum + BigInt(exact);
+                    }, 0n);
+                    return `${tooltipTotalLabel}: ${formatExactValue(total.toString())}`;
+                  }
+                : undefined,
           },
         },
       },
@@ -415,7 +690,22 @@ export function StackedTimeSeriesPanel({
         },
       },
     };
-  }, [isDark, drillToBuckets, onSelectRange, formatValue, formatAxisValue]);
+  }, [
+    isDark,
+    drillToBuckets,
+    onSelectRange,
+    onSelectSeries,
+    setFocusKey,
+    formatValue,
+    formatExactValue,
+    formatAxisValue,
+    rolled.datasets,
+    rolled.starts,
+    rolled.ends,
+    inProgressAtMs,
+    tooltipMode,
+    tooltipTotalLabel,
+  ]);
 
   return (
     <div className="border-border border p-4">
@@ -426,7 +716,7 @@ export function StackedTimeSeriesPanel({
             <Info className="text-muted-foreground size-3.5" />
           </SimpleTooltip>
         </div>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-3">
           {headerControls}
           {headerControls && <div className="bg-border h-4 w-px" />}
           <div className="flex items-center gap-1">
@@ -458,8 +748,15 @@ export function StackedTimeSeriesPanel({
               className="relative"
               style={{ height: 280 }}
               onMouseDown={handleChartMouseDown}
+              onMouseLeave={() => setFocusKey(null)}
             >
-              <Bar ref={chartRef} data={chart.data} options={chartOptions} />
+              <Chart<"bar" | "line", number[], string>
+                ref={chartRef}
+                type="bar"
+                datasetIdKey="key"
+                data={chart.data}
+                options={chartOptions}
+              />
               {dragX &&
                 Math.abs(dragX.current - dragX.start) >= DRAG_THRESHOLD_PX && (
                   <div
@@ -474,17 +771,16 @@ export function StackedTimeSeriesPanel({
             {/* HTML legend: hoverable, clearly clickable buttons that toggle
                 their series; hovering spotlights the series in the chart. */}
             <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-              {rolled.datasets.map((d) => {
-                const hidden = hiddenLabels.has(d.label);
+              {rolled.datasets.map((dataset) => {
+                const hidden = hiddenKeys.has(dataset.key);
                 return (
                   <button
-                    key={d.label}
+                    key={dataset.key}
                     type="button"
-                    // Pressed = series visible; unpressed = hidden.
                     aria-pressed={!hidden}
-                    onClick={() => toggleLabel(d.label)}
-                    onMouseEnter={() => setFocusLabel(d.label)}
-                    onMouseLeave={() => setFocusLabel(null)}
+                    onClick={() => toggleSeries(dataset.key)}
+                    onMouseEnter={() => setFocusKey(dataset.key)}
+                    onMouseLeave={() => setFocusKey(null)}
                     className={cn(
                       "hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1.5 px-2 py-0.5 text-xs transition-colors",
                       hidden
@@ -494,11 +790,13 @@ export function StackedTimeSeriesPanel({
                   >
                     <span
                       className={cn("size-2.5", hidden && "opacity-40")}
-                      style={{
-                        backgroundColor: d.base,
-                      }}
+                      style={
+                        dataset.base.outline
+                          ? { border: `1px solid ${dataset.base.color}` }
+                          : { backgroundColor: dataset.base.color }
+                      }
                     />
-                    {d.label}
+                    {dataset.label}
                   </button>
                 );
               })}

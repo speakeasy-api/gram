@@ -1,0 +1,148 @@
+package gateway
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+)
+
+// zodMissingTenantURL is a runner validation failure naming ACME_TENANT_URL.
+const zodMissingTenantURL = `{"name":"ZodError","message":"[{\"path\":[\"ACME_TENANT_URL\"]}]"}`
+
+// callFunctionToolWithEnv runs one function tool call that declares
+// ACME_TENANT_URL, ACME_USERNAME and ACME_PASSWORD against a runner answering
+// runnerStatus with zodMissingTenantURL, with userConfig as the caller's
+// environment.
+func callFunctionToolWithEnv(t *testing.T, runnerStatus int, userConfig map[string]string) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+	return callFunctionToolWithEnvAndBody(t, runnerStatus, zodMissingTenantURL, userConfig)
+}
+
+// callFunctionToolWithEnvAndBody is callFunctionToolWithEnv with the runner
+// answering runnerBody.
+func callFunctionToolWithEnvAndBody(t *testing.T, runnerStatus int, runnerBody string, userConfig map[string]string) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+
+	var invocationID uuid.UUID
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Gram-Invoke-ID", invocationID.String())
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(runnerStatus)
+		_, _ = w.Write([]byte(runnerBody))
+	}))
+	t.Cleanup(mockServer.Close)
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	toolCallPlan := NewFunctionToolCallPlan(newTestToolDescriptor(), &FunctionToolCallPlan{
+		FunctionID:        uuid.New().String(),
+		FunctionsAccessID: uuid.New().String(),
+		Runtime:           "nodejs",
+		InputSchema:       []byte{},
+		Variables: map[string]*functions.ManifestVariableAttributeV0{
+			"ACME_USERNAME":   {Description: nil},
+			"ACME_TENANT_URL": {Description: nil},
+			"ACME_PASSWORD":   {Description: nil},
+		},
+		AuthInput: nil,
+	})
+
+	proxy := NewToolProxy(
+		testenv.NewLogger(t),
+		tracerProvider,
+		testenv.NewMeterProvider(t),
+		ToolCallSourceMCP,
+		testenv.NewEncryptionClient(t),
+		nil,
+		policy,
+		&mockToolCaller{
+			serverURL: mockServer.URL,
+			onCall:    func(invID uuid.UUID) { invocationID = invID },
+			onRequest: nil,
+		},
+		nil,
+		nil,
+	)
+
+	user := toolconfig.NewCaseInsensitiveEnv()
+	for key, value := range userConfig {
+		user.Set(key, value)
+	}
+
+	recorder := httptest.NewRecorder()
+	err = proxy.Do(t.Context(), recorder, bytes.NewReader(json.RawMessage(`{"device":"1"}`)), toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig: user,
+		GramEmail:  "",
+		GramChatID: "",
+		MCPClient:  toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+	}, toolCallPlan, tm.HTTPLogAttributes{})
+	return recorder, err
+}
+
+// A function that fails while declared variables are unset answers with the
+// variables to configure instead of the runner's validation output.
+func TestToolProxy_Do_FunctionTool_FailureNamesMissingVariables(t *testing.T) {
+	t.Parallel()
+
+	_, err := callFunctionToolWithEnv(t, http.StatusInternalServerError, map[string]string{"ACME_PASSWORD": "secret"})
+
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeFailedPrecondition, shareable.Code)
+	require.Equal(t, "server not configured: missing environment variables ACME_TENANT_URL, ACME_USERNAME", shareable.Error())
+}
+
+// Declared variables may be optional, so a function that succeeds without
+// them is answered as it responded.
+func TestToolProxy_Do_FunctionTool_SuccessWithMissingVariablesPassesThrough(t *testing.T) {
+	t.Parallel()
+
+	recorder, err := callFunctionToolWithEnv(t, http.StatusOK, nil)
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+// A failing function whose variables are all set keeps the runner's own
+// answer: the environment is not the cause.
+func TestToolProxy_Do_FunctionTool_FailureWithAllVariablesPassesThrough(t *testing.T) {
+	t.Parallel()
+
+	recorder, err := callFunctionToolWithEnv(t, http.StatusInternalServerError, map[string]string{
+		"ACME_TENANT_URL": "https://tenant.example.com",
+		"ACME_USERNAME":   "admin",
+		"ACME_PASSWORD":   "secret",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "ZodError")
+}
+
+// A failure that names none of the unset variables is not caused by them, so
+// it keeps the runner's own status and body.
+func TestToolProxy_Do_FunctionTool_UnrelatedFailureWithMissingVariablesPassesThrough(t *testing.T) {
+	t.Parallel()
+
+	recorder, err := callFunctionToolWithEnvAndBody(t, http.StatusInternalServerError, `{"name":"TypeError","message":"device is offline"}`, nil)
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "device is offline")
+}

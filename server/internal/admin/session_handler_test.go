@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"sync"
@@ -15,11 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
@@ -111,6 +113,7 @@ func newTestSessionService(t *testing.T, oidcClient *OIDCClient) *Service {
 	)
 
 	return &Service{
+		tracer:   testenv.NewTracerProvider(t).Tracer("admin_test"),
 		logger:   logger,
 		oidc:     oidcClient,
 		sessions: sessions,
@@ -119,8 +122,12 @@ func newTestSessionService(t *testing.T, oidcClient *OIDCClient) *Service {
 	}
 }
 
-// callSessionGet drives the handler through the same middleware and error
-// wrapper that Attach mounts it behind.
+type sessionInfo struct {
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
+// callSessionGet drives the generated route through the production middleware.
 func callSessionGet(t *testing.T, svc *Service, sessionID string) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -129,8 +136,10 @@ func callSessionGet(t *testing.T, svc *Service, sessionID string) *httptest.Resp
 		req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 	}
 
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
 	rec := httptest.NewRecorder()
-	SessionMiddleware(oops.ErrHandle(svc.logger, svc.handleGetSession)).ServeHTTP(rec, req)
+	SessionMiddleware(mux).ServeHTTP(rec, req)
 
 	return rec
 }
@@ -146,8 +155,10 @@ func callSessionGetConcurrently(t *testing.T, svc *Service, sessionID string, re
 			<-start
 			req := httptest.NewRequest(http.MethodGet, "/admin/session.get", nil)
 			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+			mux := goahttp.NewMuxer()
+			Attach(mux, svc)
 			rec := httptest.NewRecorder()
-			SessionMiddleware(oops.ErrHandle(svc.logger, svc.handleGetSession)).ServeHTTP(rec, req)
+			SessionMiddleware(mux).ServeHTTP(rec, req)
 			codes <- rec.Code
 		})
 	}
@@ -163,8 +174,8 @@ func callSessionGetConcurrently(t *testing.T, svc *Service, sessionID string, re
 	return results
 }
 
-// TestAttach_MountsSessionRoute proves the hand-written route reaches the
-// handler on the same muxer that carries the generated admin routes. A missing
+// TestAttach_MountsSessionRoute proves the generated route reaches the
+// handler on the admin muxer. A missing
 // or conflicting pattern would give 404 instead of 401.
 func TestAttach_MountsSessionRoute(t *testing.T) {
 	t.Parallel()
@@ -181,7 +192,75 @@ func TestAttach_MountsSessionRoute(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestHandleGetSession_ReturnsIdentity(t *testing.T) {
+func TestAdminSessionCookieWorksForDashboardAndMCP(t *testing.T) {
+	t.Parallel()
+
+	callback, err := url.Parse("https://gram-admin-dev.example.test/admin/auth.callback")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name      string
+		location  string
+		sessionID string
+		mcp       bool
+	}{
+		{name: "dashboard login", location: "/admin/organizations", sessionID: "test-session"},
+		{name: "MCP consent login", location: "/admin-mcp/connect?state=opaque", sessionID: "test-session", mcp: true},
+		{name: "MCP login fallback", location: "/admin-mcp/connect?state=opaque"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			jar, err := cookiejar.New(nil)
+			require.NoError(t, err)
+			jar.SetCookies(callback, []*http.Cookie{{Name: constants.AdminSessionCookie, Value: "previous-session", Path: "/admin-mcp"}})
+			response := httptest.NewRecorder()
+			var encodeErr error
+			scopeMCPAdminCookie(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				encodeErr = adminserver.EncodeCallbackResponse(nil)(t.Context(), w, &gen.CallbackResult{
+					Location:  tc.location,
+					SessionID: tc.sessionID,
+				})
+			})).ServeHTTP(response, httptest.NewRequest(http.MethodGet, callback.String(), nil))
+			require.NoError(t, encodeErr)
+			require.Equal(t, http.StatusTemporaryRedirect, response.Code)
+			cookies := response.Result().Cookies()
+			if tc.sessionID == "" {
+				require.Len(t, cookies, 1, "failed login does not change MCP browser cookie")
+				jar.SetCookies(callback, cookies)
+				requestURL := *callback
+				requestURL.Path = "/admin-mcp/connect"
+				mcpCookies := jar.Cookies(&requestURL)
+				require.Len(t, mcpCookies, 1)
+				require.Equal(t, "previous-session", mcpCookies[0].Value)
+				return
+			}
+			require.Len(t, cookies, 2)
+			require.Equal(t, "/admin-mcp", cookies[1].Path)
+			require.True(t, cookies[1].Secure)
+			require.True(t, cookies[1].HttpOnly)
+			if tc.mcp {
+				require.Equal(t, "test-session", cookies[1].Value)
+			} else {
+				require.Negative(t, cookies[1].MaxAge)
+			}
+			require.Empty(t, cookies[0].Path, "dashboard cookie retains its default /admin scope")
+			jar.SetCookies(callback, cookies)
+			for _, path := range []string{"/admin/session.get", "/admin/auth.logout", "/admin-mcp/connect", "/"} {
+				requestURL := *callback
+				requestURL.Path = path
+				cookies := jar.Cookies(&requestURL)
+				if path == "/" || (path == "/admin-mcp/connect" && !tc.mcp) {
+					require.Empty(t, cookies)
+					continue
+				}
+				require.Len(t, cookies, 1, path)
+				require.Equal(t, constants.AdminSessionCookie, cookies[0].Name)
+				require.Equal(t, "test-session", cookies[0].Value)
+			}
+		})
+	}
+}
+
+func TestGetSession_HTTPContract(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()

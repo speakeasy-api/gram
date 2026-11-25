@@ -1,8 +1,8 @@
 package usersessions
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 

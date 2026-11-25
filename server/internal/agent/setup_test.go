@@ -3,20 +3,27 @@ package agent_test
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -24,15 +31,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 const testServerURL = "https://app.getgram.ai"
+
+// testSiteURL is the dashboard base that plugin server links are built on.
+const testSiteURL = "https://dashboard.getgram.ai"
 
 var infra *testenv.Environment
 
@@ -68,12 +82,21 @@ func (s *stubProductFeatures) IsFeatureEnabled(_ context.Context, _ string, feat
 type testInstance struct {
 	service   *agent.Service
 	conn      *pgxpool.Pool
+	chConn    clickhouse.Conn
 	orgID     string
 	projectID uuid.UUID
 	features  *stubProductFeatures
 	// blobs is the same store the service writes handoff documents to, so
 	// tests can assert a burned handoff left nothing behind in it.
 	blobs assets.BlobStore
+	// deviceAgentTokens mints the device-agent tokens the service accepts.
+	deviceAgentTokens *deviceagenttoken.Issuer
+	// redis backs rate limiters a test attaches to the service.
+	redis *redis.Client
+	// sessions and authz are the dependencies an access service attached to
+	// the agent service is built from.
+	sessions *sessions.Manager
+	authz    *authz.Engine
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -105,19 +128,38 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	// behavior is exercised explicitly via withPerUserKeyAuth.
 	authCtx.APIKeyScopes = []string{"agent", "agent_user"}
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
 
 	features := &stubProductFeatures{sessionPortability: true}
 	blobs := assetstest.NewTestBlobStore(t)
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs)
+
+	// A real telemetry logger over the test ClickHouse so AI scan reports can
+	// be round-tripped through storage in tests.
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	enabled := func(context.Context, string) (bool, error) { return true, nil }
+	telemetryLogger := telemetry.NewLogger(ctx, logger, tracerProvider, testenv.NewMeterProvider(t), chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(logger))
+
+	serverURL, err := url.Parse(testServerURL)
+	require.NoError(t, err)
+	siteURL, err := url.Parse(testSiteURL)
+	require.NoError(t, err)
+	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL})
+	deviceAgentTokens := deviceagenttoken.New(mcpauthztest.NewIssuer(t), conn)
+	svc := agent.NewService(aivendorstest.NewStore(), logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens, marketplacetokenstest.Tokens(t, conn))
 
 	return ctx, &testInstance{
-		service:   svc,
-		conn:      conn,
-		orgID:     authCtx.ActiveOrganizationID,
-		projectID: *authCtx.ProjectID,
-		features:  features,
-		blobs:     blobs,
+		service:           svc,
+		conn:              conn,
+		chConn:            chConn,
+		orgID:             authCtx.ActiveOrganizationID,
+		projectID:         *authCtx.ProjectID,
+		features:          features,
+		blobs:             blobs,
+		deviceAgentTokens: deviceAgentTokens,
+		redis:             redisClient,
+		sessions:          sessionManager,
+		authz:             authzEngine,
 	}
 }
 
@@ -149,18 +191,21 @@ func withPerUserKeyAuth(t *testing.T, ctx context.Context, ownerEmail string) co
 	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
-// publishMarketplace gives a project a marketplace_token, which is what makes
-// its marketplace visible to the agent endpoint (the query requires one).
+// publishMarketplace gives a project a marketplace token, which is what makes
+// its marketplace visible to the agent endpoint (the query requires one). An
+// empty token leaves the connection without one.
 func publishMarketplace(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, token string) {
 	t.Helper()
 	_, err := pluginsrepo.New(conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
-		ProjectID:        projectID,
-		InstallationID:   1,
-		RepoOwner:        "speakeasy",
-		RepoName:         "plugins-" + token, // unique per (installation, owner, repo)
-		MarketplaceToken: pgtype.Text{String: token, Valid: true},
+		ProjectID:      projectID,
+		InstallationID: 1,
+		RepoOwner:      "speakeasy",
+		RepoName:       "plugins-" + token, // unique per (installation, owner, repo)
 	})
 	require.NoError(t, err)
+	if token != "" {
+		marketplacetokenstest.Plant(t, conn, projectID, token)
+	}
 }
 
 // seedProject creates an additional project in an existing org, used to exercise
@@ -182,8 +227,25 @@ func seedProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, s
 func setMarketplaceOverride(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, name string) {
 	t.Helper()
 	_, err := pluginsrepo.New(conn).UpsertMarketplaceSettings(ctx, pluginsrepo.UpsertMarketplaceSettingsParams{
-		ProjectID:       projectID,
-		MarketplaceName: pgtype.Text{String: name, Valid: true},
+		ProjectID:               projectID,
+		SetMarketplaceName:      true,
+		MarketplaceName:         pgtype.Text{String: name, Valid: true},
+		SetObservabilityEnabled: false,
+		ObservabilityEnabled:    pgtype.Bool{},
+	})
+	require.NoError(t, err)
+}
+
+// disableObservability turns off a project's observability plugin without
+// touching its marketplace name override.
+func disableObservability(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) {
+	t.Helper()
+	_, err := pluginsrepo.New(conn).UpsertMarketplaceSettings(ctx, pluginsrepo.UpsertMarketplaceSettingsParams{
+		ProjectID:               projectID,
+		SetMarketplaceName:      false,
+		MarketplaceName:         pgtype.Text{},
+		SetObservabilityEnabled: true,
+		ObservabilityEnabled:    pgtype.Bool{Bool: false, Valid: true},
 	})
 	require.NoError(t, err)
 }

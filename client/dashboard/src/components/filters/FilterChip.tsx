@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   Popover,
   PopoverContent,
+  PopoverAnchor,
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import {
@@ -13,6 +14,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/Command";
+import { Check } from "lucide-react";
+import {
+  chipLabel,
+  allLabelFor,
+  hidesAllOption,
+  type FilterDimension,
+  type FilterOption,
+} from "./filter-schema";
 import { cn } from "@/lib/utils";
 import { Operator } from "@gram/client/models/components/logfilter";
 import { OP_LABELS, type ActiveLogFilter } from "@/pages/logs/log-filter-types";
@@ -45,8 +62,10 @@ export function FilterChip({
   active = false,
   onClick,
   onRemove,
+  ariaLabel,
 }: {
   label: string;
+  ariaLabel?: string;
   /**
    * The dimension's accent, from the brand spectrum. Identity, not state: the
    * square says *which* filter this is at a glance, while the border and text
@@ -62,13 +81,15 @@ export function FilterChip({
   onClick?: () => void;
   onRemove?: () => void;
 }): JSX.Element {
+  const body = useRef<HTMLButtonElement>(null);
   return (
     <span
+      onClick={(e) => clickOwnArea(e, body.current)}
       // Colour is set here and inherited, never merged onto the label beside
       // `text-eyebrow`: tailwind-merge files both under its `text-*` group and
       // drops the earlier one, which silently cost the chip its mono uppercase.
       className={cn(
-        "bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 border pl-3 transition-colors",
+        "bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 border pl-3 transition-colors",
         active
           ? "border-foreground text-foreground"
           : "border-border text-muted-foreground",
@@ -76,7 +97,9 @@ export function FilterChip({
       )}
     >
       <button
+        ref={body}
         type="button"
+        aria-label={ariaLabel}
         onClick={onClick}
         className="hover:text-foreground flex items-center gap-2 transition-colors"
       >
@@ -100,6 +123,93 @@ export function FilterChip({
         </button>
       )}
     </span>
+  );
+}
+
+// Padding and gaps belong to the chip, so a click there acts as the body button.
+function clickOwnArea(
+  event: MouseEvent<HTMLElement>,
+  body: HTMLButtonElement | null,
+): void {
+  if (event.target === event.currentTarget) body?.click();
+}
+
+/** Standard filter-chip treatment with a direct, searchable selection popover. */
+export function SelectFilterChip({
+  dim,
+  value,
+  options,
+  color,
+  onChange,
+}: {
+  dim: FilterDimension;
+  value: string | null;
+  options: FilterOption[];
+  color?: string;
+  onChange: (value: string | null) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<HTMLSpanElement>(null);
+  const label = chipLabel(dim, value, options);
+  const select = (value: string | null) => {
+    onChange(value);
+    setOpen(false);
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <span ref={anchor}>
+          <FilterChip
+            label={label}
+            ariaLabel={`${dim.label} filter: ${label}`}
+            color={color}
+            active={!!value}
+            onClick={() => setOpen(!open)}
+            // A required dimension has nothing to clear *to*: clearing it only
+            // resolves back to a value, so hide the × as the toolbar does.
+            onRemove={value && !dim.required ? () => onChange(null) : undefined}
+          />
+        </span>
+      </PopoverAnchor>
+      <PopoverContent
+        align="start"
+        className="p-0"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          anchor.current?.querySelector("button")?.focus();
+        }}
+      >
+        <Command>
+          <CommandInput placeholder={`Search ${dim.label.toLowerCase()}…`} />
+          <CommandList>
+            <CommandEmpty>No options match.</CommandEmpty>
+            <CommandGroup>
+              {!hidesAllOption(dim) && (
+                <CommandItem
+                  value="__all__"
+                  keywords={[allLabelFor(dim)]}
+                  onSelect={() => select(null)}
+                >
+                  {!value && <Check className="size-4" />}
+                  {allLabelFor(dim)}
+                </CommandItem>
+              )}
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={option.value}
+                  keywords={[option.label]}
+                  onSelect={() => select(option.value)}
+                >
+                  {value === option.value && <Check className="size-4" />}
+                  {option.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -137,12 +247,17 @@ export function CustomFilterChip({
   };
 
   const valuePlaceholder = op === Operator.In ? "value1, value2, ..." : "value";
+  const body = useRef<HTMLButtonElement>(null);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <span className="border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 border pr-2 pl-3 font-mono text-xs transition-colors">
+      <span
+        onClick={(e) => clickOwnArea(e, body.current)}
+        className="border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 border pr-2 pl-3 font-mono text-xs transition-colors"
+      >
         <PopoverTrigger asChild>
           <button
+            ref={body}
             type="button"
             aria-label={`Edit filter ${filter.path}`}
             className="hover:text-foreground cursor-pointer transition-colors"
@@ -206,7 +321,7 @@ export function CustomFilterChip({
               }
             }}
             placeholder={valuePlaceholder}
-            className="border-border focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 border bg-transparent px-2 font-mono text-xs outline-none focus-visible:ring-[3px]"
+            className="border-border focus-visible:border-ring focus-visible:ring-ring/40 h-8 min-w-0 flex-1 border bg-transparent px-2 font-mono text-xs outline-none focus-visible:ring-1"
             autoFocus
           />
         </div>

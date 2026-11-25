@@ -14,8 +14,9 @@ pub struct McpServer {
 
 /// `/threads/{thread_id}/turn` request body. The runner looks up — or
 /// bootstraps — a per-thread tokio task on first hit and enqueues `input`
-/// onto its inbox. `auth_token` rotates the host's shared bearer; an
-/// optional `mcp_servers` reconciles the assistant-wide MCP set so
+/// onto its inbox. Each explicit `auth_token` is validated via bootstrap;
+/// the bearer and optional `mcp_servers` change together at the thread's
+/// serialized turn boundary, after preceding compaction, so
 /// toolset edits made after bootstrap take effect without recycling the
 /// VM.
 #[derive(Debug, Deserialize)]
@@ -161,11 +162,15 @@ pub struct ThreadStateView {
 }
 
 /// Bootstrap blob the runner pulls from
-/// `POST /rpc/assistants.getThreadBootstrap` on the first /turn for a
-/// thread. Mirrors `server/internal/assistants/runtime.go::threadBootstrap`.
+/// `POST /rpc/assistants.getThreadBootstrap` on every /turn for a
+/// thread (only the first initializes the driver/history). Mirrors `server/internal/assistants/runtime.go::threadBootstrap`.
 #[derive(Debug, Deserialize, Clone)]
 pub struct ThreadBootstrap {
+    pub assistant_id: String,
+    pub project_id: String,
     pub model: String,
+    #[serde(default = "default_reasoning_effort")]
+    pub reasoning_effort: String,
     #[serde(default)]
     pub instructions: String,
     pub completions_url: String,
@@ -178,6 +183,10 @@ pub struct ThreadBootstrap {
     pub context_window: Option<u64>,
     #[serde(default)]
     pub compaction: CompactionPolicy,
+}
+
+fn default_reasoning_effort() -> String {
+    "medium".into()
 }
 
 #[cfg(test)]

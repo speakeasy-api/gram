@@ -2,27 +2,32 @@ package remotesessions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/urls"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
-// untrustedDocumentError marks a discovery document that parsed but that Gram
+// untrustedDocumentError marks a discovery document that parsed but that Speakeasy
 // refuses to persist over an issuer's stored metadata. It is distinct from
 // *discoveryError, which means the document could not be fetched or read at
 // all: here the upstream answered, and what it said is the problem.
 //
 // Both map to a 4xx. The upstream is the customer's own identity provider, so
-// a document Gram will not act on is a fact about their configuration to
-// surface, not a Gram fault to page on.
+// a document Speakeasy will not act on is a fact about their configuration to
+// surface, not a Speakeasy fault to page on.
 type untrustedDocumentError struct {
 	reason string
 }
@@ -36,25 +41,20 @@ func (e *untrustedDocumentError) Error() string { return e.reason }
 // tiers.
 func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) *types.RemoteSessionIssuerDraft {
 	return &types.RemoteSessionIssuerDraft{
-		Issuer:                conv.Default(doc.Issuer, issuerURL),
-		AuthorizationEndpoint: conv.PtrEmpty(doc.AuthorizationEndpoint),
-		TokenEndpoint:         conv.PtrEmpty(doc.TokenEndpoint),
-		// Revocation endpoints that are not HTTPS are filtered out: tokens are
-		// sensitive credentials that must not be transmitted in plaintext. Only
-		// https:// revocation endpoints are accepted.
-		RevocationEndpoint:   conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.RevocationEndpoint), doc.RevocationEndpoint, "")),
-		RegistrationEndpoint: conv.PtrEmpty(doc.RegistrationEndpoint),
-		JwksURI:              conv.PtrEmpty(doc.JwksURI),
-		// The issuer controls these and downstream surfaces render them as
-		// links, so a value that is not an absolute http(s) URL is discarded
-		// rather than carried into the draft the create form submits back.
-		ServiceDocumentation:              conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.ServiceDocumentation), doc.ServiceDocumentation, "")),
-		OpPolicyURI:                       conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.OpPolicyURI), doc.OpPolicyURI, "")),
-		OpTosURI:                          conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTP(doc.OpTosURI), doc.OpTosURI, "")),
-		ScopesSupported:                   doc.ScopesSupported,
-		GrantTypesSupported:               doc.GrantTypesSupported,
-		ResponseTypesSupported:            doc.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: doc.TokenEndpointAuthMethodsSupported,
+		Issuer:                              conv.Default(doc.Issuer, issuerURL),
+		AuthorizationEndpoint:               conv.PtrEmpty(doc.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.PtrEmpty(doc.TokenEndpoint),
+		RevocationEndpoint:                  conv.PtrEmpty(doc.RevocationEndpoint),
+		RegistrationEndpoint:                conv.PtrEmpty(doc.RegistrationEndpoint),
+		JwksURI:                             conv.PtrEmpty(doc.JwksURI),
+		ServiceDocumentation:                conv.PtrEmpty(doc.ServiceDocumentation),
+		OpPolicyURI:                         conv.PtrEmpty(doc.OpPolicyURI),
+		OpTosURI:                            conv.PtrEmpty(doc.OpTosURI),
+		ScopesSupported:                     doc.ScopesSupported,
+		GrantTypesSupported:                 doc.GrantTypesSupported,
+		AuthorizationGrantProfilesSupported: orEmptySlice(doc.AuthorizationGrantProfilesSupported),
+		ResponseTypesSupported:              doc.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported:   doc.TokenEndpointAuthMethodsSupported,
 
 		// Copied as-is, nil included, so absent stays distinguishable from
 		// advertised-empty for as long as the draft lives. The dashboard's
@@ -66,51 +66,73 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
 
-		// Gram behavior flags, not discovered metadata. A draft never proposes
-		// them; the operator opts in on the create form.
-		Oidc:              false,
-		Passthrough:       false,
-		DiscoveryWarnings: warnings,
-	}
-}
+		UserinfoEndpoint:                           conv.PtrEmpty(doc.UserinfoEndpoint),
+		IntrospectionEndpoint:                      conv.PtrEmpty(doc.IntrospectionEndpoint),
+		IntrospectionEndpointAuthMethodsSupported:  doc.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           doc.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            doc.ClaimsSupported,
+		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
 
-// issuerOrigin reduces an issuer URL to its scheme and host. Returns the input
-// unchanged when it does not parse as an absolute URL, so a caller comparing
-// against it simply finds no match rather than matching everything.
-func issuerOrigin(issuerURL string) string {
-	u, err := url.Parse(issuerURL)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return issuerURL
+		// Speakeasy behavior flags and operator knobs, not discovered metadata. A
+		// draft never proposes them; the operator opts in on the create form.
+		Oidc:                       false,
+		Passthrough:                false,
+		ScopeOverride:              nil,
+		ResourceIndicatorSupported: nil,
+		DiscoveryWarnings:          warnings,
 	}
-	return (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
 }
 
 // mapDiscoveryError turns the errors discovery raises into the response a fetch
 // or refresh handler returns for them.
 //
-// A document that was read fine and is merely not one Gram will persist is
+// A document that was read fine and is merely not one Speakeasy will persist is
 // always a 422: nothing about retrying changes the answer, and the upstream is
 // the caller's own identity provider.
 //
 // Whether an unreachable or unparseable upstream is the caller's fault depends
 // on which method asked, so callers pass the code. On fetchMetadata the caller
 // supplied the URL, and a host that does not resolve is a typo: 400, and
-// customer IdP misconfiguration stays out of Gram's error budget. On
-// refreshMetadata the caller supplied only an issuer id and Gram chose the URL
-// from the stored row, so the same failure means an upstream Gram depends on is
+// customer IdP misconfiguration stays out of Speakeasy's error budget. On
+// refreshMetadata the caller supplied only an issuer id and Speakeasy chose the URL
+// from the stored row, so the same failure means an upstream Speakeasy depends on is
 // down or slow. That is a 502 — it is not caller error, and SDK retry policies
 // treat 4xx as terminal, which would make a thirty-second outage look permanent.
 func mapDiscoveryError(ctx context.Context, logger *slog.Logger, err error, unreachable oops.Code) error {
+	msg, _ := discoveryFailureMessage(err)
+	_, untrusted := errors.AsType[*untrustedDocumentError](err)
+	_, fetchFailed := errors.AsType[*discoveryError](err)
+	_, keySetFetchFailed := errors.AsType[*keySetRefreshError](err)
+	switch {
+	case untrusted:
+		return oops.E(oops.CodeInvalid, err, "%s", msg).LogError(ctx, logger)
+	case fetchFailed, keySetFetchFailed:
+		return oops.E(unreachable, err, "%s", msg).LogError(ctx, logger)
+	default:
+		// Unreachable today: discoverIssuerMetadata only ever returns the two
+		// types above. An unexpected error is Speakeasy's to explain rather than
+		// the caller's to correct.
+		return oops.E(oops.CodeUnexpected, err, "%s", msg).LogError(ctx, logger)
+	}
+}
+
+// discoveryFailureMessage describes a discovery failure in text safe to store
+// on the issuer row and show to its operators: it names well-known URLs and
+// upstream statuses but never dial errors or the outbound policy's internals.
+// transient reports whether the failure says nothing about what the issuer
+// serves, so a retry later may succeed.
+func discoveryFailureMessage(err error) (msg string, transient bool) {
 	if ude, ok := errors.AsType[*untrustedDocumentError](err); ok {
-		return oops.E(oops.CodeInvalid, err, "%s", ude.reason).LogError(ctx, logger)
+		return ude.reason, false
 	}
-	if df, ok := errors.AsType[*discoveryError](err); ok {
-		return oops.E(unreachable, err, "%s", df.UserMessage()).LogError(ctx, logger)
+	if de, ok := errors.AsType[*discoveryError](err); ok {
+		return de.UserMessage(), de.transient()
 	}
-	// Unreachable today: discoverIssuerMetadata only ever returns the two types
-	// above. Anything new arrives here, and an unexpected error is Gram's to
-	// explain rather than the caller's to correct.
-	return oops.E(oops.CodeUnexpected, err, "fetch issuer metadata").LogError(ctx, logger)
+	if ke, ok := errors.AsType[*keySetRefreshError](err); ok {
+		return fmt.Sprintf("Could not refresh the JWK Set at %s", ke.uri), true
+	}
+	return "issuer metadata could not be fetched", false
 }
 
 // refreshIssuerMetadata re-reads an existing issuer's upstream RFC 8414
@@ -130,61 +152,169 @@ func mapDiscoveryError(ctx context.Context, logger *slog.Logger, err error, unre
 // transaction would hold a pooled connection open for the duration.
 //
 // Only RFC 8414-derived columns are represented in the returned parameters.
-// Gram's own behavior and display fields cannot be expressed through them —
+// Speakeasy's own behavior and display fields cannot be expressed through them —
 // see UpdateRemoteSessionIssuerDiscoveredMetadata, which has no parameter for
 // slug, issuer, name, logo, client setup documentation, oidc, or passthrough.
-func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
+func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolver *jwks.Resolver, tunnels *tunnelrouting.HTTPClient, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
 	var zero repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, policy, issuer.Issuer)
+	tunnel, err := issuerTunnelTransport(tunnels, issuer.TunneledMcpServerID)
+	if err != nil {
+		return zero, nil, &discoveryError{
+			WellKnownURL: issuer.Issuer,
+			Status:       0,
+			cause:        fmt.Errorf("select issuer discovery transport: %w", err),
+			definitive:   false,
+		}
+	}
+	var doer httpDoer = issuerDiscoveryHTTPClient(policy)
+	if tunnel != nil {
+		doer = tunnel
+	}
+
+	discovered, err := discoverIssuerMetadataWithDoer(ctx, doer, issuer.Issuer)
+	if err != nil {
+		return zero, nil, err
+	}
+	// A partial read is useful for a draft, but cannot replace a complete
+	// stored snapshot: omitted members may belong to the unreadable family.
+	if discovered.unreadableErr != nil {
+		return zero, nil, discovered.unreadableErr
+	}
+	doc := discovered.doc
+
+	if err := vetDiscoveredDocument(doc, issuer.Issuer); err != nil {
+		return zero, nil, err
+	}
+
+	// Persist only evidence read during this discovery. Metadata stores the
+	// merged document, not the individual candidates or member provenance.
+	// Even for the same issuer, filling gaps from it could resurrect a grant,
+	// profile, or endpoint the readable primary has now omitted. An unreadable
+	// candidate fails the refresh above rather than borrowing old evidence.
+
+	// The key set rides the issuer's binding like the discovery document that
+	// advertised it. An issuer inside a customer network publishes its
+	// jwks_uri there too, and a direct fetch of it would fail every refresh
+	// and stamp a last-error on a provider that is working.
+	keySet, err := refreshIssuerKeySet(ctx, resolver, tunnel, doc.JwksURI, issuer)
 	if err != nil {
 		return zero, nil, err
 	}
 
-	// Gram distrusts the whole document rather than salvaging parts of it. A
-	// refresh overwrites metadata that currently works, so a document that
-	// deviates on anything load-bearing is more likely to be a captive portal,
-	// an error page rendered as JSON, or a misconfigured gateway than a genuine
-	// change the operator wants persisted.
-	//
-	// The issuer claim is checked first. This query cannot write the issuer
-	// column, so the stored URL is never repointed; what the check prevents is
-	// adopting some *other* authorization server's endpoints, which would send
-	// users somewhere else at the next sign-in.
-	//
-	// An advertised issuer equal to the stored URL's origin is accepted, because
-	// that is the shape issuerProbeCandidates itself manufactures: when the
-	// path-aware candidates 404, it falls back to the origin-root well-known
-	// URL, and gateways that serve metadata only there advertise the origin.
-	// Rejecting it would make every issuer created through that fallback
-	// permanently unrefreshable. The relaxation is deliberately no wider than
-	// the fallback: a sibling path on the same host (a different tenant on a
-	// multi-tenant IdP) still aborts. collectDiscoveryWarnings has already
-	// recorded the divergence, so the operator still sees it.
-	switch {
-	case doc.Issuer == "":
-		return zero, nil, &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuer.Issuer),
-		}
-	case !issuerURLsEqual(doc.Issuer, issuer.Issuer) && !issuerURLsEqual(doc.Issuer, issuerOrigin(issuer.Issuer)):
-		return zero, nil, &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to adopt another authorization server's endpoints", doc.Issuer, issuer.Issuer),
-		}
-	// An issuer advertising neither endpoint is unusable for OAuth. Discovery
-	// returns such a document as a last resort when no probe candidate yields a
-	// better one, which on create leaves the operator to fill the endpoints in
-	// by hand. Persisting it over an issuer that currently has working
-	// endpoints would break every session it mints.
-	case doc.AuthorizationEndpoint == "":
-		return zero, nil, &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no authorization_endpoint", issuer.Issuer),
-		}
-	case doc.TokenEndpoint == "":
-		return zero, nil, &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no token_endpoint", issuer.Issuer),
-		}
+	return discoveredMetadataParams(doc, discovered.unreadable, discovered.unreadableErr, keySet, issuer), discovered.warnings, nil
+}
+
+type refreshedIssuerKeySet struct {
+	document  json.RawMessage
+	fetchedAt pgtype.Timestamptz
+	expiresAt pgtype.Timestamptz
+	etag      string
+}
+
+func refreshIssuerKeySet(ctx context.Context, resolver *jwks.Resolver, tunnel httpDoer, jwksURI string, issuer repo.RemoteSessionIssuer) (refreshedIssuerKeySet, error) {
+	var zero refreshedIssuerKeySet
+	if jwksURI == "" {
+		return zero, nil
 	}
 
+	source, err := jwks.NewRemoteSource(jwksURI)
+	if err != nil {
+		return zero, &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises an invalid jwks_uri: %v", err)}
+	}
+	if tunnel != nil {
+		source = source.WithTransport(tunnel)
+	}
+
+	cache := jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}
+	if issuer.JwksUri.Valid && issuer.JwksUri.String == jwksURI {
+		cache.Document = json.RawMessage(issuer.Jwks)
+		cache.ETag = conv.FromPGTextOrEmpty[string](issuer.JwksEtag)
+		if issuer.JwksFetchedAt.Valid {
+			cache.RefreshedAt = issuer.JwksFetchedAt.Time
+		}
+	}
+	// ExpiresAt deliberately remains zero: this is the explicit refresh
+	// operation, so it must consult the upstream even when the stored cache is
+	// still fresh. A usable stored document and ETag still enable a 304.
+	result, err := resolver.Resolve(ctx, source, cache)
+	if err != nil {
+		if errors.Is(err, jwks.ErrKeySetInvalid) || errors.Is(err, jwks.ErrKeySetTooLarge) || errors.Is(err, jwks.ErrPrivateKeyMaterial) || errors.Is(err, jwks.ErrSymmetricKeyMaterial) {
+			return zero, &untrustedDocumentError{reason: "jwks_uri did not return a valid public JWK Set"}
+		}
+		return zero, &keySetRefreshError{uri: jwksURI, cause: err}
+	}
+	if result.Outcome != jwks.CacheOutcomeRefreshed && result.Outcome != jwks.CacheOutcomeNotModified {
+		return zero, fmt.Errorf("explicit JWKS refresh unexpectedly returned %q", result.Outcome)
+	}
+
+	now := time.Now()
+	return refreshedIssuerKeySet{
+		document:  result.Document,
+		fetchedAt: pgtype.Timestamptz{Time: now, InfinityModifier: pgtype.Finite, Valid: true},
+		expiresAt: pgtype.Timestamptz{Time: now.Add(result.TTL), InfinityModifier: pgtype.Finite, Valid: true},
+		etag:      result.ETag,
+	}, nil
+}
+
+type keySetRefreshError struct {
+	uri   string
+	cause error
+}
+
+func (e *keySetRefreshError) Error() string {
+	return fmt.Sprintf("refresh key set at %s: %v", e.uri, e.cause)
+}
+func (e *keySetRefreshError) Unwrap() error { return e.cause }
+
+// vetDiscoveredDocument is the distrust gate a fetched document must pass
+// before it may overwrite an issuer's stored metadata. Speakeasy distrusts the
+// whole document rather than salvaging parts of it: a refresh overwrites
+// metadata that currently works, so a document that deviates on anything
+// load-bearing is more likely to be a captive portal, an error page rendered
+// as JSON, or a misconfigured gateway than a genuine change the operator wants
+// persisted.
+//
+// The issuer claim is checked first. The update query cannot write the issuer
+// column, so the stored URL is never repointed; what the check prevents is
+// adopting some *other* authorization server's endpoints, which would send
+// users somewhere else at the next sign-in.
+//
+// The served issuer must match byte-for-byte, including path and trailing slashes.
+// A fallback discovery location is not permission to adopt its origin's issuer.
+//
+// An issuer advertising neither endpoint is unusable for OAuth. Discovery
+// returns such a document as a last resort when no probe candidate yields a
+// better one, which on create leaves the operator to fill the endpoints in by
+// hand. Persisting it over an issuer that currently has working endpoints
+// would break every session it mints.
+func vetDiscoveredDocument(doc rfc8414Document, issuerURL string) error {
+	switch {
+	case doc.Issuer == "":
+		return &untrustedDocumentError{
+			reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuerURL),
+		}
+	case doc.Issuer != issuerURL:
+		return &untrustedDocumentError{
+			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuerURL),
+		}
+	case doc.AuthorizationEndpoint == "":
+		return &untrustedDocumentError{
+			reason: fmt.Sprintf("metadata document at %s advertises no authorization_endpoint", issuerURL),
+		}
+	case doc.TokenEndpoint == "":
+		return &untrustedDocumentError{
+			reason: fmt.Sprintf("metadata document at %s advertises no token_endpoint", issuerURL),
+		}
+	default:
+		return nil
+	}
+}
+
+// discoveredMetadataParams maps a vetted document onto the parameters that
+// persist it over issuer's row. unreadable is the well-known URL discovery
+// could not read this run, or "" when every candidate answered.
+func discoveredMetadataParams(doc rfc8414Document, unreadable string, unreadableErr *discoveryError, keySet refreshedIssuerKeySet, issuer repo.RemoteSessionIssuer) repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams {
 	return repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams{
 		// An endpoint the issuer has stopped advertising arrives here as an
 		// empty string, which the query clears to NULL. Manual endpoint
@@ -193,27 +323,26 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		// history rather than on what the issuer advertises right now.
 		AuthorizationEndpoint: doc.AuthorizationEndpoint,
 		TokenEndpoint:         doc.TokenEndpoint,
-		// Deliberately absent from the distrust gate above: an issuer that
+		// Deliberately absent from vetDiscoveredDocument: an issuer that
 		// advertises no revocation endpoint is the common case, not a signal
 		// that the document is untrustworthy. It clears to NULL like any other
 		// endpoint the issuer has stopped advertising, and revoking a session
 		// against such an issuer stays a local soft-delete.
-		//
-		// Revocation endpoints that are not HTTPS are filtered out: tokens are
-		// sensitive credentials that must not be transmitted in plaintext.
-		RevocationEndpoint:   conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.RevocationEndpoint), doc.RevocationEndpoint, ""),
-		RegistrationEndpoint: doc.RegistrationEndpoint,
-		JwksUri:              doc.JwksURI,
-		// Downstream surfaces render these as links, so a value that is not an
-		// absolute http(s) URL is dropped rather than stored — matching how the
-		// create-time draft filters them.
-		ServiceDocumentation:              conv.Ternary(urls.IsAbsoluteHTTP(doc.ServiceDocumentation), doc.ServiceDocumentation, ""),
-		OpPolicyUri:                       conv.Ternary(urls.IsAbsoluteHTTP(doc.OpPolicyURI), doc.OpPolicyURI, ""),
-		OpTosUri:                          conv.Ternary(urls.IsAbsoluteHTTP(doc.OpTosURI), doc.OpTosURI, ""),
-		ScopesSupported:                   orEmptySlice(doc.ScopesSupported),
-		GrantTypesSupported:               orEmptySlice(doc.GrantTypesSupported),
-		ResponseTypesSupported:            orEmptySlice(doc.ResponseTypesSupported),
-		TokenEndpointAuthMethodsSupported: orEmptySlice(doc.TokenEndpointAuthMethodsSupported),
+		RevocationEndpoint:                  doc.RevocationEndpoint,
+		RegistrationEndpoint:                doc.RegistrationEndpoint,
+		JwksUri:                             doc.JwksURI,
+		Jwks:                                string(keySet.document),
+		JwksFetchedAt:                       keySet.fetchedAt,
+		JwksCacheExpiresAt:                  keySet.expiresAt,
+		JwksEtag:                            keySet.etag,
+		ServiceDocumentation:                doc.ServiceDocumentation,
+		OpPolicyUri:                         doc.OpPolicyURI,
+		OpTosUri:                            doc.OpTosURI,
+		ScopesSupported:                     orEmptySlice(doc.ScopesSupported),
+		GrantTypesSupported:                 orEmptySlice(doc.GrantTypesSupported),
+		AuthorizationGrantProfilesSupported: orEmptySlice(doc.AuthorizationGrantProfilesSupported),
+		ResponseTypesSupported:              orEmptySlice(doc.ResponseTypesSupported),
+		TokenEndpointAuthMethodsSupported:   orEmptySlice(doc.TokenEndpointAuthMethodsSupported),
 
 		// orEmptySlice is load-bearing here beyond its NOT NULL siblings: this
 		// column is nullable, and a refresh is the capture event, so a document
@@ -224,14 +353,31 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
 
+		// Session-enrichment capabilities. A refresh is the capture event for
+		// these nullable columns too: an omitted endpoint clears to NULL, an
+		// omitted array persists as empty, an omitted flag as false.
+		UserinfoEndpoint:                           doc.UserinfoEndpoint,
+		IntrospectionEndpoint:                      doc.IntrospectionEndpoint,
+		IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(doc.IntrospectionEndpointAuthMethodsSupported),
+		IDTokenSigningAlgValuesSupported:           orEmptySlice(doc.IDTokenSigningAlgValuesSupported),
+		ClaimsSupported:                            orEmptySlice(doc.ClaimsSupported),
+		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
+		Metadata: string(retainableDocument(doc.raw)),
+
+		// Record incomplete discovery without claiming that omitted members
+		// were definitively withdrawn by the unreadable candidate.
+		MetadataLastError:    unreadableCandidateMessage(unreadable, unreadableErr),
+		MetadataLastErrorUrl: unreadable,
+
 		// The identity the update re-asserts, so a concurrent move or issuer
-		// rename aborts the write instead of applying it to a row Gram no
+		// rename aborts the write instead of applying it to a row Speakeasy no
 		// longer holds the same authorization over.
 		ID:             issuer.ID,
 		Issuer:         issuer.Issuer,
 		ProjectID:      issuer.ProjectID,
 		OrganizationID: issuer.OrganizationID,
-	}, warnings, nil
+	}
 }
 
 // refreshConflictMessage is what a caller reports when the shared update
@@ -239,3 +385,51 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 // allowed to write it, and only a concurrent move, rename, or delete explains
 // the miss.
 const refreshConflictMessage = "identity provider changed while its metadata was being fetched; retry the refresh"
+
+func sameMetadataRefreshSnapshot(a, b repo.RemoteSessionIssuer) bool {
+	return sameTimestamp(a.MetadataFetchedAt, b.MetadataFetchedAt) && sameTimestamp(a.UpdatedAt, b.UpdatedAt)
+}
+
+// discoveryRetryURL is the well-known URL a transient failure left unread, or "" when the failure is definitive.
+func discoveryRetryURL(err error) string {
+	if de, ok := errors.AsType[*discoveryError](err); ok && de.transient() {
+		return de.WellKnownURL
+	}
+	if ke, ok := errors.AsType[*keySetRefreshError](err); ok {
+		return ke.uri
+	}
+	return ""
+}
+
+// Five seconds gives the single bookkeeping write time to finish after request
+// cancellation without letting database contention prolong cleanup indefinitely.
+const issuerDiscoveryFailureRecordTimeout = 5 * time.Second
+
+// recordIssuerDiscoveryFailure records the attempt without modifying the last
+// successful snapshot. The observed identity and timestamps prevent a failed
+// in-flight request from overwriting a newer refresh or a concurrent tier move.
+// A superseded failure record is only skipped bookkeeping: unlike a successful
+// refresh whose snapshot cannot be saved, it must not hide the discovery error.
+func (s *Service) recordIssuerDiscoveryFailure(ctx context.Context, logger *slog.Logger, existing repo.RemoteSessionIssuer, discoveryErr error) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerDiscoveryFailureRecordTimeout)
+	defer cancel()
+
+	msg, _ := discoveryFailureMessage(discoveryErr)
+	rows, err := repo.New(s.db).RecordRemoteSessionIssuerMetadataRefreshFailure(ctx, repo.RecordRemoteSessionIssuerMetadataRefreshFailureParams{
+		MetadataLastError:         msg,
+		MetadataLastErrorUrl:      discoveryRetryURL(discoveryErr),
+		ObservedMetadataFetchedAt: existing.MetadataFetchedAt,
+		ObservedUpdatedAt:         existing.UpdatedAt,
+		ID:                        existing.ID,
+		Issuer:                    existing.Issuer,
+		ProjectID:                 existing.ProjectID,
+		OrganizationID:            existing.OrganizationID,
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "record issuer discovery failure", attr.SlogError(err))
+	}
+	if err == nil && rows == 0 {
+		logger.WarnContext(ctx, "issuer discovery failure record skipped after concurrent update")
+	}
+	return mapDiscoveryError(ctx, logger, discoveryErr, oops.CodeGatewayError)
+}

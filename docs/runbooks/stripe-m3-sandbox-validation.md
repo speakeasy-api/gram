@@ -10,11 +10,11 @@ logs. Use only synthetic values and placeholders such as `<ORG_ID>`.
 
 ## What the clocks control
 
-Stripe test clocks advance Stripe objects only. They do not advance Gram's
+Stripe test clocks advance Stripe objects only. They do not advance Speakeasy's
 Postgres clock, Temporal clock, worker schedules, or activity `Now` inputs.
 The sandbox portion below validates real Stripe subscription and invoice state.
-The deterministic Gram tests use explicit timestamps to validate the +48-hour
-and +72-hour state transitions without waiting three days.
+The deterministic Speakeasy tests use explicit timestamps to validate billing-period
+and invoice-allocation transitions without waiting for wall-clock time.
 
 Stripe advances a clock asynchronously. After every advance, poll until its
 status is `ready` before inspecting invoices or subscriptions. Test-clock
@@ -38,13 +38,36 @@ References:
    ./zero --agent
    ```
 
-3. Configure and validate the Stripe meter, metered price, and local webhook
-   signing secret:
+3. Configure Stripe once for this local worktree; no organization is required.
 
    ```sh
+   mise install stripe
    mise set --prompt --file mise.local.toml STRIPE_API_KEY
    mise run stripe:setup
    ```
+
+   Setup preflights the managed CLI, local target and
+   webhook authentication before catalog writes. Only test-mode credentials are
+   accepted. It reuses compatible metered prices/products by lookup key and
+   billing semantics, not mutable product display names. Conflicting product
+   metadata still requires manual resolution; setup does not overwrite it.
+
+   The same API key and signing secret are saved in ignored `mise.local.toml`
+   for provisioning, server and listener. An authenticated CLI key can be used
+   as a fallback, but **CLI keys expire (typically after 90 days)**. A passing
+   check today does not establish durable credentials. After expiry/rotation,
+   replace the saved key using
+   `mise set --prompt --file mise.local.toml STRIPE_API_KEY`, then rerun setup
+   and restart the server, worker and listener. CLI reauthentication alone is
+   insufficient: setup prefers the saved `STRIPE_API_KEY` over the CLI key.
+
+   Setup does not read or change organization billing flags, trial state or
+   eligibility. Before testing checkout, separately select a **synthetic local**
+   organization with eligible billing/trial state. Keep its identifiers only in
+   your shell/internal rollout record (`M3_ORG_ID` / `M3_ORG_SLUG`), not shared
+   logs.
+   These are checkout prerequisites, not setup requirements. Trial reset is
+   separate work (GRW-92) and is not part of this procedure.
 
 4. In the Stripe sandbox Dashboard, verify these account settings:
 
@@ -55,24 +78,103 @@ References:
    - Smart Retries uses 8 attempts within 2 weeks and cancels the subscription
      after the last failed attempt.
 
-5. Restart `server`, then forward sandbox webhooks to Gram in a separate
-   terminal. The setup task already saved the listener signing secret to
-   ignored `mise.local.toml`.
+5. Use the worktree-managed listener, not a separate terminal:
 
    ```sh
-   pitchfork restart server
-   if test "${STRIPE_API_KEY:-}" = unset; then unset STRIPE_API_KEY; fi
-   stripe listen --latest --skip-verify \
-     --forward-to "$GRAM_SERVER_URL/rpc/stripe.webhook"
+   mise run wake
+   pitchfork restart server worker
+   mise run stripe:listen
+   mise run stripe:status
+   # When finished:
+   mise run pause
    ```
 
-6. Create a synthetic Gram organization through the local dashboard. Record
-   its ID and slug only in your shell or the internal rollout record:
+   Setup saves billing configuration; `mise run stripe:listen` validates it,
+   registers the daemon in ignored `pitchfork.local.toml` using native Pitchfork,
+   and starts the supervisor and listener. Repeating `stripe:listen` overwrites
+   old registrations and restarts forwarding with fresh configuration. The
+   foreground task `stripe:_listen` is hidden and used only by Pitchfork.
+   Listen does not reload server/worker: restart them after saving billing config.
+   Setup alone does not register forwarding or remove an existing registration.
+   Native `pitchfork start --all-local` (including wake) starts registered
+   forwarding; pause stops it with the other worktree daemons. Setup/status
+   report missing credentials, server/listener readiness and
+   remediation without printing secrets. After key/config changes, restart the
+   relevant daemons with fresh mise configuration as directed by status.
+   Status deliberately reports the running server/worker configuration as
+   **unknown**: it does not inspect their credentials, and a health response
+   cannot prove they loaded newly saved settings. `configurationReady` and
+   `listenerReady` are not an end-to-end billing readiness claim. `--ready` is
+   the supervised listener's readiness check, not proof of billing side effects.
+
+   To opt out, stop the listener and remove its local registration:
 
    ```sh
-   export M3_ORG_ID='<ORG_ID>'
-   export M3_ORG_SLUG='<ORG_SLUG>'
+   pitchfork stop stripe-listener
+   pitchfork daemons remove stripe-listener --local
    ```
+
+   **Listener readiness is not verified webhook delivery.** A connected CLI
+   and matching signing secret do not prove that Speakeasy accepted and processed
+   an event. After the local mocked checks pass, separately validate a real
+   sandbox checkout and its resulting webhook, checking the expected local
+   billing transition and successful HTTP delivery. Do not interpret mere
+   listener startup (or a synthetic trigger alone) as end-to-end validation.
+
+### Local regression checks (no Stripe mutations)
+
+```sh
+mise run test:stripe
+```
+
+These mocked tests do not authenticate to Stripe, create checkout sessions,
+advance clocks, or change trial state. Real sandbox setup, wake/pause/restart,
+credential rotation/expiry, checkout and webhook processing remain manual
+validation steps; run them only when authorized.
+
+## Manual partner conversion and daily inference settlement
+
+Only a manually applied promotion satisfying the enabled signup-offer and
+gateway-scope checks can terminate an ordinary Checkout trial early. No code,
+unmapped codes, disabled offers, and unrelated discounts retain existing trial
+behavior. Use only isolated synthetic customers and test-mode credentials when
+validating this route; do not consume finite-use shared promotion codes.
+
+Stripe sandbox validation established these API contracts for
+`2026-03-25.dahlia`:
+
+- `trial_end=now` with `proration_behavior=none` activates the subscription and
+  resets the anchor to the current instant; identical idempotency-key replay is
+  safe.
+- Adding `billing_cycle_anchor=unchanged` is rejected when ending a trial.
+- `billing_cycle_anchor_config` is not accepted by subscription update.
+- The non-midnight time persists across renewals; it is not just a first stub.
+
+For this route only, verify the redeemed partner subscription's original monthly
+anchor against each invoice, including February/leap-year day clamping. Preserve
+all Stripe invoice timestamps and existing identity checks. Never round persisted
+invoice periods or relax the nonpartner midnight requirement.
+
+Inference allocation uses completed UTC days with an initial waiver: exclude the
+UTC day containing conversion, then assign each later boundary day to the next
+invoice. For a conversion on December 31 at 13:17 UTC, the first invoice allocates
+January 1–30 and the next allocates January 31–February 28 in a leap year. Native
+Stripe meter periods remain December 31 13:17–January 31 13:17 and January 31
+13:17–February 29 13:17 respectively. The day waiver concerns daily inference,
+not timestamped native-meter events.
+
+Check recovery/readiness/freeze selection as well as final charges; retries must
+not duplicate days, and cancellation must retain the original anchor for pending
+settlement. An externally changed anchor or unsupported interval must fail closed,
+not silently move historical costs to a new period.
+
+Focused deterministic production-seam regressions:
+
+```sh
+mise run test:server ./internal/usage -run 'TestManualPartner|TestPartnerInvoice' -count=1
+mise run test:server ./internal/background/activities -run TestPartnerDailyAllocations -count=1
+mise run test:server ./internal/thirdparty/stripe -run 'TestPartnerCheckoutWire|TestEndPartnerCheckoutTrial' -count=1
+```
 
 ## Create a clocked Stripe customer
 
@@ -87,7 +189,7 @@ M3_CLOCK_ID="$({
   curl --fail --silent --show-error https://api.stripe.com/v1/test_helpers/test_clocks \
     -u "$STRIPE_API_KEY:" \
     -d frozen_time="$M3_CLOCK_START" \
-    -d name='Gram M3 validation'
+    -d name='Speakeasy M3 validation'
 } | jq -r .id)"
 export M3_CLOCK_ID
 
@@ -179,42 +281,42 @@ curl --fail --silent --show-error \
 wait_for_m3_clock
 ```
 
-## Validate Gram's explicit-time billing transitions
+## Validate Speakeasy's explicit-time billing transitions
 
 Run the deterministic acceptance suites. They seed synthetic Postgres state,
 invoke the real activities and webhook handler with explicit timestamps, and
 use fake remote boundaries so CI never needs Stripe credentials.
 
 ```sh
-mise exec -- go test ./server/internal/usage \
+mise run test:server ./internal/usage \
   -run 'TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle|TestStripeCheckout' -count=1
 
-mise exec -- go test ./server/internal/background/activities \
-  -run 'TestM3FreezeObservationAndCarrySettlementLifecycle|TestReportTUMUsageToStripe' -count=1
+mise run test:server ./internal/background/activities \
+  -run 'TestSettleStripeInvoiceAllocations' -count=1
+
+mise run test:server ./internal/metering \
+  -run 'TestMeterReadingStripeExporter' -count=1
 ```
 
 Confirm the test output covers all of these checkpoints:
 
 - paid periods start at midnight UTC and exclude the free stub;
-- durable TUM intents use signed database-derived deltas and stable IDs;
-- the +48-hour TUM baseline freezes once, the closed-period event timestamp is
-  `cycle_end - 1 second`, and a post-freeze difference becomes one signed
-  carry-forward allocation after +72 hours;
+- streaming TUM readings retain their reading ID, value, and occurrence time
+  when exported to the configured Stripe meter;
 - only in-period Other inference spend is allocated; Security inference and
   pre-period spend are excluded;
 - exact decimal sums are converted to minor units once per cumulative period;
 - positive corrections become a later invoice item and negative corrections
   become a credit note, without duplicate delivery after replay;
-- ambiguous meter and allocation writes stay on the same idempotency identity
-  inside 24 hours and reconcile before a replacement identity is used.
+- ambiguous allocation writes stay on the same idempotency identity inside
+  24 hours and reconcile before a replacement identity is used.
 
 For the sandbox run, compare the same durable records to Stripe by exact object
 ID. Do not use unscoped list endpoints.
 
 ```sh
 psql "$GRAM_DATABASE_URL" -v org_id="$M3_ORG_ID" <<'SQL'
-SELECT cycle_start, cycle_end, tum_tokens, billed_tum_tokens,
-       billed_frozen_at, finalized_at
+SELECT cycle_start, cycle_end, tum_tokens, finalized_at
 FROM billing_cycle_usage
 WHERE organization_id = :'org_id'
 ORDER BY cycle_start;
@@ -224,28 +326,27 @@ SELECT source_kind, source_key, seq, source_snapshot_usd, amount_usd,
 FROM stripe_invoice_allocations
 WHERE organization_id = :'org_id'
 ORDER BY source_period_start, source_key, seq;
-
-SELECT stripe_identifier, delta_tokens, event_timestamp,
-       delivery_state, confirmed_at
-FROM stripe_meter_reports
-WHERE organization_id = :'org_id'
-ORDER BY event_timestamp, seq;
 SQL
 ```
 
-The sum of confirmed TUM deltas must equal the frozen billed baseline for the
-closed period. Initial OpenRouter allocation cents plus signed carry cents must
+TUM exports use Pub/Sub meter readings, not `stripe_meter_reports` or frozen
+billing-cycle baselines. Invoice allocation settlement handles OpenRouter spend.
+Initial OpenRouter allocation cents plus signed carry cents must
 equal the exact final cumulative Other inference spend cents. Every confirmed
-external ID
-must resolve to the same customer, subscription, invoice period, currency, and
-amount in Stripe.
+allocation external ID must resolve to the same customer, invoice period,
+currency, and amount in Stripe.
+
+Enable Stripe exports in `gram streams` with
+`GRAM_STRIPE_METER_EVENT_EXPORT_ENABLED=true` and configure
+`STRIPE_METER_EVENT_NAME` for TUM. This export switch controls all streaming
+meters; TUM has no separate streaming toggle.
 
 ## Validate subscription loss and recovery
 
 Cancel the current sandbox subscription. Wait for
 `customer.subscription.deleted`, then verify:
 
-- Gram is `free` and not admitted;
+- Speakeasy is `free` and not admitted;
 - the stored subscription ID and exact Stripe anchor are cleared, while the
   Stripe customer remains;
 - the Other inference key is disabled locally and upstream;
@@ -262,10 +363,10 @@ cause current-state reconciliation to re-enable the same Other inference key
 with a $100 monthly cap and restore the Security inference key to its most
 recent chosen cap, or $100 when no chosen cap exists.
 
-The voluntary cancellation proves Gram's terminal event behavior. Separately,
+The voluntary cancellation proves Speakeasy's terminal event behavior. Separately,
 confirm the sandbox Dashboard still has the required Smart Retries end action:
 8 attempts within 2 weeks, then cancel. Stripe owns the retry schedule and
-customer retry emails; Gram reacts only to the terminal deletion.
+customer retry emails; Speakeasy reacts only to the terminal deletion.
 
 ## Cleanup and mandatory repetition
 
@@ -277,10 +378,10 @@ curl --fail --silent --show-error -X DELETE \
   -u "$STRIPE_API_KEY:"
 ```
 
-Delete the synthetic Gram organization through the normal local administration
+Delete the synthetic Speakeasy organization through the normal local administration
 path. Do not reuse its billing rows for the second run.
 
-Repeat the complete runbook with a new clock, customer, and synthetic Gram
+Repeat the complete runbook with a new clock, customer, and synthetic Speakeasy
 organization. The second run must require no manual database repair and must
 produce the same invariants. File a discrepancy before expanding beyond the
 internal sandbox cohort.

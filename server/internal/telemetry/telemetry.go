@@ -11,11 +11,14 @@ import (
 type EventSource string
 
 const (
-	EventSourceToolCall       EventSource = "tool_call"
+	EventSourceToolCall EventSource = "tool_call"
+	// EventSourceMetaDiscovery marks gateway list_servers/describe_* calls; distinct so they never count as tool calls.
+	EventSourceMetaDiscovery  EventSource = "meta_discovery"
 	EventSourceChatCompletion EventSource = "chat_completion"
 	EventSourceEvaluation     EventSource = "evaluation"
 	EventSourceResourceRead   EventSource = "resource_read"
 	EventSourceHook           EventSource = "hook"
+	EventSourceHookDiagnostic EventSource = "hook_diagnostic"
 	EventSourceAPI            EventSource = "api"
 	EventSourceTrigger        EventSource = "trigger"
 	EventSourceAssistant      EventSource = "assistant"
@@ -41,7 +44,7 @@ type ToolInfo struct {
 }
 
 // UserInfo identifies the user a telemetry log row is attributed to. Callers
-// provide either a Gram user ID or an email address; the logger resolves the
+// provide either a Speakeasy user ID or an email address; the logger resolves the
 // other identity field and directory context during hydration.
 type UserInfo struct {
 	userID string

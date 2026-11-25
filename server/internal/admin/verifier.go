@@ -62,6 +62,11 @@ func (v *Verifier) Authorize(ctx context.Context, key string, scheme *security.A
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
+	if session.Expired(time.Now()) {
+		_ = v.sessions.Delete(ctx, session.SessionID)
+		return ctx, oops.C(oops.CodeUnauthorized).LogInfo(ctx, v.logger)
+	}
+
 	accessToken, err := v.sessions.DecryptAccessToken(session)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "decrypt admin session").LogError(ctx, v.logger)
@@ -141,7 +146,7 @@ func (v *Verifier) refreshSession(ctx context.Context, session Session) (Session
 }
 
 func (v *Verifier) refreshSessionLocked(ctx context.Context, session Session, lockKey, owner string) (Session, string, error) {
-	defer o11y.LogDefer(ctx, v.logger, func() error {
+	defer o11y.LogDefer(ctx, v.logger, "failed to release admin session refresh lock", func() error {
 		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminRefreshReleaseTimeout)
 		defer cancel()
 		return v.locks.ReleaseLease(releaseCtx, lockKey, owner)

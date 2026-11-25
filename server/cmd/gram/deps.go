@@ -3,22 +3,28 @@ package gram
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/pubsub/v2"
+	cloudstorage "cloud.google.com/go/storage"
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/exaring/otelpgx"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
@@ -46,14 +52,18 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/speakeasy-api/gram/infra/gen"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/storage"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -64,36 +74,72 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/lake"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/resend"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"golang.org/x/oauth2"
 
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 )
 
 func noopShutdown(context.Context) error { return nil }
 
 func newEmailService(ctx context.Context, c *cli.Context, logger *slog.Logger, guardianPolicy *guardian.Policy) (*email.Service, error) {
+	provider := c.String("email-provider")
+	switch provider {
+	case "", "loops":
+	case "resend":
+		enabled := loops.IsConfigured(c.String("resend-api-key"))
+		if !enabled && c.String("environment") != "local" {
+			return nil, fmt.Errorf("RESEND_API_KEY is required when email provider is resend outside local development")
+		}
+		from, replyTo := c.String("email-from"), c.String("email-reply-to")
+		if enabled && (from == "" || replyTo == "") {
+			return nil, fmt.Errorf("email-from and email-reply-to are required for Resend delivery")
+		}
+		if !enabled {
+			return email.NewResendService(logger, resend.NewNoop(), nil, from, replyTo, false), nil
+		}
+		sender := resend.New(guardianPolicy.PooledClient(), c.String("resend-api-key"))
+		contacts := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+		return email.NewResendService(logger, sender, contacts, from, replyTo, true), nil
+	default:
+		return nil, fmt.Errorf("unsupported email provider %q (expected loops or resend)", provider)
+	}
 	ids, err := email.ParseTemplateIDs(c.String("email-template-ids"))
 	if err != nil {
 		return nil, fmt.Errorf("load email template IDs: %w", err)
@@ -124,6 +170,10 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, redisClient redis.UniversalClient) (policy *guardian.Policy, err error) {
+	catalogOption, err := guardian.WithHostedMCPFrontEndCIDR(c.String("remote-mcp-catalog-ilb-cidr"))
+	if err != nil {
+		return nil, fmt.Errorf("configure remote MCP catalog: %w", err)
+	}
 	breaker := guardian.NewNoopBreaker(logger, meterProvider)
 	limiter := guardian.NewRedisRateLimiter(logger, meterProvider, redisClient)
 
@@ -157,50 +207,127 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 		}
 	}
 
+	catalogOption(policy)
 	return policy, nil
 }
 
+const (
+	// clickhousePoolMaxOpenConns bounds one ClickHouse pool. Ingest and
+	// dashboard reads run on separate pools, so each gets the whole budget
+	// the primary pool has always had rather than a share of one.
+	clickhousePoolMaxOpenConns = 32
+
+	// clickhousePoolMaxIdleConns keeps half the pool warm between bursts.
+	clickhousePoolMaxIdleConns = 16
+)
+
+type clickhouseClientOptions struct {
+	component    string
+	host         string
+	database     string
+	username     string
+	password     string
+	nativePort   string
+	insecure     bool
+	rootCAFile   string
+	maxOpenConns int
+	maxIdleConns int
+}
+
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
-	logger = logger.With(attr.SlogComponent("clickhouse"))
+	return openClickhouseClient(ctx, logger, clickhouseClientOptions{
+		component:    "clickhouse",
+		host:         c.String("clickhouse-host"),
+		database:     c.String("clickhouse-database"),
+		username:     c.String("clickhouse-username"),
+		password:     c.String("clickhouse-password"),
+		nativePort:   c.String("clickhouse-native-port"),
+		insecure:     c.Bool("clickhouse-insecure"),
+		maxOpenConns: clickhousePoolMaxOpenConns,
+		maxIdleConns: clickhousePoolMaxIdleConns,
+		rootCAFile:   "",
+	})
+}
+
+func newClickhouseReadClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
+	return openClickhouseClient(ctx, logger, clickhouseClientOptions{
+		component:    "clickhouse-reader",
+		host:         c.String("clickhouse-read-host"),
+		database:     c.String("clickhouse-read-database"),
+		username:     c.String("clickhouse-read-username"),
+		password:     c.String("clickhouse-read-password"),
+		nativePort:   c.String("clickhouse-read-native-port"),
+		rootCAFile:   c.Path("clickhouse-read-ca-file"),
+		maxOpenConns: clickhousePoolMaxOpenConns,
+		maxIdleConns: clickhousePoolMaxIdleConns,
+		insecure:     false,
+	})
+}
+
+func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickhouseClientOptions) (clickhouse.Conn, func(context.Context) error, error) {
+	logger = logger.With(attr.SlogComponent(opts.component))
 	nilFunc := noopShutdown
 
-	host := c.String("clickhouse-host")
-	database := c.String("clickhouse-database")
-	username := c.String("clickhouse-username")
-	password := c.String("clickhouse-password")
-	nativePort := c.String("clickhouse-native-port")
-	insecure := c.Bool("clickhouse-insecure")
-
-	// validate cli args
 	err := inv.Check("clickhouse config options",
-		"clickhouse host must be set", host != "",
-		"clickhouse database must be set", database != "",
-		"clickhouse username must be set", username != "",
-		"clickhouse password must be set", password != "",
-		"clickhouse native port must be set", nativePort != "",
+		"clickhouse host must be set", opts.host != "",
+		"clickhouse database must be set", opts.database != "",
+		"clickhouse username must be set", opts.username != "",
+		"clickhouse password must be set", opts.password != "",
+		"clickhouse native port must be set", opts.nativePort != "",
+		"clickhouse max open connections must be positive", opts.maxOpenConns > 0,
+		"clickhouse max idle connections must not be negative", opts.maxIdleConns >= 0,
+		"clickhouse max idle connections must not exceed max open connections", opts.maxIdleConns <= opts.maxOpenConns,
 	)
 	if err != nil {
 		return nil, nilFunc, fmt.Errorf("invalid clickhouse config: %w", err)
 	}
 
-	opts := &clickhouse.Options{
+	var rootCAs *x509.CertPool
+	if opts.rootCAFile != "" {
+		rootCAs, err = x509.SystemCertPool()
+		if err != nil {
+			return nil, nilFunc, fmt.Errorf("load system certificate pool: %w", err)
+		}
+		caPEM, err := os.ReadFile(opts.rootCAFile)
+		if err != nil {
+			return nil, nilFunc, fmt.Errorf("read clickhouse CA file: %w", err)
+		}
+		if ok := rootCAs.AppendCertsFromPEM(caPEM); !ok {
+			return nil, nilFunc, errors.New("clickhouse CA file contains no certificates")
+		}
+	}
+
+	driverOpts := &clickhouse.Options{
 		Protocol: clickhouse.Native,
-		Addr:     []string{fmt.Sprintf("%s:%s", host, nativePort)},
+		Addr:     []string{fmt.Sprintf("%s:%s", opts.host, opts.nativePort)},
 		Auth: clickhouse.Auth{
-			Database: database,
-			Username: username,
-			Password: password,
+			Database: opts.database,
+			Username: opts.username,
+			Password: opts.password,
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
+			// Async inserts that leave the wait to the connection are
+			// fire-and-forget: they ack once queued rather than once
+			// committed. Tests set 1 on their connection to read their own
+			// writes. ClickHouse defaults async_insert to 1 since 26.2, so an
+			// insert that sends no async settings is fire-and-forget here too:
+			// every insert must state its posture (async_insert=0, or
+			// async_insert=1 with an explicit wait_for_async_insert=1 when it
+			// must read its own writes).
+			"wait_for_async_insert": 0,
 		},
+		MaxOpenConns: opts.maxOpenConns,
+		MaxIdleConns: opts.maxIdleConns,
+		DialTimeout:  10 * time.Second,
 		TLS: &tls.Config{
-			// #nosec G402 -- we're reading the value from an environment variable.
-			InsecureSkipVerify: insecure,
+			RootCAs: rootCAs,
+			// #nosec G402 -- only the existing writer flag can enable this.
+			InsecureSkipVerify: opts.insecure,
 		},
 	}
 
-	conn, err := clickhouse.Open(opts)
+	conn, err := clickhouse.Open(driverOpts)
 	if err != nil {
 		return nil, nilFunc, fmt.Errorf("failed to open clickhouse connection: %w", err)
 	}
@@ -237,6 +364,11 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 	}
 
 	if pingErr != nil {
+		closeErr := conn.Close()
+		if closeErr != nil {
+			logger.ErrorContext(ctx, "failed to close clickhouse client after ping failure", attr.SlogError(closeErr))
+			pingErr = errors.Join(pingErr, fmt.Errorf("close clickhouse client connection: %w", closeErr))
+		}
 		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
 	}
 
@@ -312,7 +444,7 @@ func newAssetStorage(ctx context.Context, logger *slog.Logger, opts assetStorage
 	switch opts.assetsBackend {
 	case "fs":
 		assetsURI := filepath.Clean(opts.assetsURI)
-		if err := os.MkdirAll(assetsURI, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
+		if err := os.MkdirAll(assetsURI, 0o750); err != nil && !errors.Is(err, fs.ErrExist) {
 			return nil, shutdown, fmt.Errorf("create assets directory: %w", err)
 		}
 
@@ -346,7 +478,7 @@ type redisClientOptions struct {
 
 func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
 	db := 0
-	redisClient := redis.NewClient(&redis.Options{
+	redisClient, err := redisswitch.NewClient(ctx, slog.Default(), &redis.Options{
 		Addr:            opts.redisAddr,
 		Password:        opts.redisPassword,
 		DB:              db,
@@ -354,7 +486,10 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 		ReadTimeout:     300 * time.Millisecond,
 		WriteTimeout:    1 * time.Second,
 		DisableIdentity: true,
-	})
+	}, redisswitch.DefaultRole, redisswitch.NextFromEnv())
+	if err != nil {
+		return nil, fmt.Errorf("create redis client: %w", err)
+	}
 
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("redis connection failed: %w", err)
@@ -382,7 +517,7 @@ type temporalClientOptions struct {
 }
 
 func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
-	var nilShutdownFunc = noopShutdown
+	nilShutdownFunc := noopShutdown
 	if opts.address == "" || opts.namespace == "" {
 		return nil, nilShutdownFunc, nil
 	}
@@ -408,6 +543,7 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 
 	tracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{
 		TextMapPropagator: otel.GetTextMapPropagator(),
+		SpanStarter:       temporal.StartTracingSpan,
 	})
 	if err != nil {
 		return nil, nilShutdownFunc, fmt.Errorf("failed to create temporal tracing interceptor: %w", err)
@@ -433,8 +569,24 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	}, nil
 }
 
+// newFeatureFlags returns PostHog, or the CSV-backed in-memory provider in local dev.
+func newFeatureFlags(ctx context.Context, c *cli.Context, logger *slog.Logger, posthogClient feature.Provider) feature.Provider {
+	if c.String("environment") == "local" {
+		return newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+	}
+	return posthogClient
+}
+
 func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath string) *feature.InMemory {
 	inmem := &feature.InMemory{}
+	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
+	// Pub/Sub lanes to pystreams. A CSV row can still turn this off.
+	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
+	// The issuer kill switch fails closed when unset, so local dev sets it off.
+	inmem.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, feature.AnyDistinctID, false)
+	// The dashboard shows every flag on in local dev, so the server lets local
+	// orgs create tool approval policies too. A CSV row can still turn it off.
+	inmem.SetFlag(feature.FlagToolApprovals, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -458,7 +610,7 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 		logger.ErrorContext(ctx, "newLocalFeatureFlags: error opening local feature flags csv file", attr.SlogError(err), attr.SlogFilePath(csvPath))
 		return inmem
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return file.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close local feature flags csv file", func() error { return file.Close() })
 
 	rdr := csv.NewReader(file)
 	rdr.FieldsPerRecord = -1
@@ -506,6 +658,7 @@ func newBillingProvider(
 	redisClient *redis.Client,
 	posthogClient *posthog.Posthog,
 	stripeClient stripeclient.Client,
+	db *pgxpool.Pool,
 	c *cli.Context,
 ) (billing.Repository, billing.Tracker, error) {
 	switch {
@@ -545,6 +698,9 @@ func newBillingProvider(
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
 		stub := billing.NewStubClient(logger, tracerProvider)
+		if db != nil {
+			stub = billing.NewStubClientWithLocalProfiles(logger, tracerProvider, db)
+		}
 		return stub, stub, nil
 	case stripeClient != nil:
 		logger.InfoContext(ctx, "using Stripe billing provider with legacy billing operations disabled")
@@ -555,13 +711,26 @@ func newBillingProvider(
 	}
 }
 
+var stripePublishableKeyPattern = regexp.MustCompile(`^pk_(test|live)_[A-Za-z0-9]+$`)
+
 func newStripeClient(
 	ctx context.Context,
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.Client, error) {
+	publishableKey := c.String("stripe-publishable-key")
+	if stripeclient.IsConfigured(publishableKey) && !stripePublishableKeyPattern.MatchString(publishableKey) {
+		return nil, errors.New("invalid Stripe publishable key format")
+	}
 	apiKey := c.String("stripe-api-key")
+	apiKeyParts := strings.SplitN(apiKey, "_", 3)
+	if stripeclient.IsConfigured(publishableKey) && len(apiKeyParts) == 3 &&
+		(apiKeyParts[0] == "sk" || apiKeyParts[0] == "rk") &&
+		(apiKeyParts[1] == "test" || apiKeyParts[1] == "live") &&
+		!strings.HasPrefix(publishableKey, "pk_"+apiKeyParts[1]+"_") {
+		return nil, errors.New("mismatched Stripe API and publishable key modes")
+	}
 	if !stripeclient.IsConfigured(apiKey) {
 		if c.String("environment") == "local" {
 			logger.WarnContext(ctx, "using stub Stripe client: Stripe not configured")
@@ -574,8 +743,8 @@ func newStripeClient(
 
 	catalog := stripeclient.Catalog{
 		PriceIDTUM:            c.String("stripe-price-id-tum"),
-		MeterIDTUM:            c.String("stripe-meter-id-tum"),
-		MeterEventName:        c.String("stripe-meter-event-name"),
+		PriceIDMCPEgress:      c.String("stripe-price-id-mcp-egress"),
+		PriceIDRiskScans:      c.String("stripe-price-id-risk-scans"),
 		PortalConfigurationID: c.String("stripe-portal-configuration-id"),
 	}
 	if err := catalog.Validate(); err != nil {
@@ -586,46 +755,154 @@ func newStripeClient(
 		guardianPolicy,
 		apiKey,
 		c.String("stripe-webhook-secret"),
+		publishableKey,
 		catalog,
 	), nil
+}
+
+func newStripeMeterEventClient(
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
+	c *cli.Context,
+) (stripeclient.V2MeterEventClient, error) {
+	if !c.Bool(stripeMeterEventExportFlagName) {
+		return stripeclient.NewNoopV2MeterEventClient(), nil
+	}
+
+	apiKey := c.String("stripe-api-key")
+	switch {
+	case stripeclient.IsConfigured(apiKey):
+		return stripeclient.NewV2MeterEventClient(logger, guardianPolicy, apiKey), nil
+	case c.String("environment") == "local":
+		return stripeclient.NewNoopV2MeterEventClient(), nil
+	default:
+		return nil, errors.New("stripe API key is required")
+	}
+}
+
+func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
+	tumMeterEventName := c.String("stripe-meter-event-name")
+	meterExportEnabled := c.Bool(stripeMeterEventExportFlagName)
+	return metering.StripeCatalogFunc(func(definition metering.Definition) (string, error) {
+		switch definition {
+		case metering.AgentSessionStorage():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			if !stripeclient.IsConfigured(tumMeterEventName) {
+				return "", errors.New("stripe TUM meter event name is not configured")
+			}
+			return tumMeterEventName, nil
+		case metering.MCPBandwidthIngress():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-mcp-bandwidth-ingress"), nil
+		case metering.MCPBandwidthEgress():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-mcp-bandwidth-egress"), nil
+		case metering.RiskGitleaks():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-gitleaks")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPresidio():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-presidio")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPromptInjection():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-prompt-injection")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPromptPolicy():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-prompt-policy")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskCustomRules():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-custom-rules")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskCLIDestructive():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-cli-destructive")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskLLMAnalyzer():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-llm-analyzer")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		default:
+			return "", errors.New("meter definition is not mapped to Stripe")
+		}
+	})
 }
 
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
 // call site below. Pulls the optional --workos-endpoint override (env:
 // WORKOS_API_URL) so local dev can point both real-WorkOS callers at
-// the dev-idp's mock-workos emulator without changing any wiring.
+// the dev-idp's WorkOS emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
-		Endpoint: c.String("workos-endpoint"),
-		ClientID: c.String("idp-client-id"),
+		Endpoint:    c.String("workos-endpoint"),
+		ClientID:    c.String("idp-client-id"),
+		RetryConfig: nil,
 	}
 }
 
 func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
-	apiKey := c.String("idp-client-secret")
+	idpClientSecret := c.String("idp-client-secret")
 
-	// Local dev: when a real GRAM_IDP_CLIENT_SECRET is configured (GRAM_IDP_MODE=workos),
-	// use it so the access role provider proxies through dev-idp to real WorkOS.
-	// Otherwise fall back to the mock-workos emulator or a stub.
+	// Local callers authenticate to dev-idp with its client secret; dev-idp owns
+	// any upstream WorkOS API key needed by the selected backend.
 	if c.String("environment") == "local" {
-		haveRealKey := apiKey != "" && apiKey != "unset"
 		opts := workosClientOpts(c)
 
-		if haveRealKey {
-			logger.InfoContext(ctx, "using real WorkOS API key as access role provider")
-			return workos.NewClient(guardianPolicy, apiKey, opts), nil
-		}
-		if opts.Endpoint != "" {
-			logger.InfoContext(ctx, "using dev-idp mock-workos as access role provider")
-			return workos.NewClient(guardianPolicy, "dev-idp-mock", opts), nil
+		if opts.Endpoint != "" && idpClientSecret != "" && idpClientSecret != "unset" {
+			logger.InfoContext(ctx, "using dev-idp WorkOS emulator as access role provider")
+			return workos.NewClient(guardianPolicy, idpClientSecret, opts), nil
 		}
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
 		return workos.NewStubClient(), nil
 	}
 
 	switch {
-	case apiKey != "" && apiKey != "unset":
-		return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), nil
+	case idpClientSecret != "" && idpClientSecret != "unset":
+		return workos.NewClient(guardianPolicy, idpClientSecret, workosClientOpts(c)), nil
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}
@@ -640,12 +917,16 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 // server down over it would take login, the organizations list, the detail page
 // and every update endpoint with it. The condition is logged at Error on
 // startup, which is what makes it visible before an operator goes looking.
-func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSOrganizationCreator {
+func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSVerifiedDomainCreator {
 	apiKey := c.String("workos-api-key")
 	haveRealKey := apiKey != "" && apiKey != "unset"
 	opts := workosClientOpts(c)
+	idpClientSecret := c.String("idp-client-secret")
 
 	switch {
+	case c.String("environment") == "local" && opts.Endpoint != "" && idpClientSecret != "" && idpClientSecret != "unset":
+		logger.InfoContext(ctx, "using dev-idp to create organizations")
+		return workos.NewClient(guardianPolicy, idpClientSecret, opts)
 	case haveRealKey:
 		logger.InfoContext(ctx, "using real WorkOS API key to create organizations")
 		return workos.NewClient(guardianPolicy, apiKey, opts)
@@ -653,8 +934,8 @@ func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger,
 		logger.ErrorContext(ctx, "organization creation is unavailable: no WorkOS API key configured")
 		return orgprovision.Unavailable{}
 	case opts.Endpoint != "":
-		logger.InfoContext(ctx, "using dev-idp mock-workos to create organizations")
-		return workos.NewClient(guardianPolicy, "dev-idp-mock", opts)
+		logger.ErrorContext(ctx, "organization creation is unavailable: no dev-idp client secret configured")
+		return orgprovision.Unavailable{}
 	default:
 		logger.WarnContext(ctx, "organization creation is unavailable: WorkOS not configured")
 		return orgprovision.Unavailable{}
@@ -675,6 +956,7 @@ func newAdminOpenRouter(
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	c *cli.Context,
+	staffOrg staff.Organization,
 ) admin.AdminOpenRouter {
 	env := c.String("environment")
 	if env == "local" {
@@ -699,32 +981,39 @@ func newAdminOpenRouter(
 		guardianPolicy,
 		db,
 		env,
+		PullPartition(ctx),
 		provisioningKey,
-		nil,
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
 		encryptionClient,
+		staffOrg,
 	)
 }
 
 func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
 	env := c.String("environment")
-	apiKey := c.String("idp-client-secret")
+	credential := c.String("idp-client-secret")
 
-	haveAPIKey := apiKey != "" && apiKey != "unset"
-	if env != "local" && !haveAPIKey {
+	haveCredential := credential != "" && credential != "unset"
+	if env != "local" && !haveCredential {
 		return nil, false, errors.New("WorkOS API key not provided")
 	}
 
-	return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), haveAPIKey, nil
+	available := haveCredential
+	if env == "local" {
+		available = c.String("devidp-backend") == "workos"
+	}
+	return workos.NewClient(guardianPolicy, credential, workosClientOpts(c)), available, nil
 }
 
 // newIDPUserManagementClient creates a WorkOS user-management SDK client
-// scoped to the IDP application key. Returns nil only when the key is empty.
-// In mock-workos mode the key can be any non-empty string (e.g. "unset") —
-// the mock endpoint accepts it.
+// scoped to the IDP application key. Returns nil when the key is unset, which
+// is both an empty value and the "unset" sentinel mise defaults it to — a
+// checkout that never configured a key would otherwise look configured.
+// Under the local backend any other non-empty string works, because the
+// dev-idp endpoint accepts whatever key it is handed.
 func newIDPUserManagementClient(guardianPolicy *guardian.Policy, apiKey string, c *cli.Context) *usermanagement.Client {
-	if apiKey == "" {
+	if apiKey == "" || apiKey == "unset" {
 		return nil
 	}
 
@@ -751,7 +1040,10 @@ func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*
 	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
-	case "local":
+	case functions.ProviderDisabled:
+		warnIgnoredFunctionsFlags(ctx, c, logger, "functions-tigris-bucket-uri", "functions-tigris-key", "functions-tigris-secret")
+		return nil, nilShutdown, nil
+	case functions.ProviderLocal:
 		tmpDir, err := os.MkdirTemp("", "gram-tigris-")
 		if err != nil {
 			return nil, nilShutdown, fmt.Errorf("create temp dir for mock tigris store: %w", err)
@@ -775,7 +1067,7 @@ func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*
 		store := assets.NewFSBlobStore(logger, root)
 
 		return assets.NewTigrisStore(store), shutdown, nil
-	case "flyio":
+	case functions.ProviderFlyIO:
 		tigrisBucketURI := c.String("functions-tigris-bucket-uri")
 		tigrisKey := c.String("functions-tigris-key")
 		tigrisSecret := c.String("functions-tigris-secret")
@@ -814,18 +1106,21 @@ func newFunctionOrchestrator(
 	db *pgxpool.Pool,
 	assetStore assets.BlobStore,
 	tigrisStore *assets.TigrisStore,
-	enc *encryption.Client,
+	runnerKeys *runnerkeys.Keys,
 ) (functions.Orchestrator, func(context.Context) error, error) {
 	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
-	case "local":
+	case functions.ProviderDisabled:
+		warnIgnoredFunctionsFlags(c.Context, c, logger, "functions-flyio-api-token", "functions-flyio-org")
+		return functions.Disabled{}, nilShutdown, nil
+	case functions.ProviderLocal:
 		codeRootDir := filepath.Clean(c.String("functions-local-runner-root"))
 		if codeRootDir == "" {
 			return nil, nilShutdown, fmt.Errorf("--functions-local-runner-root must be set in local environment")
 		}
 
-		if err := os.MkdirAll(codeRootDir, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
+		if err := os.MkdirAll(codeRootDir, 0o750); err != nil && !errors.Is(err, fs.ErrExist) {
 			return nil, nilShutdown, fmt.Errorf("create local functions root directory: %w", err)
 		}
 
@@ -836,7 +1131,7 @@ func newFunctionOrchestrator(
 		}
 
 		return functions.NewLocalRunner(logger, tracerProvider, codeRootDir, serverURL, assetStore), nilShutdown, nil
-	case "flyio":
+	case functions.ProviderFlyIO:
 		surl := c.String("server-url")
 		tokenstr := c.String("functions-flyio-api-token")
 		ociImage := c.String("functions-runner-oci-image")
@@ -874,7 +1169,7 @@ func newFunctionOrchestrator(
 			assetStore,
 			tigrisStore,
 			imgSelector,
-			enc,
+			runnerKeys,
 			functions.FlyRunnerOptions{
 				ServiceName:        "gram",
 				ServiceVersion:     GitSHA,
@@ -888,23 +1183,6 @@ func newFunctionOrchestrator(
 	default:
 		return nil, nilShutdown, fmt.Errorf("unrecognized functions provider: %s", provider)
 	}
-}
-
-type mcpRegistryClientOptions struct {
-	pulseTenantID string
-	pulseAPIKey   conv.Secret
-	cacheImpl     cache.Cache
-}
-
-func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
-	pulseURL, err := url.Parse("https://api.pulsemcp.com")
-	if err != nil {
-		return nil, fmt.Errorf("parse pulse registry url: %w", err)
-	}
-
-	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
-
-	return externalmcp.NewRegistryClient(logger, tracerProvider, guardianPolicy, backend, opts.cacheImpl), nil
 }
 
 func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat productfeatures.Feature) telemetry.FeatureChecker {
@@ -956,7 +1234,10 @@ func newTriggersApp(
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
 	siteURL *url.URL,
+	platformHosts map[string]string,
 	slackClient *slack_client.SlackClient,
+	cacheImpl cache.Cache,
+	identities *assistantidentity.Service,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
 	return bgtriggers.NewApp(
@@ -988,9 +1269,22 @@ func newTriggersApp(
 		auditLogger,
 		serverURL,
 		siteURL,
+		platformHosts,
 		slackClient,
+		cacheImpl,
+		identities,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
+}
+
+// newAssistantIdentities binds assistant trigger workloads to the deployment's
+// Speakeasy signing issuer, the same origin mcpauthz.New takes.
+func newAssistantIdentities(c *cli.Context, auditLogger *audit.Logger) *assistantidentity.Service {
+	issuerURL := c.String("authz-issuer-url")
+	inv.Require("assistant identity issuer",
+		"authz-issuer-url is a Speakeasy issuer origin", mcpauthz.ValidateIssuerOrigin(issuerURL, c.String("environment") == "local"),
+	)
+	return assistantidentity.New(issuerURL, auditLogger)
 }
 
 func newAuditLogger() *audit.Logger {
@@ -1086,6 +1380,46 @@ func newSvixClient(c *cli.Context, logger *slog.Logger, guardianPolicy *guardian
 type pubSubBroker interface {
 	gcp.PublisherBroker
 	gcp.SubscriberBroker
+	storage.Broker
+}
+
+func newLakeStorage(ctx context.Context, logger *slog.Logger, c *cli.Context) (storage.Store, map[string]string, func(context.Context) error, error) {
+	buckets, err := storage.ParseBucketMapping(c.String("storage-buckets"))
+	if err != nil {
+		return nil, nil, noopShutdown, fmt.Errorf("parse storage bucket mapping: %w", err)
+	}
+
+	if c.String("environment") == "local" {
+		if buckets["lake"] == "" {
+			buckets["lake"] = "lake"
+		}
+
+		store, err := lake.NewFilesystemStore(ctx, logger, c.String("lake-directory"))
+		if err != nil {
+			return nil, nil, noopShutdown, fmt.Errorf("create filesystem lake: %w", err)
+		}
+
+		return store, buckets, func(context.Context) error { return store.Close() }, nil
+	}
+
+	// Preview environments emulate Pub/Sub and map no lake bucket. They have no
+	// persistent disk either, so the lake is disabled rather than faked: a nil
+	// store tells the caller not to start the lake consumer.
+	if buckets["lake"] == "" && c.String("pubsub-emulator-host") != "" {
+		logger.WarnContext(ctx, "lake disabled: Pub/Sub is emulated and no lake bucket is mapped")
+		return nil, buckets, noopShutdown, nil
+	}
+
+	if buckets["lake"] == "" {
+		return nil, nil, noopShutdown, errors.New("storage bucket mapping for lake is required")
+	}
+
+	client, err := cloudstorage.NewClient(ctx)
+	if err != nil {
+		return nil, nil, noopShutdown, fmt.Errorf("create lake GCS client: %w", err)
+	}
+
+	return &storage.GCSStore{Client: client}, buckets, func(context.Context) error { return client.Close() }, nil
 }
 
 func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (*pubsub.Client, pubSubBroker, func(ctx context.Context) error, error) {
@@ -1174,15 +1508,33 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "customRulesAnalysis", pub: customRulesAnalysis})
 
+	llmAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.LLMAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for llm analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "llmAnalysis", pub: llmAnalysis})
+
+	toolCallAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.ToolCallAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for tool call analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "toolCallAnalysis", pub: toolCallAnalysis})
+
+	accountIdentityAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.AccountIdentityAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for account identity analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "accountIdentityAnalysis", pub: accountIdentityAnalysis})
+
 	riskFindings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
 	}
 	pubs = append(pubs, labelledStop{label: "riskFindings", pub: riskFindings})
 
-	// The telemetry shadow dual-write is best-effort and must stay bounded
-	// during a Pub/Sub outage: cap how long a publish may take and fail fast
-	// at enqueue once the buffer fills, instead of buffering unboundedly.
+	// Request-path telemetry and meter publishing must stay bounded during a
+	// Pub/Sub outage: cap how long a publish may take and fail fast at enqueue
+	// once the buffer fills instead of buffering unboundedly.
 	telemetryPublishSettings := pubsub.DefaultPublishSettings
 	telemetryPublishSettings.Timeout = 10 * time.Second
 	telemetryPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
@@ -1196,6 +1548,14 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for telemetry logs: %w", err)
 	}
 	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
+
+	meterReadings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
+		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for meter readings: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "meterReadings", pub: meterReadings})
 
 	// OTLP ingest publishes on the request path and waits for the result before
 	// answering the exporter. Bound buffering so Pub/Sub stalls reject exports
@@ -1269,7 +1629,11 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptInjectionAnalysis: promptInjectionAnalysis,
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
+		LLMAnalysis:             llmAnalysis,
+		ToolCallAnalysis:        toolCallAnalysis,
+		AccountIdentityAnalysis: accountIdentityAnalysis,
 		RiskFindings:            riskFindings,
+		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,
 		OTELLogs:                otelLogs,
 		OTELMetrics:             otelMetrics,
@@ -1281,7 +1645,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 // cloud account authenticate through.
 //
 // Local development gets a stub. The real resolver screens every customer
-// supplied service account against Gram's own project, which requires Gram to be
+// supplied service account against Speakeasy's own project, which requires Speakeasy to be
 // running as a user managed service account. A developer machine authenticates
 // with a personal Google login instead, so the screening cannot be evaluated and
 // every credential and key write fails closed. Stubbing the resolver is what
@@ -1310,7 +1674,7 @@ const defaultLocalSigningAlgorithm = jose.RS256
 //
 // The algorithm it signs with is configurable, and deliberately independent of
 // what any key records. Reporting back whatever the caller expected would make
-// the stand-in agree with Gram by construction, and agreeing by construction is
+// the stand-in agree with Speakeasy by construction, and agreeing by construction is
 // precisely what the verify probe exists to disprove: comparing the key's real
 // algorithm against the recorded one is the check that catches a key pointed at
 // the wrong row. Keeping the two independent is what leaves the mismatch outcome
@@ -1320,22 +1684,455 @@ func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		return gcpkms.NewSigningClient, nil
 	}
 
-	alg := defaultLocalSigningAlgorithm
-	if configured := strings.TrimSpace(c.String("local-kms-signing-algorithm")); configured != "" {
-		parsed, err := gcpkms.ParseSignatureAlgorithm(configured)
-		if err != nil {
-			return nil, fmt.Errorf("parse local kms signing algorithm: %w", err)
-		}
-		alg = parsed
+	alg, err := localKMSSigningAlgorithm(c)
+	if err != nil {
+		return nil, err
 	}
 
 	logger.WarnContext(ctx, fmt.Sprintf("using in-process kms signing client signing %s: local development has no cloud kms to reach", alg))
 
+	client, err := newPersistentLocalKMSClient(alg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Close is a no-op for the local client, so every caller can retain the
+	// production ownership contract while server and worker reuse one key.
 	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.SigningClient, error) {
-		client, err := gcpkms.NewLocalSigningClient(alg)
-		if err != nil {
-			return nil, fmt.Errorf("build local signing client: %w", err)
-		}
 		return client, nil
 	}, nil
+}
+
+// localKMSSigningAlgorithm is the algorithm the local KMS stand-in is configured to sign with.
+func localKMSSigningAlgorithm(c *cli.Context) (jose.SignatureAlgorithm, error) {
+	configured := strings.TrimSpace(c.String("local-kms-signing-algorithm"))
+	if configured == "" {
+		return defaultLocalSigningAlgorithm, nil
+	}
+	parsed, err := gcpkms.ParseSignatureAlgorithm(configured)
+	if err != nil {
+		return "", fmt.Errorf("parse local kms signing algorithm: %w", err)
+	}
+	return parsed, nil
+}
+
+// newPersistentLocalKMSClient loads or mints the in-process signing key every local KMS stand-in shares.
+func newPersistentLocalKMSClient(alg jose.SignatureAlgorithm) (*gcpkms.LocalSigningClient, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve local kms signing key directory: %w", err)
+	}
+	keyName := strings.ToLower(string(alg)) + ".pem"
+	keyPath := filepath.Join(configDir, "gram", "local-kms", keyName)
+	if _, err := os.Stat(keyPath); errors.Is(err, fs.ErrNotExist) {
+		cacheDir, err := os.UserCacheDir()
+		if err != nil {
+			return nil, fmt.Errorf("resolve previous local kms signing key cache: %w", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+			return nil, fmt.Errorf("create local kms signing key directory: %w", err)
+		}
+		legacyPath := filepath.Join(cacheDir, "gram", "local-kms", keyName)
+		if err := preserveLegacyLocalSigningKey(legacyPath, keyPath); err != nil {
+			return nil, fmt.Errorf("preserve previous local kms signing key: %w", err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("inspect local kms signing key: %w", err)
+	}
+	client, err := gcpkms.NewPersistentLocalSigningClient(
+		alg,
+		keyPath,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load local kms signing key: %w", err)
+	}
+
+	return client, nil
+}
+
+// newIdentityProviderConnectionsProvisioner builds the provisioner, or nil when
+// no signing credential is configured. Locally it provisions through the same
+// in-process client kmsSigningClients hands the assertion signer, so a revoked
+// key version is refused by both and the signing algorithm agrees; managed keys
+// are RS256, so any other configured local algorithm leaves the feature off.
+func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsSigningClients gcpkms.SigningClientFactory, auditLogger *audit.Logger, clientSecrets *clientsecrets.Secrets, serverURL *url.URL) (*identityproviderconnections.Provisioner, error) {
+	rawCredentialID := strings.TrimSpace(c.String(identityProviderSigningCredentialIDFlag))
+	if rawCredentialID == "" {
+		logger.WarnContext(ctx, "identity provider connections are unavailable: no signing credential configured")
+		return nil, nil
+	}
+	credentialID, err := uuid.Parse(rawCredentialID)
+	if err != nil {
+		return nil, fmt.Errorf("parse identity provider signing credential id: %w", err)
+	}
+
+	keyRing := strings.TrimSpace(c.String(identityProviderKMSKeyRingFlag))
+	local := c.String("environment") == "local"
+	if keyRing == "" {
+		if !local {
+			return nil, errors.New("identity provider kms key ring is required when a signing credential is configured")
+		}
+		keyRing = identityProviderKMSKeyRingLocalDefault
+	}
+
+	kmsClients := gcpkms.NewProvisioningClient
+	if local {
+		alg, err := localKMSSigningAlgorithm(c)
+		if err != nil {
+			return nil, err
+		}
+		if alg != identityproviderconnections.ManagedKeyAlgorithm {
+			logger.WarnContext(ctx, fmt.Sprintf("identity provider connections are unavailable: local kms signs %s but managed keys are %s", alg, identityproviderconnections.ManagedKeyAlgorithm))
+			return nil, nil
+		}
+		shared, err := kmsSigningClients(ctx, nil)
+		if err != nil {
+			return nil, fmt.Errorf("load local kms signing client: %w", err)
+		}
+		client, ok := shared.(gcpkms.ProvisioningClient)
+		if !ok {
+			return nil, fmt.Errorf("local kms signing client %T cannot provision keys", shared)
+		}
+		kmsClients = func(_ context.Context, _ oauth2.TokenSource) (gcpkms.ProvisioningClient, error) {
+			return client, nil
+		}
+	}
+
+	provisioner, err := identityproviderconnections.NewProvisioner(logger, db, gcpIdentity, kmsClients, auditLogger, clientSecrets, identityproviderconnections.Config{
+		KeyRing:               keyRing,
+		SigningCredentialID:   credentialID,
+		SigningServiceAccount: strings.TrimSpace(c.String(identityProviderSigningServiceAccount)),
+		ServerURL:             serverURL,
+		AllowLoopbackIssuer:   c.String("environment") == "local",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build identity provider connections provisioner: %w", err)
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	if err := provisioner.ProbeSigningCredential(probeCtx); err != nil {
+		logger.WarnContext(ctx, "identity provider connections signing credential is unusable; creates will fail until it is fixed", attr.SlogError(err))
+	}
+	return provisioner, nil
+}
+
+// preserveLegacyLocalSigningKey publishes a private copy without replacing a
+// key another process has already installed. The source and destination may
+// reside on different filesystems.
+func preserveLegacyLocalSigningKey(sourcePath, targetPath string) error {
+	source, err := os.Open(sourcePath) //nolint:gosec // the path is derived from the local user's cache directory.
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("open cached local kms signing key: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return source.Close() })
+
+	info, err := source.Stat()
+	if err != nil {
+		return fmt.Errorf("inspect cached local kms signing key: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return errors.New("cached local kms signing key must be a regular file accessible only to its owner")
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(targetPath), ".local-kms-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create local kms signing key temporary file: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return os.Remove(tmp.Name()) })
+	if err := tmp.Chmod(0o600); err != nil {
+		return errors.Join(fmt.Errorf("secure local kms signing key temporary file: %w", err), tmp.Close())
+	}
+	if _, err := io.Copy(tmp, source); err != nil {
+		return errors.Join(fmt.Errorf("copy cached local kms signing key: %w", err), tmp.Close())
+	}
+	if err := tmp.Sync(); err != nil {
+		return errors.Join(fmt.Errorf("sync local kms signing key temporary file: %w", err), tmp.Close())
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close local kms signing key temporary file: %w", err)
+	}
+	if err := os.Link(tmp.Name(), targetPath); err != nil && !errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("publish cached local kms signing key: %w", err)
+	}
+	return nil
+}
+
+// newGrowthSignalsEmitter builds the emitter that reports notable moments to
+// PostHog.
+//
+// It enriches against the read replica. The lookups are display names for an
+// ops notification, not authority for anything, and a miss degrades the event
+// by omitting a property rather than dropping it — so replication lag costs at
+// most a missing slug on a very fresh row, which is not worth the primary's
+// capacity.
+func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog, replicaDB *pgxpool.Pool, siteURL *url.URL) *growthsignals.Emitter {
+	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
+}
+
+// newInternalSessionIssuerGate reports what each organization may do with its
+// issuer, honoring the startup kill switch.
+func newInternalSessionIssuerGate(c *cli.Context, db *pgxpool.Pool, featureFlags feature.Provider, provisioning bool) *internalsessionissuers.Gate {
+	return internalsessionissuers.NewGate(db, featureFlags, internalsessionissuers.GateConfig{
+		Provisioning:  provisioning,
+		SigningPaused: c.Bool(internalSessionIssuerSigningPausedFlag),
+	})
+}
+
+// internalSessionIssuerManager keeps a nil provisioner a nil interface.
+func internalSessionIssuerManager(provisioner *identityproviderconnections.Provisioner) internalsessionissuers.Manager {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
+}
+
+// enableIssuerKeyAutoActivation lets the key sweep finish routine rotations,
+// approving each key with the same checks a signature passes.
+func enableIssuerKeyAutoActivation(provisioner *identityproviderconnections.Provisioner, signer *internalsessionissuers.Signer) {
+	if provisioner == nil {
+		return
+	}
+	provisioner.SetEMAIssuerActivationCheck(signer.CheckActivation)
+}
+
+// issuerKeySweeper keeps a nil provisioner a nil interface.
+func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) background.InternalSessionIssuerKeySweeper {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
+}
+
+// newKMSEncryptionClients returns the symmetric KMS client factories. Locally
+// both hand out one persistent in-process client, so data wrapped in one run
+// stays readable in the next and the server and worker agree on keys. Disabling
+// a key is per process locally: a key the worker's sweep disables stays usable
+// in the server until it restarts. Database state still records the disable,
+// so this only weakens the KMS half of the check in local development.
+func newKMSEncryptionClients(ctx context.Context, logger *slog.Logger, c *cli.Context) (gcpkms.EncryptionClientFactory, gcpkms.EncryptionProvisioningClientFactory, error) {
+	if c.String("environment") != "local" {
+		return gcpkms.NewEncryptionClient, gcpkms.NewEncryptionProvisioningClient, nil
+	}
+
+	logger.WarnContext(ctx, "using in-process kms encryption client: local development has no cloud kms to reach")
+
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve local kms encryption key directory: %w", err)
+	}
+	client, err := gcpkms.NewPersistentLocalEncryptionClient(filepath.Join(configDir, "gram", "local-kms", "encryption.pem"))
+	if err != nil {
+		return nil, nil, fmt.Errorf("load local kms encryption key: %w", err)
+	}
+
+	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.EncryptionClient, error) {
+			return client, nil
+		}, func(_ context.Context, _ oauth2.TokenSource) (gcpkms.EncryptionProvisioningClient, error) {
+			return client, nil
+		}, nil
+}
+
+// orgEncryptionOptionalEnvironments are the only environments where a process
+// may start without organization encryption configured. Everywhere else, every
+// process that reads or writes organization-encrypted data requires it: a
+// process without it cannot open data sealed under an organization key, so it
+// fails at startup instead of at the first request. Listing the exemptions
+// means a new or misspelled environment fails safe. Previews run with
+// environment dev and opt out explicitly.
+var orgEncryptionOptionalEnvironments = []string{"local", "test"}
+
+// orgEncryptionDeps is a process's organization encryption. Service and
+// Provisioner are nil when organization encryption is off; Transitions is
+// always set, so consumers serve platform_key and fail closed otherwise.
+type orgEncryptionDeps struct {
+	// Service encrypts and decrypts organization data.
+	Service *orgencryption.Service
+
+	// Provisioner mints, switches and retires organization keys.
+	Provisioner *orgencryption.Provisioner
+
+	// Transitions reads each organization's transition state, which decides
+	// whether a use case seals with the platform key or the organization's
+	// key. It is set even when organization encryption is off: the process
+	// then serves organizations in platform_key and fails closed for the rest.
+	Transitions *orgencryption.Transitions
+}
+
+// newOrgEncryption builds the organization encryption service, provisioner
+// and transition state. Service and Provisioner are nil when organization
+// encryption is off, and it returns an error when organization encryption is
+// misconfigured or required but not configured.
+func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, auditLogger *audit.Logger) (orgEncryptionDeps, error) {
+	environment := c.String("environment")
+	rawCredentialID := strings.TrimSpace(c.String(orgEncryptionCredentialIDFlag))
+
+	if c.Bool(orgEncryptionDisabledFlag) {
+		if rawCredentialID != "" {
+			return orgEncryptionDeps{}, errors.New("organization encryption is disabled but a platform credential is configured: unset GRAM_ORG_ENCRYPTION_DISABLED or GRAM_ORG_ENCRYPTION_CREDENTIAL_ID")
+		}
+		logger.WarnContext(ctx, "organization encryption is disabled by configuration")
+		return orgEncryptionDeps{Service: nil, Provisioner: nil, Transitions: newOrgEncryptionTransitions(logger, db, auditLogger, nil)}, nil
+	}
+
+	if rawCredentialID == "" {
+		if !slices.Contains(orgEncryptionOptionalEnvironments, environment) {
+			return orgEncryptionDeps{}, fmt.Errorf("organization encryption is required in the %q environment: set GRAM_ORG_ENCRYPTION_CREDENTIAL_ID, or set GRAM_ORG_ENCRYPTION_DISABLED to run without it", environment)
+		}
+		logger.WarnContext(ctx, "organization encryption is unavailable: no platform credential configured")
+		return orgEncryptionDeps{Service: nil, Provisioner: nil, Transitions: newOrgEncryptionTransitions(logger, db, auditLogger, nil)}, nil
+	}
+
+	credentialID, err := uuid.Parse(rawCredentialID)
+	if err != nil {
+		return orgEncryptionDeps{}, fmt.Errorf("parse organization encryption credential id: %w", err)
+	}
+
+	keyRing := strings.TrimSpace(c.String(orgEncryptionKMSKeyRingFlag))
+	if keyRing == "" {
+		if environment != "local" {
+			return orgEncryptionDeps{}, errors.New("organization encryption kms key ring is required when a credential is configured")
+		}
+		keyRing = orgEncryptionKMSKeyRingLocalDefault
+	}
+
+	keys := orgencryption.KeyConfig{
+		KeyRing:                keyRing,
+		PlatformCredentialID:   credentialID,
+		PlatformServiceAccount: strings.TrimSpace(c.String(orgEncryptionServiceAccountFlag)),
+	}
+
+	clients, provisioning, err := newKMSEncryptionClients(ctx, logger, c)
+	if err != nil {
+		return orgEncryptionDeps{}, err
+	}
+
+	service, err := orgencryption.NewService(logger, db, gcpIdentity, clients, keys)
+	if err != nil {
+		return orgEncryptionDeps{}, fmt.Errorf("build organization encryption service: %w", err)
+	}
+
+	provisioner, err := orgencryption.NewProvisioner(logger, db, gcpIdentity, clients, provisioning, auditLogger, service, orgencryption.ProvisionerConfig{
+		Keys:                keys,
+		SwitchGracePeriod:   c.Duration(orgEncryptionSwitchGracePeriodFlag),
+		ManagedKeyRetention: c.Duration(orgEncryptionManagedKeyRetention),
+	})
+	if err != nil {
+		return orgEncryptionDeps{}, fmt.Errorf("build organization encryption provisioner: %w", err)
+	}
+
+	logger.InfoContext(ctx, "organization encryption is enabled")
+
+	return orgEncryptionDeps{Service: service, Provisioner: provisioner, Transitions: newOrgEncryptionTransitions(logger, db, auditLogger, provisioner)}, nil
+}
+
+// newOrgEncryptionTransitions builds the process's transition state. A nil
+// provisioner leaves the process able to read state but not change it.
+func newOrgEncryptionTransitions(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, provisioner *orgencryption.Provisioner) *orgencryption.Transitions {
+	return orgencryption.NewTransitions(logger, db, auditLogger, provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: 0})
+}
+
+// Cipher builds a cipher that seals and opens values moving from the platform
+// key to organization keys, sharing the process's transition state cache.
+func (d orgEncryptionDeps) Cipher(logger *slog.Logger, platform *encryption.Client) *orgencryption.Cipher {
+	return orgencryption.NewCipher(logger, platform, d.Service, d.Transitions)
+}
+
+// ClientSecrets builds the seal and storage seam for remote session client
+// secrets over the process's organization encryption.
+func (d orgEncryptionDeps) ClientSecrets(logger *slog.Logger, platform *encryption.Client) *clientsecrets.Secrets {
+	return clientsecrets.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// UpstreamTokens builds the stored upstream OAuth token seam over the
+// process's organization encryption and transition state.
+func (d orgEncryptionDeps) UpstreamTokens(logger *slog.Logger, platform *encryption.Client) *upstreamtokens.Tokens {
+	return upstreamtokens.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// AIProviderKeys builds the seam for AI provider and model keys over the
+// process's organization encryption.
+func (d orgEncryptionDeps) AIProviderKeys(logger *slog.Logger, platform *encryption.Client) *aiproviderkeys.Keys {
+	return aiproviderkeys.New(logger, d.Cipher(logger, platform))
+}
+
+// MarketplaceTokens builds the plugin marketplace token seam over the
+// process's organization encryption and transition state.
+func (d orgEncryptionDeps) MarketplaceTokens(logger *slog.Logger, platform *encryption.Client) *marketplacetokens.Tokens {
+	return marketplacetokens.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// RunnerKeys builds the Speakeasy Functions runner key seam over the process's
+// organization encryption and transition state.
+func (d orgEncryptionDeps) RunnerKeys(logger *slog.Logger, platform *encryption.Client) *runnerkeys.Keys {
+	return runnerkeys.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// NetworkIngressCredentials builds the seal and storage seam for network
+// ingress provider credentials over the process's organization encryption and
+// transition state. It is nil without a platform key, which keeps the
+// reconciler's missing-key gate and teardown without credentials working.
+func (d orgEncryptionDeps) NetworkIngressCredentials(logger *slog.Logger, platform *encryption.Client) *ingresscredentials.Credentials {
+	if platform == nil {
+		return nil
+	}
+	return ingresscredentials.New(logger, d.Cipher(logger, platform))
+}
+
+// Migrator builds the background side of moving the OAuth use cases to
+// organization keys, with the copy stores of every value each use case holds.
+// It is a nil interface when organization encryption is not configured: the
+// backfill can neither seal nor open organization-key copies without it, and
+// resuming a clear needs a provisioner.
+func (d orgEncryptionDeps) Migrator(logger *slog.Logger, db *pgxpool.Pool, platform *encryption.Client, meterProvider metric.MeterProvider) (background.OrganizationEncryptionMigrator, error) {
+	if d.Service == nil || d.Provisioner == nil {
+		return nil, nil
+	}
+
+	runner := orgencryption.NewRunner(logger, db, d.Cipher(logger, platform), meterProvider)
+	migrator, err := orgencryption.NewMigrator(logger, db, runner, d.Transitions, orgEncryptionUseCaseStores(db), meterProvider)
+	if err != nil {
+		return nil, fmt.Errorf("build organization encryption migrator: %w", err)
+	}
+
+	return migrator, nil
+}
+
+// orgEncryptionUseCaseStores lists every use case that moves from the platform
+// key to organization keys, with the copy stores of every value it holds. The
+// background migrator and the admin API share it, so both reach the same
+// values.
+func orgEncryptionUseCaseStores(db *pgxpool.Pool) []orgencryption.UseCaseStores {
+	return []orgencryption.UseCaseStores{
+		{UseCase: orgencryption.UseCaseOAuthClientSecrets, Stores: []orgencryption.CopyStore{clientsecrets.NewCopyStore(db)}},
+		{UseCase: orgencryption.UseCaseOAuthSessionTokens, Stores: upstreamtokens.CopyStores(db)},
+	}
+}
+
+// orgEncryptionSweeper keeps a nil provisioner a nil interface.
+func orgEncryptionSweeper(provisioner *orgencryption.Provisioner) background.OrganizationEncryptionSweeper {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
+}
+
+// newHookFleetMetrics returns nil when the gauges cannot be set up, which
+// leaves their schedule off rather than failing worker startup. The query
+// runs on the read replica; its reader needs SELECT on hook_install_summaries.
+func newHookFleetMetrics(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, chRead clickhouse.Conn) background.HookFleetMetricsEmitter {
+	policy, err := plugins.HooksVersionPolicy()
+	if err != nil {
+		logger.ErrorContext(ctx, "hook fleet metrics disabled: hooks version policy", attr.SlogError(err))
+		return nil
+	}
+	m, err := admin.NewHookFleetMetrics(logger, meterProvider, db, telemetry.NewHookFleet(chRead), policy)
+	if err != nil {
+		logger.ErrorContext(ctx, "hook fleet metrics disabled", attr.SlogError(err))
+		return nil
+	}
+	return m
 }

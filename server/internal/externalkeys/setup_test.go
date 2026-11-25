@@ -195,7 +195,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	// A stub resolver, not gcpauth.NewResolver: creating a GCP credential resolves
-	// Gram's own identity to screen the impersonation target, and so does verify,
+	// Speakeasy's own identity to screen the impersonation target, and so does verify,
 	// so the real resolver would make this package depend on ambient cloud
 	// credentials — passing or failing based on whether the developer happens to
 	// have gcloud ADC configured.
@@ -285,7 +285,7 @@ func createGcpIamCredential(t *testing.T, ctx context.Context, ti *testInstance,
 // through the credentials repo, so verify tests can build the subtype states the
 // impersonation-only form can no longer express: a credential naming no identity
 // at all, one still carrying Workload Identity Federation columns, or one naming
-// a service account inside Gram's own project. Returns its ID.
+// a service account inside Speakeasy's own project. Returns its ID.
 func createGcpIamCredentialDirect(t *testing.T, ctx context.Context, ti *testInstance, name string, gcpParams extcredrepo.CreateGcpIamCredentialParams) string {
 	t.Helper()
 
@@ -323,7 +323,7 @@ func softDeleteCredentialDirect(t *testing.T, ctx context.Context, ti *testInsta
 }
 
 // gramProjectServiceAccount builds a service account address inside the same
-// project the stub resolver reports as Gram's own — i.e. exactly what the
+// project the stub resolver reports as Speakeasy's own — i.e. exactly what the
 // self-project screening must reject. Derived from the stub's constant so the
 // tests cannot drift from it.
 func gramProjectServiceAccount(name string) string {

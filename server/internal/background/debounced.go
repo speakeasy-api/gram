@@ -40,18 +40,25 @@ func Debounce[Params any, Result any](
 	signalIDFunc func(params Params) string,
 	reenqueue func(params Params, result Result) bool,
 ) func(ctx workflow.Context, params Params) (result Result, err error) {
-	return debounce(wrapped, continueAsSelf, signalIDFunc, reenqueue, nil)
+	return debounce(wrapped, continueAsSelf, signalIDFunc, reenqueue, nil, nil)
 }
 
 // DebounceWithSignalCoalescing folds signal messages into the next run's parameters.
+//
+// settle, when set, is for parameters that carry a one-off request: after a run
+// succeeds, it clears what that run carried out before the signals that
+// arrived during it are folded into the next run's parameters. A failed run's
+// parameters carry over unchanged, since what it was asked to do has not
+// happened.
 func DebounceWithSignalCoalescing[Params any, Result any](
 	wrapped func(ctx workflow.Context, params Params) (result Result, err error),
 	continueAsSelf func(ctx workflow.Context, params Params) (result Result, err error),
 	signalIDFunc func(params Params) string,
 	reenqueue func(params Params, result Result) bool,
 	coalesce func(params Params, message string) Params,
+	settle func(params Params) Params,
 ) func(ctx workflow.Context, params Params) (result Result, err error) {
-	return debounce(wrapped, continueAsSelf, signalIDFunc, reenqueue, coalesce)
+	return debounce(wrapped, continueAsSelf, signalIDFunc, reenqueue, coalesce, settle)
 }
 
 func debounce[Params any, Result any](
@@ -60,6 +67,7 @@ func debounce[Params any, Result any](
 	signalIDFunc func(params Params) string,
 	reenqueue func(params Params, result Result) bool,
 	coalesce func(params Params, message string) Params,
+	settle func(params Params) Params,
 ) func(ctx workflow.Context, params Params) (result Result, err error) {
 	return func(ctx workflow.Context, params Params) (result Result, err error) {
 		signalCh := workflow.GetSignalChannel(ctx, signalIDFunc(params))
@@ -88,6 +96,9 @@ func debounce[Params any, Result any](
 		recv := 0
 		if reenqueue(runParams, res) {
 			recv++
+		}
+		if settle != nil {
+			runParams = settle(runParams)
 		}
 		nextParams, received := receiveDebounceSignals(signalCh, runParams, coalesce)
 		recv += received

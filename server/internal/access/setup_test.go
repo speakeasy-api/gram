@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/url"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -23,6 +25,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -33,21 +37,39 @@ import (
 // recordingEmailSender captures transactional sends so tests can assert on
 // access-request notification emails without a live Loops client.
 type recordingEmailSender struct {
-	mu   sync.Mutex
-	sent []loops.SendTransactionalInput
+	mu        sync.Mutex
+	attempted []loops.SendTransactionalInput
+	sent      []loops.SendTransactionalInput
+	failSend  bool
 }
 
 func (r *recordingEmailSender) SendTransactional(_ context.Context, input loops.SendTransactionalInput) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.attempted = append(r.attempted, input)
+	if r.failSend {
+		return errors.New("recording email sender rejected send")
+	}
 	r.sent = append(r.sent, input)
 	return nil
+}
+
+func (r *recordingEmailSender) FailSends() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.failSend = true
 }
 
 func (r *recordingEmailSender) Sent() []loops.SendTransactionalInput {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]loops.SendTransactionalInput(nil), r.sent...)
+}
+
+func (r *recordingEmailSender) Attempts() []loops.SendTransactionalInput {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]loops.SendTransactionalInput(nil), r.attempted...)
 }
 
 var (
@@ -112,14 +134,21 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
-	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil}
+	roleManager := NewRoleManager(logger, conn, roles, auditLogger, plugins.PublicationRequests{}, nil)
+	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil, failSend: false}
 	emailService := email.NewService(logger, emailSender, email.NewTemplateIDs(map[string]string{
 		"access_request": "access-request-test-id",
 	}), true)
 	siteURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, foldAlwaysOn{})
+	orgHosts := orghost.New(orghost.Config{
+		ServerURL:                  siteURL,
+		SiteURL:                    siteURL,
+		PlatformHosts:              map[string]string{"platform.example.com": "https://platform.example.com"},
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
+	svc := NewService(aivendorstest.NewStore(), logger, tracerProvider, conn, chConn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, orgHosts, foldAlwaysOn{})
 
 	return ctx, &testInstance{
 		service:     svc,
@@ -264,7 +293,7 @@ func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 
 // seedDisconnectedUser creates a user in the users table with a workos_id but
 // does NOT insert into organization_user_relationships, simulating a WorkOS
-// user who hasn't been connected to the Gram org.
+// user who hasn't been connected to the Speakeasy org.
 func seedDisconnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, userID string, email string, displayName string, workosUserID string) {
 	t.Helper()
 

@@ -17,13 +17,13 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useCreateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/createOrganizationRemoteSessionIssuer.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Link } from "react-router";
+import { ExistingIssuerLink } from "./ExistingIssuerLink";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -61,7 +61,6 @@ export function CreateRemoteIdentityProviderSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
   const organization = useOrganization();
 
@@ -71,6 +70,9 @@ export function CreateRemoteIdentityProviderSheet({
   const projects = useMemo(() => projectsData?.projects ?? [], [projectsData]);
 
   const [projectId, setProjectId] = useState<string>(ORGANIZATIONAL);
+  const routes = useRoutes({
+    projectSlug: projects.find((project) => project.id === projectId)?.slug,
+  });
 
   // Display name + slug auto-derive from the Issuer URL hostname until the
   // operator edits them, after which the *Dirty flags lock in their value.
@@ -130,14 +132,14 @@ export function CreateRemoteIdentityProviderSheet({
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Remote identity provider created");
+      toast.success("Authorization server created");
       onOpenChange(false);
-      orgRoutes.remoteIdentityProviders.issuerDetail.goTo(created.id);
+      routes.remoteIdentityProviders.issuerDetail.goTo(created.id);
     },
     onError: (error) => {
       // useMutation surfaces error.message via createMutation.error (shown in
       // the inline Alert); a console line keeps the stack for debugging.
-      console.error("Create remote identity provider failed", error);
+      console.error("Create authorization server failed", error);
     },
   });
 
@@ -209,7 +211,7 @@ export function CreateRemoteIdentityProviderSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            New Remote Identity Provider
+            New Authorization Server
           </SheetTitle>
         </SheetHeader>
 
@@ -233,8 +235,9 @@ export function CreateRemoteIdentityProviderSheet({
                 </SelectContent>
               </Select>
               <Text muted small>
-                Organizational providers are inherited by every project. Choose
-                a project to scope the provider to it.
+                Organizational authorization servers are inherited by every
+                project. Choose a project to scope the authorization server to
+                it.
               </Text>
             </Stack>
 
@@ -246,16 +249,10 @@ export function CreateRemoteIdentityProviderSheet({
                   viewerScope="organization"
                   matches={duplicateMatches}
                   renderLink={(match) => (
-                    <Button asChild variant="secondary">
-                      <Link
-                        to={orgRoutes.remoteIdentityProviders.issuerDetail.href(
-                          match.id,
-                        )}
-                        onClick={() => onOpenChange(false)}
-                      >
-                        View existing provider
-                      </Link>
-                    </Button>
+                    <ExistingIssuerLink
+                      match={match}
+                      onClick={() => onOpenChange(false)}
+                    />
                   )}
                 />
               }
@@ -292,10 +289,10 @@ export function CreateRemoteIdentityProviderSheet({
                   setSlug(value);
                   setSlugDirty(true);
                 }}
-                placeholder="my-identity-provider"
+                placeholder="my-authorization-server"
               />
               <Text muted small>
-                Identifier for this identity provider. Auto-derived from the
+                Identifier for this authorization server. Auto-derived from the
                 Issuer URL until you edit it.
               </Text>
             </Stack>
@@ -310,7 +307,7 @@ export function CreateRemoteIdentityProviderSheet({
                   setName(value);
                   setNameDirty(true);
                 }}
-                placeholder="My Identity Provider"
+                placeholder="My Authorization Server"
               />
               <Text muted small>
                 Friendly label shown in the dashboard. Auto-derived from the
@@ -324,7 +321,7 @@ export function CreateRemoteIdentityProviderSheet({
               value={logoAssetId}
               onChange={setLogoAssetId}
               onUploadingChange={setLogoUploading}
-              description="Shown beside this provider in the dashboard and on the connect consent page."
+              description="Shown beside this authorization server in the dashboard and on the connect consent page."
             />
 
             <Stack gap={2}>
@@ -338,7 +335,7 @@ export function CreateRemoteIdentityProviderSheet({
               />
               <Text muted small>
                 Linked from the New Client sheet so operators can set up an
-                OAuth client with this provider themselves.
+                OAuth client with this authorization server themselves.
               </Text>
             </Stack>
 

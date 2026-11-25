@@ -244,7 +244,7 @@ func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRe
 
 			var out apierrors.ServiceError
 			if err := utils.UnmarshalJsonFromResponseBody(bytes.NewBuffer(rawBody), &out, ""); err != nil {
-				return nil, err
+				return nil, apierrors.NewResponseValidationError("response did not match the declared error schema", httpRes.StatusCode, string(rawBody), httpRes, err)
 			}
 
 			out.RawResponse = httpRes
@@ -268,7 +268,7 @@ func (s *Hooks) Ingest(ctx context.Context, request operations.IngestHookEventRe
 
 			var out apierrors.ServiceError
 			if err := utils.UnmarshalJsonFromResponseBody(bytes.NewBuffer(rawBody), &out, ""); err != nil {
-				return nil, err
+				return nil, apierrors.NewResponseValidationError("response did not match the declared error schema", httpRes.StatusCode, string(rawBody), httpRes, err)
 			}
 
 			out.RawResponse = httpRes
@@ -497,7 +497,7 @@ func (s *Hooks) SkillFeedback(ctx context.Context, request operations.SkillFeedb
 
 			var out apierrors.ServiceError
 			if err := utils.UnmarshalJsonFromResponseBody(bytes.NewBuffer(rawBody), &out, ""); err != nil {
-				return nil, err
+				return nil, apierrors.NewResponseValidationError("response did not match the declared error schema", httpRes.StatusCode, string(rawBody), httpRes, err)
 			}
 
 			out.RawResponse = httpRes
@@ -521,7 +521,7 @@ func (s *Hooks) SkillFeedback(ctx context.Context, request operations.SkillFeedb
 
 			var out apierrors.ServiceError
 			if err := utils.UnmarshalJsonFromResponseBody(bytes.NewBuffer(rawBody), &out, ""); err != nil {
-				return nil, err
+				return nil, apierrors.NewResponseValidationError("response did not match the declared error schema", httpRes.StatusCode, string(rawBody), httpRes, err)
 			}
 
 			out.RawResponse = httpRes
@@ -750,7 +750,7 @@ func (s *Hooks) UploadSkillContent(ctx context.Context, request operations.Uploa
 
 			var out apierrors.ServiceError
 			if err := utils.UnmarshalJsonFromResponseBody(bytes.NewBuffer(rawBody), &out, ""); err != nil {
-				return nil, err
+				return nil, apierrors.NewResponseValidationError("response did not match the declared error schema", httpRes.StatusCode, string(rawBody), httpRes, err)
 			}
 
 			out.RawResponse = httpRes
@@ -774,7 +774,7 @@ func (s *Hooks) UploadSkillContent(ctx context.Context, request operations.Uploa
 
 			var out apierrors.ServiceError
 			if err := utils.UnmarshalJsonFromResponseBody(bytes.NewBuffer(rawBody), &out, ""); err != nil {
-				return nil, err
+				return nil, apierrors.NewResponseValidationError("response did not match the declared error schema", httpRes.StatusCode, string(rawBody), httpRes, err)
 			}
 
 			out.RawResponse = httpRes

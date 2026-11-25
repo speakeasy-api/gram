@@ -5,13 +5,18 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   UserSessionUpstream,
   UserSessionUpstream$inboundSchema,
 } from "./usersessionupstream.js";
+import {
+  UserSessionWorkload,
+  UserSessionWorkload$inboundSchema,
+} from "./usersessionworkload.js";
 
 /**
  * What the client that established this session must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.
@@ -25,7 +30,7 @@ export const ClientCredentialKind = {
 /**
  * What the client that established this session must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.
  */
-export type ClientCredentialKind = ClosedEnum<typeof ClientCredentialKind>;
+export type ClientCredentialKind = OpenEnum<typeof ClientCredentialKind>;
 
 /**
  * An issued user_session record. refresh_token_hash is never returned.
@@ -49,7 +54,7 @@ export type UserSession = {
   clientTokenEndpointAuthMethod?: string | undefined;
   createdAt: Date;
   /**
-   * Terminal session expiry; ceiling on refresh_expires_at.
+   * Current access-token expiry. Sessions with a refresh grant may refresh before refresh_expires_at; workload and other sessions without a refresh grant cannot.
    */
   expiresAt: Date;
   /**
@@ -69,7 +74,7 @@ export type UserSession = {
    */
   lastUsedAt?: Date | undefined;
   /**
-   * Next refresh deadline.
+   * Inbound authorization deadline. Refresh is possible until this time only when the session has a refresh grant.
    */
   refreshExpiresAt: Date;
   /**
@@ -81,20 +86,20 @@ export type UserSession = {
    */
   subjectDisplayName?: string | undefined;
   /**
-   * Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.
+   * Avatar URL for the subject when it resolves to a Speakeasy user with one. Null for API key and anonymous subjects, and for users who have no photo.
    */
   subjectPhotoUrl?: string | undefined;
   /**
-   * Subject kind: 'user', 'apikey', or 'anonymous'.
+   * Subject kind: 'user', 'apikey', 'agent', 'anonymous', or 'workload'.
    */
   subjectType: string;
   /**
-   * The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
+   * The session's subject URN (user:<id> | apikey:<uuid> | agent:<uuid> | anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
    */
   subjectUrn: string;
   updatedAt: Date;
   /**
-   * The upstream providers Gram holds tokens for on this session's subject, through the same issuer. Empty when the session reaches only Gram-native tools. A session can have several: an issuer may have more than one remote_session_client attached.
+   * The upstream providers Speakeasy holds tokens for on this session's subject, through the same issuer. Empty when the session reaches only Speakeasy-native tools. A session can have several: an issuer may have more than one remote_session_client attached.
    */
   upstreams: Array<UserSessionUpstream>;
   /**
@@ -105,12 +110,17 @@ export type UserSession = {
    * The issuing user_session_issuer id.
    */
   userSessionIssuerId: string;
+  /**
+   * The workload behind a workload session.
+   */
+  workload?: UserSessionWorkload | undefined;
 };
 
 /** @internal */
-export const ClientCredentialKind$inboundSchema: z.ZodMiniEnum<
-  typeof ClientCredentialKind
-> = z.enum(ClientCredentialKind);
+export const ClientCredentialKind$inboundSchema: z.ZodMiniType<
+  ClientCredentialKind,
+  unknown
+> = openEnums.inboundSchema(ClientCredentialKind);
 
 /** @internal */
 export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
@@ -152,6 +162,7 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
       upstreams: z.array(UserSessionUpstream$inboundSchema),
       user_session_client_id: z.optional(z.string()),
       user_session_issuer_id: z.string(),
+      workload: z.optional(UserSessionWorkload$inboundSchema),
     }),
     z.transform((v) => {
       return remap$(v, {

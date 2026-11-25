@@ -11,6 +11,8 @@ export const SEGMENT_BASE =
 export const SEGMENT_INACTIVE =
   "text-muted-foreground hover:text-foreground bg-transparent";
 const SEGMENT_ACTIVE = "bg-primary text-primary-foreground";
+const SEGMENT_VIEW =
+  "flex h-full items-center px-3 text-base transition-colors";
 
 /**
  * A two-or-more option segmented toggle: a bordered track of mono uppercase
@@ -25,22 +27,45 @@ export function SegmentedControl<T extends string>({
   options,
   disabled,
   className,
+  ariaLabel,
+  busy,
   trailing,
+  variant = "default",
 }: {
-  value: T;
+  /** The active segment; null leaves every segment inactive, for a choice
+   *  that has not been made yet. */
+  value: T | null;
   onChange: (value: T) => void;
-  options: { value: T; label: ReactNode; tooltip?: string }[];
+  /** A disabled option stays hoverable so its tooltip can say why. */
+  options: {
+    value: T;
+    label: ReactNode;
+    tooltip?: string;
+    disabled?: boolean;
+  }[];
   disabled?: boolean;
   className?: string;
+  /** Names the control as a group for assistive technology. */
+  ariaLabel?: string;
+  /** Marks the group busy while a chosen value is still being saved, so
+   *  assistive technology knows why a press has no effect yet. */
+  busy?: boolean;
   // An extra control pinned inside the track after the options — for a set too
   // long to segment, where the tail lives behind an overflow menu. Style it with
   // SEGMENT_BASE + SEGMENT_INACTIVE so it reads as one of the segments.
   trailing?: ReactNode;
+  /** "view": a framed switch between whole views, in sentence case. */
+  variant?: "default" | "view";
 }): JSX.Element {
+  const view = variant === "view";
   return (
     <div
+      role={ariaLabel ? "group" : undefined}
+      aria-label={ariaLabel}
+      aria-busy={busy || undefined}
       className={cn(
-        "border-border bg-card divide-border inline-flex h-10 shrink-0 items-center divide-x border",
+        "border-border bg-card inline-flex shrink-0 items-center border",
+        view ? "h-10 gap-1 p-1" : "divide-border h-10 divide-x",
         disabled && "cursor-not-allowed opacity-50",
         className,
       )}
@@ -52,11 +77,15 @@ export function SegmentedControl<T extends string>({
             type="button"
             disabled={disabled}
             aria-pressed={active}
-            onClick={() => onChange(option.value)}
+            aria-disabled={option.disabled || undefined}
+            onClick={() => {
+              if (!option.disabled) onChange(option.value);
+            }}
             className={cn(
-              SEGMENT_BASE,
+              view ? SEGMENT_VIEW : SEGMENT_BASE,
               active ? SEGMENT_ACTIVE : SEGMENT_INACTIVE,
               disabled && "pointer-events-none",
+              option.disabled && "cursor-not-allowed opacity-50",
             )}
           >
             {option.label}

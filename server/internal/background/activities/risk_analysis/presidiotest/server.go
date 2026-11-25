@@ -1,7 +1,7 @@
 // Package presidiotest provides an in-process mock of the Presidio Analyzer
 // HTTP API. It speaks the same wire protocol as the real
 // mcr.microsoft.com/presidio-analyzer image but performs deterministic regex
-// based detection for the entity types Gram cares about. Tests get sub-second
+// based detection for the entity types Speakeasy cares about. Tests get sub-second
 // startup and stable output instead of waiting on the ML container to boot.
 package presidiotest
 
@@ -165,7 +165,7 @@ func (m *MockServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 
 // DefaultDetector is the built-in deterministic detector used when callers
 // don't override one. It recognises a curated set of entities chosen to
-// satisfy the production code paths Gram exercises in tests:
+// satisfy the production code paths Speakeasy exercises in tests:
 //
 //   - EMAIL_ADDRESS  matches RFC-ish local@domain.tld
 //   - CREDIT_CARD    13-19 digit groups with optional separators, Luhn-valid

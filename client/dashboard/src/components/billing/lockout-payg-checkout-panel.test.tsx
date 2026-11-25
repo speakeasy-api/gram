@@ -1,19 +1,14 @@
+import { MemoryRouter } from "react-router";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptySession } from "@/contexts/Auth";
-import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 
 const mocks = vi.hoisted(() => ({
-  flagResult: vi.fn(),
   hasScope: vi.fn(),
   sessionData: vi.fn(),
   mutate: vi.fn(),
   capture: vi.fn(),
-}));
-
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => mocks.flagResult() as FeatureFlagResult,
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -47,6 +42,7 @@ const gatedOrg = (trial: { startedAt: Date; endsAt: Date } | null) => ({
   trial,
   whitelisted: false,
   activeOrganizationId: "org-under-test",
+  organization: { ...emptySession.organization, slug: "test-org" },
 });
 
 const expiredTrial = {
@@ -60,7 +56,6 @@ const cta = () =>
 describe("LockoutPaygCheckoutPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.hasScope.mockReturnValue(true);
     mocks.sessionData.mockReturnValue(gatedOrg(null));
   });
@@ -75,7 +70,11 @@ describe("LockoutPaygCheckoutPanel", () => {
   ])("offers checkout to a gated admin with %s", (_name, trial) => {
     mocks.sessionData.mockReturnValue(gatedOrg(trial));
 
-    render(<LockoutPaygCheckoutPanel />);
+    render(
+      <MemoryRouter>
+        <LockoutPaygCheckoutPanel />
+      </MemoryRouter>,
+    );
 
     expect(cta()).not.toBeNull();
     expect(mocks.hasScope).toHaveBeenCalledWith("org:admin");
@@ -84,7 +83,11 @@ describe("LockoutPaygCheckoutPanel", () => {
   it("renders nothing for a member without org:admin", () => {
     mocks.hasScope.mockReturnValue(false);
 
-    const { container } = render(<LockoutPaygCheckoutPanel />);
+    const { container } = render(
+      <MemoryRouter>
+        <LockoutPaygCheckoutPanel />
+      </MemoryRouter>,
+    );
 
     expect(container.firstChild).toBeNull();
   });
@@ -97,7 +100,11 @@ describe("LockoutPaygCheckoutPanel", () => {
       whitelisted: true,
     });
 
-    const { container } = render(<LockoutPaygCheckoutPanel />);
+    const { container } = render(
+      <MemoryRouter>
+        <LockoutPaygCheckoutPanel />
+      </MemoryRouter>,
+    );
 
     expect(container.firstChild).toBeNull();
   });
@@ -106,29 +113,26 @@ describe("LockoutPaygCheckoutPanel", () => {
   it("renders nothing until the session resolves", () => {
     mocks.sessionData.mockReturnValue(null);
 
-    const { container } = render(<LockoutPaygCheckoutPanel />);
-
-    expect(container.firstChild).toBeNull();
-  });
-
-  // Fail closed: an unresolved rollout flag can never put a payment flow in
-  // front of a locked-out organization.
-  it.each([
-    ["disabled", { status: "disabled" }],
-    ["loading", { status: "loading" }],
-    ["missing", { status: "missing" }],
-    ["error", { status: "error" }],
-  ])("renders nothing when the flag is %s", (_name, result) => {
-    mocks.flagResult.mockReturnValue(result);
-
-    const { container } = render(<LockoutPaygCheckoutPanel />);
+    const { container } = render(
+      <MemoryRouter>
+        <LockoutPaygCheckoutPanel />
+      </MemoryRouter>,
+    );
 
     expect(container.firstChild).toBeNull();
   });
 
   it("only calls the checkout endpoint on click", () => {
-    render(<LockoutPaygCheckoutPanel />);
+    render(
+      <MemoryRouter>
+        <LockoutPaygCheckoutPanel />
+      </MemoryRouter>,
+    );
 
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
 });
+
+vi.mock("@/components/ui/hooks/useConfig", () => ({
+  useConfig: () => ({ theme: "light" }),
+}));

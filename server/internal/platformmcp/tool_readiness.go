@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -8,45 +8,48 @@ import (
 )
 
 type GetMCPReadinessToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
-	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
-	Force          bool   `json:"force,omitempty" jsonschema:"force one authenticated provider readiness probe; limited to three probes per minute for this registration; unavailable to managed project assistants"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"the project's slug, as list_projects returns it; omit it to use the organization's Default project"`
+	MCPID       string `json:"mcp_id" jsonschema:"MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"`
+	Force       bool   `json:"force,omitempty" jsonschema:"force one authenticated provider readiness probe; limited to three probes per minute for this MCP server; unavailable to managed project assistants"`
 }
 
 type GetMCPReadinessToolOutput struct {
-	ProjectSlug    string         `json:"project_slug"`
-	RegistrationID string         `json:"registration_id"`
-	State          ReadinessState `json:"state"`
-	EvidenceCode   string         `json:"evidence_code,omitempty"`
-	Freshness      string         `json:"freshness"`
-	CheckedAt      string         `json:"checked_at,omitempty"`
-	ExpiresAt      string         `json:"expires_at,omitempty"`
-	Actions        []RepairAction `json:"actions"`
+	ProjectSlug   string         `json:"project_slug"`
+	MCPID         string         `json:"mcp_id"`
+	State         ReadinessState `json:"state"`
+	EvidenceCode  string         `json:"evidence_code,omitempty"`
+	SetupCategory SetupCategory  `json:"setup_category,omitempty"`
+	Freshness     string         `json:"freshness"`
+	CheckedAt     string         `json:"checked_at,omitempty"`
+	ExpiresAt     string         `json:"expires_at,omitempty"`
+	Actions       []RepairAction `json:"actions"`
 }
 
 type GetMCPRepairPlanToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
-	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	MCPID       string `json:"mcp_id" jsonschema:"MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"`
 }
 
 type GetMCPRepairPlanToolOutput struct {
-	ProjectSlug    string         `json:"project_slug"`
-	RegistrationID string         `json:"registration_id"`
-	State          ReadinessState `json:"state"`
-	Freshness      string         `json:"freshness"`
-	Actions        []RepairAction `json:"actions"`
+	ProjectSlug   string         `json:"project_slug"`
+	MCPID         string         `json:"mcp_id"`
+	State         ReadinessState `json:"state"`
+	SetupCategory SetupCategory  `json:"setup_category,omitempty"`
+	Freshness     string         `json:"freshness"`
+	Actions       []RepairAction `json:"actions"`
 }
 
 func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_readiness",
 		Title:       "Check If an MCP Server Is Working",
-		Description: "Say whether one MCP server is working, from the last stored check, when its registration ID is known. Constraints: forcing a fresh authenticated check is limited to three per minute for that MCP server, and is unavailable to managed project assistants.",
-		Annotations: readOnlyAnnotations(),
+		Description: "Check the last provider readiness result for one MCP server added through setup, by mcp_id. This does not check whether your identity provider can vouch for users and agents at the server; use get_xaa_readiness for Cross-App Access (XAA). With no current check it checks once on read; a refused or failed check reads as stale or unchecked. Without a project it reads the default project, named by project_slug in the result. Checks are limited to three a minute per server; assistants read only the stored check. For failing calls use get_mcp_diagnostics; for usage and project health use get_project_overview.",
+		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{
+		Authorization: ExternalAuthorizationOrgAdmin,
 		// Assistants only read their own persisted, actor-scoped evidence. A
 		// forced provider probe stays external because it requires a connection.
-		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
+		Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetMCPReadinessToolOutput{}, err
@@ -55,13 +58,27 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 			result, _ := operationBudgetToolResult(ErrReadinessInvalid)
 			return result, GetMCPReadinessToolOutput{}, nil
 		}
+		input.ProjectSlug, err = projectSlugOrDefault(ctx, readiness.store, principal.OrganizationID, input.ProjectSlug)
+		if err != nil {
+			if budgetResult, ok := operationBudgetToolResult(err); ok {
+				return budgetResult, GetMCPReadinessToolOutput{}, nil
+			}
+			return nil, GetMCPReadinessToolOutput{}, err
+		}
+		registrationID, err := readiness.store.RegistrationIDForMCP(ctx, principal, input.ProjectSlug, input.MCPID, "get_mcp_readiness")
+		if err != nil {
+			if budgetResult, ok := operationBudgetToolResult(err); ok {
+				return budgetResult, GetMCPReadinessToolOutput{}, nil
+			}
+			return nil, GetMCPReadinessToolOutput{}, err
+		}
 		var project ResolvedProject
 		var result Readiness
 		var found bool
 		if principal.surface() == SurfaceProjectAssistant {
-			project, result, found, err = readiness.CurrentReadiness(ctx, principal, input.ProjectSlug, input.RegistrationID)
+			project, result, found, err = readiness.CurrentReadiness(ctx, principal, input.ProjectSlug, registrationID)
 		} else {
-			project, result, found, err = readiness.GetReadiness(ctx, principal, input.ProjectSlug, input.RegistrationID, input.Force)
+			project, result, found, err = readiness.GetReadiness(ctx, principal, input.ProjectSlug, registrationID, input.Force)
 		}
 		if err != nil {
 			if budgetResult, ok := operationBudgetToolResult(err); ok {
@@ -69,15 +86,16 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 			}
 			return nil, GetMCPReadinessToolOutput{}, err
 		}
-		return nil, readinessToolOutput(project.Slug, input.RegistrationID, normalizedReadiness(result, found), found), nil
+		return nil, readinessToolOutput(project.Slug, input.MCPID, normalizedReadiness(result, found), found), nil
 	})
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_repair_plan",
-		Title:       "What to Fix on an MCP Server",
-		Description: "List the safe next actions for one MCP server that is not working, from the last stored check, when its registration ID is known. Constraints: managed project assistants read only their own actor-scoped evidence.",
+		Title:       "Find What to Fix on an MCP Server",
+		Description: "List the safe next actions for one MCP server added through Platform setup that is not working, by mcp_id, from the last stored check. Constraints: managed project assistants read only their own actor-scoped evidence.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
+		Authorization: ExternalAuthorizationOrgAdmin,
 		// Assistants receive a repair projection from their persisted,
 		// actor-scoped evidence; no provider probe or OAuth connection is used.
 		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPRepairPlanToolInput) (*mcp.CallToolResult, GetMCPRepairPlanToolOutput, error) {
@@ -85,13 +103,20 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 		if err != nil {
 			return nil, GetMCPRepairPlanToolOutput{}, err
 		}
+		registrationID, err := readiness.store.RegistrationIDForMCP(ctx, principal, input.ProjectSlug, input.MCPID, "get_mcp_repair_plan")
+		if err != nil {
+			if budgetResult, ok := operationBudgetToolResult(err); ok {
+				return budgetResult, GetMCPRepairPlanToolOutput{}, nil
+			}
+			return nil, GetMCPRepairPlanToolOutput{}, err
+		}
 		var project ResolvedProject
 		var result Readiness
 		var found bool
 		if principal.surface() == SurfaceProjectAssistant {
-			project, result, found, err = readiness.CurrentReadiness(ctx, principal, input.ProjectSlug, input.RegistrationID)
+			project, result, found, err = readiness.CurrentReadiness(ctx, principal, input.ProjectSlug, registrationID)
 		} else {
-			project, result, found, err = readiness.GetRepairPlan(ctx, principal, input.ProjectSlug, input.RegistrationID)
+			project, result, found, err = readiness.GetRepairPlan(ctx, principal, input.ProjectSlug, registrationID)
 		}
 		if err != nil {
 			if budgetResult, ok := operationBudgetToolResult(err); ok {
@@ -100,25 +125,29 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 			return nil, GetMCPRepairPlanToolOutput{}, err
 		}
 		result = normalizedReadiness(result, found)
+		category := setupCategoryFromReadiness(result)
 		return nil, GetMCPRepairPlanToolOutput{
-			ProjectSlug:    project.Slug,
-			RegistrationID: input.RegistrationID,
-			State:          result.State,
-			Freshness:      readinessFreshness(result, found),
-			Actions:        repairActions(result.State),
+			ProjectSlug:   project.Slug,
+			MCPID:         input.MCPID,
+			State:         result.State,
+			SetupCategory: category,
+			Freshness:     readinessFreshness(result, found),
+			Actions:       setupRepairActions(category, result.State),
 		}, nil
 	})
 }
 
-func readinessToolOutput(projectSlug, registrationID string, readiness Readiness, found bool) GetMCPReadinessToolOutput {
+func readinessToolOutput(projectSlug, mcpID string, readiness Readiness, found bool) GetMCPReadinessToolOutput {
+	category := setupCategoryFromReadiness(readiness)
 	return GetMCPReadinessToolOutput{
-		ProjectSlug:    projectSlug,
-		RegistrationID: registrationID,
-		State:          readiness.State,
-		EvidenceCode:   readiness.EvidenceCode,
-		Freshness:      readinessFreshness(readiness, found),
-		CheckedAt:      readinessTimestamp(readiness.CheckedAt),
-		ExpiresAt:      readinessTimestamp(readiness.ExpiresAt),
-		Actions:        repairActions(readiness.State),
+		ProjectSlug:   projectSlug,
+		MCPID:         mcpID,
+		State:         readiness.State,
+		EvidenceCode:  readiness.EvidenceCode,
+		SetupCategory: category,
+		Freshness:     readinessFreshness(readiness, found),
+		CheckedAt:     readinessTimestamp(readiness.CheckedAt),
+		ExpiresAt:     readinessTimestamp(readiness.ExpiresAt),
+		Actions:       setupRepairActions(category, readiness.State),
 	}
 }

@@ -12,7 +12,9 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	keys "github.com/speakeasy-api/gram/server/gen/keys"
 	goahttp "goa.design/goa/v3/http"
@@ -232,6 +234,432 @@ func EncodeCreateKeyError(encoder func(context.Context, http.ResponseWriter) goa
 	}
 }
 
+// EncodeRotateKeyResponse returns an encoder for responses returned by the
+// keys rotateKey endpoint.
+func EncodeRotateKeyResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*keys.Key)
+		enc := encoder(ctx, w)
+		body := NewRotateKeyResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeRotateKeyRequest returns a decoder for requests sent to the keys
+// rotateKey endpoint.
+func DecodeRotateKeyRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*keys.RotateKeyPayload, error) {
+	return func(r *http.Request) (*keys.RotateKeyPayload, error) {
+		var payload *keys.RotateKeyPayload
+		var (
+			body RotateKeyRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRotateKeyRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewRotateKeyPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeRotateKeyError returns an encoder for errors returned by the rotateKey
+// keys endpoint.
+func EncodeRotateKeyError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRotateKeyUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRotateKeyForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRotateKeyBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRotateKeyNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRotateKeyConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRotateKeyUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRotateKeyInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRotateKeyInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRotateKeyUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRotateKeyGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeExtendAgentKeysResponse returns an encoder for responses returned by
+// the keys extendAgentKeys endpoint.
+func EncodeExtendAgentKeysResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*keys.ListKeysResult)
+		enc := encoder(ctx, w)
+		body := NewExtendAgentKeysResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeExtendAgentKeysRequest returns a decoder for requests sent to the keys
+// extendAgentKeys endpoint.
+func DecodeExtendAgentKeysRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*keys.ExtendAgentKeysPayload, error) {
+	return func(r *http.Request) (*keys.ExtendAgentKeysPayload, error) {
+		var payload *keys.ExtendAgentKeysPayload
+		var (
+			body ExtendAgentKeysRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateExtendAgentKeysRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewExtendAgentKeysPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeExtendAgentKeysError returns an encoder for errors returned by the
+// extendAgentKeys keys endpoint.
+func EncodeExtendAgentKeysError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExtendAgentKeysUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExtendAgentKeysForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExtendAgentKeysBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExtendAgentKeysNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExtendAgentKeysConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExtendAgentKeysUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExtendAgentKeysInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExtendAgentKeysInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExtendAgentKeysUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExtendAgentKeysGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListKeysResponse returns an encoder for responses returned by the keys
 // listKeys endpoint.
 func EncodeListKeysResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -250,13 +678,68 @@ func DecodeListKeysRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 	return func(r *http.Request) (*keys.ListKeysPayload, error) {
 		var payload *keys.ListKeysPayload
 		var (
+			agentID      *string
+			cursor       *string
+			limit        *int
+			search       *string
 			sessionToken *string
+			err          error
 		)
+		qp := r.URL.Query()
+		agentIDRaw := qp.Get("agent_id")
+		if agentIDRaw != "" {
+			agentID = &agentIDRaw
+		}
+		if agentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", *agentID, goa.FormatUUID))
+		}
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		if cursor != nil {
+			if utf8.RuneCountInString(*cursor) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("cursor", *cursor, utf8.RuneCountInString(*cursor), 512, false))
+			}
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw != "" {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				pv := int(v)
+				limit = &pv
+			}
+		}
+		if limit != nil {
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+		}
+		if limit != nil {
+			if *limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 100, false))
+			}
+		}
+		searchRaw := qp.Get("search")
+		if searchRaw != "" {
+			search = &searchRaw
+		}
+		if search != nil {
+			if utf8.RuneCountInString(*search) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 255, false))
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewListKeysPayload(sessionToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListKeysPayload(agentID, cursor, limit, search, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -624,6 +1107,219 @@ func EncodeRevokeKeyError(encoder func(context.Context, http.ResponseWriter) goa
 	}
 }
 
+// EncodeUpdateKeyPolicyResponse returns an encoder for responses returned by
+// the keys updateKeyPolicy endpoint.
+func EncodeUpdateKeyPolicyResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*keys.Key)
+		enc := encoder(ctx, w)
+		body := NewUpdateKeyPolicyResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeUpdateKeyPolicyRequest returns a decoder for requests sent to the keys
+// updateKeyPolicy endpoint.
+func DecodeUpdateKeyPolicyRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*keys.UpdateKeyPolicyPayload, error) {
+	return func(r *http.Request) (*keys.UpdateKeyPolicyPayload, error) {
+		var payload *keys.UpdateKeyPolicyPayload
+		var (
+			body UpdateKeyPolicyRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateUpdateKeyPolicyRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewUpdateKeyPolicyPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeUpdateKeyPolicyError returns an encoder for errors returned by the
+// updateKeyPolicy keys endpoint.
+func EncodeUpdateKeyPolicyError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateKeyPolicyUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateKeyPolicyForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateKeyPolicyBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateKeyPolicyNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateKeyPolicyConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateKeyPolicyUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateKeyPolicyInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateKeyPolicyInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateKeyPolicyUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdateKeyPolicyGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeVerifyKeyResponse returns an encoder for responses returned by the
 // keys verifyKey endpoint.
 func EncodeVerifyKeyResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -817,20 +1513,217 @@ func EncodeVerifyKeyError(encoder func(context.Context, http.ResponseWriter) goa
 	}
 }
 
+// unmarshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm builds a
+// value of type *keys.AgentPolicyGrantForm from a value of type
+// *AgentPolicyGrantFormRequestBody.
+func unmarshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm(v *AgentPolicyGrantFormRequestBody) *keys.AgentPolicyGrantForm {
+	if v == nil {
+		return nil
+	}
+	res := &keys.AgentPolicyGrantForm{
+		Scope:  *v.Scope,
+		Effect: *v.Effect,
+	}
+	res.Selector = unmarshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector(v.Selector)
+
+	return res
+}
+
+// unmarshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector builds a
+// value of type *keys.AgentPolicySelector from a value of type
+// *AgentPolicySelectorRequestBody.
+func unmarshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector(v *AgentPolicySelectorRequestBody) *keys.AgentPolicySelector {
+	res := &keys.AgentPolicySelector{
+		ResourceKind:    *v.ResourceKind,
+		ResourceID:      *v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		UpstreamClient:  v.UpstreamClient,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
+	}
+
+	return res
+}
+
+// unmarshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant builds a value
+// of type *keys.APIKeyPolicyGrant from a value of type
+// *APIKeyPolicyGrantRequestBody.
+func unmarshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant(v *APIKeyPolicyGrantRequestBody) *keys.APIKeyPolicyGrant {
+	if v == nil {
+		return nil
+	}
+	res := &keys.APIKeyPolicyGrant{
+		Scope: *v.Scope,
+	}
+	res.Selector = unmarshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector(v.Selector)
+
+	return res
+}
+
+// unmarshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector builds a
+// value of type *keys.APIKeyPolicySelector from a value of type
+// *APIKeyPolicySelectorRequestBody.
+func unmarshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector(v *APIKeyPolicySelectorRequestBody) *keys.APIKeyPolicySelector {
+	res := &keys.APIKeyPolicySelector{
+		ResourceKind: *v.ResourceKind,
+		ResourceID:   *v.ResourceID,
+		ProjectID:    v.ProjectID,
+		ClientType:   v.ClientType,
+	}
+
+	return res
+}
+
+// unmarshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice
+// builds a value of type *keys.AgentKeyAuthClientChoice from a value of type
+// *AgentKeyAuthClientChoiceRequestBody.
+func unmarshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice(v *AgentKeyAuthClientChoiceRequestBody) *keys.AgentKeyAuthClientChoice {
+	if v == nil {
+		return nil
+	}
+	res := &keys.AgentKeyAuthClientChoice{
+		McpServerID:  *v.McpServerID,
+		AuthClientID: v.AuthClientID,
+	}
+
+	return res
+}
+
+// marshalKeysAgentDelegatedPolicyToAgentDelegatedPolicyResponseBody builds a
+// value of type *AgentDelegatedPolicyResponseBody from a value of type
+// *keys.AgentDelegatedPolicy.
+func marshalKeysAgentDelegatedPolicyToAgentDelegatedPolicyResponseBody(v *keys.AgentDelegatedPolicy) *AgentDelegatedPolicyResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentDelegatedPolicyResponseBody{}
+	if v.Requested != nil {
+		res.Requested = make([]*AgentDelegatedGrantResponseBody, len(v.Requested))
+		for i, val := range v.Requested {
+			if val == nil {
+				res.Requested[i] = nil
+				continue
+			}
+			res.Requested[i] = marshalKeysAgentDelegatedGrantToAgentDelegatedGrantResponseBody(val)
+		}
+	} else {
+		res.Requested = []*AgentDelegatedGrantResponseBody{}
+	}
+	if v.Effective != nil {
+		res.Effective = make([]*AgentDelegatedGrantResponseBody, len(v.Effective))
+		for i, val := range v.Effective {
+			if val == nil {
+				res.Effective[i] = nil
+				continue
+			}
+			res.Effective[i] = marshalKeysAgentDelegatedGrantToAgentDelegatedGrantResponseBody(val)
+		}
+	} else {
+		res.Effective = []*AgentDelegatedGrantResponseBody{}
+	}
+
+	return res
+}
+
+// marshalKeysAgentDelegatedGrantToAgentDelegatedGrantResponseBody builds a
+// value of type *AgentDelegatedGrantResponseBody from a value of type
+// *keys.AgentDelegatedGrant.
+func marshalKeysAgentDelegatedGrantToAgentDelegatedGrantResponseBody(v *keys.AgentDelegatedGrant) *AgentDelegatedGrantResponseBody {
+	res := &AgentDelegatedGrantResponseBody{
+		Scope: v.Scope,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalKeysAgentPolicySelectorToAgentPolicySelectorResponseBody(v.Selector)
+	}
+
+	return res
+}
+
+// marshalKeysAgentPolicySelectorToAgentPolicySelectorResponseBody builds a
+// value of type *AgentPolicySelectorResponseBody from a value of type
+// *keys.AgentPolicySelector.
+func marshalKeysAgentPolicySelectorToAgentPolicySelectorResponseBody(v *keys.AgentPolicySelector) *AgentPolicySelectorResponseBody {
+	res := &AgentPolicySelectorResponseBody{
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		UpstreamClient:  v.UpstreamClient,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
+	}
+
+	return res
+}
+
+// marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody builds a value
+// of type *APIKeyPolicyGrantResponseBody from a value of type
+// *keys.APIKeyPolicyGrant.
+func marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(v *keys.APIKeyPolicyGrant) *APIKeyPolicyGrantResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &APIKeyPolicyGrantResponseBody{
+		Scope: v.Scope,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorResponseBody(v.Selector)
+	}
+
+	return res
+}
+
+// marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorResponseBody builds a
+// value of type *APIKeyPolicySelectorResponseBody from a value of type
+// *keys.APIKeyPolicySelector.
+func marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorResponseBody(v *keys.APIKeyPolicySelector) *APIKeyPolicySelectorResponseBody {
+	res := &APIKeyPolicySelectorResponseBody{
+		ResourceKind: v.ResourceKind,
+		ResourceID:   v.ResourceID,
+		ProjectID:    v.ProjectID,
+		ClientType:   v.ClientType,
+	}
+
+	return res
+}
+
+// unmarshalExtendAgentKeyGrantFormRequestBodyToKeysExtendAgentKeyGrantForm
+// builds a value of type *keys.ExtendAgentKeyGrantForm from a value of type
+// *ExtendAgentKeyGrantFormRequestBody.
+func unmarshalExtendAgentKeyGrantFormRequestBodyToKeysExtendAgentKeyGrantForm(v *ExtendAgentKeyGrantFormRequestBody) *keys.ExtendAgentKeyGrantForm {
+	res := &keys.ExtendAgentKeyGrantForm{
+		Scope:  *v.Scope,
+		Effect: *v.Effect,
+	}
+	res.Selector = unmarshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector(v.Selector)
+
+	return res
+}
+
 // marshalKeysKeyToKeyResponseBody builds a value of type *KeyResponseBody from
 // a value of type *keys.Key.
 func marshalKeysKeyToKeyResponseBody(v *keys.Key) *KeyResponseBody {
 	res := &KeyResponseBody{
-		ID:              v.ID,
-		OrganizationID:  v.OrganizationID,
-		ProjectID:       v.ProjectID,
-		CreatedByUserID: v.CreatedByUserID,
-		Name:            v.Name,
-		KeyPrefix:       v.KeyPrefix,
-		Key:             v.Key,
-		CreatedAt:       v.CreatedAt,
-		UpdatedAt:       v.UpdatedAt,
-		LastAccessedAt:  v.LastAccessedAt,
+		ID:                     v.ID,
+		OrganizationID:         v.OrganizationID,
+		ProjectID:              v.ProjectID,
+		CreatedByUserID:        v.CreatedByUserID,
+		Name:                   v.Name,
+		KeyPrefix:              v.KeyPrefix,
+		Key:                    v.Key,
+		SubjectUrn:             v.SubjectUrn,
+		DelegatedGrantsVersion: v.DelegatedGrantsVersion,
+		ExpiresAt:              v.ExpiresAt,
+		CreatedAt:              v.CreatedAt,
+		UpdatedAt:              v.UpdatedAt,
+		LastAccessedAt:         v.LastAccessedAt,
 	}
 	if v.Scopes != nil {
 		res.Scopes = make([]string, len(v.Scopes))
@@ -839,6 +1732,19 @@ func marshalKeysKeyToKeyResponseBody(v *keys.Key) *KeyResponseBody {
 		}
 	} else {
 		res.Scopes = []string{}
+	}
+	if v.DelegatedGrants != nil {
+		res.DelegatedGrants = marshalKeysAgentDelegatedPolicyToAgentDelegatedPolicyResponseBody(v.DelegatedGrants)
+	}
+	if v.PolicyGrants != nil {
+		res.PolicyGrants = make([]*APIKeyPolicyGrantResponseBody, len(v.PolicyGrants))
+		for i, val := range v.PolicyGrants {
+			if val == nil {
+				res.PolicyGrants[i] = nil
+				continue
+			}
+			res.PolicyGrants[i] = marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(val)
+		}
 	}
 
 	return res

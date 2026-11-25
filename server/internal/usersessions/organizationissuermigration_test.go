@@ -1,0 +1,950 @@
+package usersessions_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+
+	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+)
+
+func TestOrganizationUserSessionIssuerMoveRetiersIssuerData(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := seedIssuer(t, ctx, ti, "move-retier")
+	client, err := seedUserSessionClient(t, ctx, ti.conn, issuerID, "move-retier-client")
+	require.NoError(t, err)
+	subject := urn.NewUserSubject("move-retier-user")
+	session, err := seedUserSessionForClient(t, ctx, ti.conn, issuerID, client.ID, subject)
+	require.NoError(t, err)
+	consent, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, subject)
+	require.NoError(t, err)
+	cimd, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, usersessionsrepo.CreateUserSessionIssuerCimdClientParams{
+		ProjectID:           *authCtx.ProjectID,
+		ClientIDMetadataUri: "https://move-retier.example.com/client",
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+
+	moved, err := ti.service.MoveIssuer(ctx, &orggen.MoveIssuerPayload{ID: issuerID.String()})
+	require.NoError(t, err)
+	require.Equal(t, issuerID.String(), moved.ID)
+	require.Empty(t, moved.ProjectID)
+	require.Equal(t, authCtx.ActiveOrganizationID, moved.OrganizationID)
+
+	repo := usersessionsrepo.New(ti.conn)
+	clientAfter, err := repo.GetUserSessionClientByID(ctx, usersessionsrepo.GetUserSessionClientByIDParams{ID: client.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.False(t, clientAfter.ProjectID.Valid)
+	requireOrganizationID(t, ctx, clientAfter.OrganizationID)
+	sessionAfter, err := repo.GetUserSessionByID(ctx, usersessionsrepo.GetUserSessionByIDParams{ID: session.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.False(t, sessionAfter.ProjectID.Valid)
+	requireOrganizationID(t, ctx, sessionAfter.OrganizationID)
+	consentAfter, err := repo.GetUserSessionConsentByID(ctx, usersessionsrepo.GetUserSessionConsentByIDParams{ID: consent.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.False(t, consentAfter.ProjectID.Valid)
+	requireOrganizationID(t, ctx, consentAfter.OrganizationID)
+	cimdAfter, err := repo.GetUserSessionIssuerCimdClientByID(ctx, usersessionsrepo.GetUserSessionIssuerCimdClientByIDParams{ID: cimd.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.False(t, cimdAfter.ProjectID.Valid)
+	requireOrganizationID(t, ctx, cimdAfter.OrganizationID)
+
+	projectID := authCtx.ProjectID.String()
+	movedBack, err := ti.service.MoveIssuer(ctx, &orggen.MoveIssuerPayload{ID: issuerID.String(), ProjectID: &projectID})
+	require.NoError(t, err)
+	require.Equal(t, projectID, movedBack.ProjectID)
+	clientAfter, err = repo.GetUserSessionClientByID(ctx, usersessionsrepo.GetUserSessionClientByIDParams{ID: client.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.True(t, clientAfter.ProjectID.Valid)
+	require.Equal(t, *authCtx.ProjectID, clientAfter.ProjectID.UUID)
+	sessionAfter, err = repo.GetUserSessionByID(ctx, usersessionsrepo.GetUserSessionByIDParams{ID: session.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.True(t, sessionAfter.ProjectID.Valid)
+	require.Equal(t, *authCtx.ProjectID, sessionAfter.ProjectID.UUID)
+	consentAfter, err = repo.GetUserSessionConsentByID(ctx, usersessionsrepo.GetUserSessionConsentByIDParams{ID: consent.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.True(t, consentAfter.ProjectID.Valid)
+	require.Equal(t, *authCtx.ProjectID, consentAfter.ProjectID.UUID)
+	cimdAfter, err = repo.GetUserSessionIssuerCimdClientByID(ctx, usersessionsrepo.GetUserSessionIssuerCimdClientByIDParams{ID: cimd.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.True(t, cimdAfter.ProjectID.Valid)
+	require.Equal(t, *authCtx.ProjectID, cimdAfter.ProjectID.UUID)
+
+	moveAudit, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionUserSessionIssuerUpdate)
+	require.NoError(t, err)
+	require.Equal(t, issuerID.String(), moveAudit.SubjectID)
+}
+
+func TestOrganizationUserSessionIssuerMoveBlocksChildInAnotherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuer, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "move-child-blocker", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	issuerID := uuid.MustParse(issuer.ID)
+	client, err := seedUserSessionClient(t, ctx, ti.conn, issuerID, "move-child-blocker-client")
+	require.NoError(t, err)
+	subject := urn.NewUserSubject("move-child-blocker-user")
+	_, err = seedUserSessionForClient(t, ctx, ti.conn, issuerID, client.ID, subject)
+	require.NoError(t, err)
+	_, err = seedUserSessionConsent(t, ctx, ti.conn, client.ID, subject)
+	require.NoError(t, err)
+	_, err = usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuerCimdClient(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerCimdClientParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ClientIDMetadataUri: "https://move-child-blocker.example.com/client",
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+	siblingProjectID := createSiblingProject(t, ctx, ti.conn, "move-child-blocker-sibling")
+
+	repo := usersessionsrepo.New(ti.conn)
+	_, err = repo.RetierUserSessionClients(ctx, usersessionsrepo.RetierUserSessionClientsParams{
+		ProjectID:           uuid.NullUUID{UUID: siblingProjectID, Valid: true},
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+	_, err = repo.RetierUserSessions(ctx, usersessionsrepo.RetierUserSessionsParams{
+		ProjectID:           uuid.NullUUID{UUID: siblingProjectID, Valid: true},
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+	_, err = repo.RetierUserSessionConsents(ctx, usersessionsrepo.RetierUserSessionConsentsParams{
+		ProjectID:           uuid.NullUUID{UUID: siblingProjectID, Valid: true},
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+	_, err = repo.RetierUserSessionIssuerCimdClients(ctx, usersessionsrepo.RetierUserSessionIssuerCimdClientsParams{
+		ProjectID:           uuid.NullUUID{UUID: siblingProjectID, Valid: true},
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+
+	queryParams := usersessionsrepo.CountUserSessionIssuerIncompatibleProjectReferencesParams{
+		UserSessionIssuerID: issuerID,
+		TargetProjectID:     *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+	}
+	incompatible, err := repo.CountUserSessionIssuerIncompatibleProjectReferences(ctx, queryParams)
+	require.NoError(t, err)
+	require.Equal(t, int32(4), incompatible)
+	queryParams.OrganizationID = "another-organization"
+	incompatible, err = repo.CountUserSessionIssuerIncompatibleProjectReferences(ctx, queryParams)
+	require.NoError(t, err)
+	require.Zero(t, incompatible)
+
+	targetProjectID := authCtx.ProjectID.String()
+	_, err = ti.service.MoveIssuer(ctx, &orggen.MoveIssuerPayload{ID: issuer.ID, ProjectID: &targetProjectID})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	clientAfter, err := repo.GetUserSessionClientByID(ctx, usersessionsrepo.GetUserSessionClientByIDParams{ID: client.ID, ProjectID: siblingProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, siblingProjectID, clientAfter.ProjectID.UUID)
+}
+
+func TestOrganizationUserSessionIssuerMoveLocksTargetProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuer, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "move-project-lock", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	issuerID := uuid.MustParse(issuer.ID)
+	_, err = seedUserSessionClient(t, ctx, ti.conn, issuerID, "move-project-lock-client")
+	require.NoError(t, err)
+	targetProjectID := createSiblingProject(t, ctx, ti.conn, "move-project-lock-target")
+
+	clientLock := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, usersessionsrepo.New(clientLock).LockUserSessionIssuerClientsForMigration(ctx, issuerID))
+	moveErr := make(chan error, 1)
+	go func() {
+		target := targetProjectID.String()
+		_, moveIssuerErr := ti.service.MoveIssuer(ctx, &orggen.MoveIssuerPayload{ID: issuer.ID, ProjectID: &target})
+		moveErr <- moveIssuerErr
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 1)
+
+	deleteErr := make(chan error, 1)
+	go func() {
+		_, deleteProjectErr := projectsrepo.New(ti.conn).DeleteProject(ctx, targetProjectID)
+		deleteErr <- deleteProjectErr
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 2)
+	require.NoError(t, clientLock.Commit(ctx))
+	require.Eventually(t, func() bool { return len(moveErr) > 0 }, 2*time.Second, 10*time.Millisecond)
+	require.NoError(t, <-moveErr)
+	require.Eventually(t, func() bool { return len(deleteErr) > 0 }, 2*time.Second, 10*time.Millisecond)
+	require.NoError(t, <-deleteErr)
+}
+
+func TestOrganizationUserSessionIssuerMigrateWidensScopeAndPreservesData(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := seedIssuer(t, ctx, ti, "migrate-source")
+	target, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		Slug:                 "migrate-target",
+		AuthnChallengeMode:   "interactive",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	targetID := uuid.MustParse(target.ID)
+
+	client, err := seedUserSessionClient(t, ctx, ti.conn, sourceID, "migrate-client")
+	require.NoError(t, err)
+	subject := urn.NewUserSubject("migrate-user")
+	session, err := seedUserSessionForClient(t, ctx, ti.conn, sourceID, client.ID, subject)
+	require.NoError(t, err)
+	consent, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, subject)
+	require.NoError(t, err)
+	cimd, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, usersessionsrepo.CreateUserSessionIssuerCimdClientParams{
+		ProjectID:           *authCtx.ProjectID,
+		ClientIDMetadataUri: "https://migrate.example.com/client",
+		UserSessionIssuerID: sourceID,
+	})
+	require.NoError(t, err)
+	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		Name: "Migration toolset", Slug: "migration-toolset", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	hostToolset(t, ctx, ti, toolset, uuid.NullUUID{UUID: sourceID, Valid: true})
+	mcpServerID := uuid.New()
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: mcpServerID, ProjectID: *authCtx.ProjectID,
+		Name: pgtype.Text{String: "Migration server", Valid: true}, Slug: pgtype.Text{String: "migration-server", Valid: true},
+		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{UUID: sourceID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{},
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ToolVariationsGroupID: uuid.NullUUID{}, Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: target.ID})
+	require.NoError(t, err)
+	require.True(t, preflight.CanMigrate)
+	require.Equal(t, 1, preflight.ClientCount)
+	require.Equal(t, 1, preflight.SessionCount)
+	require.Equal(t, 1, preflight.ConsentCount)
+	require.Equal(t, 1, preflight.CimdClientCount)
+	require.Empty(t, preflight.ConflictingClientIds)
+	require.Len(t, preflight.Warnings, 1)
+	require.Equal(t, "authn_challenge_mode", preflight.Warnings[0].Field)
+	require.NotEmpty(t, preflight.WarningsFingerprint)
+
+	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID, ConfirmedWarningsFingerprint: &preflight.WarningsFingerprint})
+	require.NoError(t, err)
+	require.True(t, result.SourceDeleted)
+	require.Equal(t, target.ID, result.Issuer.ID)
+	require.Equal(t, 1, result.ClientsMigrated)
+	require.Equal(t, 1, result.SessionsMigrated)
+	require.Equal(t, 1, result.ConsentsMigrated)
+	require.Equal(t, 1, result.CimdClientsMigrated)
+
+	repo := usersessionsrepo.New(ti.conn)
+	clientAfter, err := repo.GetUserSessionClientByID(ctx, usersessionsrepo.GetUserSessionClientByIDParams{ID: client.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, targetID, clientAfter.UserSessionIssuerID)
+	require.False(t, clientAfter.ProjectID.Valid)
+	requireOrganizationID(t, ctx, clientAfter.OrganizationID)
+	sessionAfter, err := repo.GetUserSessionByID(ctx, usersessionsrepo.GetUserSessionByIDParams{ID: session.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, targetID, sessionAfter.UserSessionIssuerID)
+	require.False(t, sessionAfter.ProjectID.Valid)
+	consentAfter, err := repo.GetUserSessionConsentByID(ctx, usersessionsrepo.GetUserSessionConsentByIDParams{ID: consent.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, targetID, consentAfter.UserSessionIssuerID)
+	require.False(t, consentAfter.ProjectID.Valid)
+	cimdAfter, err := repo.GetUserSessionIssuerCimdClientByID(ctx, usersessionsrepo.GetUserSessionIssuerCimdClientByIDParams{ID: cimd.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, targetID, cimdAfter.UserSessionIssuerID)
+	require.False(t, cimdAfter.ProjectID.Valid)
+	hostedAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: toolset.ID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.True(t, hostedAfter.UserSessionIssuerID.Valid)
+	require.Equal(t, targetID, hostedAfter.UserSessionIssuerID.UUID)
+	mcpServerAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: mcpServerID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.True(t, mcpServerAfter.UserSessionIssuerID.Valid)
+	require.Equal(t, targetID, mcpServerAfter.UserSessionIssuerID.UUID)
+
+	_, err = ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: sourceID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	migrateAudit, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionUserSessionIssuerMigrate)
+	require.NoError(t, err)
+	require.Equal(t, sourceID.String(), migrateAudit.SubjectID)
+}
+
+func TestOrganizationUserSessionIssuerMigratePreflightBlocksClientIDConflicts(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	source, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "conflict-source", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	target, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "conflict-target", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	sourceClient, err := seedUserSessionClient(t, ctx, ti.conn, uuid.MustParse(source.ID), "duplicate-client")
+	require.NoError(t, err)
+	_, err = seedUserSessionClient(t, ctx, ti.conn, uuid.MustParse(target.ID), "duplicate-client")
+	require.NoError(t, err)
+	// Someone signs in through the source copy, so it cannot merge.
+	_, err = seedUserSessionForClient(t, ctx, ti.conn, uuid.MustParse(source.ID), sourceClient.ID, urn.NewUserSubject("conflict-user"))
+	require.NoError(t, err)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: source.ID, TargetID: target.ID})
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate)
+	require.Equal(t, []string{"duplicate-client"}, preflight.ConflictingClientIds)
+	require.Empty(t, preflight.MergedClientIds)
+
+	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: source.ID, TargetID: target.ID})
+	requireOopsCode(t, err, oops.CodeConflict)
+	_, err = ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: source.ID})
+	require.NoError(t, err)
+}
+
+func TestOrganizationUserSessionIssuerMigrateLeavesTombstonesOnSource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := seedIssuer(t, ctx, ti, "tombstone-migrate-source")
+	target, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "tombstone-migrate-target", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	client, err := seedUserSessionClient(t, ctx, ti.conn, sourceID, "tombstone-migrate-client")
+	require.NoError(t, err)
+	subject := urn.NewUserSubject("tombstone-migrate-user")
+	session, err := seedUserSessionForClient(t, ctx, ti.conn, sourceID, client.ID, subject)
+	require.NoError(t, err)
+	consent, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, subject)
+	require.NoError(t, err)
+	cimd, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, usersessionsrepo.CreateUserSessionIssuerCimdClientParams{
+		ProjectID: *authCtx.ProjectID, ClientIDMetadataUri: "https://tombstone-migrate.example.com/client", UserSessionIssuerID: sourceID,
+	})
+	require.NoError(t, err)
+	remoteRepo := remotesessionsrepo.New(ti.conn)
+	remoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "tombstone-migrate-remote-issuer",
+		Issuer:                            "https://tombstone-migrate.example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://tombstone-migrate.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://tombstone-migrate.example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	remoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID: "tombstone-migrate-remote-client", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	remoteSession, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
+		SubjectUrn: subject, UserSessionIssuerID: sourceID, RemoteSessionClientID: remoteClient.ID,
+		AccessTokenEncrypted: "test-ciphertext", Scopes: []string{"openid"},
+	})
+	require.NoError(t, err)
+
+	fixtures := testrepo.New(ti.conn)
+	deleted, err := fixtures.SoftDeleteUserSessionMigrationChildrenFixture(ctx, testrepo.SoftDeleteUserSessionMigrationChildrenFixtureParams{
+		ClientID: client.ID, SessionID: session.ID, ConsentID: consent.ID, CimdID: cimd.ID, RemoteSessionID: remoteSession.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, testrepo.SoftDeleteUserSessionMigrationChildrenFixtureRow{Clients: 1, Sessions: 1, Consents: 1, CimdClients: 1, RemoteSessions: 1}, deleted)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: target.ID})
+	require.NoError(t, err)
+	require.Zero(t, preflight.ClientCount)
+	require.Zero(t, preflight.SessionCount)
+	require.Zero(t, preflight.ConsentCount)
+	require.Zero(t, preflight.CimdClientCount)
+	require.Zero(t, preflight.RemoteSessionCount)
+	result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID})
+	require.NoError(t, err)
+	require.Zero(t, result.ClientsMigrated)
+	require.Zero(t, result.SessionsMigrated)
+	require.Zero(t, result.ConsentsMigrated)
+	require.Zero(t, result.CimdClientsMigrated)
+	require.Zero(t, result.RemoteSessionsMigrated)
+
+	tombstones, err := fixtures.GetUserSessionMigrationTombstonesFixture(ctx, testrepo.GetUserSessionMigrationTombstonesFixtureParams{
+		ClientID: client.ID, SessionID: session.ID, ConsentID: consent.ID, CimdID: cimd.ID, RemoteSessionID: remoteSession.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, sourceID, tombstones.ClientIssuerID)
+	require.Equal(t, sourceID, tombstones.SessionIssuerID)
+	require.Equal(t, sourceID, tombstones.CimdIssuerID)
+	require.Equal(t, sourceID, tombstones.RemoteSessionIssuerID)
+	require.Equal(t, conv.ToNullUUID(*authCtx.ProjectID), tombstones.ClientProjectID)
+	require.Equal(t, conv.ToNullUUID(*authCtx.ProjectID), tombstones.SessionProjectID)
+	require.Equal(t, conv.ToNullUUID(*authCtx.ProjectID), tombstones.ConsentProjectID)
+	require.Equal(t, conv.ToNullUUID(*authCtx.ProjectID), tombstones.CimdProjectID)
+}
+
+func TestOrganizationUserSessionIssuerMigrateNormalizesLegacyProjectIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := seedLegacyProjectIssuer(t, ctx, ti.conn, "legacy-migrate-source")
+	targetID := seedIssuer(t, ctx, ti, "legacy-migrate-target")
+	client, err := seedUserSessionClient(t, ctx, ti.conn, sourceID, "legacy-migrate-client")
+	require.NoError(t, err)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	require.True(t, preflight.CanMigrate)
+	require.Equal(t, 1, preflight.ClientCount)
+	require.Empty(t, preflight.WarningsFingerprint)
+
+	result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	require.True(t, result.SourceDeleted)
+	require.Equal(t, targetID.String(), result.Issuer.ID)
+
+	clientAfter, err := usersessionsrepo.New(ti.conn).GetUserSessionClientByID(ctx, usersessionsrepo.GetUserSessionClientByIDParams{ID: client.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, targetID, clientAfter.UserSessionIssuerID)
+}
+
+func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := seedIssuer(t, ctx, ti, "remote-migrate-source")
+	targetID := seedIssuer(t, ctx, ti, "remote-migrate-target")
+	remoteRepo := remotesessionsrepo.New(ti.conn)
+	remoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "remote-migrate-issuer",
+		Issuer:                            "https://remote-migrate.example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://remote-migrate.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://remote-migrate.example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	remoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID:              "remote-migrate-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: remoteClient.ID,
+		UserSessionIssuerID:   sourceID,
+	}))
+	targetRemoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "remote-migrate-target-issuer",
+		Issuer:                            "https://remote-migrate-target.example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://remote-migrate-target.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://remote-migrate-target.example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	targetRemoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID: targetRemoteIssuer.ID,
+		ClientID:              "remote-migrate-target-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: targetRemoteClient.ID,
+		UserSessionIssuerID:   targetID,
+	}))
+	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		Name: "Remote migration toolset", Slug: "remote-migration-toolset", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	mcpServerID := uuid.New()
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: mcpServerID, ProjectID: *authCtx.ProjectID,
+		Name: pgtype.Text{String: "Remote migration server", Valid: true}, Slug: pgtype.Text{String: "remote-migration-server", Valid: true},
+		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: conv.ToNullUUID(sourceID), RemoteMcpServerID: uuid.NullUUID{},
+		ToolsetID: conv.ToNullUUID(toolset.ID), ToolVariationsGroupID: uuid.NullUUID{}, Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
+		ID: mcpServerID, ProjectID: *authCtx.ProjectID, RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuer.ID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped)
+
+	subject := urn.NewUserSubject(authCtx.UserID)
+	remoteSession, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionClientID: remoteClient.ID,
+		AccessTokenEncrypted:  "test-ciphertext",
+		Scopes:                []string{"openid"},
+	})
+	require.NoError(t, err)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Remote migration agent",
+	})
+	require.NoError(t, err)
+	fixtures := testrepo.New(ti.conn)
+	principalBindingID, err := fixtures.InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		PrincipalID:           agent.ID,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionClientID: remoteClient.ID,
+		RemoteSessionID:       remoteSession.ID,
+		GrantGeneration:       remoteSession.GrantGeneration,
+		AttachedBySubjectID:   subject.String(),
+	})
+	require.NoError(t, err)
+	emaBindingID, err := fixtures.InsertRemoteSessionEMABindingFixture(ctx, testrepo.InsertRemoteSessionEMABindingFixtureParams{
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionIssuerID: remoteIssuer.ID,
+		Resource:              "https://resource.example.com",
+		RemoteSessionClientID: conv.ToNullUUID(remoteClient.ID),
+	})
+	require.NoError(t, err)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	require.True(t, preflight.CanMigrate)
+	require.Equal(t, 1, preflight.RemoteSessionCount)
+
+	// Another agent's attachment whose connection was since disconnected. The
+	// merge moves only live connections, so this attachment stays behind and
+	// leaves with the source's client bindings instead of aborting the merge.
+	staleSubject := urn.NewUserSubject("remote-migrate-stale-user")
+	staleSession, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
+		SubjectUrn:            staleSubject,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionClientID: remoteClient.ID,
+		AccessTokenEncrypted:  "test-ciphertext",
+		Scopes:                []string{"openid"},
+	})
+	require.NoError(t, err)
+	staleAgent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Remote migration stale agent",
+	})
+	require.NoError(t, err)
+	staleBindingID, err := fixtures.InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		PrincipalID:           staleAgent.ID,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionClientID: remoteClient.ID,
+		RemoteSessionID:       staleSession.ID,
+		GrantGeneration:       staleSession.GrantGeneration,
+		AttachedBySubjectID:   staleSubject.String(),
+	})
+	require.NoError(t, err)
+	disconnected, err := remoteRepo.SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessionsrepo.SoftDeleteRemoteSessionBySubjectAndClientParams{
+		SubjectUrn: staleSubject, RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: sourceID,
+		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Len(t, disconnected, 1)
+
+	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
+	require.NoError(t, err)
+	require.Equal(t, 1, result.RemoteSessionsMigrated)
+	staleIssuer, err := fixtures.GetPrincipalRemoteSessionBindingIssuerFixture(ctx, staleBindingID)
+	require.NoError(t, err)
+	require.Equal(t, sourceID, staleIssuer, "retired issuer cleanup does not delete compatibility parents")
+	_, err = remoteRepo.GetPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.GetPrincipalRemoteSessionBindingParams{
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		PrincipalID:           staleAgent.ID,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionClientID: remoteClient.ID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "remaining source attachment must be revoked")
+	sourcePairs, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: sourceID})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, sourcePairs, "source compatibility pair stays intact")
+	remoteSessionAfter, err := remoteRepo.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: remoteSession.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, targetID, remoteSessionAfter.UserSessionIssuerID)
+	principalIssuerID, err := fixtures.GetPrincipalRemoteSessionBindingIssuerFixture(ctx, principalBindingID)
+	require.NoError(t, err)
+	require.Equal(t, targetID, principalIssuerID)
+	emaBinding, err := fixtures.GetRemoteSessionEMABindingFixture(ctx, emaBindingID)
+	require.NoError(t, err)
+	require.Equal(t, targetID, emaBinding.UserSessionIssuerID)
+	require.Equal(t, int64(2), emaBinding.Generation)
+	linkCount, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: targetID})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), linkCount, "the surviving issuer must still carry the registration for legacy readers")
+	mcpServerAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: mcpServerID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, targetID, mcpServerAfter.UserSessionIssuerID.UUID)
+	require.False(t, mcpServerAfter.RemoteSessionIssuerID.Valid, "issuer-client links do not determine the stamp")
+
+	require.Empty(t, preflight.ServerImpacts)
+	require.Empty(t, result.ServerImpacts)
+
+}
+
+// seedMigrationRemoteClient seeds an upstream client bound to each issuer.
+func seedMigrationRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, slug string, issuerIDs ...uuid.UUID) uuid.UUID {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteRepo := remotesessionsrepo.New(ti.conn)
+	upstream := "https://" + slug + ".example.com"
+	remoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              slug,
+		Issuer:                            upstream,
+		AuthorizationEndpoint:             conv.ToPGText(upstream + "/authorize"),
+		TokenEndpoint:                     conv.ToPGText(upstream + "/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	client, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID:              slug + "-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	for _, issuerID := range issuerIDs {
+		require.NoError(t, remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: client.ID,
+			UserSessionIssuerID:   issuerID,
+		}))
+	}
+	return client.ID
+}
+
+// An agent attached to one client on both issuers through different people's
+// logins cannot be merged: either attachment would silently replace the other.
+func TestOrganizationUserSessionIssuerMigrateRefusesAttachmentsOnDifferentLogins(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := seedIssuer(t, ctx, ti, "different-logins-source")
+	targetID := seedIssuer(t, ctx, ti, "different-logins-target")
+	clientID := seedMigrationRemoteClient(t, ctx, ti, "different-logins-upstream", sourceID, targetID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Different logins agent",
+	})
+	require.NoError(t, err)
+	remoteRepo := remotesessionsrepo.New(ti.conn)
+	fixtures := testrepo.New(ti.conn)
+	bindingIDs := map[uuid.UUID]uuid.UUID{}
+	for issuerID, person := range map[uuid.UUID]string{sourceID: "different-logins-first", targetID: "different-logins-second"} {
+		login, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
+			SubjectUrn:            urn.NewUserSubject(person),
+			UserSessionIssuerID:   issuerID,
+			RemoteSessionClientID: clientID,
+			AccessTokenEncrypted:  "test-ciphertext",
+			Scopes:                []string{"openid"},
+		})
+		require.NoError(t, err)
+		bindingIDs[issuerID], err = fixtures.InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
+			ProjectID:             *authCtx.ProjectID,
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			PrincipalID:           agent.ID,
+			UserSessionIssuerID:   issuerID,
+			RemoteSessionClientID: clientID,
+			RemoteSessionID:       login.ID,
+			GrantGeneration:       login.GrantGeneration,
+			AttachedBySubjectID:   person,
+		})
+		require.NoError(t, err)
+	}
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	require.Equal(t, 1, preflight.PrincipalBindingConflictCount)
+	require.False(t, preflight.CanMigrate)
+
+	_, err = ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
+	requireOopsCode(t, err, oops.CodeConflict)
+	for issuerID, bindingID := range bindingIDs {
+		bindingIssuerID, err := fixtures.GetPrincipalRemoteSessionBindingIssuerFixture(ctx, bindingID)
+		require.NoError(t, err, "a refused merge keeps both attachments")
+		require.Equal(t, issuerID, bindingIssuerID)
+	}
+}
+
+// An attachment on the source may use a login made through another issuer,
+// such as a team gateway's. The merge leaves that login where it is, so no
+// cascade from the login can move the attachment: the merge must move it.
+func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := seedIssuer(t, ctx, ti, "cross-issuer-migrate-source")
+	targetID := seedIssuer(t, ctx, ti, "cross-issuer-migrate-target")
+	gatewayID := seedIssuer(t, ctx, ti, "cross-issuer-migrate-gateway")
+	clientID := seedMigrationRemoteClient(t, ctx, ti, "cross-issuer-migrate-upstream", sourceID, gatewayID)
+	login, bindingIDs := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-user", gatewayID, clientID, sourceID)
+	// A second agent uses the same registration and same login. The fixture's
+	// reauthorization advances the grant on that login but preserves its ID.
+	secondLogin, secondBindings := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-second", gatewayID, clientID, sourceID)
+	require.Equal(t, login, secondLogin)
+
+	remoteRepo := remotesessionsrepo.New(ti.conn)
+	parent := remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: targetID}
+	parents, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.Zero(t, parents)
+	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
+	require.NoError(t, err)
+	require.Equal(t, 0, result.RemoteSessionsMigrated, "the login was made through the gateway, not the source")
+
+	requireMigrationAttachment(t, ctx, ti, bindingIDs[sourceID], targetID, login)
+	requireMigrationAttachment(t, ctx, ti, secondBindings[sourceID], targetID, secondLogin)
+	parents, err = remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, parents)
+	loginAfter, err := remoteRepo.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: login, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, gatewayID, loginAfter.UserSessionIssuerID, "the login stays on the issuer it was made through")
+}
+
+// An agent may attach the same login on both issuers. The merge keeps one
+// active attachment for it, on the target, instead of colliding with it.
+func TestOrganizationUserSessionIssuerMigrateKeepsOneAttachmentForSameLogin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := seedIssuer(t, ctx, ti, "same-login-migrate-source")
+	targetID := seedIssuer(t, ctx, ti, "same-login-migrate-target")
+	gatewayID := seedIssuer(t, ctx, ti, "same-login-migrate-gateway")
+	clientID := seedMigrationRemoteClient(t, ctx, ti, "same-login-migrate-upstream", sourceID, targetID, gatewayID)
+	login, bindingIDs := seedMigrationAttachments(t, ctx, ti, "same-login-migrate-user", gatewayID, clientID, sourceID, targetID)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	require.Equal(t, 0, preflight.PrincipalBindingConflictCount, "the same login on both issuers is not a conflict")
+	require.True(t, preflight.CanMigrate)
+
+	_, err = ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
+	require.NoError(t, err)
+
+	requireMigrationAttachment(t, ctx, ti, bindingIDs[targetID], targetID, login)
+	sourceIssuer, err := testrepo.New(ti.conn).GetPrincipalRemoteSessionBindingIssuerFixture(ctx, bindingIDs[sourceID])
+	require.NoError(t, err)
+	require.Equal(t, sourceID, sourceIssuer, "the duplicate remains on the retired issuer, never replacing the target attachment")
+	active, err := testrepo.New(ti.conn).CountActivePrincipalRemoteSessionBindingsForSessionFixture(ctx, login)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, active, "only the target attachment remains active")
+
+}
+
+// seedMigrationAttachments makes one person's login through loginIssuerID and
+// attaches it to a new agent on each of attachIssuerIDs.
+func seedMigrationAttachments(t *testing.T, ctx context.Context, ti *testInstance, person string, loginIssuerID, clientID uuid.UUID, attachIssuerIDs ...uuid.UUID) (uuid.UUID, map[uuid.UUID]uuid.UUID) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	login, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
+		SubjectUrn:            urn.NewUserSubject(authCtx.UserID),
+		UserSessionIssuerID:   loginIssuerID,
+		RemoteSessionClientID: clientID,
+		AccessTokenEncrypted:  "test-ciphertext",
+		Scopes:                []string{"openid"},
+	})
+	require.NoError(t, err)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           person + " agent",
+	})
+	require.NoError(t, err)
+	bindingIDs := map[uuid.UUID]uuid.UUID{}
+	for _, issuerID := range attachIssuerIDs {
+		bindingIDs[issuerID], err = testrepo.New(ti.conn).InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
+			ProjectID:             *authCtx.ProjectID,
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			PrincipalID:           agent.ID,
+			UserSessionIssuerID:   issuerID,
+			RemoteSessionClientID: clientID,
+			RemoteSessionID:       login.ID,
+			GrantGeneration:       login.GrantGeneration,
+			AttachedBySubjectID:   login.SubjectUrn.String(),
+		})
+		require.NoError(t, err)
+	}
+	return login.ID, bindingIDs
+}
+
+// requireMigrationAttachment asserts the attachment is on issuerID and still
+// uses the login it was made with.
+func requireMigrationAttachment(t *testing.T, ctx context.Context, ti *testInstance, bindingID, issuerID, loginID uuid.UUID) {
+	t.Helper()
+	bindingIssuerID, err := testrepo.New(ti.conn).GetPrincipalRemoteSessionBindingIssuerFixture(ctx, bindingID)
+	require.NoError(t, err, "the merge keeps the attachment")
+	require.Equal(t, issuerID, bindingIssuerID)
+	bindingLoginID, err := testrepo.New(ti.conn).GetPrincipalRemoteSessionBindingSessionFixture(ctx, bindingID)
+	require.NoError(t, err)
+	require.Equal(t, loginID, bindingLoginID, "the attachment keeps its login")
+}
+
+func TestOrganizationUserSessionIssuerMigrateScopeAndRBAC(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	source, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "scope-source", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	projectTargetID := seedIssuer(t, ctx, ti, "scope-project-target")
+
+	_, err = ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: source.ID, TargetID: projectTargetID.String()})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	organizationTarget, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "rbac-target", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	// The preflight runs the consolidation and rolls it back, taking its
+	// locks, so it needs the same scope as the consolidation.
+	readCtx := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
+	_, err = ti.service.GetIssuerMigratePreflight(readCtx, &orggen.GetIssuerMigratePreflightPayload{SourceID: source.ID, TargetID: organizationTarget.ID})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.MigrateIssuer(readCtx, &orggen.MigrateIssuerPayload{SourceID: source.ID, TargetID: organizationTarget.ID})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.MoveIssuer(readCtx, &orggen.MoveIssuerPayload{ID: source.ID})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// A registration resolves its issuer before it inserts. The insert's foreign
+// key waits for a migration holding the issuer, but once that commits the
+// retired issuer still satisfies the key, so the insert has to re-read
+// liveness under its own lock and land nowhere rather than on the tombstone.
+func TestOrganizationUserSessionIssuerMigrateRejectsStaleClientRegistration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sourceID := seedIssuer(t, ctx, ti, "stale-registration-source")
+	target, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "stale-registration-target", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	_, err = seedUserSessionClient(t, ctx, ti.conn, sourceID, "stale-registration-existing")
+	require.NoError(t, err)
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: target.ID})
+	require.NoError(t, err)
+	require.True(t, preflight.CanMigrate)
+
+	// Park the migration after it has locked the source issuer FOR UPDATE:
+	// it takes the source clients next, and this transaction holds them.
+	clientLock := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, usersessionsrepo.New(clientLock).LockUserSessionIssuerClientsForMigration(ctx, sourceID))
+	migrateErr := make(chan error, 1)
+	go func() {
+		_, migrateIssuerErr := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID, ConfirmedWarningsFingerprint: &preflight.WarningsFingerprint})
+		migrateErr <- migrateIssuerErr
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 1)
+
+	// The late registration already resolved the source issuer as live.
+	registerErr := make(chan error, 1)
+	go func() {
+		_, seedErr := seedUserSessionClient(t, ctx, ti.conn, sourceID, "stale-registration-late")
+		registerErr <- seedErr
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 2)
+
+	require.NoError(t, clientLock.Commit(ctx))
+	require.Eventually(t, func() bool { return len(migrateErr) > 0 }, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, <-migrateErr)
+	require.Eventually(t, func() bool { return len(registerErr) > 0 }, 5*time.Second, 10*time.Millisecond)
+	require.ErrorIs(t, <-registerErr, pgx.ErrNoRows, "the registration re-reads the retired issuer and inserts nothing")
+
+	clients, err := usersessionsrepo.New(ti.conn).CountUserSessionIssuerClientsForMigration(ctx, usersessionsrepo.CountUserSessionIssuerClientsForMigrationParams{UserSessionIssuerID: sourceID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Zero(t, clients, "no live client may reference the retired source issuer")
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -12,32 +13,25 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 type Handler struct {
-	logger      *slog.Logger
-	findingsPub gcp.Publisher[*riskv1.Finding]
-	metrics     *scanners.AsyncScanHandlerMetrics
-	realScanner *Scanner
-	stubScanner *Scanner
-	gate        *scanners.AsyncShadowGate
+	logger       *slog.Logger
+	findingsPub  gcp.Publisher[*riskv1.Finding]
+	metrics      *scanners.AsyncScanHandlerMetrics
+	scanner      *Scanner
+	riskRecorder *metering.RiskRecorder
 }
 
-func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, realScanner, stubScanner *Scanner, findingsPub gcp.Publisher[*riskv1.Finding], gate *scanners.AsyncShadowGate) *Handler {
-	if stubScanner == nil {
-		stubScanner = NewScanner(logger, NoopEvaluator)
-	}
-	if realScanner == nil {
-		realScanner = stubScanner
-	}
+func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, scanner *Scanner, findingsPub gcp.Publisher[*riskv1.Finding], riskRecorder *metering.RiskRecorder) *Handler {
 	return &Handler{
-		logger:      logger.With(attr.SlogComponent("prompt-policy-analyzer")),
-		findingsPub: findingsPub,
-		metrics:     scanners.NewAsyncScanHandlerMetrics(meterProvider, logger),
-		realScanner: realScanner,
-		stubScanner: stubScanner,
-		gate:        gate,
+		logger:       logger.With(attr.SlogComponent("prompt-policy-analyzer")),
+		findingsPub:  findingsPub,
+		metrics:      scanners.NewAsyncScanHandlerMetrics(meterProvider, logger),
+		scanner:      scanner,
+		riskRecorder: riskRecorder,
 	}
 }
 
@@ -47,15 +41,13 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 	if anchorID == "" {
 		anchorID = m.GetContentPartId()
 	}
-	gateReason := h.gate.Decide(ctx, m.GetProjectId(), anchorID)
-	engine := gateReason.Engine()
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
 		attr.RiskScanRequestID(m.GetRequestId()),
 		attr.MessageID(anchorID),
 		attr.AuthOrganizationID(m.GetOrganizationId()),
-		attr.RiskScanEngine(engine),
-		attr.RiskScanGateReason(gateReason),
+		attr.RiskScanEngine(scanners.AsyncScanEngineReal),
+		attr.RiskScanSelectionReason(scanners.AsyncScanEngineSelectionUpstreamSelected),
 	)
 	// message.id carries whichever anchor resolved, so a part-anchored scan also
 	// gets the dedicated key: without it those spans are unsearchable by part.
@@ -63,12 +55,13 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 		span.SetAttributes(attr.ChatContentPartID(partID))
 	}
 
-	scanner := h.stubScanner
-	if engine == scanners.AsyncScanEngineReal {
-		scanner = h.realScanner
+	startedAt := time.Now().UTC()
+	jm := promptPolicyJudgeMessage(m)
+	result, verdict := h.scanner.ScanWithVerdict(ctx, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), m.GetPrompt(), cfg, jm)
+	findings := result.Findings
+	if len(findings) > 0 {
+		scanners.SetEventMatch(findings, judgemessage.Render(jm))
 	}
-
-	findings := scanner.Scan(ctx, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), m.GetPrompt(), cfg, promptPolicyJudgeMessage(m))
 
 	_, _, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
@@ -78,13 +71,30 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
+		Shadow:            false,
 	}, findings, "prompt policy")
 	if err != nil {
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomePublishError, gateReason)
-		return fmt.Errorf("publish prompt policy findings: %w", err)
+		err = fmt.Errorf("publish prompt policy findings: %w", err)
 	}
 
-	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomeOK, gateReason)
+	if result.Completed {
+		provenance, provenanceErr := scanners.ParseRiskProvenance(m, m.GetMessageType(), "async")
+		if provenanceErr != nil {
+			h.logger.WarnContext(ctx, "skipping prompt policy usage with invalid attribution", attr.SlogError(provenanceErr))
+		} else {
+			provenance.Model = verdict.Model
+			provenance.Provider = verdict.Provider
+			if meterErr := h.riskRecorder.Record(ctx, metering.RiskPromptPolicy(), provenance, result.STokens, startedAt); meterErr != nil {
+				h.logger.ErrorContext(ctx, "record prompt policy usage", attr.SlogError(meterErr))
+			}
+		}
+	}
+	if err != nil {
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanOutcomePublishError)
+		return err
+	}
+
+	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanOutcomeOK)
 	return nil
 }
 

@@ -1,7 +1,7 @@
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useOrganization } from "@/contexts/Auth";
 import { Heading } from "@/components/ui/Heading";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/Dropdown";
 import { Input } from "@/components/ui/Input";
 import { Stack } from "@/components/ui/Stack";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { Check, MoreHorizontal } from "lucide-react";
 import { type ComponentProps, useMemo, useState } from "react";
 import { toast } from "sonner";

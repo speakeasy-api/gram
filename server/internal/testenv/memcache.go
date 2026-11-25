@@ -4,12 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
+
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
+
+// errMemoryCacheMiss matches the Redis adapter's miss so callers can tell a
+// missing key from a backend failure.
+var errMemoryCacheMiss = fmt.Errorf("no cache entry for key: %w", redisCache.ErrCacheMiss)
 
 // memoryCache is a minimal in-memory cache.Cache for unit tests that need
 // real storage semantics without a Redis container. Values round-trip
@@ -31,7 +38,7 @@ func (m *memoryCache) Get(ctx context.Context, key string, value any) error {
 	defer m.mu.Unlock()
 	raw, ok := m.entries[key]
 	if !ok {
-		return errors.New("no cache entry for key")
+		return errMemoryCacheMiss
 	}
 	if err := json.Unmarshal(raw, value); err != nil {
 		return errors.New("unmarshal cache entry: " + err.Error())
@@ -48,7 +55,7 @@ func (m *memoryCache) GetAndDelete(ctx context.Context, key string, value any) e
 	delete(m.entries, key)
 	m.mu.Unlock()
 	if !ok {
-		return errors.New("no cache entry for key")
+		return errMemoryCacheMiss
 	}
 	if err := json.Unmarshal(raw, value); err != nil {
 		return errors.New("unmarshal cache entry: " + err.Error())

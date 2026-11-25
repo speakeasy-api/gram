@@ -1,4 +1,9 @@
+import {
+  useBillingState,
+  usePaygCheckoutAccess,
+} from "@/components/billing/use-billing-state";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
+import { BookingCalendarLink } from "@/pages/demo/components/booking-calendar/BookingCalendarLink";
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
@@ -7,11 +12,6 @@ import {
   getTrialLifecycleFromDates,
   getTrialStatusFromDates,
 } from "@/lib/trial-status";
-import { Link } from "react-router";
-
-// The in-app upgrade gate, which prefills the booking form from the session.
-// The marketing site's /talk-to-us cannot.
-const SALES_PATH = "/talk-to-us";
 
 const BLACK_PROGRESS_CLASS = "bg-(--color-base-black)";
 const DEEP_GREEN_PROGRESS_CLASS = "bg-(--color-brand-c)";
@@ -41,6 +41,7 @@ function getTrialProgressColorClass(
 
 export function TrialStatusCard(): React.ReactNode {
   const { trial } = useSession();
+  const { eligible: checkoutEligible } = usePaygCheckoutAccess("active-trial");
   const now = useTrialNow(trial);
   const status = getTrialStatusFromDates(trial, now);
   const lifecycle = getTrialLifecycleFromDates(trial, now);
@@ -106,15 +107,19 @@ export function TrialStatusCard(): React.ReactNode {
         </div>
         {/* Self-serve upgrade for admins still in the trial; sales stays the
             fallback for everyone else and for expired trials. */}
-        <StartPaygCheckoutCTA size="sm" label="Add payment method" />
-        <Link
-          to={SALES_PATH}
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
+        {checkoutEligible && <TrialCheckoutCTA />}
+        <BookingCalendarLink className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           {salesLinkLabel}
           <Icon name="arrow-right" className="size-3" aria-hidden="true" />
-        </Link>
+        </BookingCalendarLink>
       </div>
     </div>
   );
+}
+
+function TrialCheckoutCTA(): React.ReactNode {
+  const billingState = useBillingState();
+  return billingState.status === "needs-setup" ? (
+    <StartPaygCheckoutCTA size="sm" label="Add payment method" />
+  ) : null;
 }

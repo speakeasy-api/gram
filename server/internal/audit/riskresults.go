@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 
@@ -12,9 +13,10 @@ import (
 )
 
 const (
-	ActionRiskResultUnmask  Action = "risk_result:unmask"
-	ActionRiskResultDismiss Action = "risk_result:dismiss"
-	ActionRiskResultRestore Action = "risk_result:restore"
+	ActionRiskResultUnmask        Action = "risk_result:unmask"
+	ActionRiskResultRevealPayload Action = "risk_result:reveal_payload"
+	ActionRiskResultDismiss       Action = "risk_result:dismiss"
+	ActionRiskResultRestore       Action = "risk_result:restore"
 )
 
 type LogRiskResultUnmaskEvent struct {
@@ -25,11 +27,11 @@ type LogRiskResultUnmaskEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskResultID uuid.UUID //nolint:glint // matches risk_policy precedent; URN migration tracked in AGE-1954
+	RiskResultID uuid.UUID //nolint:glint // auditeventurnnaming: matches risk_policy precedent; URN migration tracked in AGE-1954
 	// ChatID is recorded so reviewers can see which chat the unmasked secret
 	// came from without a second lookup. It is auxiliary context, not the
 	// audit subject (which is RiskResultID).
-	ChatID uuid.UUID //nolint:glint // auxiliary context, not the audit subject
+	ChatID uuid.UUID //nolint:glint // auditeventurnnaming: auxiliary context, not the audit subject
 }
 
 // LogRiskResultUnmask records that a risk result's plaintext match was
@@ -38,8 +40,13 @@ type LogRiskResultUnmaskEvent struct {
 // no surrounding transaction to be atomic with.
 func (l *Logger) LogRiskResultUnmask(ctx context.Context, dbtx repo.DBTX, event LogRiskResultUnmaskEvent) error {
 	action := ActionRiskResultUnmask
+	subjectSlug := ""
+	if event.ChatID != uuid.Nil {
+		subjectSlug = event.ChatID.String()
+	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -53,11 +60,74 @@ func (l *Logger) LogRiskResultUnmask(ctx context.Context, dbtx repo.DBTX, event 
 		SubjectID:          event.RiskResultID.String(),
 		SubjectType:        string(subjectTypeRiskResult),
 		SubjectDisplayName: conv.ToPGTextEmpty(""),
-		SubjectSlug:        conv.ToPGTextEmpty(event.ChatID.String()),
+		SubjectSlug:        conv.ToPGTextEmpty(subjectSlug),
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RiskResultV1})
+}
+
+type LogRiskResultRevealPayloadEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RiskResultID uuid.UUID //nolint:glint // auditeventurnnaming: matches LogRiskResultUnmaskEvent precedent
+
+	// ExecutionID is the mediated execution whose payload was revealed. Every
+	// finding on the same execution phase shares that payload.
+	ExecutionID string //nolint:glint // auditeventurnnaming: auxiliary context, not the audit subject
+
+	// Phase is the inspection phase the payload was scanned in.
+	Phase string
+}
+
+// RiskResultRevealPayloadMetadata locates the revealed payload.
+type RiskResultRevealPayloadMetadata struct {
+	ExecutionID string `json:"execution_id"`
+	Phase       string `json:"phase"`
+}
+
+// LogRiskResultRevealPayload records that the full scanned payload behind a
+// risk result was revealed via risk.revealResultPayload. Like unmask it
+// describes a read, so callers pass the pool directly as dbtx.
+func (l *Logger) LogRiskResultRevealPayload(ctx context.Context, dbtx repo.DBTX, event LogRiskResultRevealPayloadEvent) error {
+	action := ActionRiskResultRevealPayload
+
+	metadata, err := marshalAuditPayload(&RiskResultRevealPayloadMetadata{
+		ExecutionID: event.ExecutionID,
+		Phase:       event.Phase,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.RiskResultID.String(),
+		SubjectType:        string(subjectTypeRiskResult),
+		SubjectDisplayName: conv.ToPGTextEmpty(""),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RiskResultV1})
@@ -71,7 +141,7 @@ type LogRiskResultDismissEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskResultID uuid.UUID //nolint:glint // matches LogRiskResultUnmaskEvent precedent
+	RiskResultID uuid.UUID //nolint:glint // auditeventurnnaming: matches LogRiskResultUnmaskEvent precedent
 }
 
 // LogRiskResultDismiss records that a risk result was manually marked as a
@@ -82,6 +152,7 @@ func (l *Logger) LogRiskResultDismiss(ctx context.Context, dbtx repo.DBTX, event
 	action := ActionRiskResultDismiss
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -113,7 +184,7 @@ type LogRiskResultRestoreEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskResultID uuid.UUID //nolint:glint // matches LogRiskResultUnmaskEvent precedent
+	RiskResultID uuid.UUID //nolint:glint // auditeventurnnaming: matches LogRiskResultUnmaskEvent precedent
 }
 
 // LogRiskResultRestore records that a manual false-positive dismissal was
@@ -122,6 +193,7 @@ func (l *Logger) LogRiskResultRestore(ctx context.Context, dbtx repo.DBTX, event
 	action := ActionRiskResultRestore
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

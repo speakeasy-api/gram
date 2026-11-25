@@ -1,3 +1,4 @@
+import { isKnownEnumValue } from "@/lib/enum";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -9,33 +10,62 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
-import { getServerURL } from "@/lib/utils";
+import { useNewRemoteSessionClientCallbackUrl } from "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import {
+  UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+  type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
+} from "@gram/client/models/components/updateremotesessionclientform.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,
+  isPrivateKeyJwtAuthMethod,
   type ClientType,
 } from "./issuerFormUtils";
-
-// remoteLoginCallbackURL is the single stable redirect_uri Gram uses for
-// every upstream OAuth provider, regardless of MCP server or slug (see
-// canonicalCallbackRouteBase in server/internal/remotesessions/challenge.go).
-// Manual clients need it registered on the upstream's app out-of-band; DCR
-// and CIMD clients send/publish it automatically, so this only surfaces
-// where the operator has to do that registration by hand.
-function remoteLoginCallbackURL(): string {
-  return `${getServerURL()}/mcp/remote_login_callback`;
-}
 
 // RedirectURICallout shows the redirect_uri operators must register on the
 // upstream provider's OAuth app before typed-in client credentials will
 // work. Rendered inside ClientCredentialsFields so both the Attach sheet's
 // Manual add path and the Modify sheet's existing-client edit path show it.
-function RedirectURICallout(): JSX.Element {
-  const redirectURI = remoteLoginCallbackURL();
+// An existing client passes the callbackURL it was registered with, or null
+// when it registered none; a client not yet created passes undefined and
+// shows the one the server will register for it.
+function RedirectURICallout({
+  callbackURL,
+}: {
+  callbackURL?: string | null;
+}): JSX.Element | null {
+  const newClientCallback = useNewRemoteSessionClientCallbackUrl(
+    undefined,
+    undefined,
+    { enabled: callbackURL === undefined, throwOnError: false },
+  );
+  if (callbackURL === null) return null;
+  const redirectURI = callbackURL ?? newClientCallback.data?.callbackUrl;
+  if (redirectURI === undefined && newClientCallback.isError) {
+    return (
+      <Alert variant="error" dismissible={false}>
+        Couldn't load the redirect URI to register.{" "}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void newClientCallback.refetch()}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </Alert>
+    );
+  }
+  if (redirectURI === undefined) {
+    return (
+      <Text muted small>
+        Loading redirect URI…
+      </Text>
+    );
+  }
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">Redirect URI</Label>
@@ -50,8 +80,8 @@ function RedirectURICallout(): JSX.Element {
         </div>
       </div>
       <Text muted small>
-        Register this as the callback / redirect URI on the upstream provider's
-        OAuth app before pasting credentials below.
+        Register this as the callback / redirect URI on the upstream
+        authorization server's OAuth app before pasting credentials below.
       </Text>
     </Stack>
   );
@@ -197,7 +227,7 @@ export function EndpointsFields({
       </Stack>
 
       <Stack gap={2}>
-        <Label className="text-muted-foreground text-xs">Token Endpoint</Label>
+        <Label className="text-muted-foreground text-xs">Token endpoint</Label>
         <Input
           value={tokenEndpoint}
           onChange={onTokenEndpointChange}
@@ -214,6 +244,10 @@ export function EndpointsFields({
           onChange={onRegistrationEndpointChange}
           placeholder="https://login.example.com/register"
         />
+        <Text muted small>
+          Used for DCR. Enter it manually when issuer metadata does not
+          advertise one.
+        </Text>
       </Stack>
 
       <Stack gap={2}>
@@ -248,12 +282,39 @@ export function EndpointsFields({
 export function TokenEndpointAuthMethodField({
   value,
   onChange,
+  allowPrivateKeyJwt = false,
+  privateKeyJwtUnavailable,
+  hideNone = false,
+  disabled = false,
+  unsupported = false,
 }: {
   value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "";
   onChange: (
     value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
   ) => void;
+  allowPrivateKeyJwt?: boolean;
+  /**
+   * Lists private_key_jwt even when it can't be picked, with this reason
+   * beside it, so the option is visible rather than missing.
+   */
+  privateKeyJwtUnavailable?: string;
+  /** A service account must prove who it is, so `none` is not offered. */
+  hideNone?: boolean;
+  disabled?: boolean;
+  unsupported?: boolean;
 }): JSX.Element {
+  if (unsupported) {
+    return (
+      <Stack gap={2}>
+        <Label className="text-muted-foreground text-xs">
+          Token endpoint authentication
+        </Label>
+        <Text small muted>
+          Unsupported authentication method
+        </Text>
+      </Stack>
+    );
+  }
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">
@@ -264,6 +325,7 @@ export function TokenEndpointAuthMethodField({
         onValueChange={(next) =>
           onChange(next as CreateRemoteSessionClientFormTokenEndpointAuthMethod)
         }
+        disabled={disabled}
       >
         <SelectTrigger>
           <SelectValue placeholder="client_secret_basic (default)" />
@@ -283,31 +345,116 @@ export function TokenEndpointAuthMethodField({
           >
             client_secret_post
           </SelectItem>
-          <SelectItem
-            value={CreateRemoteSessionClientFormTokenEndpointAuthMethod.None}
-          >
-            none
-          </SelectItem>
+          {!hideNone && (
+            <SelectItem
+              value={CreateRemoteSessionClientFormTokenEndpointAuthMethod.None}
+            >
+              none
+            </SelectItem>
+          )}
+          {privateKeyJwtUnavailable !== undefined &&
+            !allowPrivateKeyJwt &&
+            value !==
+              CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt && (
+              <SelectItem
+                value={
+                  CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt
+                }
+                disabled
+              >
+                private_key_jwt · {privateKeyJwtUnavailable}
+              </SelectItem>
+            )}
+          {(allowPrivateKeyJwt ||
+            value ===
+              CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt) && (
+            <SelectItem
+              value={
+                CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt
+              }
+            >
+              private_key_jwt
+            </SelectItem>
+          )}
         </SelectContent>
       </Select>
     </Stack>
   );
 }
 
+export function ClientAssertionAudienceField({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: string;
+  onChange: (value: AuthAudienceFormat) => void;
+  disabled?: boolean;
+}): JSX.Element {
+  const isKnown = isKnownEnumValue(
+    UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+    value,
+  );
+  return (
+    <Stack gap={2}>
+      <Label className="text-muted-foreground text-xs">
+        Client assertion audience
+      </Label>
+      <Select
+        value={value}
+        onValueChange={(next) => onChange(next as AuthAudienceFormat)}
+        disabled={disabled}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {!isKnown && (
+            <SelectItem value={value} disabled>
+              Unsupported audience format
+            </SelectItem>
+          )}
+          <SelectItem
+            value={
+              UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer
+            }
+          >
+            Issuer URL (default)
+          </SelectItem>
+          <SelectItem
+            value={
+              UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.TokenEndpoint
+            }
+          >
+            Token endpoint URL
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      <Text small muted>
+        Use the issuer URL unless your identity provider requires the token
+        endpoint URL, as required by providers such as Okta.
+      </Text>
+    </Stack>
+  );
+}
+
 // ClientCredentialsFields is used by both Add (editable client_id) and
 // Modify (client_id read-only — the API has no rotate path; create a fresh
-// remote_session_client if you need a new one). clientSecret stays an input
-// in both — empty means "leave existing in place" in Modify. Callers that
+// remote_session_client if you need a new one). The secret input is hidden
+// for private_key_jwt; empty means "leave existing in place" in Modify. Callers that
 // render their own section header (e.g. above a client-type selector) pass
 // showHeading={false} to suppress the built-in "OAuth Client Credentials" block.
 export function ClientCredentialsFields({
   clientId,
   clientSecret,
   tokenEndpointAuthMethod,
+  allowPrivateKeyJwt = false,
+  unsupportedAuthMethod = false,
   clientIdEditable = true,
   clientSecretLabel = "Client Secret (optional)",
   clientSecretPlaceholder = "••••••••",
   showHeading = true,
+  callbackURL,
   onClientIdChange,
   onClientSecretChange,
   onTokenEndpointAuthMethodChange,
@@ -317,10 +464,15 @@ export function ClientCredentialsFields({
   tokenEndpointAuthMethod:
     | CreateRemoteSessionClientFormTokenEndpointAuthMethod
     | "";
+  allowPrivateKeyJwt?: boolean;
+  unsupportedAuthMethod?: boolean;
   clientIdEditable?: boolean;
   clientSecretLabel?: string;
   clientSecretPlaceholder?: string;
   showHeading?: boolean;
+  // callbackURL is the redirect URI of an existing client, or null when it
+  // registered none. Omit it for a client not yet created.
+  callbackURL?: string | null;
   onClientIdChange: (value: string) => void;
   onClientSecretChange: (value: string) => void;
   onTokenEndpointAuthMethodChange: (
@@ -342,7 +494,7 @@ export function ClientCredentialsFields({
         </Stack>
       )}
 
-      <RedirectURICallout />
+      <RedirectURICallout callbackURL={callbackURL} />
 
       <Stack gap={2}>
         <Label className="text-muted-foreground text-xs">Client ID</Label>
@@ -359,21 +511,31 @@ export function ClientCredentialsFields({
         )}
       </Stack>
 
-      <Stack gap={2}>
-        <Label className="text-muted-foreground text-xs">
-          {clientSecretLabel}
-        </Label>
-        <Input
-          type="password"
-          value={clientSecret}
-          onChange={onClientSecretChange}
-          placeholder={clientSecretPlaceholder}
-        />
-      </Stack>
+      {isPrivateKeyJwtAuthMethod(tokenEndpointAuthMethod) ? (
+        <Text muted small>
+          Any existing client secret is retained but not used with
+          private_key_jwt.
+        </Text>
+      ) : (
+        <Stack gap={2}>
+          <Label className="text-muted-foreground text-xs">
+            {clientSecretLabel}
+          </Label>
+          <Input
+            disabled={unsupportedAuthMethod}
+            type="password"
+            value={clientSecret}
+            onChange={onClientSecretChange}
+            placeholder={clientSecretPlaceholder}
+          />
+        </Stack>
+      )}
 
       <TokenEndpointAuthMethodField
         value={tokenEndpointAuthMethod}
         onChange={onTokenEndpointAuthMethodChange}
+        allowPrivateKeyJwt={allowPrivateKeyJwt}
+        unsupported={unsupportedAuthMethod}
       />
     </Stack>
   );
@@ -381,7 +543,7 @@ export function ClientCredentialsFields({
 
 // OverridesFields renders the per-client OAuth dance overrides. Both fields
 // are optional and apply in both DCR and manual modes — they control what
-// Gram sends at authorize/token time, independent of how the client was
+// Speakeasy sends at authorize/token time, independent of how the client was
 // registered.
 export function OverridesFields({
   scopeOverride,
@@ -406,9 +568,9 @@ export function OverridesFields({
           placeholder="read, write, openid"
         />
         <Text muted small>
-          Comma-separated. When provided, the platform requests these scopes
-          during the OAuth dance; otherwise it falls back to the issuer's
-          scopes_supported.
+          Comma-separated. When provided, every sign-in requests these scopes.
+          Otherwise sign-ins request what the MCP server asks for, falling back
+          to the issuer's scopes_supported.
         </Text>
       </Stack>
 
@@ -498,7 +660,7 @@ export function ClientTypeFields({
       <Stack gap={2}>
         {availableTypes.length > 1 && (
           <>
-            <Label className="text-muted-foreground text-xs">Client Type</Label>
+            <Label className="text-muted-foreground text-xs">Client type</Label>
             <Select
               value={clientType}
               onValueChange={(value) => onClientTypeChange(value as ClientType)}

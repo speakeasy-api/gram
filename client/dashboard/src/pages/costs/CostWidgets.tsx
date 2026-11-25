@@ -2,29 +2,45 @@ import { formatCost } from "@/lib/money";
 import type { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { formatWorkUnits, type Measures, unsetLabel } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
-import { movingAverage, resample, smoothPath } from "./sparkline-math";
+import {
+  movingAverage,
+  resample,
+  smoothPath,
+} from "@/components/chart/sparkline-math";
 import { EstimatedCostIndicator } from "@/components/estimated-cost";
-import { TREND } from "@/components/chart/palette";
-import { useSeriesColors } from "@/components/chart/useSeriesColors";
+import { useIsDarkTheme } from "@/lib/theme";
+import {
+  useSeriesColors,
+  useTrendColors,
+} from "@/components/chart/useSeriesColors";
 
-const NEUTRAL = TREND.flat; // KPI sparklines
-
-// Bar grading: muted green (lowest cost) → neutral → muted red (highest).
-// RGB forms of the palette TREND tokens (down/flat/up), pre-converted because
-// the mix below interpolates channel-wise.
-type RGB = [number, number, number];
-const GRADE_LOW: RGB = [59, 85, 52]; // TREND.down
-const GRADE_MID: RGB = [150, 150, 150]; // TREND.flat
-const GRADE_HIGH: RGB = [164, 39, 35]; // TREND.up
-function mixRgb(a: RGB, b: RGB, k: number): string {
-  const c = (i: 0 | 1 | 2) => Math.round(a[i] + (b[i] - a[i]) * k);
-  return `rgb(${c(0)}, ${c(1)}, ${c(2)})`;
+// Ranked-bar shading. These cards list one measure — spend — ordered by it, so
+// the bars encode rank, not a verdict: nothing here is good or bad, the top row
+// is just the biggest. That makes this an ordinal ramp, one hue stepping from
+// the breakdown chart's own leading blue down toward the surface, so the cards
+// and the chart below them read as one system. (It used to grade green → red,
+// which borrowed the trend signal's meaning for a list that has no direction,
+// and clashed with the chart besides.)
+//
+// One step per row, deepest first; the light end still clears 2:1 against its
+// surface so the last row's bar doesn't dissolve into the track.
+const RANK_RAMP_LIGHT = [
+  "#274f72",
+  "#33699f", // the chart's slot-0 blue
+  "#4a80b4",
+  "#7099c0",
+  "#93b2cf",
+];
+// Dark runs the other way — the deepest step would vanish against the canvas,
+// so rank 1 takes the lightest and the ramp steps down from there.
+const RANK_RAMP_DARK = ["#b3cde4", "#8fb4d6", "#6f9bc4", "#5183ae", "#3d6b92"];
+function useRankRamp(): string[] {
+  return useIsDarkTheme() ? RANK_RAMP_DARK : RANK_RAMP_LIGHT;
 }
-function gradeColor(t: number): string {
-  const u = Math.max(0, Math.min(1, t));
-  return u < 0.5
-    ? mixRgb(GRADE_LOW, GRADE_MID, u / 0.5)
-    : mixRgb(GRADE_MID, GRADE_HIGH, (u - 0.5) / 0.5);
+// The bar color for row `rank`. Past the ramp's length the last step repeats —
+// these cards show five rows, so that is a guard, not a case.
+function rankColor(rank: number, ramp: string[]): string {
+  return ramp[Math.min(rank, ramp.length - 1)]!;
 }
 
 function Skeleton({
@@ -296,6 +312,7 @@ function MixCard({
   const costs = top.map((r) => r.cost);
   const max = Math.max(...costs, 0) || 1;
   const canDrill = drillable && !!onDrill;
+  const ramp = useRankRamp();
   return (
     <Card title={title}>
       <div className="mt-3 space-y-0">
@@ -305,10 +322,8 @@ function MixCard({
           <div className="text-muted-foreground/60 text-sm">No data</div>
         ) : (
           top.map((r, i) => {
-            // Colour by rank, not magnitude: rows are sorted by cost desc, so a
-            // single outlier won't collapse everyone else to one colour. Top
-            // rank → muted red, last → muted green, middle ranks → neutral.
-            const t = top.length > 1 ? 1 - i / (top.length - 1) : 1;
+            // Shade by rank, not magnitude: rows are sorted by cost desc, so a
+            // single outlier won't collapse everyone else onto one step.
             const selectable =
               canDrill && r.label !== "" && r.label !== "Other";
             return (
@@ -317,7 +332,7 @@ function MixCard({
                 label={r.label === "" ? unsetLabel(dim) : r.label}
                 cost={r.cost}
                 barPct={(r.cost / max) * 100}
-                barColor={gradeColor(t)}
+                barColor={rankColor(i, ramp)}
                 onSelect={selectable ? () => onDrill!(dim, r.label) : undefined}
               />
             );
@@ -344,6 +359,7 @@ function SessionsCard({
 }): JSX.Element {
   const top = rows.slice(0, 5);
   const max = Math.max(...top.map((r) => r.cost), 0) || 1;
+  const ramp = useRankRamp();
   return (
     <Card title={title}>
       <div className="mt-3 space-y-0">
@@ -353,8 +369,7 @@ function SessionsCard({
           <div className="text-muted-foreground/60 text-sm">No sessions</div>
         ) : (
           top.map((r, i) => {
-            // Colour by rank (top → muted red, last → muted green), matching MixCard.
-            const t = top.length > 1 ? 1 - i / (top.length - 1) : 1;
+            // Shade by rank, matching MixCard.
             return (
               <MixRowItem
                 key={r.id}
@@ -363,7 +378,7 @@ function SessionsCard({
                 clampTitle
                 cost={r.cost}
                 barPct={(r.cost / max) * 100}
-                barColor={gradeColor(t)}
+                barColor={rankColor(i, ramp)}
                 onSelect={onOpenSession ? () => onOpenSession(r.id) : undefined}
               />
             );
@@ -389,6 +404,9 @@ function KpiTile({
   range: string;
   loading: boolean;
 }): JSX.Element {
+  // These sparklines are deliberately colorless — a KPI count has no good or
+  // bad direction — so they take the theme's neutral rather than grading.
+  const neutral = useTrendColors().flat;
   // Shares the Card shell with the row above rather than a squatter box of its
   // own, so the two rows read as one family: same padding, same title, same
   // value size, with the sparkline sized to fill the tile instead of tucking
@@ -409,7 +427,7 @@ function KpiTile({
               </span>
             )}
           </div>
-          <Sparkline values={series} width={96} height={36} color={NEUTRAL} />
+          <Sparkline values={series} width={96} height={36} color={neutral} />
         </div>
       )}
     </Card>

@@ -11,8 +11,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -35,8 +35,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionNoValidTokenChallenges(t *tes
 
 	sessionToken := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, requestSubject)
 	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), sessionToken, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unauthorized")
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
 		"resolver must surface a WWW-Authenticate challenge when no valid remote_session exists for the subject")
 }
@@ -61,8 +60,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionNoRowsChallenges(t *testing.T
 
 	sessionToken := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, requestSubject)
 	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), sessionToken, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unauthorized")
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
 		"resolver must surface a WWW-Authenticate challenge when the subject has no remote_sessions rows")
 }
@@ -128,7 +126,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionAnonymousSubjectResolves(t *t
 }
 
 type remoteSessionResolverFixture struct {
-	Toolset             toolsets_repo.Toolset
+	Toolset             hostedToolset
 	UserSessionIssuer   usersessions_repo.UserSessionIssuer
 	RemoteSessionClient remotesessions_repo.RemoteSessionClient
 }
@@ -158,13 +156,8 @@ func createRemoteSessionResolverFixture(
 	})
 	require.NoError(t, err)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
-	toolset, err = toolsets_repo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, toolset, userIssuer.ID)
 	ti.addToolWithDualSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 
 	remoteRepo := remotesessions_repo.New(ti.conn)
@@ -185,7 +178,7 @@ func createRemoteSessionResolverFixture(
 	})
 	require.NoError(t, err)
 
-	remoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+	remoteClient, err := remoteRepo.CreateRemoteSessionClientFixture(ctx, remotesessions_repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID: remoteIssuer.ID,
 		ClientID:              "resolver-client-" + suffix,
@@ -223,7 +216,7 @@ func insertRemoteSessionAccessToken(
 	accessTokenEncrypted, err := ti.enc.Encrypt([]byte(accessToken))
 	require.NoError(t, err)
 
-	session, err := remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	session, err := remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userSessionIssuerID,
 		RemoteSessionClientID: remoteSessionClientID,
@@ -241,14 +234,14 @@ func insertRemoteSessionAccessToken(
 func mintUserSessionBearerForSubject(
 	t *testing.T,
 	ti *testInstance,
-	toolset toolsets_repo.Toolset,
+	toolset hostedToolset,
 	subject urn.SessionSubject,
 ) string {
 	t.Helper()
 
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  subject,
-		Audience: urn.NewToolset(toolset.ID).String(),
+		Audience: urn.NewUserSessionIssuer(toolset.UserSessionIssuerID.UUID).String(),
 		Issuer:   ti.serverURL.String() + "/mcp/" + toolset.McpSlug.String,
 		Lifetime: time.Hour,
 	})
@@ -269,10 +262,11 @@ func persistTestUserSession(t *testing.T, ti *testInstance, issuerID uuid.UUID, 
 		UserSessionClientID: uuid.NullUUID{},
 		SubjectUrn:          subject,
 		Jti:                 jti,
-		RefreshTokenHash:    "test-bearer-" + uuid.NewString(),
+		RefreshTokenHash:    conv.ToPGText("test-bearer-" + uuid.NewString()),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 		ToolSelection:       nil,
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 }

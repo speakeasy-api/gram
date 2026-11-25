@@ -1,7 +1,7 @@
 # WorkOS Backfill
 
 Use this runbook to run the local WorkOS backfill script against local, dev, or
-prod databases. The script syncs WorkOS snapshot state into Gram for:
+prod databases. The script syncs WorkOS snapshot state into Speakeasy for:
 
 - global roles
 - organization metadata
@@ -18,7 +18,7 @@ The entrypoint is `server/cmd/workos-backfill`.
 
 The organization phase reconciles each org's Directory Sync users against the
 WorkOS snapshot. Active directory users are upserted locally; non-active
-(deactivated/suspended) directory users are soft-deleted and, when a Gram user
+(deactivated/suspended) directory users are soft-deleted and, when a Speakeasy user
 is linked (by email, falling back to the stored linkage on the soft-deleted
 directory row), their organization relationship and role assignments are
 revoked. A relationship stamped after the snapshot fetch is left untouched — a
@@ -248,12 +248,12 @@ Each organization write runs inside a database transaction. The write path:
    when no local `workos_id` row exists.
 2. Skips unlinked WorkOS organizations with no `external_id`.
 3. Upserts organization metadata and preserves an existing slug. New slugs use
-   Gram's normal unique organization slug generation.
+   Speakeasy's normal unique organization slug generation.
 4. Upserts organization roles and soft-deletes roles missing from the WorkOS
    snapshot.
 5. Resolves each WorkOS user by existing local `workos_id`, then by WorkOS
    `external_id`.
-6. Skips users that cannot be resolved to a local Gram user ID.
+6. Skips users that cannot be resolved to a local Speakeasy user ID.
 7. Upserts users, memberships, and role assignments for resolved users.
 8. Commits the transaction and validates the expected rows.
 

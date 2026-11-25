@@ -38,6 +38,10 @@ export type TierLimits = {
    */
   includedToolCalls: number;
   /**
+   * Exact USD list price per GiB of MCP gateway egress (optional)
+   */
+  mcpEgressPricePerGibUsd?: string | undefined;
+  /**
    * The price per additional server
    */
   pricePerAdditionalServer: number;
@@ -45,6 +49,10 @@ export type TierLimits = {
    * The price per additional tool call
    */
   pricePerAdditionalToolCall: number;
+  /**
+   * Exact USD list price per million tokens scanned for risk (optional)
+   */
+  riskScanPricePerMillionUsd?: string | undefined;
   /**
    * Exact USD list price per million tokens under management (optional)
    */
@@ -62,8 +70,10 @@ export const TierLimits$inboundSchema: z.ZodMiniType<TierLimits, unknown> = z
       included_credits: z.int(),
       included_servers: z.int(),
       included_tool_calls: z.int(),
+      mcp_egress_price_per_gib_usd: z.optional(z.string()),
       price_per_additional_server: z.number(),
       price_per_additional_tool_call: z.number(),
+      risk_scan_price_per_million_usd: z.optional(z.string()),
       tum_price_per_million_usd: z.optional(z.string()),
     }),
     z.transform((v) => {
@@ -75,8 +85,10 @@ export const TierLimits$inboundSchema: z.ZodMiniType<TierLimits, unknown> = z
         "included_credits": "includedCredits",
         "included_servers": "includedServers",
         "included_tool_calls": "includedToolCalls",
+        "mcp_egress_price_per_gib_usd": "mcpEgressPricePerGibUsd",
         "price_per_additional_server": "pricePerAdditionalServer",
         "price_per_additional_tool_call": "pricePerAdditionalToolCall",
+        "risk_scan_price_per_million_usd": "riskScanPricePerMillionUsd",
         "tum_price_per_million_usd": "tumPricePerMillionUsd",
       });
     }),

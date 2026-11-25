@@ -1,6 +1,10 @@
 import type { JourneyStatus } from "@/components/project-guide/journeys";
 import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
-import { DETECTION_RULES } from "@/pages/security/policy-data";
+import {
+  DETECTION_RULES,
+  type PolicyMessageType,
+} from "@/pages/security/policy-data";
+import { decodeKindScope } from "@/pages/security/policy-scope";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
@@ -63,19 +67,24 @@ export function hasDefaultPluginServer(
   );
 }
 
+/** The activity row the guide attributes to a governed MCP server. */
+export function findMcpServerActivity(
+  activity: McpServerActivity[] | undefined,
+  server: McpServer | undefined,
+): McpServerActivity | undefined {
+  if (!server?.slug) return undefined;
+  return activity?.find(
+    (entry) =>
+      entry.targetType === "hosted_mcp_server" &&
+      entry.targetId === server.slug,
+  );
+}
+
 export function hasMcpServerActivity(
   activity: McpServerActivity[] | undefined,
   server: McpServer | undefined,
 ): boolean {
-  return Boolean(
-    server?.slug &&
-    activity?.some(
-      (entry) =>
-        entry.targetType === "hosted_mcp_server" &&
-        entry.targetId === server.slug &&
-        entry.totalToolCalls > 0,
-    ),
-  );
+  return (findMcpServerActivity(activity, server)?.totalToolCalls ?? 0) > 0;
 }
 
 export function latestSecretsFinding(
@@ -95,7 +104,6 @@ export function hasBlockingSecretsPolicy(
   policies: RiskPolicy[] | undefined,
 ): boolean {
   return (policies ?? []).some((policy) => {
-    const messageTypes = policy.messageTypes ?? [];
     return (
       policy.enabled &&
       policy.action === "block" &&
@@ -103,21 +111,34 @@ export function hasBlockingSecretsPolicy(
       policy.audienceType === "everyone" &&
       policy.sources.length === 1 &&
       policy.sources.includes("gitleaks") &&
-      messageTypes.length === 2 &&
-      messageTypes.includes("tool_request") &&
-      messageTypes.includes("tool_response") &&
       DETECTION_RULES.secrets.some(
         (rule) => !rule.hidden && !policy.disabledRules?.includes(rule.id),
       ) &&
-      !policy.scopeInclude &&
-      !policy.scopeExempt &&
-      !(policy.detectionScopes ?? []).some(
-        (scope) =>
-          scope.category === "secrets" &&
-          (Boolean(scope.scopeInclude) || Boolean(scope.scopeExempt)),
-      )
+      coversGuideScope(policy)
     );
   });
+}
+
+/** The kinds the secrets guide scopes its policy to. */
+const GUIDE_KINDS: PolicyMessageType[] = ["tool_request", "tool_response"];
+
+function isGuideKinds(kinds: readonly string[]): boolean {
+  return (
+    kinds.length === GUIDE_KINDS.length &&
+    GUIDE_KINDS.every((kind) => kinds.includes(kind))
+  );
+}
+
+/** Recognizes the guide's own policy by the `secrets` category scope it
+ *  writes. Missing it would make the guide create a second policy on every
+ *  reload. */
+function coversGuideScope(policy: RiskPolicy): boolean {
+  const secretsScope = (policy.detectionScopes ?? []).find(
+    (scope) => scope.category === "secrets",
+  );
+  if (!secretsScope || secretsScope.scopeExempt) return false;
+  const kinds = decodeKindScope(secretsScope.scopeInclude ?? "");
+  return kinds !== null && isGuideKinds(kinds);
 }
 
 /**

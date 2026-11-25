@@ -12,21 +12,26 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/protobuf/proto"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
+	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	forwardingrepo "github.com/speakeasy-api/gram/server/internal/otelforwarding/repo"
 )
 
 const (
-	relayDestinationCacheTTL        = 60 * time.Second
-	relayDestinationCacheMaxEntries = 1024
-	maxRelayErrorBodyBytes          = 4 * 1024
+	relayNonSensitiveDestinationCacheTTL = 60 * time.Second
+	relayDestinationCacheMaxEntries      = 1024
+	maxRelayErrorBodyBytes               = 4 * 1024
+	relayMaxRetries                      = 1
+	relayRequestTimeout                  = 10 * time.Second
 )
 
 type relayReason string
@@ -39,21 +44,34 @@ const (
 	relayReasonHTTP4xx            relayReason = "http-4xx"
 	relayReasonHTTP5xx            relayReason = "http-5xx"
 	relayReasonPermanentHTTPError relayReason = "permanent-http-error"
+	relayReasonExcluded           relayReason = "excluded"
+	relayReasonBelowSeverity      relayReason = "below-severity"
+	relayReasonDeadLetter         relayReason = "dead-letter"
+	relayReasonStateChange        relayReason = "state-change"
+	relayReasonShadow             relayReason = "shadow"
 )
 
 // signalRelay resolves and caches customer-defined OTLP destinations, then
 // delivers one signal's protobuf export requests to its configured endpoint.
 type signalRelay struct {
-	readReplica      *pgxpool.Pool
+	db               *pgxpool.Pool
 	encryptionClient *encryption.Client
 	policy           *guardian.Policy
+	dataSource       string
 	endpointPath     string
 	signalName       string
 	now              func() time.Time
+	maxRetries       int
+	timeout          time.Duration
 
 	cacheMu          sync.RWMutex
-	destinationCache map[string]cachedRelayDestination
+	destinationCache map[relayRouteKey]cachedRelayDestination
 	destinationLoads singleflight.Group
+}
+
+type relayRouteKey struct {
+	organizationID string
+	projectID      uuid.UUID
 }
 
 type cachedRelayDestination struct {
@@ -61,14 +79,18 @@ type cachedRelayDestination struct {
 	expiresAt   time.Time
 }
 
-// relayDestination sends protobuf exports to one organization's configured
-// OTLP endpoint using its forwarding headers and HTTP policy.
+// relayDestination sends protobuf exports to one project's configured OTLP
+// endpoint using its destination headers and HTTP policy.
 type relayDestination struct {
-	organizationID string
-	endpoint       string
-	headers        http.Header
-	httpClient     *guardian.HTTPClient
-	signalName     string
+	organizationID       string
+	projectID            uuid.UUID
+	endpoint             string
+	headers              http.Header
+	httpClient           *guardian.HTTPClient
+	signalName           string
+	includeSensitiveData bool
+	// minSeverity drops log records below it. Unspecified keeps every record.
+	minSeverity otelv1.LogRecord_SeverityNumber
 }
 
 type relayExportError struct {
@@ -86,47 +108,53 @@ func (e *relayExportError) Unwrap() error {
 }
 
 func newSignalRelay(
-	readReplica *pgxpool.Pool,
+	db *pgxpool.Pool,
 	encryptionClient *encryption.Client,
 	policy *guardian.Policy,
+	dataSource string,
 	endpointPath string,
 	signalName string,
 ) *signalRelay {
 	return &signalRelay{
-		readReplica:      readReplica,
+		db:               db,
 		encryptionClient: encryptionClient,
 		policy:           policy,
+		dataSource:       dataSource,
 		endpointPath:     endpointPath,
 		signalName:       signalName,
 		now:              time.Now,
+		maxRetries:       relayMaxRetries,
+		timeout:          relayRequestTimeout,
 		cacheMu:          sync.RWMutex{},
-		destinationCache: make(map[string]cachedRelayDestination),
+		destinationCache: make(map[relayRouteKey]cachedRelayDestination),
 		destinationLoads: singleflight.Group{},
 	}
 }
 
-func (r *signalRelay) destinationForOrganization(ctx context.Context, organizationID string) (*relayDestination, error) {
+func (r *signalRelay) destinationForRoute(ctx context.Context, key relayRouteKey) (*relayDestination, error) {
 	now := r.now()
-	if cached, ok := r.cachedDestination(organizationID, now); ok {
+	if cached, ok := r.cachedDestination(key, now); ok {
 		return cached, nil
 	}
 
-	value, err, _ := r.destinationLoads.Do(organizationID, func() (any, error) {
+	value, err, _ := r.destinationLoads.Do(relayRouteLoadKey(key), func() (any, error) {
 		now := r.now()
-		if cached, ok := r.cachedDestination(organizationID, now); ok {
-			return cachedRelayDestination{destination: cached, expiresAt: now.Add(relayDestinationCacheTTL)}, nil
+		if cached, ok := r.cachedDestination(key, now); ok {
+			return cachedRelayDestination{destination: cached, expiresAt: time.Time{}}, nil
 		}
 
-		destination, err := r.loadDestination(ctx, organizationID)
+		destination, err := r.loadDestination(ctx, key)
 		if err != nil {
 			return nil, err
 		}
 
-		cached := cachedRelayDestination{
-			destination: destination,
-			expiresAt:   now.Add(relayDestinationCacheTTL),
+		cached := cachedRelayDestination{destination: destination, expiresAt: time.Time{}}
+		// Only exclude and missing destinations are safe to reuse: stale include
+		// policy could disclose data after an include-to-exclude change.
+		if destination == nil || !destination.includeSensitiveData {
+			cached.expiresAt = now.Add(relayNonSensitiveDestinationCacheTTL)
+			r.cacheDestination(key, cached, now)
 		}
-		r.cacheDestination(organizationID, cached, now)
 		return cached, nil
 	})
 	if err != nil {
@@ -140,36 +168,67 @@ func (r *signalRelay) destinationForOrganization(ctx context.Context, organizati
 	return cached.destination, nil
 }
 
-func (r *signalRelay) loadDestination(ctx context.Context, organizationID string) (*relayDestination, error) {
-	config, err := forwardingrepo.New(r.readReplica).GetOrgOTELForwardingConfig(ctx, organizationID)
+// relayRouteLoadKey converts a structured route key into the string required
+// by singleflight.Group. The NUL byte delimits the organization ID from the
+// fixed-format project UUID so distinct component pairs cannot concatenate to
+// the same key.
+func relayRouteLoadKey(key relayRouteKey) string {
+	return key.organizationID + "\x00" + key.projectID.String()
+}
+
+func (r *signalRelay) loadDestination(ctx context.Context, key relayRouteKey) (*relayDestination, error) {
+	config, err := dataexportsrepo.New(r.db).GetActiveOtelRouteDestination(ctx, dataexportsrepo.GetActiveOtelRouteDestinationParams{
+		DefaultMinSeverity: dataexports.DefaultMCPConnectionLogMinSeverity,
+		OrganizationID:     key.organizationID,
+		ProjectID:          key.projectID,
+		DataSource:         r.dataSource,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get forwarding settings for organization: %w", err)
-	}
-	if config.EndpointUrl == "" || !config.Enabled {
-		return nil, nil
+		return nil, fmt.Errorf("get active OTEL route destination: %w", err)
 	}
 
 	headers := make(map[string]string)
 	if config.HeadersEncrypted.Valid && config.HeadersEncrypted.String != "" {
 		plaintext, err := r.encryptionClient.Decrypt(config.HeadersEncrypted.String)
 		if err != nil {
-			return nil, fmt.Errorf("decrypt forwarding headers: %w", err)
+			return nil, fmt.Errorf("decrypt destination headers: %w", err)
 		}
 		if err := json.Unmarshal([]byte(plaintext), &headers); err != nil {
-			return nil, fmt.Errorf("decode forwarding headers: %w", err)
+			return nil, fmt.Errorf("decode destination headers: %w", err)
 		}
 	}
 
-	return r.newDestination(organizationID, config.EndpointUrl, headers)
+	destination, err := r.newDestination(key, config.EndpointUrl, headers, config.IncludeSensitiveData)
+	if err != nil {
+		return nil, err
+	}
+	if r.dataSource == dataexports.DataSourceMCPConnectionLogs {
+		destination.minSeverity = connectionLogMinSeverity(config.MinSeverity)
+	}
+	return destination, nil
+}
+
+// connectionLogMinSeverity maps a route's level to the lowest severity it receives.
+// An unknown level gets the most restrictive one.
+func connectionLogMinSeverity(level string) otelv1.LogRecord_SeverityNumber {
+	switch level {
+	case dataexports.MinSeverityInfo:
+		return otelv1.LogRecord_SEVERITY_NUMBER_INFO
+	case dataexports.MinSeverityWarn:
+		return otelv1.LogRecord_SEVERITY_NUMBER_WARN
+	default:
+		return otelv1.LogRecord_SEVERITY_NUMBER_ERROR
+	}
 }
 
 func (r *signalRelay) newDestination(
-	organizationID string,
+	key relayRouteKey,
 	baseURL string,
 	headerValues map[string]string,
+	includeSensitiveData bool,
 ) (*relayDestination, error) {
 	endpoint, err := url.JoinPath(baseURL, r.endpointPath)
 	if err != nil {
@@ -184,7 +243,7 @@ func (r *signalRelay) newDestination(
 	defaultCheckRetry := retryConfig.CheckRetry
 	retryConfig.WaitMin = 100 * time.Millisecond
 	retryConfig.WaitMax = time.Second
-	retryConfig.MaxAttempts = 1
+	retryConfig.MaxAttempts = r.maxRetries
 	retryConfig.CheckRetry = func(ctx context.Context, response *http.Response, err error) (bool, error) {
 		retry, retryErr := defaultCheckRetry(ctx, response, err)
 		if retry || retryErr != nil {
@@ -195,59 +254,80 @@ func (r *signalRelay) newDestination(
 	retryConfig.ErrorHandler = func(response *http.Response, err error, _ int) (*http.Response, error) {
 		return response, err
 	}
-	httpClient := r.policy.PooledClient(guardian.WithRetryConfig(retryConfig))
-	httpClient.Timeout = 10 * time.Second
+	// Include destinations are deliberately reloaded for every delivery so an
+	// include-to-exclude policy change takes effect immediately. Their clients
+	// are therefore short-lived and must not retain idle connections. Exclude
+	// destinations live in the cache and use pooled connections across exports.
+	var httpClient *guardian.HTTPClient
+	if includeSensitiveData {
+		httpClient = r.policy.Client(guardian.WithRetryConfig(retryConfig))
+	} else {
+		httpClient = r.policy.PooledClient(guardian.WithRetryConfig(retryConfig))
+	}
+	httpClient.Timeout = r.timeout
 
 	return &relayDestination{
-		organizationID: organizationID,
-		endpoint:       endpoint,
-		headers:        headers,
-		httpClient:     httpClient,
-		signalName:     r.signalName,
+		organizationID:       key.organizationID,
+		projectID:            key.projectID,
+		endpoint:             endpoint,
+		headers:              headers,
+		httpClient:           httpClient,
+		signalName:           r.signalName,
+		includeSensitiveData: includeSensitiveData,
+		minSeverity:          otelv1.LogRecord_SEVERITY_NUMBER_UNSPECIFIED,
 	}, nil
 }
 
-func (r *signalRelay) cacheDestination(organizationID string, cached cachedRelayDestination, now time.Time) {
+func (r *signalRelay) cacheDestination(key relayRouteKey, cached cachedRelayDestination, now time.Time) {
 	var evicted []*relayDestination
 
 	r.cacheMu.Lock()
-	if replaced, ok := r.destinationCache[organizationID]; ok {
-		delete(r.destinationCache, organizationID)
+	if replaced, ok := r.destinationCache[key]; ok {
+		delete(r.destinationCache, key)
 		if replaced.destination != nil && replaced.destination != cached.destination {
 			evicted = append(evicted, replaced.destination)
 		}
 	}
-	for cachedOrganizationID, candidate := range r.destinationCache {
+	for cachedKey, candidate := range r.destinationCache {
 		if now.Before(candidate.expiresAt) {
 			continue
 		}
-		delete(r.destinationCache, cachedOrganizationID)
+		delete(r.destinationCache, cachedKey)
 		if candidate.destination != nil {
 			evicted = append(evicted, candidate.destination)
 		}
 	}
 	for len(r.destinationCache) >= relayDestinationCacheMaxEntries {
-		evictOrganizationID := ""
+		var evictKey relayRouteKey
 		var evictCandidate cachedRelayDestination
-		for cachedOrganizationID, candidate := range r.destinationCache {
-			if evictOrganizationID == "" ||
+		evictSet := false
+		for cachedKey, candidate := range r.destinationCache {
+			if !evictSet ||
 				candidate.expiresAt.Before(evictCandidate.expiresAt) ||
-				(candidate.expiresAt.Equal(evictCandidate.expiresAt) && cachedOrganizationID < evictOrganizationID) {
-				evictOrganizationID = cachedOrganizationID
+				(candidate.expiresAt.Equal(evictCandidate.expiresAt) && relayRouteKeyLess(cachedKey, evictKey)) {
+				evictKey = cachedKey
 				evictCandidate = candidate
+				evictSet = true
 			}
 		}
-		delete(r.destinationCache, evictOrganizationID)
+		delete(r.destinationCache, evictKey)
 		if evictCandidate.destination != nil {
 			evicted = append(evicted, evictCandidate.destination)
 		}
 	}
-	r.destinationCache[organizationID] = cached
+	r.destinationCache[key] = cached
 	r.cacheMu.Unlock()
 
 	for _, destination := range evicted {
 		closeIdleRelayDestination(destination)
 	}
+}
+
+func relayRouteKeyLess(left, right relayRouteKey) bool {
+	if left.organizationID != right.organizationID {
+		return left.organizationID < right.organizationID
+	}
+	return bytes.Compare(left.projectID[:], right.projectID[:]) < 0
 }
 
 func closeIdleRelayDestination(destination *relayDestination) {
@@ -257,9 +337,9 @@ func closeIdleRelayDestination(destination *relayDestination) {
 	destination.httpClient.CloseIdleConnections()
 }
 
-func (r *signalRelay) cachedDestination(organizationID string, now time.Time) (*relayDestination, bool) {
+func (r *signalRelay) cachedDestination(key relayRouteKey, now time.Time) (*relayDestination, bool) {
 	r.cacheMu.RLock()
-	cached, ok := r.destinationCache[organizationID]
+	cached, ok := r.destinationCache[key]
 	if !ok {
 		r.cacheMu.RUnlock()
 		return nil, false
@@ -271,9 +351,9 @@ func (r *signalRelay) cachedDestination(organizationID string, now time.Time) (*
 	r.cacheMu.RUnlock()
 
 	// Recheck under the write lock: another goroutine may have refreshed this
-	// organization after the expired read above.
+	// project route after the expired read above.
 	r.cacheMu.Lock()
-	cached, ok = r.destinationCache[organizationID]
+	cached, ok = r.destinationCache[key]
 	if !ok {
 		r.cacheMu.Unlock()
 		return nil, false
@@ -282,37 +362,48 @@ func (r *signalRelay) cachedDestination(organizationID string, now time.Time) (*
 		r.cacheMu.Unlock()
 		return cached.destination, true
 	}
-	delete(r.destinationCache, organizationID)
+	delete(r.destinationCache, key)
 	r.cacheMu.Unlock()
 
 	closeIdleRelayDestination(cached.destination)
 	return nil, false
 }
 
-func (d *relayDestination) export(ctx context.Context, message proto.Message) error {
-	return d.exportWithLimit(ctx, message, 0)
+// export marshals and sends one OTLP export, returning the destination's HTTP
+// status, zero when no response arrived. maxBytes of zero means no limit.
+func (d *relayDestination) export(ctx context.Context, message proto.Message, maxBytes int) (int, error) {
+	body, err := d.marshalExport(message, maxBytes)
+	if err != nil {
+		return 0, err
+	}
+	return d.sendExport(ctx, body)
 }
 
-func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Message, maxBytes int) error {
+// marshalExport encodes an export and checks it against maxBytes, zero meaning no limit.
+func (d *relayDestination) marshalExport(message proto.Message, maxBytes int) ([]byte, error) {
 	body, err := proto.Marshal(message)
 	if err != nil {
-		return &relayExportError{
+		return nil, &relayExportError{
 			reason:    relayReasonInvalid,
 			retryable: false,
 			err:       fmt.Errorf("marshal OTLP %s export: %w", d.signalName, err),
 		}
 	}
 	if maxBytes > 0 && len(body) > maxBytes {
-		return &relayExportError{
+		return nil, &relayExportError{
 			reason:    relayReasonInvalid,
 			retryable: false,
 			err:       fmt.Errorf("OTLP %s export is %d bytes, limit is %d", d.signalName, len(body), maxBytes),
 		}
 	}
+	return body, nil
+}
 
+// sendExport posts an encoded export and returns the destination's HTTP status, zero when no response arrived.
+func (d *relayDestination) sendExport(ctx context.Context, body []byte) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.endpoint, bytes.NewReader(body))
 	if err != nil {
-		return &relayExportError{
+		return 0, &relayExportError{
 			reason:    relayReasonPermanentHTTPError,
 			retryable: false,
 			err:       fmt.Errorf("create OTLP %s export request: %w", d.signalName, err),
@@ -327,7 +418,7 @@ func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Me
 
 	response, err := d.httpClient.Do(req)
 	if err != nil {
-		return &relayExportError{
+		return 0, &relayExportError{
 			reason:    relayReasonNetworkError,
 			retryable: true,
 			err:       fmt.Errorf("send OTLP %s export: %w", d.signalName, err),
@@ -337,7 +428,7 @@ func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Me
 
 	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
 		_, _ = io.Copy(io.Discard, response.Body)
-		return nil
+		return response.StatusCode, nil
 	}
 
 	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, maxRelayErrorBodyBytes))
@@ -348,7 +439,7 @@ func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Me
 	if !retryable && responseSnippet != "" {
 		responseErr = fmt.Errorf("OTLP %s export returned %s: %s", d.signalName, response.Status, responseSnippet)
 	}
-	return &relayExportError{
+	return response.StatusCode, &relayExportError{
 		reason:    reason,
 		retryable: retryable,
 		err:       responseErr,

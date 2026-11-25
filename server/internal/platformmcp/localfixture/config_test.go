@@ -21,7 +21,7 @@ func TestNewConfigBuildsCodeOwnedCatalogDescriptor(t *testing.T) {
 	require.Equal(t, ProviderKey, descriptor.ProviderKey)
 	require.Equal(t, CanonicalRef, descriptor.CanonicalRef)
 	require.Len(t, resources, 1)
-	require.Equal(t, "gram://platform-mcp/setup/local-fixture/provider_setup", resources[0].URI)
+	require.Equal(t, "speakeasy://platform-mcp/setup/local-fixture/provider_setup", resources[0].URI)
 	require.LessOrEqual(t, len(resources[0].Text), 32*1024)
 	require.NotContains(t, resources[0].Text, config.RemoteURL())
 	require.Equal(t, SetupIntent, descriptor.SetupIntent)
@@ -54,4 +54,15 @@ func TestNewConfigRejectsNonOriginURLs(t *testing.T) {
 			require.Nil(t, config)
 		})
 	}
+}
+
+func TestRegistryDetailsPathWithDiscoveryPrefix(t *testing.T) {
+	t.Parallel()
+
+	origin, err := url.Parse("https://localhost:8080")
+	require.NoError(t, err)
+	config, err := NewConfig(origin)
+	require.NoError(t, err)
+	config.SetRegistryPrefix("/platform-mcp/local-fixture/registry")
+	require.Equal(t, "/platform-mcp/local-fixture/registry/v0.1/servers/local-fixture%2Freviewed-mcp/versions/latest", config.RegistryDetailsPath())
 }

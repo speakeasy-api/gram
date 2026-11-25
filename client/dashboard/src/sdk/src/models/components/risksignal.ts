@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -25,7 +26,7 @@ export const RiskSignalSeverity = {
 /**
  * Severity rating derived from the risk score.
  */
-export type RiskSignalSeverity = ClosedEnum<typeof RiskSignalSeverity>;
+export type RiskSignalSeverity = OpenEnum<typeof RiskSignalSeverity>;
 
 /**
  * One clustered risk signal: all live findings for a single rule in the window, with a heuristic severity score and trend/spread stats.
@@ -64,6 +65,10 @@ export type RiskSignal = {
    */
   lastSeen: Date;
   /**
+   * Concrete MCP server IDs the findings in this signal were observed on. Empty when no finding carries server attribution.
+   */
+  mcpServerIds: Array<string>;
+  /**
    * Finding count in the equal-length window immediately before from.
    */
   previousFindings: number;
@@ -88,6 +93,10 @@ export type RiskSignal = {
    */
   teams: number;
   /**
+   * Concrete tool names the findings in this signal were observed on. Empty when no finding carries tool attribution.
+   */
+  toolNames: Array<string>;
+  /**
    * Top users by finding count within the signal.
    */
   topUsers: Array<RiskSignalTopUser>;
@@ -98,9 +107,10 @@ export type RiskSignal = {
 };
 
 /** @internal */
-export const RiskSignalSeverity$inboundSchema: z.ZodMiniEnum<
-  typeof RiskSignalSeverity
-> = z.enum(RiskSignalSeverity);
+export const RiskSignalSeverity$inboundSchema: z.ZodMiniType<
+  RiskSignalSeverity,
+  unknown
+> = openEnums.inboundSchema(RiskSignalSeverity);
 
 /** @internal */
 export const RiskSignal$inboundSchema: z.ZodMiniType<RiskSignal, unknown> = z
@@ -120,12 +130,14 @@ export const RiskSignal$inboundSchema: z.ZodMiniType<RiskSignal, unknown> = z
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      mcp_server_ids: z.array(z.string()),
       previous_findings: z.int(),
       risk_score: z.number(),
       rule_id: z.string(),
       severity: RiskSignalSeverity$inboundSchema,
       sparkline: z.array(z.int()),
       teams: z.int(),
+      tool_names: z.array(z.string()),
       top_users: z.array(RiskSignalTopUser$inboundSchema),
       users: z.int(),
     }),
@@ -134,9 +146,11 @@ export const RiskSignal$inboundSchema: z.ZodMiniType<RiskSignal, unknown> = z
         "detection_sources": "detectionSources",
         "first_seen": "firstSeen",
         "last_seen": "lastSeen",
+        "mcp_server_ids": "mcpServerIds",
         "previous_findings": "previousFindings",
         "risk_score": "riskScore",
         "rule_id": "ruleId",
+        "tool_names": "toolNames",
         "top_users": "topUsers",
       });
     }),

@@ -23,6 +23,12 @@ func TestDeriveEventURN_ClassifiesKnownProducers(t *testing.T) {
 			want:      "urn:telemetry:gram_service:log:tool_call",
 		},
 		{
+			name:      "it classifies meta MCP discovery calls",
+			legacyURN: "metamcp:11111111-2222-4333-a444-555555555555:list_servers",
+			attrs:     map[attr.Key]any{attr.EventSourceKey: string(EventSourceMetaDiscovery)},
+			want:      "urn:telemetry:gram_service:log:meta_discovery",
+		},
+		{
 			name:      "it classifies gateway resource reads",
 			legacyURN: "tools:http:petstore:read_docs",
 			attrs:     map[attr.Key]any{attr.EventSourceKey: string(EventSourceResourceRead)},
@@ -147,6 +153,15 @@ func TestDeriveEventURN_ClassifiesKnownProducers(t *testing.T) {
 				attr.HookEventKey:   "skill.activated",
 			},
 			want: "urn:telemetry:agent_hook:log:skill.activated",
+		},
+		{
+			name:      "it classifies hook delivery failure reports as agent_hook diagnostics",
+			legacyURN: "",
+			attrs: map[attr.Key]any{
+				attr.EventSourceKey: string(EventSourceHookDiagnostic),
+				attr.HookEventKey:   "client.delivery_failed",
+			},
+			want: "urn:telemetry:agent_hook:log:client.delivery_failed",
 		},
 		{
 			name:      "it marks hook rows without an event name as unknown",

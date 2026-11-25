@@ -27,18 +27,41 @@ type CreateClientRequestBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// Optional client_secret supplied by the caller. Gram encrypts before
+	// Optional client_secret supplied by the caller. Speakeasy encrypts before
 	// persisting; the plaintext is never returned.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Omit to use
+	// the issuer identifier; token_endpoint is available for providers that
+	// require the token endpoint URL.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// Organization JSON Web Key Set to sign private_key_jwt assertions with.
+	// Required when token_endpoint_auth_method is private_key_jwt and optional
+	// otherwise, as with attachKeySet. Must belong to the caller's organization,
+	// which needs the customer-managed encryption keys entitlement.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Who the upstream access credential belongs to, fixed at creation. subject
+	// (the default) means each caller connects their own upstream account through
+	// the client. self means the client obtains a credential for itself with the
+	// client_credentials grant and every caller shares it; it requires
+	// token_endpoint_auth_method client_secret_basic, client_secret_post (both
+	// with client_secret) or private_key_jwt (with json_web_key_set_id), and an
+	// issuer with a token_endpoint.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
+	// When the issuer reported issuing the client_id (RFC 7591
+	// client_id_issued_at). Omit to record the time of this call.
+	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// When the issuer reported the client secret expires (RFC 7591
+	// client_secret_expires_at). Omit when the issuer reported no expiry.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 }
 
 // CreateCimdClientRequestBody is the type of the
@@ -67,16 +90,78 @@ type CreateCimdClientRequestBody struct {
 type UpdateClientRequestBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Rotate the client secret. Gram re-encrypts before persisting.
+	// Correct the client_id registered with the issuer. Refused for Client ID
+	// Metadata Document (CIMD) clients and clients managed by an identity provider
+	// connection. A changed value revokes every remote session obtained through
+	// the client, so each user must reconnect. Omit to leave unchanged.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Replace the client's display name. Pass an empty string to clear it so the
+	// client shows its client_id. Omit to leave unchanged.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Rotate the client secret. Speakeasy re-encrypts before persisting.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Change the aud claim format used in private_key_jwt assertions. Omit to
+	// leave unchanged.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Replace the upstream OAuth audience sent for this client. Omit to leave
-	// unchanged.
+	// Replace the upstream OAuth audience sent for this client. Pass an empty
+	// string to clear it. Omit to leave unchanged.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Send the connecting MCP client's self-reported name to this provider as
+	// speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit
+	// to leave unchanged.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
+	// Platform admins only. Set true to run the client in compatibility mode with
+	// the legacy callback URL, or false to migrate it to the current callback URL
+	// once that URL is registered with the identity provider. Omit to leave
+	// unchanged.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+}
+
+// AttachClientKeySetRequestBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP request body.
+type AttachClientKeySetRequestBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The organization JSON Web Key Set to sign this client's private_key_jwt
+	// assertions with. Must belong to the client's organization.
+	JSONWebKeySetID string `form:"json_web_key_set_id" json:"json_web_key_set_id" xml:"json_web_key_set_id"`
+}
+
+// RotateClientRequestBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// request body.
+type RotateClientRequestBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
+// DuplicateClientRequestBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// request body.
+type DuplicateClientRequestBody struct {
+	// The remote_session_client id to duplicate.
+	ID string `form:"id" json:"id" xml:"id"`
+	// client_id of a fresh upstream registration, e.g. from /oauth/proxy-register.
+	// Omit to copy the source's client_id and secret.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// client_secret of the fresh registration. Only with client_id. Speakeasy
+	// encrypts before persisting; the plaintext is never returned.
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// How the fresh registration authenticates at the issuer's token endpoint.
+	// Only with client_id; omit to keep the source's method.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// When the issuer reported issuing the client_id (RFC 7591
+	// client_id_issued_at). Omit to record the time of this call.
+	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// When the issuer reported the client secret expires (RFC 7591
+	// client_secret_expires_at). Omit when the issuer reported no expiry.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 }
 
 // RemoveClientFromMcpServerRequestBody is the type of the
@@ -101,6 +186,9 @@ type ListClientsResponseBody struct {
 // GetClientResponseBody is the type of the "organizationRemoteSessionClients"
 // service "getClient" endpoint HTTP response body.
 type GetClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -116,24 +204,78 @@ type GetClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// GetClientDelegationStatusResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body.
+type GetClientDelegationStatusResponseBody struct {
+	// unknown means no current observations; observed means matching observations
+	// exist; configuration_failure means the current delegation configuration is
+	// known to be invalid, not a per-human observation.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Inclusive observation window start.
+	WindowStart  *string                              `form:"window_start,omitempty" json:"window_start,omitempty" xml:"window_start,omitempty"`
+	Observations []*DelegationStatusCountResponseBody `form:"observations,omitempty" json:"observations,omitempty" xml:"observations,omitempty"`
 }
 
 // GetClientDeletePreflightResponseBody is the type of the
@@ -144,6 +286,16 @@ type GetClientDeletePreflightResponseBody struct {
 	SessionCount *int `form:"session_count,omitempty" json:"session_count,omitempty" xml:"session_count,omitempty"`
 	// Display names of MCP servers this client is attached to.
 	McpServerNames []string `form:"mcp_server_names,omitempty" json:"mcp_server_names,omitempty" xml:"mcp_server_names,omitempty"`
+	// Organization-owned user-session issuers that use this client for
+	// identity-provider login and block deletion.
+	TrustedUserSessionIssuers []*TrustedClientUserSessionIssuerReferenceResponseBody `form:"trusted_user_session_issuers,omitempty" json:"trusted_user_session_issuers,omitempty" xml:"trusted_user_session_issuers,omitempty"`
+	// Whether the client can be deleted now.
+	CanDelete *bool `form:"can_delete,omitempty" json:"can_delete,omitempty" xml:"can_delete,omitempty"`
+	// Stable reason deletion is blocked. Present when can_delete is false.
+	BlockingReason *string `form:"blocking_reason,omitempty" json:"blocking_reason,omitempty" xml:"blocking_reason,omitempty"`
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount *int64 `form:"ema_binding_count,omitempty" json:"ema_binding_count,omitempty" xml:"ema_binding_count,omitempty"`
 }
 
 // ListClientMcpServersResponseBody is the type of the
@@ -157,6 +309,9 @@ type ListClientMcpServersResponseBody struct {
 // "organizationRemoteSessionClients" service "createClient" endpoint HTTP
 // response body.
 type CreateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -172,30 +327,74 @@ type CreateClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateCimdClientResponseBody is the type of the
 // "organizationRemoteSessionClients" service "createCimdClient" endpoint HTTP
 // response body.
 type CreateCimdClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -211,30 +410,74 @@ type CreateCimdClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateClientResponseBody is the type of the
 // "organizationRemoteSessionClients" service "updateClient" endpoint HTTP
 // response body.
 type UpdateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -250,24 +493,397 @@ type UpdateClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// AttachClientKeySetResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body.
+type AttachClientKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id. Empty for organization-level and global clients.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// DetachClientKeySetResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body.
+type DetachClientKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id. Empty for organization-level and global clients.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// RotateClientResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body.
+type RotateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id. Empty for organization-level and global clients.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// DuplicateClientResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body.
+type DuplicateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id. Empty for organization-level and global clients.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListClientsUnauthorizedResponseBody is the type of the
@@ -635,6 +1251,196 @@ type GetClientUnexpectedResponseBody struct {
 // "organizationRemoteSessionClients" service "getClient" endpoint HTTP
 // response body for the "gateway_error" error.
 type GetClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "unauthorized" error.
+type GetClientDelegationStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusForbiddenResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "forbidden" error.
+type GetClientDelegationStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusBadRequestResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "bad_request" error.
+type GetClientDelegationStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusNotFoundResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "not_found" error.
+type GetClientDelegationStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusConflictResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "conflict" error.
+type GetClientDelegationStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "unsupported_media" error.
+type GetClientDelegationStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusInvalidResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "invalid" error.
+type GetClientDelegationStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "invariant_violation" error.
+type GetClientDelegationStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "unexpected" error.
+type GetClientDelegationStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetClientDelegationStatusGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1600,6 +2406,804 @@ type UpdateClientGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// AttachClientKeySetFailedPreconditionResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "failed_precondition" error.
+type AttachClientKeySetFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "unauthorized" error.
+type AttachClientKeySetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetForbiddenResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "forbidden" error.
+type AttachClientKeySetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetBadRequestResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "bad_request" error.
+type AttachClientKeySetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetNotFoundResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "not_found" error.
+type AttachClientKeySetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetConflictResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "conflict" error.
+type AttachClientKeySetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "unsupported_media" error.
+type AttachClientKeySetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetInvalidResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "invalid" error.
+type AttachClientKeySetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "invariant_violation" error.
+type AttachClientKeySetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "unexpected" error.
+type AttachClientKeySetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachClientKeySetGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// HTTP response body for the "gateway_error" error.
+type AttachClientKeySetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetFailedPreconditionResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "failed_precondition" error.
+type DetachClientKeySetFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "unauthorized" error.
+type DetachClientKeySetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetForbiddenResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "forbidden" error.
+type DetachClientKeySetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetBadRequestResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "bad_request" error.
+type DetachClientKeySetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetNotFoundResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "not_found" error.
+type DetachClientKeySetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetConflictResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "conflict" error.
+type DetachClientKeySetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "unsupported_media" error.
+type DetachClientKeySetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetInvalidResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "invalid" error.
+type DetachClientKeySetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "invariant_violation" error.
+type DetachClientKeySetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "unexpected" error.
+type DetachClientKeySetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DetachClientKeySetGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// HTTP response body for the "gateway_error" error.
+type DetachClientKeySetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type RotateClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "forbidden" error.
+type RotateClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "bad_request" error.
+type RotateClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "not_found" error.
+type RotateClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientConflictResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "conflict" error.
+type RotateClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RotateClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "invalid" error.
+type RotateClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type RotateClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "unexpected" error.
+type RotateClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type RotateClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type DuplicateClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "forbidden" error.
+type DuplicateClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "bad_request" error.
+type DuplicateClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "not_found" error.
+type DuplicateClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateClientConflictResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "conflict" error.
+type DuplicateClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DuplicateClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "invalid" error.
+type DuplicateClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DuplicateClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "unexpected" error.
+type DuplicateClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DuplicateClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type DuplicateClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DeleteClientUnauthorizedResponseBody is the type of the
 // "organizationRemoteSessionClients" service "deleteClient" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -1995,6 +3599,9 @@ type OrganizationRemoteSessionClientResponseBody struct {
 // RemoteSessionClientResponseBody is used to define fields on response body
 // types.
 type RemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -2010,24 +3617,93 @@ type RemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName *bool `form:"forward_client_name,omitempty" json:"forward_client_name,omitempty" xml:"forward_client_name,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// DelegationStatusCountResponseBody is used to define fields on response body
+// types.
+type DelegationStatusCountResponseBody struct {
+	// Observed per-human delegation outcome, present only when the top-level
+	// status is observed. A configuration_failure count records past per-human
+	// failures for the current configuration; it is distinct from top-level
+	// configuration_failure, which reports a currently invalid configuration and
+	// returns no observations.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Number of humans with this latest outcome.
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+	// Most recent matching observation.
+	LastObservedAt *string `form:"last_observed_at,omitempty" json:"last_observed_at,omitempty" xml:"last_observed_at,omitempty"`
+	// Most recent credential acquisition, distinct from renewal.
+	LastCredentialObtainedAt *string `form:"last_credential_obtained_at,omitempty" json:"last_credential_obtained_at,omitempty" xml:"last_credential_obtained_at,omitempty"`
+	// Most recent successful assertion renewal.
+	LastRefreshSucceededAt *string `form:"last_refresh_succeeded_at,omitempty" json:"last_refresh_succeeded_at,omitempty" xml:"last_refresh_succeeded_at,omitempty"`
+}
+
+// TrustedClientUserSessionIssuerReferenceResponseBody is used to define fields
+// on response body types.
+type TrustedClientUserSessionIssuerReferenceResponseBody struct {
+	// The user_session_issuer id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The user_session_issuer slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 }
 
 // OrganizationMcpServerResponseBody is used to define fields on response body
@@ -2052,17 +3728,28 @@ type OrganizationMcpServerResponseBody struct {
 // service.
 func NewCreateClientRequestBody(p *organizationremotesessionclients.CreateClientPayload) *CreateClientRequestBody {
 	body := &CreateClientRequestBody{
-		RemoteSessionIssuerID:   p.RemoteSessionIssuerID,
-		ProjectID:               p.ProjectID,
-		ClientID:                p.ClientID,
-		ClientSecret:            p.ClientSecret,
-		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
-		Audience:                p.Audience,
+		RemoteSessionIssuerID:           p.RemoteSessionIssuerID,
+		ProjectID:                       p.ProjectID,
+		ClientID:                        p.ClientID,
+		ClientSecret:                    p.ClientSecret,
+		TokenEndpointAuthMethod:         p.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: p.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 p.JSONWebKeySetID,
+		Audience:                        p.Audience,
+		CredentialOwner:                 p.CredentialOwner,
+		ClientIDIssuedAt:                p.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           p.ClientSecretExpiresAt,
 	}
 	if p.Scope != nil {
 		body.Scope = make([]string, len(p.Scope))
 		for i, val := range p.Scope {
 			body.Scope[i] = val
+		}
+	}
+	{
+		var zero string
+		if body.CredentialOwner == zero {
+			body.CredentialOwner = "subject"
 		}
 	}
 	return body
@@ -2091,16 +3778,57 @@ func NewCreateCimdClientRequestBody(p *organizationremotesessionclients.CreateCi
 // service.
 func NewUpdateClientRequestBody(p *organizationremotesessionclients.UpdateClientPayload) *UpdateClientRequestBody {
 	body := &UpdateClientRequestBody{
-		ID:                      p.ID,
-		ClientSecret:            p.ClientSecret,
-		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
-		Audience:                p.Audience,
+		ID:                              p.ID,
+		ClientID:                        p.ClientID,
+		DisplayName:                     p.DisplayName,
+		ClientSecret:                    p.ClientSecret,
+		TokenEndpointAuthMethod:         p.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: p.TokenEndpointAuthAudienceFormat,
+		Audience:                        p.Audience,
+		ForwardClientName:               p.ForwardClientName,
+		LegacyCallbackURL:               p.LegacyCallbackURL,
 	}
 	if p.Scope != nil {
 		body.Scope = make([]string, len(p.Scope))
 		for i, val := range p.Scope {
 			body.Scope[i] = val
 		}
+	}
+	return body
+}
+
+// NewAttachClientKeySetRequestBody builds the HTTP request body from the
+// payload of the "attachClientKeySet" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewAttachClientKeySetRequestBody(p *organizationremotesessionclients.AttachClientKeySetPayload) *AttachClientKeySetRequestBody {
+	body := &AttachClientKeySetRequestBody{
+		ID:              p.ID,
+		JSONWebKeySetID: p.JSONWebKeySetID,
+	}
+	return body
+}
+
+// NewRotateClientRequestBody builds the HTTP request body from the payload of
+// the "rotateClient" endpoint of the "organizationRemoteSessionClients"
+// service.
+func NewRotateClientRequestBody(p *organizationremotesessionclients.RotateClientPayload) *RotateClientRequestBody {
+	body := &RotateClientRequestBody{
+		ID: p.ID,
+	}
+	return body
+}
+
+// NewDuplicateClientRequestBody builds the HTTP request body from the payload
+// of the "duplicateClient" endpoint of the "organizationRemoteSessionClients"
+// service.
+func NewDuplicateClientRequestBody(p *organizationremotesessionclients.DuplicateClientPayload) *DuplicateClientRequestBody {
+	body := &DuplicateClientRequestBody{
+		ID:                      p.ID,
+		ClientID:                p.ClientID,
+		ClientSecret:            p.ClientSecret,
+		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
+		ClientIDIssuedAt:        p.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   p.ClientSecretExpiresAt,
 	}
 	return body
 }
@@ -2290,18 +4018,34 @@ func NewListClientsGatewayError(body *ListClientsGatewayErrorResponseBody) *goa.
 // a HTTP "OK" response.
 func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
+		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CredentialOwner:                 *body.CredentialOwner,
+		CallbackURL:                     body.CallbackURL,
+		FederatedCallbackURL:            body.FederatedCallbackURL,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -2467,16 +4211,207 @@ func NewGetClientGatewayError(body *GetClientGatewayErrorResponseBody) *goa.Serv
 	return v
 }
 
+// NewGetClientDelegationStatusOrganizationClientDelegationStatusOK builds a
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint result from a HTTP "OK" response.
+func NewGetClientDelegationStatusOrganizationClientDelegationStatusOK(body *GetClientDelegationStatusResponseBody) *organizationremotesessionclients.OrganizationClientDelegationStatus {
+	v := &organizationremotesessionclients.OrganizationClientDelegationStatus{
+		Status:      *body.Status,
+		WindowStart: *body.WindowStart,
+	}
+	v.Observations = make([]*organizationremotesessionclients.DelegationStatusCount, len(body.Observations))
+	for i, val := range body.Observations {
+		if val == nil {
+			v.Observations[i] = nil
+			continue
+		}
+		v.Observations[i] = unmarshalDelegationStatusCountResponseBodyToOrganizationremotesessionclientsDelegationStatusCount(val)
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusUnauthorized builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// unauthorized error.
+func NewGetClientDelegationStatusUnauthorized(body *GetClientDelegationStatusUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusForbidden builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// forbidden error.
+func NewGetClientDelegationStatusForbidden(body *GetClientDelegationStatusForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusBadRequest builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// bad_request error.
+func NewGetClientDelegationStatusBadRequest(body *GetClientDelegationStatusBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusNotFound builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// not_found error.
+func NewGetClientDelegationStatusNotFound(body *GetClientDelegationStatusNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusConflict builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// conflict error.
+func NewGetClientDelegationStatusConflict(body *GetClientDelegationStatusConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusUnsupportedMedia builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// unsupported_media error.
+func NewGetClientDelegationStatusUnsupportedMedia(body *GetClientDelegationStatusUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusInvalid builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// invalid error.
+func NewGetClientDelegationStatusInvalid(body *GetClientDelegationStatusInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusInvariantViolation builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// invariant_violation error.
+func NewGetClientDelegationStatusInvariantViolation(body *GetClientDelegationStatusInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusUnexpected builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// unexpected error.
+func NewGetClientDelegationStatusUnexpected(body *GetClientDelegationStatusUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusGatewayError builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// gateway_error error.
+func NewGetClientDelegationStatusGatewayError(body *GetClientDelegationStatusGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetClientDeletePreflightOrganizationClientDeletePreflightOK builds a
 // "organizationRemoteSessionClients" service "getClientDeletePreflight"
 // endpoint result from a HTTP "OK" response.
 func NewGetClientDeletePreflightOrganizationClientDeletePreflightOK(body *GetClientDeletePreflightResponseBody) *organizationremotesessionclients.OrganizationClientDeletePreflight {
 	v := &organizationremotesessionclients.OrganizationClientDeletePreflight{
-		SessionCount: *body.SessionCount,
+		SessionCount:    *body.SessionCount,
+		CanDelete:       *body.CanDelete,
+		BlockingReason:  body.BlockingReason,
+		EmaBindingCount: *body.EmaBindingCount,
 	}
 	v.McpServerNames = make([]string, len(body.McpServerNames))
 	for i, val := range body.McpServerNames {
 		v.McpServerNames[i] = val
+	}
+	v.TrustedUserSessionIssuers = make([]*organizationremotesessionclients.TrustedClientUserSessionIssuerReference, len(body.TrustedUserSessionIssuers))
+	for i, val := range body.TrustedUserSessionIssuers {
+		if val == nil {
+			v.TrustedUserSessionIssuers[i] = nil
+			continue
+		}
+		v.TrustedUserSessionIssuers[i] = unmarshalTrustedClientUserSessionIssuerReferenceResponseBodyToOrganizationremotesessionclientsTrustedClientUserSessionIssuerReference(val)
 	}
 
 	return v
@@ -2817,18 +4752,34 @@ func NewListClientMcpServersGatewayError(body *ListClientMcpServersGatewayErrorR
 // from a HTTP "OK" response.
 func NewCreateClientRemoteSessionClientOK(body *CreateClientResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
+		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CredentialOwner:                 *body.CredentialOwner,
+		CallbackURL:                     body.CallbackURL,
+		FederatedCallbackURL:            body.FederatedCallbackURL,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -2999,18 +4950,34 @@ func NewCreateClientGatewayError(body *CreateClientGatewayErrorResponseBody) *go
 // result from a HTTP "OK" response.
 func NewCreateCimdClientRemoteSessionClientOK(body *CreateCimdClientResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
+		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CredentialOwner:                 *body.CredentialOwner,
+		CallbackURL:                     body.CallbackURL,
+		FederatedCallbackURL:            body.FederatedCallbackURL,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -3183,18 +5150,34 @@ func NewCreateCimdClientGatewayError(body *CreateCimdClientGatewayErrorResponseB
 // from a HTTP "OK" response.
 func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
+		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CredentialOwner:                 *body.CredentialOwner,
+		CallbackURL:                     body.CallbackURL,
+		FederatedCallbackURL:            body.FederatedCallbackURL,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -3348,6 +5331,835 @@ func NewUpdateClientUnexpected(body *UpdateClientUnexpectedResponseBody) *goa.Se
 // NewUpdateClientGatewayError builds a organizationRemoteSessionClients
 // service updateClient endpoint gateway_error error.
 func NewUpdateClientGatewayError(body *UpdateClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetRemoteSessionClientOK builds a
+// "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
+// result from a HTTP "OK" response.
+func NewAttachClientKeySetRemoteSessionClientOK(body *AttachClientKeySetResponseBody) *types.RemoteSessionClient {
+	v := &types.RemoteSessionClient{
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
+		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CredentialOwner:                 *body.CredentialOwner,
+		CallbackURL:                     body.CallbackURL,
+		FederatedCallbackURL:            body.FederatedCallbackURL,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetFailedPrecondition builds a
+// organizationRemoteSessionClients service attachClientKeySet endpoint
+// failed_precondition error.
+func NewAttachClientKeySetFailedPrecondition(body *AttachClientKeySetFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetUnauthorized builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint unauthorized error.
+func NewAttachClientKeySetUnauthorized(body *AttachClientKeySetUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetForbidden builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint forbidden error.
+func NewAttachClientKeySetForbidden(body *AttachClientKeySetForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetBadRequest builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint bad_request error.
+func NewAttachClientKeySetBadRequest(body *AttachClientKeySetBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetNotFound builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint not_found error.
+func NewAttachClientKeySetNotFound(body *AttachClientKeySetNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetConflict builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint conflict error.
+func NewAttachClientKeySetConflict(body *AttachClientKeySetConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetUnsupportedMedia builds a
+// organizationRemoteSessionClients service attachClientKeySet endpoint
+// unsupported_media error.
+func NewAttachClientKeySetUnsupportedMedia(body *AttachClientKeySetUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetInvalid builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint invalid error.
+func NewAttachClientKeySetInvalid(body *AttachClientKeySetInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetInvariantViolation builds a
+// organizationRemoteSessionClients service attachClientKeySet endpoint
+// invariant_violation error.
+func NewAttachClientKeySetInvariantViolation(body *AttachClientKeySetInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetUnexpected builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint unexpected error.
+func NewAttachClientKeySetUnexpected(body *AttachClientKeySetUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachClientKeySetGatewayError builds a organizationRemoteSessionClients
+// service attachClientKeySet endpoint gateway_error error.
+func NewAttachClientKeySetGatewayError(body *AttachClientKeySetGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetRemoteSessionClientOK builds a
+// "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
+// result from a HTTP "OK" response.
+func NewDetachClientKeySetRemoteSessionClientOK(body *DetachClientKeySetResponseBody) *types.RemoteSessionClient {
+	v := &types.RemoteSessionClient{
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
+		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CredentialOwner:                 *body.CredentialOwner,
+		CallbackURL:                     body.CallbackURL,
+		FederatedCallbackURL:            body.FederatedCallbackURL,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetFailedPrecondition builds a
+// organizationRemoteSessionClients service detachClientKeySet endpoint
+// failed_precondition error.
+func NewDetachClientKeySetFailedPrecondition(body *DetachClientKeySetFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetUnauthorized builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint unauthorized error.
+func NewDetachClientKeySetUnauthorized(body *DetachClientKeySetUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetForbidden builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint forbidden error.
+func NewDetachClientKeySetForbidden(body *DetachClientKeySetForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetBadRequest builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint bad_request error.
+func NewDetachClientKeySetBadRequest(body *DetachClientKeySetBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetNotFound builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint not_found error.
+func NewDetachClientKeySetNotFound(body *DetachClientKeySetNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetConflict builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint conflict error.
+func NewDetachClientKeySetConflict(body *DetachClientKeySetConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetUnsupportedMedia builds a
+// organizationRemoteSessionClients service detachClientKeySet endpoint
+// unsupported_media error.
+func NewDetachClientKeySetUnsupportedMedia(body *DetachClientKeySetUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetInvalid builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint invalid error.
+func NewDetachClientKeySetInvalid(body *DetachClientKeySetInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetInvariantViolation builds a
+// organizationRemoteSessionClients service detachClientKeySet endpoint
+// invariant_violation error.
+func NewDetachClientKeySetInvariantViolation(body *DetachClientKeySetInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetUnexpected builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint unexpected error.
+func NewDetachClientKeySetUnexpected(body *DetachClientKeySetUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDetachClientKeySetGatewayError builds a organizationRemoteSessionClients
+// service detachClientKeySet endpoint gateway_error error.
+func NewDetachClientKeySetGatewayError(body *DetachClientKeySetGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientRemoteSessionClientOK builds a
+// "organizationRemoteSessionClients" service "rotateClient" endpoint result
+// from a HTTP "OK" response.
+func NewRotateClientRemoteSessionClientOK(body *RotateClientResponseBody) *types.RemoteSessionClient {
+	v := &types.RemoteSessionClient{
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
+		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CredentialOwner:                 *body.CredentialOwner,
+		CallbackURL:                     body.CallbackURL,
+		FederatedCallbackURL:            body.FederatedCallbackURL,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewRotateClientUnauthorized builds a organizationRemoteSessionClients
+// service rotateClient endpoint unauthorized error.
+func NewRotateClientUnauthorized(body *RotateClientUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientForbidden builds a organizationRemoteSessionClients service
+// rotateClient endpoint forbidden error.
+func NewRotateClientForbidden(body *RotateClientForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientBadRequest builds a organizationRemoteSessionClients service
+// rotateClient endpoint bad_request error.
+func NewRotateClientBadRequest(body *RotateClientBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientNotFound builds a organizationRemoteSessionClients service
+// rotateClient endpoint not_found error.
+func NewRotateClientNotFound(body *RotateClientNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientConflict builds a organizationRemoteSessionClients service
+// rotateClient endpoint conflict error.
+func NewRotateClientConflict(body *RotateClientConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientUnsupportedMedia builds a organizationRemoteSessionClients
+// service rotateClient endpoint unsupported_media error.
+func NewRotateClientUnsupportedMedia(body *RotateClientUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientInvalid builds a organizationRemoteSessionClients service
+// rotateClient endpoint invalid error.
+func NewRotateClientInvalid(body *RotateClientInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientInvariantViolation builds a organizationRemoteSessionClients
+// service rotateClient endpoint invariant_violation error.
+func NewRotateClientInvariantViolation(body *RotateClientInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientUnexpected builds a organizationRemoteSessionClients service
+// rotateClient endpoint unexpected error.
+func NewRotateClientUnexpected(body *RotateClientUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateClientGatewayError builds a organizationRemoteSessionClients
+// service rotateClient endpoint gateway_error error.
+func NewRotateClientGatewayError(body *RotateClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateClientRemoteSessionClientOK builds a
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint result
+// from a HTTP "OK" response.
+func NewDuplicateClientRemoteSessionClientOK(body *DuplicateClientResponseBody) *types.RemoteSessionClient {
+	v := &types.RemoteSessionClient{
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		IdentityProviderConnectionID:    body.IdentityProviderConnectionID,
+		Audience:                        body.Audience,
+		ForwardClientName:               *body.ForwardClientName,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CredentialOwner:                 *body.CredentialOwner,
+		CallbackURL:                     body.CallbackURL,
+		FederatedCallbackURL:            body.FederatedCallbackURL,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
+	}
+
+	return v
+}
+
+// NewDuplicateClientUnauthorized builds a organizationRemoteSessionClients
+// service duplicateClient endpoint unauthorized error.
+func NewDuplicateClientUnauthorized(body *DuplicateClientUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateClientForbidden builds a organizationRemoteSessionClients
+// service duplicateClient endpoint forbidden error.
+func NewDuplicateClientForbidden(body *DuplicateClientForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateClientBadRequest builds a organizationRemoteSessionClients
+// service duplicateClient endpoint bad_request error.
+func NewDuplicateClientBadRequest(body *DuplicateClientBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateClientNotFound builds a organizationRemoteSessionClients service
+// duplicateClient endpoint not_found error.
+func NewDuplicateClientNotFound(body *DuplicateClientNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateClientConflict builds a organizationRemoteSessionClients service
+// duplicateClient endpoint conflict error.
+func NewDuplicateClientConflict(body *DuplicateClientConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateClientUnsupportedMedia builds a organizationRemoteSessionClients
+// service duplicateClient endpoint unsupported_media error.
+func NewDuplicateClientUnsupportedMedia(body *DuplicateClientUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateClientInvalid builds a organizationRemoteSessionClients service
+// duplicateClient endpoint invalid error.
+func NewDuplicateClientInvalid(body *DuplicateClientInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateClientInvariantViolation builds a
+// organizationRemoteSessionClients service duplicateClient endpoint
+// invariant_violation error.
+func NewDuplicateClientInvariantViolation(body *DuplicateClientInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateClientUnexpected builds a organizationRemoteSessionClients
+// service duplicateClient endpoint unexpected error.
+func NewDuplicateClientUnexpected(body *DuplicateClientUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDuplicateClientGatewayError builds a organizationRemoteSessionClients
+// service duplicateClient endpoint gateway_error error.
+func NewDuplicateClientGatewayError(body *DuplicateClientGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3707,8 +6519,14 @@ func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3731,16 +6549,71 @@ func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
 		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
+	}
+	if body.FederatedCallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.federated_callback_url", *body.FederatedCallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusResponseBody runs the validations defined
+// on GetClientDelegationStatusResponseBody
+func ValidateGetClientDelegationStatusResponseBody(body *GetClientDelegationStatusResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.WindowStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_start", "body"))
+	}
+	if body.Observations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observations", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "unknown" || *body.Status == "observed" || *body.Status == "configuration_failure") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"unknown", "observed", "configuration_failure"}))
+		}
+	}
+	if body.WindowStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.window_start", *body.WindowStart, goa.FormatDateTime))
+	}
+	for _, e := range body.Observations {
+		if e != nil {
+			if err2 := ValidateDelegationStatusCountResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -3753,6 +6626,27 @@ func ValidateGetClientDeletePreflightResponseBody(body *GetClientDeletePreflight
 	}
 	if body.McpServerNames == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_names", "body"))
+	}
+	if body.TrustedUserSessionIssuers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trusted_user_session_issuers", "body"))
+	}
+	if body.CanDelete == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_delete", "body"))
+	}
+	if body.EmaBindingCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ema_binding_count", "body"))
+	}
+	for _, e := range body.TrustedUserSessionIssuers {
+		if e != nil {
+			if err2 := ValidateTrustedClientUserSessionIssuerReferenceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.BlockingReason != nil {
+		if !(*body.BlockingReason == "identity_provider_login" || *body.BlockingReason == "identity_chaining") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.blocking_reason", *body.BlockingReason, []any{"identity_provider_login", "identity_chaining"}))
+		}
 	}
 	return
 }
@@ -3794,8 +6688,14 @@ func ValidateCreateClientResponseBody(body *CreateClientResponseBody) (err error
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3818,10 +6718,35 @@ func ValidateCreateClientResponseBody(body *CreateClientResponseBody) (err error
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
 		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
+	}
+	if body.FederatedCallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.federated_callback_url", *body.FederatedCallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3853,8 +6778,14 @@ func ValidateCreateCimdClientResponseBody(body *CreateCimdClientResponseBody) (e
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3877,10 +6808,35 @@ func ValidateCreateCimdClientResponseBody(body *CreateCimdClientResponseBody) (e
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
 		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
+	}
+	if body.FederatedCallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.federated_callback_url", *body.FederatedCallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3912,8 +6868,14 @@ func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3936,10 +6898,395 @@ func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
 		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
+	}
+	if body.FederatedCallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.federated_callback_url", *body.FederatedCallbackURL, goa.FormatURI))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetResponseBody runs the validations defined on
+// AttachClientKeySetResponseBody
+func ValidateAttachClientKeySetResponseBody(body *AttachClientKeySetResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
+	}
+	if body.FederatedCallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.federated_callback_url", *body.FederatedCallbackURL, goa.FormatURI))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetResponseBody runs the validations defined on
+// DetachClientKeySetResponseBody
+func ValidateDetachClientKeySetResponseBody(body *DetachClientKeySetResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
+	}
+	if body.FederatedCallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.federated_callback_url", *body.FederatedCallbackURL, goa.FormatURI))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRotateClientResponseBody runs the validations defined on
+// RotateClientResponseBody
+func ValidateRotateClientResponseBody(body *RotateClientResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
+	}
+	if body.FederatedCallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.federated_callback_url", *body.FederatedCallbackURL, goa.FormatURI))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDuplicateClientResponseBody runs the validations defined on
+// DuplicateClientResponseBody
+func ValidateDuplicateClientResponseBody(body *DuplicateClientResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
+	}
+	if body.FederatedCallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.federated_callback_url", *body.FederatedCallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -4409,6 +7756,248 @@ func ValidateGetClientUnexpectedResponseBody(body *GetClientUnexpectedResponseBo
 // ValidateGetClientGatewayErrorResponseBody runs the validations defined on
 // getClient_gateway_error_response_body
 func ValidateGetClientGatewayErrorResponseBody(body *GetClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusUnauthorizedResponseBody runs the
+// validations defined on getClientDelegationStatus_unauthorized_response_body
+func ValidateGetClientDelegationStatusUnauthorizedResponseBody(body *GetClientDelegationStatusUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusForbiddenResponseBody runs the validations
+// defined on getClientDelegationStatus_forbidden_response_body
+func ValidateGetClientDelegationStatusForbiddenResponseBody(body *GetClientDelegationStatusForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusBadRequestResponseBody runs the validations
+// defined on getClientDelegationStatus_bad_request_response_body
+func ValidateGetClientDelegationStatusBadRequestResponseBody(body *GetClientDelegationStatusBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusNotFoundResponseBody runs the validations
+// defined on getClientDelegationStatus_not_found_response_body
+func ValidateGetClientDelegationStatusNotFoundResponseBody(body *GetClientDelegationStatusNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusConflictResponseBody runs the validations
+// defined on getClientDelegationStatus_conflict_response_body
+func ValidateGetClientDelegationStatusConflictResponseBody(body *GetClientDelegationStatusConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusUnsupportedMediaResponseBody runs the
+// validations defined on
+// getClientDelegationStatus_unsupported_media_response_body
+func ValidateGetClientDelegationStatusUnsupportedMediaResponseBody(body *GetClientDelegationStatusUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusInvalidResponseBody runs the validations
+// defined on getClientDelegationStatus_invalid_response_body
+func ValidateGetClientDelegationStatusInvalidResponseBody(body *GetClientDelegationStatusInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusInvariantViolationResponseBody runs the
+// validations defined on
+// getClientDelegationStatus_invariant_violation_response_body
+func ValidateGetClientDelegationStatusInvariantViolationResponseBody(body *GetClientDelegationStatusInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusUnexpectedResponseBody runs the validations
+// defined on getClientDelegationStatus_unexpected_response_body
+func ValidateGetClientDelegationStatusUnexpectedResponseBody(body *GetClientDelegationStatusUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusGatewayErrorResponseBody runs the
+// validations defined on getClientDelegationStatus_gateway_error_response_body
+func ValidateGetClientDelegationStatusGatewayErrorResponseBody(body *GetClientDelegationStatusGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5632,6 +9221,1014 @@ func ValidateUpdateClientGatewayErrorResponseBody(body *UpdateClientGatewayError
 	return
 }
 
+// ValidateAttachClientKeySetFailedPreconditionResponseBody runs the
+// validations defined on attachClientKeySet_failed_precondition_response_body
+func ValidateAttachClientKeySetFailedPreconditionResponseBody(body *AttachClientKeySetFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetUnauthorizedResponseBody runs the validations
+// defined on attachClientKeySet_unauthorized_response_body
+func ValidateAttachClientKeySetUnauthorizedResponseBody(body *AttachClientKeySetUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetForbiddenResponseBody runs the validations defined
+// on attachClientKeySet_forbidden_response_body
+func ValidateAttachClientKeySetForbiddenResponseBody(body *AttachClientKeySetForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetBadRequestResponseBody runs the validations
+// defined on attachClientKeySet_bad_request_response_body
+func ValidateAttachClientKeySetBadRequestResponseBody(body *AttachClientKeySetBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetNotFoundResponseBody runs the validations defined
+// on attachClientKeySet_not_found_response_body
+func ValidateAttachClientKeySetNotFoundResponseBody(body *AttachClientKeySetNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetConflictResponseBody runs the validations defined
+// on attachClientKeySet_conflict_response_body
+func ValidateAttachClientKeySetConflictResponseBody(body *AttachClientKeySetConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetUnsupportedMediaResponseBody runs the validations
+// defined on attachClientKeySet_unsupported_media_response_body
+func ValidateAttachClientKeySetUnsupportedMediaResponseBody(body *AttachClientKeySetUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetInvalidResponseBody runs the validations defined
+// on attachClientKeySet_invalid_response_body
+func ValidateAttachClientKeySetInvalidResponseBody(body *AttachClientKeySetInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetInvariantViolationResponseBody runs the
+// validations defined on attachClientKeySet_invariant_violation_response_body
+func ValidateAttachClientKeySetInvariantViolationResponseBody(body *AttachClientKeySetInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetUnexpectedResponseBody runs the validations
+// defined on attachClientKeySet_unexpected_response_body
+func ValidateAttachClientKeySetUnexpectedResponseBody(body *AttachClientKeySetUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachClientKeySetGatewayErrorResponseBody runs the validations
+// defined on attachClientKeySet_gateway_error_response_body
+func ValidateAttachClientKeySetGatewayErrorResponseBody(body *AttachClientKeySetGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetFailedPreconditionResponseBody runs the
+// validations defined on detachClientKeySet_failed_precondition_response_body
+func ValidateDetachClientKeySetFailedPreconditionResponseBody(body *DetachClientKeySetFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetUnauthorizedResponseBody runs the validations
+// defined on detachClientKeySet_unauthorized_response_body
+func ValidateDetachClientKeySetUnauthorizedResponseBody(body *DetachClientKeySetUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetForbiddenResponseBody runs the validations defined
+// on detachClientKeySet_forbidden_response_body
+func ValidateDetachClientKeySetForbiddenResponseBody(body *DetachClientKeySetForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetBadRequestResponseBody runs the validations
+// defined on detachClientKeySet_bad_request_response_body
+func ValidateDetachClientKeySetBadRequestResponseBody(body *DetachClientKeySetBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetNotFoundResponseBody runs the validations defined
+// on detachClientKeySet_not_found_response_body
+func ValidateDetachClientKeySetNotFoundResponseBody(body *DetachClientKeySetNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetConflictResponseBody runs the validations defined
+// on detachClientKeySet_conflict_response_body
+func ValidateDetachClientKeySetConflictResponseBody(body *DetachClientKeySetConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetUnsupportedMediaResponseBody runs the validations
+// defined on detachClientKeySet_unsupported_media_response_body
+func ValidateDetachClientKeySetUnsupportedMediaResponseBody(body *DetachClientKeySetUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetInvalidResponseBody runs the validations defined
+// on detachClientKeySet_invalid_response_body
+func ValidateDetachClientKeySetInvalidResponseBody(body *DetachClientKeySetInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetInvariantViolationResponseBody runs the
+// validations defined on detachClientKeySet_invariant_violation_response_body
+func ValidateDetachClientKeySetInvariantViolationResponseBody(body *DetachClientKeySetInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetUnexpectedResponseBody runs the validations
+// defined on detachClientKeySet_unexpected_response_body
+func ValidateDetachClientKeySetUnexpectedResponseBody(body *DetachClientKeySetUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDetachClientKeySetGatewayErrorResponseBody runs the validations
+// defined on detachClientKeySet_gateway_error_response_body
+func ValidateDetachClientKeySetGatewayErrorResponseBody(body *DetachClientKeySetGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientUnauthorizedResponseBody runs the validations defined on
+// rotateClient_unauthorized_response_body
+func ValidateRotateClientUnauthorizedResponseBody(body *RotateClientUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientForbiddenResponseBody runs the validations defined on
+// rotateClient_forbidden_response_body
+func ValidateRotateClientForbiddenResponseBody(body *RotateClientForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientBadRequestResponseBody runs the validations defined on
+// rotateClient_bad_request_response_body
+func ValidateRotateClientBadRequestResponseBody(body *RotateClientBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientNotFoundResponseBody runs the validations defined on
+// rotateClient_not_found_response_body
+func ValidateRotateClientNotFoundResponseBody(body *RotateClientNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientConflictResponseBody runs the validations defined on
+// rotateClient_conflict_response_body
+func ValidateRotateClientConflictResponseBody(body *RotateClientConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientUnsupportedMediaResponseBody runs the validations
+// defined on rotateClient_unsupported_media_response_body
+func ValidateRotateClientUnsupportedMediaResponseBody(body *RotateClientUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientInvalidResponseBody runs the validations defined on
+// rotateClient_invalid_response_body
+func ValidateRotateClientInvalidResponseBody(body *RotateClientInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientInvariantViolationResponseBody runs the validations
+// defined on rotateClient_invariant_violation_response_body
+func ValidateRotateClientInvariantViolationResponseBody(body *RotateClientInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientUnexpectedResponseBody runs the validations defined on
+// rotateClient_unexpected_response_body
+func ValidateRotateClientUnexpectedResponseBody(body *RotateClientUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateClientGatewayErrorResponseBody runs the validations defined on
+// rotateClient_gateway_error_response_body
+func ValidateRotateClientGatewayErrorResponseBody(body *RotateClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateClientUnauthorizedResponseBody runs the validations defined
+// on duplicateClient_unauthorized_response_body
+func ValidateDuplicateClientUnauthorizedResponseBody(body *DuplicateClientUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateClientForbiddenResponseBody runs the validations defined on
+// duplicateClient_forbidden_response_body
+func ValidateDuplicateClientForbiddenResponseBody(body *DuplicateClientForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateClientBadRequestResponseBody runs the validations defined
+// on duplicateClient_bad_request_response_body
+func ValidateDuplicateClientBadRequestResponseBody(body *DuplicateClientBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateClientNotFoundResponseBody runs the validations defined on
+// duplicateClient_not_found_response_body
+func ValidateDuplicateClientNotFoundResponseBody(body *DuplicateClientNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateClientConflictResponseBody runs the validations defined on
+// duplicateClient_conflict_response_body
+func ValidateDuplicateClientConflictResponseBody(body *DuplicateClientConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateClientUnsupportedMediaResponseBody runs the validations
+// defined on duplicateClient_unsupported_media_response_body
+func ValidateDuplicateClientUnsupportedMediaResponseBody(body *DuplicateClientUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateClientInvalidResponseBody runs the validations defined on
+// duplicateClient_invalid_response_body
+func ValidateDuplicateClientInvalidResponseBody(body *DuplicateClientInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateClientInvariantViolationResponseBody runs the validations
+// defined on duplicateClient_invariant_violation_response_body
+func ValidateDuplicateClientInvariantViolationResponseBody(body *DuplicateClientInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateClientUnexpectedResponseBody runs the validations defined
+// on duplicateClient_unexpected_response_body
+func ValidateDuplicateClientUnexpectedResponseBody(body *DuplicateClientUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDuplicateClientGatewayErrorResponseBody runs the validations defined
+// on duplicateClient_gateway_error_response_body
+func ValidateDuplicateClientGatewayErrorResponseBody(body *DuplicateClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDeleteClientUnauthorizedResponseBody runs the validations defined on
 // deleteClient_unauthorized_response_body
 func ValidateDeleteClientUnauthorizedResponseBody(body *DeleteClientUnauthorizedResponseBody) (err error) {
@@ -6155,8 +10752,14 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.ForwardClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("forward_client_name", "body"))
+	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -6179,16 +10782,87 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
 		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
+		}
+	}
+	if body.JSONWebKeySetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
+	}
+	if body.FederatedCallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.federated_callback_url", *body.FederatedCallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDelegationStatusCountResponseBody runs the validations defined on
+// DelegationStatusCountResponseBody
+func ValidateDelegationStatusCountResponseBody(body *DelegationStatusCountResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "durable_credential_present" || *body.Status == "assertion_only" || *body.Status == "offline_unsupported" || *body.Status == "offline_not_requested" || *body.Status == "refused" || *body.Status == "reauthentication_required" || *body.Status == "temporary_failure" || *body.Status == "configuration_failure") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"durable_credential_present", "assertion_only", "offline_unsupported", "offline_not_requested", "refused", "reauthentication_required", "temporary_failure", "configuration_failure"}))
+		}
+	}
+	if body.Count != nil {
+		if *body.Count < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.count", *body.Count, 0, true))
+		}
+	}
+	if body.LastObservedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_observed_at", *body.LastObservedAt, goa.FormatDateTime))
+	}
+	if body.LastCredentialObtainedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_credential_obtained_at", *body.LastCredentialObtainedAt, goa.FormatDateTime))
+	}
+	if body.LastRefreshSucceededAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_refresh_succeeded_at", *body.LastRefreshSucceededAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateTrustedClientUserSessionIssuerReferenceResponseBody runs the
+// validations defined on TrustedClientUserSessionIssuerReferenceResponseBody
+func ValidateTrustedClientUserSessionIssuerReferenceResponseBody(body *TrustedClientUserSessionIssuerReferenceResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

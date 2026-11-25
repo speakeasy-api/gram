@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listKeys keys
  *
  * @remarks
- * List all api keys for an organization
+ * List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
  */
 export function keysList(
   client: GramCore,
@@ -106,6 +106,13 @@ async function $do(
 
   const path = pathToFunc("/rpc/keys.list")();
 
+  const query = encodeFormQuery({
+    "agent_id": payload?.agent_id,
+    "cursor": payload?.cursor,
+    "limit": payload?.limit,
+    "search": payload?.search,
+  });
+
   const headers = new Headers(compactMap({
     Accept: "application/json",
     "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
@@ -145,6 +152,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,

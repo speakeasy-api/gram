@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { toast } from "sonner";
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
 import { useRefreshUserSessionClientCIMDMutation } from "@gram/client/react-query/refreshUserSessionClientCIMD.js";
+import { useUpdateUserSessionClientRedirectURIsMutation } from "@gram/client/react-query/updateUserSessionClientRedirectURIs.js";
 import {
   invalidateUserSessionClient,
   setUserSessionClientData,
@@ -10,6 +12,7 @@ import {
 } from "@gram/client/react-query/userSessionClient.js";
 import { invalidateAllUserSessionClients } from "@gram/client/react-query/userSessionClients.js";
 
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -25,7 +28,7 @@ import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import {
-  CREDENTIAL_KIND_PRESENTATION,
+  credentialKindPresentation,
   declaredAuthMethodValue,
 } from "@/lib/user-session-client-credential";
 import {
@@ -34,9 +37,12 @@ import {
 } from "@/lib/user-session-client-source";
 import { ClientCredentialBadge } from "./ClientCredentialBadge";
 import { ClientSourceBadge } from "./ClientSourceBadge";
+import { RedirectUriInputs } from "./RedirectUriInputs";
+import { filledRedirectUris } from "./redirect-uris";
+import { useCanManageIssuerClients } from "./useCanManageIssuerClients";
 
 /**
- * Everything Gram knows about one registered client: the shared registration
+ * Everything Speakeasy knows about one registered client: the shared registration
  * facts, and — for a CIMD-resolved client — the metadata document's cache
  * state (source URL, last read, expiry, validator) with a manual refresh.
  * DCR rows get the base detail without the CIMD panel.
@@ -145,7 +151,7 @@ export function ClientDetailSheet({
                 value is written out rather than left to a tooltip. */}
             <DetailField label="Authentication">
               <Text small>
-                {CREDENTIAL_KIND_PRESENTATION[detail.credentialKind].label}
+                {credentialKindPresentation(detail.credentialKind).label}
               </Text>
               <Text small muted className="font-mono">
                 {declaredAuthMethodValue(detail.tokenEndpointAuthMethod)}
@@ -154,9 +160,7 @@ export function ClientDetailSheet({
             <DetailField label="Active sessions">
               <Text small>{detail.activeSessionCount}</Text>
             </DetailField>
-            <DetailField label="Redirect URIs">
-              <RedirectUriList uris={detail.redirectUris} />
-            </DetailField>
+            <RedirectUrisField client={detail} gramProject={gramProject} />
           </div>
 
           {userSessionClientSource(detail) === "cimd" && (
@@ -295,6 +299,118 @@ function DetailField({
       <div className="text-eyebrow">{label}</div>
       {children}
     </div>
+  );
+}
+
+/**
+ * The registration's redirect URIs, editable in place by whoever may manage
+ * the issuer's agents. A CIMD client's come from its metadata document, which
+ * would overwrite an edit on the next re-read, so they stay read-only.
+ */
+function RedirectUrisField({
+  client,
+  gramProject,
+}: {
+  client: UserSessionClient;
+  gramProject: string;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const canManage = useCanManageIssuerClients(
+    client.userSessionIssuerId,
+    gramProject,
+  );
+  const editable = canManage && userSessionClientSource(client) !== "cimd";
+  const [draft, setDraft] = useState<string[] | null>(null);
+
+  const update = useUpdateUserSessionClientRedirectURIsMutation({
+    onSuccess: async (data) => {
+      setUserSessionClientData(
+        queryClient,
+        [{ id: client.id, gramProject }],
+        data,
+      );
+      setDraft(null);
+      await invalidateAllUserSessionClients(queryClient, {
+        refetchType: "all",
+      });
+      toast.success("Redirect URIs saved");
+    },
+  });
+
+  if (draft === null) {
+    return (
+      <DetailField label="Redirect URIs">
+        <RedirectUriList uris={client.redirectUris} />
+        {editable && (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="pencil"
+            className="mt-2 self-start"
+            onClick={() => {
+              update.reset();
+              setDraft(
+                client.redirectUris.length > 0 ? client.redirectUris : [""],
+              );
+            }}
+          >
+            <Button.Text>Edit redirect URIs</Button.Text>
+          </Button>
+        )}
+      </DetailField>
+    );
+  }
+
+  const uris = filledRedirectUris(draft);
+
+  return (
+    <DetailField label="Redirect URIs">
+      <div className="flex flex-col gap-3">
+        <RedirectUriInputs
+          value={draft}
+          onChange={setDraft}
+          disabled={update.isPending}
+        />
+        <Text small muted>
+          Applies to the next /authorize. Sessions already issued keep working
+          until they expire or are revoked.
+        </Text>
+        {update.error && (
+          <Alert variant="error" title="Couldn’t save redirect URIs">
+            {update.error.message}
+          </Alert>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setDraft(null)}
+            disabled={update.isPending}
+          >
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+          <Button
+            size="sm"
+            disabled={uris.length === 0 || update.isPending}
+            onClick={() =>
+              update.mutate({
+                request: {
+                  gramProject,
+                  updateUserSessionClientRedirectURIsRequestBody: {
+                    id: client.id,
+                    redirectUris: uris,
+                  },
+                },
+              })
+            }
+          >
+            <Button.Text>
+              {update.isPending ? "Saving…" : "Save redirect URIs"}
+            </Button.Text>
+          </Button>
+        </div>
+      </div>
+    </DetailField>
   );
 }
 

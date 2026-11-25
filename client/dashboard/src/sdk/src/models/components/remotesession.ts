@@ -9,13 +9,17 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A remote_session record — Gram's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
+ * A remote_session record — Speakeasy's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
  */
 export type RemoteSession = {
   /**
-   * Upstream access-token expiry. Independent of refresh_expires_at.
+   * Upstream access-token expiry. Independent of refresh_expires_at. Omitted when the upstream reported no expiry, which readers treat as non-expiring.
    */
-  accessExpiresAt: Date;
+  accessExpiresAt?: Date | undefined;
+  /**
+   * Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.
+   */
+  authorizationExpiresAt?: Date | undefined;
   createdAt: Date;
   /**
    * Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.
@@ -25,6 +29,14 @@ export type RemoteSession = {
    * The remote_session id.
    */
   id: string;
+  /**
+   * The upstream identity interface that supplied the stored account identity, such as an ID token or userinfo response. Absent when upstream identity is unknown.
+   */
+  identitySource?: string | undefined;
+  /**
+   * Last recorded upstream request, accurate to within five minutes. Null means unknown.
+   */
+  lastUsedAt?: Date | undefined;
   /**
    * Upstream refresh-token expiry. Null when the session has no refresh token.
    */
@@ -38,11 +50,11 @@ export type RemoteSession = {
    */
   scopes: Array<string>;
   /**
-   * Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+   * Resolved display name when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.
    */
   subjectDisplayName?: string | undefined;
   /**
-   * Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+   * Resolved email when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.
    */
   subjectEmail?: string | undefined;
   /**
@@ -50,6 +62,14 @@ export type RemoteSession = {
    */
   subjectUrn: string;
   updatedAt: Date;
+  /**
+   * Stored display name of the account at the upstream provider. Absent when no upstream identity interface supplied it.
+   */
+  upstreamDisplayName?: string | undefined;
+  /**
+   * Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Speakeasy subject.
+   */
+  upstreamEmail?: string | undefined;
   /**
    * The user_session_issuer this session is bound to.
    */
@@ -62,9 +82,11 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    access_expires_at: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
+    access_expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    authorization_expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -72,6 +94,10 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
     ),
     has_refresh_token: z.boolean(),
     id: z.string(),
+    identity_source: z.optional(z.string()),
+    last_used_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     refresh_expires_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -84,19 +110,26 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    upstream_display_name: z.optional(z.string()),
+    upstream_email: z.optional(z.string()),
     user_session_issuer_id: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "access_expires_at": "accessExpiresAt",
+      "authorization_expires_at": "authorizationExpiresAt",
       "created_at": "createdAt",
       "has_refresh_token": "hasRefreshToken",
+      "identity_source": "identitySource",
+      "last_used_at": "lastUsedAt",
       "refresh_expires_at": "refreshExpiresAt",
       "remote_session_client_id": "remoteSessionClientId",
       "subject_display_name": "subjectDisplayName",
       "subject_email": "subjectEmail",
       "subject_urn": "subjectUrn",
       "updated_at": "updatedAt",
+      "upstream_display_name": "upstreamDisplayName",
+      "upstream_email": "upstreamEmail",
       "user_session_issuer_id": "userSessionIssuerId",
     });
   }),

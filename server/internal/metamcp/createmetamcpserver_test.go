@@ -3,6 +3,7 @@ package metamcp_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -43,10 +45,32 @@ func TestCreateMetaMcpServer_Success(t *testing.T) {
 	// A gateway without sign-in is a trap (anonymous callers, no member
 	// credentials), so omitting the issuer mints a dedicated one.
 	require.NotNil(t, result.UserSessionIssuerID)
+	require.Equal(t, types.NetworkAccessMode("public_only"), result.NetworkAccessMode)
+
+	stored, err := metamcprepo.New(ti.conn).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
+		ID: uuid.MustParse(result.ID), OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.False(t, stored.NetworkAccessMode.Valid)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestCreateMetaMcpServer_NonPublicModesFailClosed(t *testing.T) {
+	t.Parallel()
+
+	for _, requested := range []types.NetworkAccessMode{"dual", "private_only"} {
+		t.Run(string(requested), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			_, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{
+				Name: "fail closed " + string(requested), NetworkAccessMode: &requested,
+			})
+			requireOopsCode(t, err, oops.CodeForbidden)
+		})
+	}
 }
 
 func TestCreateMetaMcpServer_WithIssuer(t *testing.T) {

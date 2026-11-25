@@ -1,3 +1,12 @@
+import {
+  rememberLandingUtm,
+  setAnalyticsSessionIdSource,
+} from "@/lib/signup-attribution";
+import {
+  datadogRumConfig,
+  hasAnyDatadogRumSetting,
+  posthogConfig,
+} from "@/lib/runtime-config";
 import { getServerURL } from "@/lib/utils";
 import posthog from "posthog-js";
 import { type ReactNode, useEffect } from "react";
@@ -22,30 +31,98 @@ const AM_TESTING_TELEMETRY = false;
 const isPublicSharePath = (): boolean =>
   window.location.pathname.startsWith("/shared/");
 
+// Localhost skips PostHog flag evaluation so every flag is on. Preview
+// hosts keep talking to the real project so configured flags can be
+// toggled; only missing keys fail open (see failOpenMissingFlags).
+export const shouldUseDevTelemetry = (serverURL: string): boolean =>
+  serverURL.includes("localhost");
+
+// PR preview hosts (*.dev.getgram.ai). Shared staging is the apex host
+// (dev.getgram.ai) and must not match.
+export const shouldFailOpenMissingFlags = (serverURL: string): boolean =>
+  serverURL.includes(".dev.getgram.ai");
+
+export function failOpenMissingFlags(telemetry: Telemetry): Telemetry {
+  return {
+    isFeatureEnabled: ((flag, options) => {
+      const result = telemetry.isFeatureEnabled(flag, options);
+      return result === undefined ? true : result;
+    }) as Telemetry["isFeatureEnabled"],
+    // Variants pass through untouched: a missing multivariate key stays
+    // undefined so callers fall back to the boolean read above rather than
+    // inventing a variant.
+    getFeatureFlag: telemetry.getFeatureFlag.bind(telemetry),
+    onFeatureFlags: telemetry.onFeatureFlags.bind(telemetry),
+    capture: telemetry.capture.bind(telemetry),
+    identify: telemetry.identify.bind(telemetry),
+    register: telemetry.register.bind(telemetry),
+    reset: telemetry.reset.bind(telemetry),
+    group: telemetry.group.bind(telemetry),
+  };
+}
+
+// Speakeasy's own hosts: getgram.ai, ai.speakeasy.com and their subdomains. Matched
+// on label boundaries so lookalikes such as mygetgram.ai do not qualify.
+export function isGramHost(serverURL: string): boolean {
+  const host = new URL(serverURL).hostname;
+  return ["getgram.ai", "ai.speakeasy.com"].some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  );
+}
+
+// Before the router can redirect away from the landing URL.
+rememberLandingUtm();
+
+let warnedMissingPostHog = false;
+
 export const TelemetryProvider = (props: {
   children: ReactNode;
 }): JSX.Element => {
   const serverURL = getServerURL();
-  const isProd = serverURL.includes("app.getgram.ai");
-  const ph = isPublicSharePath()
-    ? null
-    : posthog.init(
-        isProd
-          ? "phc_hiYSF5Axu49I1xs4Z5BG8KCI3PGNLM8ERRs7eocmfX9"
-          : "phc_5S3YhOs1lONwM2yKa0ytVSAyWOR2GhVhwAebkyi022l",
-        {
-          api_host: "https://metrics.speakeasy.com",
-          // PostHog otherwise collects the hardware model by default on
-          // Chromium-based Android browsers.
-          disableDeviceModel: true,
-          feature_flag_request_timeout_ms: 1000,
-        },
-        "speakeasy",
-      );
+  // PostHog and Datadog RUM settings come from the deployment (see
+  // lib/runtime-config.ts). A deployment that sets none runs without either.
+  const posthogSettings = posthogConfig();
+  if (
+    !posthogSettings &&
+    !warnedMissingPostHog &&
+    !isPublicSharePath() &&
+    !shouldUseDevTelemetry(serverURL)
+  ) {
+    // Without PostHog every feature flag reads false. Every deployment except
+    // local development is expected to configure it (GRAM_DASHBOARD_CONFIG).
+    warnedMissingPostHog = true;
+    console.warn(
+      "Dashboard runtime configuration has no PostHog settings; feature flags are off.",
+    );
+  }
+  const ph =
+    isPublicSharePath() || !posthogSettings
+      ? null
+      : posthog.init(
+          posthogSettings.key,
+          {
+            api_host: posthogSettings.apiHost,
+            // Pin SDK defaults so dependency upgrades don't change tracking behavior.
+            defaults: "2025-05-24",
+            // Capture in-app pathname changes as well as the initial page load.
+            capture_pageview: "history_change",
+            // Acknowledgement links carry bearer credentials in their fragments.
+            disable_capture_url_hashes: true,
+            // PostHog otherwise collects the hardware model by default on
+            // Chromium-based Android browsers.
+            disableDeviceModel: true,
+            // Session recording is otherwise switched on remotely from the
+            // PostHog project settings. Keep it off regardless of that setting.
+            disable_session_recording: true,
+            feature_flag_request_timeout_ms: 1000,
+          },
+          "speakeasy",
+        );
+  setAnalyticsSessionIdSource(ph ? () => ph.get_session_id() : null);
 
   useEffect(() => {
-    // Never start RUM on the public share page — the session replay and
-    // resource entries would capture the share token in URLs.
+    // Never start RUM on the public share page — the resource entries would
+    // capture the share token in URLs.
     if (isPublicSharePath()) {
       return;
     }
@@ -55,17 +132,22 @@ export const TelemetryProvider = (props: {
       return;
     }
 
-    const serverURL = getServerURL();
-    if (serverURL.includes("getgram.ai")) {
-      const env = serverURL.includes("app.getgram.ai") ? "prod" : "dev";
+    const rum = datadogRumConfig();
+    if (!rum && hasAnyDatadogRumSetting()) {
+      console.warn(
+        "Dashboard runtime configuration has incomplete Datadog RUM settings; RUM is off.",
+      );
+    }
+    if (rum) {
       datadogRum.init({
-        applicationId: "93afb64a-dd15-490c-a749-51b4c5c5a171",
-        clientToken: "pub8358667232c624e2f91e1eaa0bd380fd",
-        site: "datadoghq.com",
+        applicationId: rum.applicationId,
+        clientToken: rum.clientToken,
+        site: rum.site,
         service: "gram",
-        env,
+        env: rum.env,
         sessionSampleRate: 100,
-        sessionReplaySampleRate: 100,
+        // No session replay: recordings would show customer data on screen.
+        sessionReplaySampleRate: 0,
         trackUserInteractions: true,
         trackResources: true,
         defaultPrivacyLevel: "mask-user-input",
@@ -75,14 +157,23 @@ export const TelemetryProvider = (props: {
   }, []);
 
   let value: Telemetry = ph ?? nullTelemetry;
-  if (!isPublicSharePath() && getServerURL().includes("localhost")) {
+  // Share page uses nullTelemetry and never emits onFeatureFlags.
+  let flagsInitiallyAvailable = ph == null;
+  if (!isPublicSharePath() && shouldUseDevTelemetry(serverURL)) {
     value = AM_TESTING_TELEMETRY ? testTelemetry : devTelemetry;
+    flagsInitiallyAvailable = true;
+  } else if (
+    !isPublicSharePath() &&
+    ph &&
+    shouldFailOpenMissingFlags(serverURL)
+  ) {
+    value = failOpenMissingFlags(ph);
   }
 
   return (
     <TelemetryStateProvider
       telemetry={value}
-      featureFlagsInitiallyAvailable={value !== ph}
+      featureFlagsInitiallyAvailable={flagsInitiallyAvailable}
     >
       {props.children}
     </TelemetryStateProvider>

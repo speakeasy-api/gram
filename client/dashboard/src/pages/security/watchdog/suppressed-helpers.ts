@@ -1,17 +1,26 @@
+import { isKnownEnumValue } from "@/lib/enum";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
-import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import {
+  SuppressedReason,
+  type RiskResult,
+} from "@gram/client/models/components/riskresult.js";
 
 /** How a finding came to be suppressed, mirroring the API's suppressed_reason. */
-export type SuppressionReason = "rule" | "manual" | "automated";
+export type SuppressionReason = "rule" | "manual" | "automated" | "unknown";
 
 export const SUPPRESSION_REASON_LABEL: Record<SuppressionReason, string> = {
+  unknown: "Suppressed for an unknown reason",
   rule: "Suppressed by rule",
   manual: "Suppressed manually",
   automated: "Suppressed automatically",
 };
 
 export function suppressionReason(result: RiskResult): SuppressionReason {
-  if (result.suppressedReason) return result.suppressedReason;
+  if (result.suppressedReason) {
+    return isKnownEnumValue(SuppressedReason, result.suppressedReason)
+      ? result.suppressedReason
+      : "unknown";
+  }
   // Legacy pre-convergence rows can still reach the client without a reason.
   // Derive it the way ListDismissedRiskResults does: an exclusion id means a
   // rule suppressed the finding, anything else can only have come from a
@@ -25,7 +34,8 @@ export function suppressionReason(result: RiskResult): SuppressionReason {
  * exclusion instead.
  */
 export function isRestorable(result: RiskResult): boolean {
-  return suppressionReason(result) !== "rule";
+  const reason = suppressionReason(result);
+  return reason === "manual" || reason === "automated";
 }
 
 /**

@@ -1,0 +1,628 @@
+import {
+  DeleteNetworkIngressDialog,
+  RotateNetworkIngressCredentialsDialog,
+} from "./PrivateNetworkLifecycleDialogs";
+import {
+  invalidateAllNetworkIngress,
+  useNetworkIngress,
+} from "@gram/client/react-query/networkIngress.js";
+
+import { Alert } from "@/components/ui/Alert";
+import { BOOK_DEMO_URL } from "@/lib/constants";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { EnterpriseGate } from "@/components/enterprise-gate";
+import { HumanizeDateTime } from "@/lib/dates";
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import type { NetworkIngress } from "@gram/client/models/components/networkingress.js";
+import { PrivateNetworkSetupSheet } from "./PrivateNetworkSetupSheet";
+import { RequireScope } from "@/components/require-scope";
+import { SettingsSection } from "@/components/page-templates";
+import { Switch } from "@/components/ui/Switch";
+import { Text } from "@/components/ui/Text";
+import { handleAPIError } from "@/lib/errors";
+import { toast } from "sonner";
+import { useNetworkIngressCheckHealthMutation } from "@gram/client/react-query/networkIngressCheckHealth.js";
+import { useNetworkIngressDeleteIngressMutation } from "@gram/client/react-query/networkIngressDeleteIngress.js";
+import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
+import { useOrganization } from "@/contexts/Auth";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useProductTier } from "@/hooks/useProductTier";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import tailscaleLogo from "@/assets/tailscale-logo.webp";
+import { useUpdateNetworkIngressMutation } from "@gram/client/react-query/updateNetworkIngress.js";
+
+function TailscaleLogo(): JSX.Element {
+  return (
+    <img
+      src={tailscaleLogo}
+      alt="Tailscale"
+      width={134}
+      height={24}
+      className="h-6 w-auto shrink-0 dark:invert"
+    />
+  );
+}
+
+function statusVariant(
+  status: string,
+): "neutral" | "success" | "warning" | "destructive" {
+  switch (status) {
+    case "online":
+      return "success";
+    case "pending":
+    case "degraded":
+      return "warning";
+    case "error":
+      return "destructive";
+    default:
+      return "neutral";
+  }
+}
+
+// The tailnet has not approved Speakeasy's gateway to host the service.
+const SERVICE_NOT_APPROVED = "provider_service_not_approved";
+
+// The gateway is approved but Tailscale has not obtained the service's TLS
+// certificate from Let's Encrypt yet; the gateway retries on its own.
+const CERTIFICATE_UNAVAILABLE = "provider_certificate_unavailable";
+
+// Speakeasy can't use the organization's encryption key, so it can't store the
+// connection's secrets. The fix is access to the key, not the connection.
+const ENCRYPTION_KEY_UNAVAILABLE = "encryption_key_unavailable";
+
+// The service that hosts the connection isn't available in this Speakeasy
+// environment. Only Speakeasy can fix that.
+const PROVIDER_CONFIGURATION_UNAVAILABLE = "provider_configuration_unavailable";
+
+const SUPPORT_URL =
+  "mailto:support@speakeasy.com?subject=Tailscale%20setup%20help";
+
+function statusLabel(status: string): string {
+  return status.replaceAll("_", " ");
+}
+
+function PrivateNetworkCleanup({
+  ingress,
+  statusStale,
+}: {
+  ingress: NetworkIngress;
+  statusStale: boolean;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const retry = useNetworkIngressDeleteIngressMutation({
+    onSuccess: async () => {
+      await invalidateAllNetworkIngress(queryClient);
+      toast.success("Private network cleanup retried");
+    },
+    onError: (error) =>
+      handleAPIError(error, "Failed to retry private network cleanup"),
+  });
+
+  const credentialsRejected =
+    ingress.lastError === "provider_credentials_rejected";
+
+  return (
+    <SettingsSection.Panel>
+      <SettingsSection.Body>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <TailscaleLogo />
+              {credentialsRejected ? (
+                <Badge variant="destructive" background>
+                  Cleanup blocked
+                </Badge>
+              ) : (
+                <Badge variant="warning" background>
+                  Cleaning up
+                </Badge>
+              )}
+            </div>
+            <Text small muted>
+              Hostname label <code>{ingress.hostname}</code>
+            </Text>
+          </div>
+          <Text small muted>
+            Removal started <HumanizeDateTime date={ingress.updatedAt} />
+          </Text>
+        </div>
+        {credentialsRejected ? (
+          <Alert variant="error" dismissible={false}>
+            Tailscale rejected the credentials saved for this connection, so
+            Speakeasy can't remove its devices from your tailnet. If you
+            disabled the OAuth client or removed its scopes, restore them in the
+            Tailscale admin console, then retry cleanup. If the client or its
+            secret was deleted or regenerated, contact support to finish
+            cleanup.
+          </Alert>
+        ) : (
+          <Alert variant="info" dismissible={false}>
+            Speakeasy is removing the private route and its provider resources.
+            You can connect another tailnet after cleanup completes. This page
+            checks for completion automatically.
+          </Alert>
+        )}
+        {statusStale && (
+          <Alert variant="warning" dismissible={false}>
+            Cleanup status may be out of date because the latest check failed.
+            You can retry cleanup while Speakeasy continues polling.
+          </Alert>
+        )}
+      </SettingsSection.Body>
+      <SettingsSection.Footer>
+        <SettingsSection.FooterHint>
+          MCP server network modes are unchanged during cleanup.
+        </SettingsSection.FooterHint>
+        <SettingsSection.FooterActions>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={retry.isPending}
+            onClick={() =>
+              retry.mutate({ security: { sessionHeaderGramSession: "" } })
+            }
+          >
+            {retry.isPending ? "Retrying..." : "Retry cleanup"}
+          </Button>
+        </SettingsSection.FooterActions>
+      </SettingsSection.Footer>
+    </SettingsSection.Panel>
+  );
+}
+
+function ConfiguredPrivateNetwork({
+  ingress,
+  gatewayTag,
+  entitled,
+  enterprise,
+  onShowSetup,
+}: {
+  ingress: NetworkIngress;
+  // The Tailscale tag this environment's gateway carries.
+  gatewayTag: string;
+  entitled: boolean;
+  enterprise: boolean;
+  onShowSetup: () => void;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const [rotateOpen, setRotateOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const serviceNotApproved = ingress.lastError === SERVICE_NOT_APPROVED;
+  const certificateUnavailable = ingress.lastError === CERTIFICATE_UNAVAILABLE;
+  const encryptionKeyUnavailable =
+    ingress.lastError === ENCRYPTION_KEY_UNAVAILABLE;
+  const configurationUnavailable =
+    ingress.lastError === PROVIDER_CONFIGURATION_UNAVAILABLE;
+  // These errors have their own explanation, and retrying cannot fix them.
+  const explainedError =
+    serviceNotApproved ||
+    certificateUnavailable ||
+    encryptionKeyUnavailable ||
+    configurationUnavailable;
+  const update = useUpdateNetworkIngressMutation({
+    onSuccess: async () => {
+      await invalidateAllNetworkIngress(queryClient);
+      toast.success("Private network settings updated");
+    },
+    onError: (error) =>
+      handleAPIError(error, "Failed to update private network"),
+  });
+  const health = useNetworkIngressCheckHealthMutation({
+    onSuccess: async () => {
+      await invalidateAllNetworkIngress(queryClient);
+      toast.success(
+        ingress.status === "error"
+          ? "Private network provisioning retried"
+          : "Private network health checked",
+      );
+    },
+    onError: (error) =>
+      handleAPIError(error, "Failed to check private network health"),
+  });
+
+  return (
+    <SettingsSection.Panel>
+      <SettingsSection.Body>
+        {!entitled && (
+          <Alert variant="warning" dismissible={false}>
+            {enterprise
+              ? "Private network access is no longer enabled for this organization."
+              : "Private network access requires an Enterprise plan."}{" "}
+            Existing restrictions remain enforced. You can disable or remove
+            this ingress, and restore affected MCP servers to public-only
+            access.{" "}
+            {!enterprise && (
+              <a
+                href={BOOK_DEMO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                Talk to our team about Enterprise
+              </a>
+            )}
+          </Alert>
+        )}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <TailscaleLogo />
+              <Badge variant={statusVariant(ingress.status)} background>
+                {statusLabel(ingress.status)}
+              </Badge>
+            </div>
+            <Text small muted>
+              Hostname label <code>{ingress.hostname}</code>
+            </Text>
+          </div>
+          <div className="text-right">
+            {ingress.healthCheckedAt && (
+              <Text small muted>
+                Last checked <HumanizeDateTime date={ingress.healthCheckedAt} />
+              </Text>
+            )}
+            {ingress.connectedSince && (
+              <Text small muted>
+                Connected <HumanizeDateTime date={ingress.connectedSince} />
+              </Text>
+            )}
+          </div>
+        </div>
+        <dl className="grid gap-4 border-t pt-4 sm:grid-cols-3">
+          <div>
+            <dt className="text-eyebrow">Private base URL</dt>
+            <dd className="mt-1 break-all font-mono text-sm">
+              {ingress.dnsName
+                ? `https://${ingress.dnsName}`
+                : "Waiting for Tailscale"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-eyebrow">Endpoint namespace</dt>
+            <dd className="mt-1 text-sm">
+              {ingress.endpointNamespaceKind === "custom_domain"
+                ? "Custom domain"
+                : "Speakeasy platform"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-eyebrow">Credentials</dt>
+            <dd className="mt-1 text-sm">
+              {ingress.credentialsConfigured ? "Configured" : "Not configured"}
+            </dd>
+          </div>
+        </dl>
+        {serviceNotApproved ? (
+          <Alert variant="error" dismissible={false}>
+            <div className="space-y-2">
+              <Text small>
+                Your tailnet hasn&apos;t approved Speakeasy to host{" "}
+                <code>svc:{ingress.hostname}</code>, so devices can&apos;t reach
+                it yet. Approve the <code>speakeasy-gw</code> hosts on the
+                service&apos;s page in the Tailscale admin console, or add{" "}
+                <code>
+                  &quot;svc:{ingress.hostname}&quot;: [&quot;{gatewayTag}&quot;]
+                </code>{" "}
+                to <code>autoApprovers.services</code> in your tailnet policy.
+                This page updates on its own once the hosts are approved.
+              </Text>
+              <Button asChild variant="secondary" size="sm">
+                <a
+                  href="https://login.tailscale.com/admin/services"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open Tailscale services
+                </a>
+              </Button>
+            </div>
+          </Alert>
+        ) : certificateUnavailable ? (
+          <Alert variant="error" dismissible={false}>
+            <div className="space-y-2">
+              <Text small>
+                Speakeasy&apos;s gateway is approved, but it couldn&apos;t get a
+                valid HTTPS certificate for <code>{ingress.hostname}</code>, so
+                devices can&apos;t connect yet. Speakeasy retries on its own and
+                this page updates once the certificate is issued.
+              </Text>
+              {ingress.statusDetail && (
+                <Text small muted>
+                  Latest attempt: {ingress.statusDetail}
+                </Text>
+              )}
+            </div>
+          </Alert>
+        ) : encryptionKeyUnavailable ? (
+          <Alert variant="error" dismissible={false}>
+            <div className="space-y-2">
+              <Text small>
+                Speakeasy can&apos;t use your organization&apos;s encryption
+                key, so it can&apos;t store the secrets this connection needs.
+                If your organization manages its own key, restore
+                Speakeasy&apos;s access to it in your cloud key management
+                service. Otherwise, contact support. Speakeasy retries on its
+                own once the key can be used again.
+              </Text>
+              <Button asChild variant="secondary" size="sm">
+                <a href={SUPPORT_URL}>Contact support</a>
+              </Button>
+            </div>
+          </Alert>
+        ) : configurationUnavailable ? (
+          <Alert variant="error" dismissible={false}>
+            <div className="space-y-2">
+              <Text small>
+                Speakeasy can&apos;t connect Tailscale because of a problem on
+                our side. Nothing in your tailnet or this connection needs to
+                change. Contact support and we&apos;ll fix it.
+              </Text>
+              <Button asChild variant="secondary" size="sm">
+                <a href={SUPPORT_URL}>Contact support</a>
+              </Button>
+            </div>
+          </Alert>
+        ) : (
+          ingress.lastError && (
+            <Alert variant="error" dismissible={false}>
+              Latest check: {statusLabel(ingress.lastError)}
+            </Alert>
+          )
+        )}
+        {ingress.status === "error" && !explainedError && (
+          <Alert variant="warning" dismissible={false}>
+            <div className="space-y-3">
+              <Text small>
+                Tailscale could not be connected. Check your OAuth client and
+                tailnet policy, then retry provisioning. If it still fails, our
+                team can help.
+              </Text>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!entitled || health.isPending}
+                  onClick={() =>
+                    health.mutate({
+                      security: { sessionHeaderGramSession: "" },
+                    })
+                  }
+                >
+                  {health.isPending ? "Retrying..." : "Retry provisioning"}
+                </Button>
+                <Button asChild variant="tertiary" size="sm">
+                  <a href={SUPPORT_URL}>Contact support</a>
+                </Button>
+              </div>
+            </div>
+          </Alert>
+        )}
+        <div className="flex items-start justify-between gap-6 border-t pt-4">
+          <div className="space-y-1">
+            <Text variant="subheading">Require user identity</Text>
+            <Text small muted>
+              Tagged devices and service nodes are denied when this is enabled.
+            </Text>
+          </div>
+          <Switch
+            aria-label="Require user identity"
+            checked={ingress.identityRequired}
+            disabled={!entitled || update.isPending}
+            onCheckedChange={(identityRequired) =>
+              update.mutate({
+                security: { sessionHeaderGramSession: "" },
+                request: { updateIngressRequestBody: { identityRequired } },
+              })
+            }
+          />
+        </div>
+        <div className="flex items-start justify-between gap-6 border-t pt-4">
+          <div className="space-y-1">
+            <Text variant="subheading">Ingress enabled</Text>
+            <Text small muted>
+              Disabling stops private serving without changing any MCP server
+              network mode.
+            </Text>
+          </div>
+          <Switch
+            aria-label="Private network ingress enabled"
+            checked={ingress.enabled}
+            disabled={update.isPending || (!entitled && !ingress.enabled)}
+            onCheckedChange={(enabled) =>
+              update.mutate({
+                security: { sessionHeaderGramSession: "" },
+                request: { updateIngressRequestBody: { enabled } },
+              })
+            }
+          />
+        </div>
+      </SettingsSection.Body>
+      <SettingsSection.Footer>
+        <SettingsSection.FooterHint>
+          There is no automatic public fallback when the private route is
+          unavailable.
+        </SettingsSection.FooterHint>
+        <SettingsSection.FooterActions>
+          {ingress.status !== "error" && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!entitled || health.isPending}
+              onClick={() =>
+                health.mutate({ security: { sessionHeaderGramSession: "" } })
+              }
+            >
+              {health.isPending ? "Checking..." : "Check health"}
+            </Button>
+          )}
+          <Button variant="secondary" size="sm" onClick={onShowSetup}>
+            Setup steps
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!entitled}
+            onClick={() => setRotateOpen(true)}
+          >
+            Rotate credentials
+          </Button>
+          <Button
+            variant="tertiary"
+            size="sm"
+            className="hover:text-destructive"
+            onClick={() => setDeleteOpen(true)}
+          >
+            Remove
+          </Button>
+        </SettingsSection.FooterActions>
+      </SettingsSection.Footer>
+      <RotateNetworkIngressCredentialsDialog
+        open={rotateOpen}
+        onOpenChange={setRotateOpen}
+      />
+      <DeleteNetworkIngressDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        ingress={ingress}
+      />
+    </SettingsSection.Panel>
+  );
+}
+
+export function PrivateNetworkSection(): JSX.Element | null {
+  const organization = useOrganization();
+  const enterprise = useProductTier() === "enterprise";
+  const { canManageIngress } = useNetworkIngressRollout();
+  const features = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  const entitled = features.data?.networkIngressEnabled === true;
+  const ingressResult = useNetworkIngress(undefined, undefined, {
+    enabled: canManageIngress,
+    retry: (failureCount) => failureCount < 2,
+    throwOnError: false,
+    refetchInterval: (query) => {
+      const current = query.state.data?.ingress;
+      if (current?.status === "deleting") return 5_000;
+      // Admins approve the host in Tailscale's console, so pick that up
+      // without a reload.
+      if (current?.lastError === SERVICE_NOT_APPROVED) return 10_000;
+      // The gateway retries the certificate on its own; show it once issued.
+      if (current?.lastError === CERTIFICATE_UNAVAILABLE) return 30_000;
+      // The reconciler retries on its own once the encryption key is usable
+      // again; show the recovery without a reload.
+      if (current?.lastError === ENCRYPTION_KEY_UNAVAILABLE) return 30_000;
+      return false;
+    },
+  });
+  const ingress = ingressResult.data?.ingress;
+  const gatewayTag = ingressResult.data?.gatewayTag;
+  const unsupportedProvider = ingress && ingress.provider !== "tailscale";
+  const [setupOpen, setSetupOpen] = useState(false);
+
+  if (!canManageIngress) return null;
+
+  return (
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Private network access</SettingsSection.Title>
+        <SettingsSection.Description>
+          {unsupportedProvider
+            ? "Serve hosted MCP endpoints inside your private network."
+            : "Serve hosted MCP endpoints inside your Tailscale network without exposing a public fallback."}
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      {unsupportedProvider ? (
+        <SettingsSection.Panel>
+          <SettingsSection.Body>
+            <Text small muted>
+              Refresh the page before managing this unsupported private network
+              provider.
+            </Text>
+          </SettingsSection.Body>
+        </SettingsSection.Panel>
+      ) : ingress?.status === "deleting" ? (
+        <PrivateNetworkCleanup
+          ingress={ingress}
+          statusStale={ingressResult.isError}
+        />
+      ) : ingressResult.isPending || features.isPending ? (
+        <SettingsSection.Panel>
+          <SettingsSection.Body>
+            <Text small muted>
+              Loading private network settings...
+            </Text>
+          </SettingsSection.Body>
+        </SettingsSection.Panel>
+      ) : ingressResult.isError || features.isError || !features.data ? (
+        <SettingsSection.Panel>
+          <SettingsSection.Body>
+            <Alert variant="error" dismissible={false}>
+              Private network settings could not be loaded. No controls are
+              available until both entitlement and ingress checks succeed.
+            </Alert>
+          </SettingsSection.Body>
+        </SettingsSection.Panel>
+      ) : ingress ? (
+        <ConfiguredPrivateNetwork
+          ingress={ingress}
+          gatewayTag={gatewayTag ?? ""}
+          entitled={entitled}
+          enterprise={enterprise}
+          onShowSetup={() => setSetupOpen(true)}
+        />
+      ) : entitled ? (
+        <InlineEmptyState
+          icon="network"
+          heading="No private network connected"
+          description="Connect a Tailscale tailnet to create private URLs for this organization."
+          action={
+            <RequireScope scope="org:admin" level="component">
+              <Button size="sm" onClick={() => setSetupOpen(true)}>
+                Connect Tailscale
+              </Button>
+            </RequireScope>
+          }
+        />
+      ) : !enterprise ? (
+        <EnterpriseGate
+          allowed={false}
+          icon="network"
+          title="Tailscale private access"
+          description="Connect your Tailscale network to serve MCP endpoints privately. Available on the Enterprise plan. Talk to our team about upgrading."
+        />
+      ) : (
+        <InlineEmptyState
+          icon="network"
+          heading="No private network connected"
+          description="Tailscale private access is not enabled for this organization yet. Contact support to enable it."
+          action={
+            <Button asChild variant="secondary" size="sm">
+              <a href="mailto:support@speakeasy.com?subject=Enable%20Tailscale%20private%20access">
+                Contact support
+              </a>
+            </Button>
+          }
+        />
+      )}
+      {/* Before a connection exists the sheet creates one; afterwards it
+          shows the steps for the connection, including the one it just
+          created. */}
+      {!unsupportedProvider &&
+        gatewayTag &&
+        ingress?.status !== "deleting" &&
+        (ingress ? setupOpen : entitled) && (
+          <PrivateNetworkSetupSheet
+            open={setupOpen}
+            onOpenChange={setSetupOpen}
+            ingress={ingress}
+            gatewayTag={gatewayTag}
+          />
+        )}
+    </SettingsSection>
+  );
+}

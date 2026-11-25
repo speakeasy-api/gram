@@ -1,6 +1,36 @@
+// @vitest-environment node
+import { unrecognized } from "@gram/client/types/unrecognized.js";
+import {
+  canAssignChallengeRole,
+  countChallenges,
+  hasActiveTemporaryGrant,
+  reasonLabel,
+  resolutionSummary,
+  scopeChallenges,
+} from "./challengeHelpers";
 import { describe, expect, it } from "vitest";
+
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
-import { countChallenges, scopeChallenges } from "./challengeHelpers";
+
+describe("canAssignChallengeRole", () => {
+  it("allows one concrete user", () => {
+    expect(
+      canAssignChallengeRole({
+        principalType: "user",
+        principalUrn: "user:u1",
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    { principalType: "user" as const, principalUrn: "user:all" },
+    { principalType: "api_key" as const, principalUrn: "api_key:key1" },
+    { principalType: "assistant" as const, principalUrn: "assistant:a1" },
+    { principalType: "agent" as const, principalUrn: "agent:a1" },
+  ])("rejects $principalType principal $principalUrn", (principal) => {
+    expect(canAssignChallengeRole(principal)).toBe(false);
+  });
+});
 
 function makeChallenge(
   overrides: Partial<AuthzChallenge> = {},
@@ -21,6 +51,14 @@ function makeChallenge(
     ...overrides,
   };
 }
+
+describe("reasonLabel", () => {
+  it("explains a refused personal connection without naming its owner", () => {
+    expect(reasonLabel("connection_owner_mismatch")).toBe(
+      "This connection belongs to another member and works only for them.",
+    );
+  });
+});
 
 describe("scopeChallenges", () => {
   const challenges = [
@@ -148,12 +186,12 @@ describe("countChallenges", () => {
     });
   });
 
-  it("counts error outcome as allow bucket", () => {
+  it("does not count an error outcome as allowed", () => {
     const challenges = [makeChallenge({ outcome: "error" })];
     expect(countChallenges(challenges)).toEqual({
       all: 1,
       deny: 0,
-      allow: 1,
+      allow: 0,
       resolved: 0,
     });
   });
@@ -169,8 +207,120 @@ describe("countChallenges", () => {
     expect(countChallenges(challenges)).toEqual({
       all: 5,
       deny: 2,
-      allow: 2,
+      allow: 1,
       resolved: 1,
     });
+  });
+});
+
+it("never counts unknown or error challenge outcomes as allowed", () => {
+  const challenges = [
+    makeChallenge({ outcome: unrecognized("future_outcome") }),
+    makeChallenge({ outcome: "error" }),
+    makeChallenge({ outcome: "deny" }),
+    makeChallenge({ outcome: "allow" }),
+  ];
+  expect(countChallenges(challenges)).toEqual({
+    all: 4,
+    allow: 1,
+    deny: 1,
+    resolved: 0,
+  });
+});
+
+describe("resolutionSummary", () => {
+  const now = new Date("2026-11-12T12:00:00Z");
+  const later = new Date("2026-11-12T14:00:00Z");
+  const earlier = new Date("2026-11-12T11:00:00Z");
+  const format = (d: Date) => d.toISOString();
+  const resolved = {
+    resolvedAt: earlier,
+    resolutionRoleSlug: undefined,
+    resolutionTemporaryGrant: undefined,
+  };
+
+  it("is null for an unresolved row", () => {
+    expect(
+      resolutionSummary(
+        { ...resolved, resolvedAt: undefined, resolutionType: undefined },
+        now,
+        format,
+      ),
+    ).toBeNull();
+  });
+
+  it("names the role assigned, or a dismissal", () => {
+    expect(
+      resolutionSummary(
+        {
+          ...resolved,
+          resolutionType: "role_assigned",
+          resolutionRoleSlug: "auditor",
+        },
+        now,
+        format,
+      ),
+    ).toBe("Role assigned: auditor");
+    expect(
+      resolutionSummary(
+        { ...resolved, resolutionType: "dismissed" },
+        now,
+        format,
+      ),
+    ).toBe("Dismissed");
+  });
+
+  it("says when temporary access ends, or that it ended", () => {
+    const withGrant = (
+      status: "active" | "expired" | "revoked",
+      expiresAt?: Date,
+    ) => ({
+      ...resolved,
+      resolutionType: "temporary_grant" as const,
+      resolutionTemporaryGrant: { id: "g", status, expiresAt },
+    });
+    expect(resolutionSummary(withGrant("active", later), now, format)).toBe(
+      `Temporary access · ends ${later.toISOString()}`,
+    );
+    expect(resolutionSummary(withGrant("expired", earlier), now, format)).toBe(
+      "Temporary access, expired",
+    );
+    expect(resolutionSummary(withGrant("revoked"), now, format)).toBe(
+      "Temporary access, revoked",
+    );
+    // Fetched as active, but the deadline has passed since.
+    expect(resolutionSummary(withGrant("active", earlier), now, format)).toBe(
+      "Temporary access, expired",
+    );
+  });
+});
+
+describe("hasActiveTemporaryGrant", () => {
+  const now = new Date("2026-11-12T12:00:00Z");
+  const row = (status: "active" | "expired" | "revoked", expiresAt?: Date) => ({
+    resolutionType: "temporary_grant" as const,
+    resolutionTemporaryGrant: { id: "g", status, expiresAt },
+  });
+
+  it("holds only until the deadline", () => {
+    expect(
+      hasActiveTemporaryGrant(
+        row("active", new Date("2026-11-12T13:00:00Z")),
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      hasActiveTemporaryGrant(
+        row("active", new Date("2026-11-12T11:59:00Z")),
+        now,
+      ),
+    ).toBe(false);
+    expect(hasActiveTemporaryGrant(row("revoked"), now)).toBe(false);
+    expect(
+      hasActiveTemporaryGrant(
+        { resolutionType: "dismissed", resolutionTemporaryGrant: undefined },
+        now,
+      ),
+    ).toBe(false);
   });
 });

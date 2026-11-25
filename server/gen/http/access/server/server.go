@@ -24,20 +24,51 @@ type Server struct {
 	CreateRole                           http.Handler
 	UpdateRole                           http.Handler
 	DeleteRole                           http.Handler
+	ListDirectoryRoleMappings            http.Handler
+	ListDirectoryPeople                  http.Handler
+	SyncDirectoryGroups                  http.Handler
+	SetDirectoryRoleMapping              http.Handler
+	SetDirectoryRoleMappings             http.Handler
+	DeleteDirectoryRoleMapping           http.Handler
+	PreviewDirectoryRoleSetup            http.Handler
+	ApplyDirectoryRoleSetup              http.Handler
+	ListDirectoryReviewItems             http.Handler
+	ResolveDirectoryReviewItem           http.Handler
+	GetDirectoryReviewSettings           http.Handler
+	UpdateDirectoryReviewSettings        http.Handler
 	ListScopes                           http.Handler
+	ListAgentPolicyScopes                http.Handler
 	ListMembers                          http.Handler
 	ListGrants                           http.Handler
 	UpdateMemberRoles                    http.Handler
 	ListShadowMCPInventory               http.Handler
 	GetShadowMCPInventoryServer          http.Handler
+	FindShadowMCPInventoryServers        http.Handler
 	UpdateShadowMCPInventoryServerName   http.Handler
+	SetShadowMCPOfficialServer           http.Handler
 	ListShadowMCPInventoryUsers          http.Handler
 	ListShadowMCPInventoryServersForUser http.Handler
 	ResolveShadowMCPInventoryRequest     http.Handler
+	ListAIDetections                     http.Handler
+	ListEmployeeAIDetections             http.Handler
+	ListAIDetectionUsers                 http.Handler
+	SetAIToolDecision                    http.Handler
+	ListResourceAudience                 http.Handler
+	SetResourceAudience                  http.Handler
+	ListAudienceOptions                  http.Handler
+	ExplainResourceAccess                http.Handler
 	RequestAccess                        http.Handler
 	ListChallenges                       http.Handler
 	ListChallengeBuckets                 http.Handler
 	ResolveChallenge                     http.Handler
+	ListIdentityAccess                   http.Handler
+	CreateTemporaryGrant                 http.Handler
+	ListTemporaryGrants                  http.Handler
+	RenewTemporaryGrant                  http.Handler
+	RevokeTemporaryGrant                 http.Handler
+	ListAccessRequests                   http.Handler
+	DecideAccessRequest                  http.Handler
+	WithdrawAccessRequest                http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -72,40 +103,102 @@ func New(
 			{"CreateRole", "POST", "/rpc/access.createRole"},
 			{"UpdateRole", "PUT", "/rpc/access.updateRole"},
 			{"DeleteRole", "DELETE", "/rpc/access.deleteRole"},
+			{"ListDirectoryRoleMappings", "GET", "/rpc/access.listDirectoryRoleMappings"},
+			{"ListDirectoryPeople", "GET", "/rpc/access.listDirectoryPeople"},
+			{"SyncDirectoryGroups", "POST", "/rpc/access.syncDirectoryGroups"},
+			{"SetDirectoryRoleMapping", "POST", "/rpc/access.setDirectoryRoleMapping"},
+			{"SetDirectoryRoleMappings", "POST", "/rpc/access.setDirectoryRoleMappings"},
+			{"DeleteDirectoryRoleMapping", "DELETE", "/rpc/access.deleteDirectoryRoleMapping"},
+			{"PreviewDirectoryRoleSetup", "GET", "/rpc/access.previewDirectoryRoleSetup"},
+			{"ApplyDirectoryRoleSetup", "POST", "/rpc/access.applyDirectoryRoleSetup"},
+			{"ListDirectoryReviewItems", "GET", "/rpc/access.listDirectoryReviewItems"},
+			{"ResolveDirectoryReviewItem", "POST", "/rpc/access.resolveDirectoryReviewItem"},
+			{"GetDirectoryReviewSettings", "GET", "/rpc/access.getDirectoryReviewSettings"},
+			{"UpdateDirectoryReviewSettings", "POST", "/rpc/access.updateDirectoryReviewSettings"},
 			{"ListScopes", "GET", "/rpc/access.listScopes"},
+			{"ListAgentPolicyScopes", "GET", "/rpc/access.listAgentPolicyScopes"},
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
 			{"UpdateMemberRoles", "PUT", "/rpc/access.updateMemberRoles"},
 			{"ListShadowMCPInventory", "GET", "/rpc/access.listShadowMCPInventory"},
 			{"GetShadowMCPInventoryServer", "GET", "/rpc/access.getShadowMCPInventoryServer"},
+			{"FindShadowMCPInventoryServers", "GET", "/rpc/access.findShadowMCPInventoryServers"},
 			{"UpdateShadowMCPInventoryServerName", "POST", "/rpc/access.updateShadowMCPInventoryServerName"},
+			{"SetShadowMCPOfficialServer", "POST", "/rpc/access.setShadowMCPOfficialServer"},
 			{"ListShadowMCPInventoryUsers", "GET", "/rpc/access.listShadowMCPInventoryUsers"},
 			{"ListShadowMCPInventoryServersForUser", "GET", "/rpc/access.listShadowMCPInventoryServersForUser"},
 			{"ResolveShadowMCPInventoryRequest", "POST", "/rpc/access.resolveShadowMCPInventoryRequest"},
+			{"ListAIDetections", "GET", "/rpc/access.listAIDetections"},
+			{"ListEmployeeAIDetections", "GET", "/rpc/access.listEmployeeAIDetections"},
+			{"ListAIDetectionUsers", "GET", "/rpc/access.listAIDetectionUsers"},
+			{"SetAIToolDecision", "POST", "/rpc/access.setAIToolDecision"},
+			{"ListResourceAudience", "GET", "/rpc/access.listResourceAudience"},
+			{"SetResourceAudience", "POST", "/rpc/access.setResourceAudience"},
+			{"ListAudienceOptions", "GET", "/rpc/access.listAudienceOptions"},
+			{"ExplainResourceAccess", "GET", "/rpc/access.explainResourceAccess"},
 			{"RequestAccess", "POST", "/rpc/access.requestAccess"},
 			{"ListChallenges", "GET", "/rpc/access.listChallenges"},
 			{"ListChallengeBuckets", "GET", "/rpc/access.listChallengeBuckets"},
 			{"ResolveChallenge", "POST", "/rpc/access.resolveChallenge"},
+			{"ListIdentityAccess", "GET", "/rpc/access.listIdentityAccess"},
+			{"CreateTemporaryGrant", "POST", "/rpc/access.createTemporaryGrant"},
+			{"ListTemporaryGrants", "GET", "/rpc/access.listTemporaryGrants"},
+			{"RenewTemporaryGrant", "POST", "/rpc/access.renewTemporaryGrant"},
+			{"RevokeTemporaryGrant", "POST", "/rpc/access.revokeTemporaryGrant"},
+			{"ListAccessRequests", "GET", "/rpc/access.listAccessRequests"},
+			{"DecideAccessRequest", "POST", "/rpc/access.decideAccessRequest"},
+			{"WithdrawAccessRequest", "POST", "/rpc/access.withdrawAccessRequest"},
 		},
 		ListRoles:                            NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
 		GetRole:                              NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
 		CreateRole:                           NewCreateRoleHandler(e.CreateRole, mux, decoder, encoder, errhandler, formatter),
 		UpdateRole:                           NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
 		DeleteRole:                           NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
+		ListDirectoryRoleMappings:            NewListDirectoryRoleMappingsHandler(e.ListDirectoryRoleMappings, mux, decoder, encoder, errhandler, formatter),
+		ListDirectoryPeople:                  NewListDirectoryPeopleHandler(e.ListDirectoryPeople, mux, decoder, encoder, errhandler, formatter),
+		SyncDirectoryGroups:                  NewSyncDirectoryGroupsHandler(e.SyncDirectoryGroups, mux, decoder, encoder, errhandler, formatter),
+		SetDirectoryRoleMapping:              NewSetDirectoryRoleMappingHandler(e.SetDirectoryRoleMapping, mux, decoder, encoder, errhandler, formatter),
+		SetDirectoryRoleMappings:             NewSetDirectoryRoleMappingsHandler(e.SetDirectoryRoleMappings, mux, decoder, encoder, errhandler, formatter),
+		DeleteDirectoryRoleMapping:           NewDeleteDirectoryRoleMappingHandler(e.DeleteDirectoryRoleMapping, mux, decoder, encoder, errhandler, formatter),
+		PreviewDirectoryRoleSetup:            NewPreviewDirectoryRoleSetupHandler(e.PreviewDirectoryRoleSetup, mux, decoder, encoder, errhandler, formatter),
+		ApplyDirectoryRoleSetup:              NewApplyDirectoryRoleSetupHandler(e.ApplyDirectoryRoleSetup, mux, decoder, encoder, errhandler, formatter),
+		ListDirectoryReviewItems:             NewListDirectoryReviewItemsHandler(e.ListDirectoryReviewItems, mux, decoder, encoder, errhandler, formatter),
+		ResolveDirectoryReviewItem:           NewResolveDirectoryReviewItemHandler(e.ResolveDirectoryReviewItem, mux, decoder, encoder, errhandler, formatter),
+		GetDirectoryReviewSettings:           NewGetDirectoryReviewSettingsHandler(e.GetDirectoryReviewSettings, mux, decoder, encoder, errhandler, formatter),
+		UpdateDirectoryReviewSettings:        NewUpdateDirectoryReviewSettingsHandler(e.UpdateDirectoryReviewSettings, mux, decoder, encoder, errhandler, formatter),
 		ListScopes:                           NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
+		ListAgentPolicyScopes:                NewListAgentPolicyScopesHandler(e.ListAgentPolicyScopes, mux, decoder, encoder, errhandler, formatter),
 		ListMembers:                          NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
 		ListGrants:                           NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
 		UpdateMemberRoles:                    NewUpdateMemberRolesHandler(e.UpdateMemberRoles, mux, decoder, encoder, errhandler, formatter),
 		ListShadowMCPInventory:               NewListShadowMCPInventoryHandler(e.ListShadowMCPInventory, mux, decoder, encoder, errhandler, formatter),
 		GetShadowMCPInventoryServer:          NewGetShadowMCPInventoryServerHandler(e.GetShadowMCPInventoryServer, mux, decoder, encoder, errhandler, formatter),
+		FindShadowMCPInventoryServers:        NewFindShadowMCPInventoryServersHandler(e.FindShadowMCPInventoryServers, mux, decoder, encoder, errhandler, formatter),
 		UpdateShadowMCPInventoryServerName:   NewUpdateShadowMCPInventoryServerNameHandler(e.UpdateShadowMCPInventoryServerName, mux, decoder, encoder, errhandler, formatter),
+		SetShadowMCPOfficialServer:           NewSetShadowMCPOfficialServerHandler(e.SetShadowMCPOfficialServer, mux, decoder, encoder, errhandler, formatter),
 		ListShadowMCPInventoryUsers:          NewListShadowMCPInventoryUsersHandler(e.ListShadowMCPInventoryUsers, mux, decoder, encoder, errhandler, formatter),
 		ListShadowMCPInventoryServersForUser: NewListShadowMCPInventoryServersForUserHandler(e.ListShadowMCPInventoryServersForUser, mux, decoder, encoder, errhandler, formatter),
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestHandler(e.ResolveShadowMCPInventoryRequest, mux, decoder, encoder, errhandler, formatter),
+		ListAIDetections:                     NewListAIDetectionsHandler(e.ListAIDetections, mux, decoder, encoder, errhandler, formatter),
+		ListEmployeeAIDetections:             NewListEmployeeAIDetectionsHandler(e.ListEmployeeAIDetections, mux, decoder, encoder, errhandler, formatter),
+		ListAIDetectionUsers:                 NewListAIDetectionUsersHandler(e.ListAIDetectionUsers, mux, decoder, encoder, errhandler, formatter),
+		SetAIToolDecision:                    NewSetAIToolDecisionHandler(e.SetAIToolDecision, mux, decoder, encoder, errhandler, formatter),
+		ListResourceAudience:                 NewListResourceAudienceHandler(e.ListResourceAudience, mux, decoder, encoder, errhandler, formatter),
+		SetResourceAudience:                  NewSetResourceAudienceHandler(e.SetResourceAudience, mux, decoder, encoder, errhandler, formatter),
+		ListAudienceOptions:                  NewListAudienceOptionsHandler(e.ListAudienceOptions, mux, decoder, encoder, errhandler, formatter),
+		ExplainResourceAccess:                NewExplainResourceAccessHandler(e.ExplainResourceAccess, mux, decoder, encoder, errhandler, formatter),
 		RequestAccess:                        NewRequestAccessHandler(e.RequestAccess, mux, decoder, encoder, errhandler, formatter),
 		ListChallenges:                       NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
 		ListChallengeBuckets:                 NewListChallengeBucketsHandler(e.ListChallengeBuckets, mux, decoder, encoder, errhandler, formatter),
 		ResolveChallenge:                     NewResolveChallengeHandler(e.ResolveChallenge, mux, decoder, encoder, errhandler, formatter),
+		ListIdentityAccess:                   NewListIdentityAccessHandler(e.ListIdentityAccess, mux, decoder, encoder, errhandler, formatter),
+		CreateTemporaryGrant:                 NewCreateTemporaryGrantHandler(e.CreateTemporaryGrant, mux, decoder, encoder, errhandler, formatter),
+		ListTemporaryGrants:                  NewListTemporaryGrantsHandler(e.ListTemporaryGrants, mux, decoder, encoder, errhandler, formatter),
+		RenewTemporaryGrant:                  NewRenewTemporaryGrantHandler(e.RenewTemporaryGrant, mux, decoder, encoder, errhandler, formatter),
+		RevokeTemporaryGrant:                 NewRevokeTemporaryGrantHandler(e.RevokeTemporaryGrant, mux, decoder, encoder, errhandler, formatter),
+		ListAccessRequests:                   NewListAccessRequestsHandler(e.ListAccessRequests, mux, decoder, encoder, errhandler, formatter),
+		DecideAccessRequest:                  NewDecideAccessRequestHandler(e.DecideAccessRequest, mux, decoder, encoder, errhandler, formatter),
+		WithdrawAccessRequest:                NewWithdrawAccessRequestHandler(e.WithdrawAccessRequest, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -119,20 +212,51 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRole = m(s.CreateRole)
 	s.UpdateRole = m(s.UpdateRole)
 	s.DeleteRole = m(s.DeleteRole)
+	s.ListDirectoryRoleMappings = m(s.ListDirectoryRoleMappings)
+	s.ListDirectoryPeople = m(s.ListDirectoryPeople)
+	s.SyncDirectoryGroups = m(s.SyncDirectoryGroups)
+	s.SetDirectoryRoleMapping = m(s.SetDirectoryRoleMapping)
+	s.SetDirectoryRoleMappings = m(s.SetDirectoryRoleMappings)
+	s.DeleteDirectoryRoleMapping = m(s.DeleteDirectoryRoleMapping)
+	s.PreviewDirectoryRoleSetup = m(s.PreviewDirectoryRoleSetup)
+	s.ApplyDirectoryRoleSetup = m(s.ApplyDirectoryRoleSetup)
+	s.ListDirectoryReviewItems = m(s.ListDirectoryReviewItems)
+	s.ResolveDirectoryReviewItem = m(s.ResolveDirectoryReviewItem)
+	s.GetDirectoryReviewSettings = m(s.GetDirectoryReviewSettings)
+	s.UpdateDirectoryReviewSettings = m(s.UpdateDirectoryReviewSettings)
 	s.ListScopes = m(s.ListScopes)
+	s.ListAgentPolicyScopes = m(s.ListAgentPolicyScopes)
 	s.ListMembers = m(s.ListMembers)
 	s.ListGrants = m(s.ListGrants)
 	s.UpdateMemberRoles = m(s.UpdateMemberRoles)
 	s.ListShadowMCPInventory = m(s.ListShadowMCPInventory)
 	s.GetShadowMCPInventoryServer = m(s.GetShadowMCPInventoryServer)
+	s.FindShadowMCPInventoryServers = m(s.FindShadowMCPInventoryServers)
 	s.UpdateShadowMCPInventoryServerName = m(s.UpdateShadowMCPInventoryServerName)
+	s.SetShadowMCPOfficialServer = m(s.SetShadowMCPOfficialServer)
 	s.ListShadowMCPInventoryUsers = m(s.ListShadowMCPInventoryUsers)
 	s.ListShadowMCPInventoryServersForUser = m(s.ListShadowMCPInventoryServersForUser)
 	s.ResolveShadowMCPInventoryRequest = m(s.ResolveShadowMCPInventoryRequest)
+	s.ListAIDetections = m(s.ListAIDetections)
+	s.ListEmployeeAIDetections = m(s.ListEmployeeAIDetections)
+	s.ListAIDetectionUsers = m(s.ListAIDetectionUsers)
+	s.SetAIToolDecision = m(s.SetAIToolDecision)
+	s.ListResourceAudience = m(s.ListResourceAudience)
+	s.SetResourceAudience = m(s.SetResourceAudience)
+	s.ListAudienceOptions = m(s.ListAudienceOptions)
+	s.ExplainResourceAccess = m(s.ExplainResourceAccess)
 	s.RequestAccess = m(s.RequestAccess)
 	s.ListChallenges = m(s.ListChallenges)
 	s.ListChallengeBuckets = m(s.ListChallengeBuckets)
 	s.ResolveChallenge = m(s.ResolveChallenge)
+	s.ListIdentityAccess = m(s.ListIdentityAccess)
+	s.CreateTemporaryGrant = m(s.CreateTemporaryGrant)
+	s.ListTemporaryGrants = m(s.ListTemporaryGrants)
+	s.RenewTemporaryGrant = m(s.RenewTemporaryGrant)
+	s.RevokeTemporaryGrant = m(s.RevokeTemporaryGrant)
+	s.ListAccessRequests = m(s.ListAccessRequests)
+	s.DecideAccessRequest = m(s.DecideAccessRequest)
+	s.WithdrawAccessRequest = m(s.WithdrawAccessRequest)
 }
 
 // MethodNames returns the methods served.
@@ -145,20 +269,51 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRoleHandler(mux, h.CreateRole)
 	MountUpdateRoleHandler(mux, h.UpdateRole)
 	MountDeleteRoleHandler(mux, h.DeleteRole)
+	MountListDirectoryRoleMappingsHandler(mux, h.ListDirectoryRoleMappings)
+	MountListDirectoryPeopleHandler(mux, h.ListDirectoryPeople)
+	MountSyncDirectoryGroupsHandler(mux, h.SyncDirectoryGroups)
+	MountSetDirectoryRoleMappingHandler(mux, h.SetDirectoryRoleMapping)
+	MountSetDirectoryRoleMappingsHandler(mux, h.SetDirectoryRoleMappings)
+	MountDeleteDirectoryRoleMappingHandler(mux, h.DeleteDirectoryRoleMapping)
+	MountPreviewDirectoryRoleSetupHandler(mux, h.PreviewDirectoryRoleSetup)
+	MountApplyDirectoryRoleSetupHandler(mux, h.ApplyDirectoryRoleSetup)
+	MountListDirectoryReviewItemsHandler(mux, h.ListDirectoryReviewItems)
+	MountResolveDirectoryReviewItemHandler(mux, h.ResolveDirectoryReviewItem)
+	MountGetDirectoryReviewSettingsHandler(mux, h.GetDirectoryReviewSettings)
+	MountUpdateDirectoryReviewSettingsHandler(mux, h.UpdateDirectoryReviewSettings)
 	MountListScopesHandler(mux, h.ListScopes)
+	MountListAgentPolicyScopesHandler(mux, h.ListAgentPolicyScopes)
 	MountListMembersHandler(mux, h.ListMembers)
 	MountListGrantsHandler(mux, h.ListGrants)
 	MountUpdateMemberRolesHandler(mux, h.UpdateMemberRoles)
 	MountListShadowMCPInventoryHandler(mux, h.ListShadowMCPInventory)
 	MountGetShadowMCPInventoryServerHandler(mux, h.GetShadowMCPInventoryServer)
+	MountFindShadowMCPInventoryServersHandler(mux, h.FindShadowMCPInventoryServers)
 	MountUpdateShadowMCPInventoryServerNameHandler(mux, h.UpdateShadowMCPInventoryServerName)
+	MountSetShadowMCPOfficialServerHandler(mux, h.SetShadowMCPOfficialServer)
 	MountListShadowMCPInventoryUsersHandler(mux, h.ListShadowMCPInventoryUsers)
 	MountListShadowMCPInventoryServersForUserHandler(mux, h.ListShadowMCPInventoryServersForUser)
 	MountResolveShadowMCPInventoryRequestHandler(mux, h.ResolveShadowMCPInventoryRequest)
+	MountListAIDetectionsHandler(mux, h.ListAIDetections)
+	MountListEmployeeAIDetectionsHandler(mux, h.ListEmployeeAIDetections)
+	MountListAIDetectionUsersHandler(mux, h.ListAIDetectionUsers)
+	MountSetAIToolDecisionHandler(mux, h.SetAIToolDecision)
+	MountListResourceAudienceHandler(mux, h.ListResourceAudience)
+	MountSetResourceAudienceHandler(mux, h.SetResourceAudience)
+	MountListAudienceOptionsHandler(mux, h.ListAudienceOptions)
+	MountExplainResourceAccessHandler(mux, h.ExplainResourceAccess)
 	MountRequestAccessHandler(mux, h.RequestAccess)
 	MountListChallengesHandler(mux, h.ListChallenges)
 	MountListChallengeBucketsHandler(mux, h.ListChallengeBuckets)
 	MountResolveChallengeHandler(mux, h.ResolveChallenge)
+	MountListIdentityAccessHandler(mux, h.ListIdentityAccess)
+	MountCreateTemporaryGrantHandler(mux, h.CreateTemporaryGrant)
+	MountListTemporaryGrantsHandler(mux, h.ListTemporaryGrants)
+	MountRenewTemporaryGrantHandler(mux, h.RenewTemporaryGrant)
+	MountRevokeTemporaryGrantHandler(mux, h.RevokeTemporaryGrant)
+	MountListAccessRequestsHandler(mux, h.ListAccessRequests)
+	MountDecideAccessRequestHandler(mux, h.DecideAccessRequest)
+	MountWithdrawAccessRequestHandler(mux, h.WithdrawAccessRequest)
 }
 
 // Mount configures the mux to serve the access endpoints.
@@ -431,6 +586,652 @@ func NewDeleteRoleHandler(
 	})
 }
 
+// MountListDirectoryRoleMappingsHandler configures the mux to serve the
+// "access" service "listDirectoryRoleMappings" endpoint.
+func MountListDirectoryRoleMappingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listDirectoryRoleMappings", f)
+}
+
+// NewListDirectoryRoleMappingsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "listDirectoryRoleMappings"
+// endpoint.
+func NewListDirectoryRoleMappingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDirectoryRoleMappingsRequest(mux, decoder)
+		encodeResponse = EncodeListDirectoryRoleMappingsResponse(encoder)
+		encodeError    = EncodeListDirectoryRoleMappingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDirectoryRoleMappings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListDirectoryPeopleHandler configures the mux to serve the "access"
+// service "listDirectoryPeople" endpoint.
+func MountListDirectoryPeopleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listDirectoryPeople", f)
+}
+
+// NewListDirectoryPeopleHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listDirectoryPeople" endpoint.
+func NewListDirectoryPeopleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDirectoryPeopleRequest(mux, decoder)
+		encodeResponse = EncodeListDirectoryPeopleResponse(encoder)
+		encodeError    = EncodeListDirectoryPeopleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDirectoryPeople")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSyncDirectoryGroupsHandler configures the mux to serve the "access"
+// service "syncDirectoryGroups" endpoint.
+func MountSyncDirectoryGroupsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.syncDirectoryGroups", f)
+}
+
+// NewSyncDirectoryGroupsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "syncDirectoryGroups" endpoint.
+func NewSyncDirectoryGroupsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSyncDirectoryGroupsRequest(mux, decoder)
+		encodeResponse = EncodeSyncDirectoryGroupsResponse(encoder)
+		encodeError    = EncodeSyncDirectoryGroupsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "syncDirectoryGroups")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetDirectoryRoleMappingHandler configures the mux to serve the "access"
+// service "setDirectoryRoleMapping" endpoint.
+func MountSetDirectoryRoleMappingHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.setDirectoryRoleMapping", f)
+}
+
+// NewSetDirectoryRoleMappingHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "setDirectoryRoleMapping"
+// endpoint.
+func NewSetDirectoryRoleMappingHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetDirectoryRoleMappingRequest(mux, decoder)
+		encodeResponse = EncodeSetDirectoryRoleMappingResponse(encoder)
+		encodeError    = EncodeSetDirectoryRoleMappingError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setDirectoryRoleMapping")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetDirectoryRoleMappingsHandler configures the mux to serve the
+// "access" service "setDirectoryRoleMappings" endpoint.
+func MountSetDirectoryRoleMappingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.setDirectoryRoleMappings", f)
+}
+
+// NewSetDirectoryRoleMappingsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "setDirectoryRoleMappings"
+// endpoint.
+func NewSetDirectoryRoleMappingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetDirectoryRoleMappingsRequest(mux, decoder)
+		encodeResponse = EncodeSetDirectoryRoleMappingsResponse(encoder)
+		encodeError    = EncodeSetDirectoryRoleMappingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setDirectoryRoleMappings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteDirectoryRoleMappingHandler configures the mux to serve the
+// "access" service "deleteDirectoryRoleMapping" endpoint.
+func MountDeleteDirectoryRoleMappingHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/access.deleteDirectoryRoleMapping", f)
+}
+
+// NewDeleteDirectoryRoleMappingHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "deleteDirectoryRoleMapping"
+// endpoint.
+func NewDeleteDirectoryRoleMappingHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteDirectoryRoleMappingRequest(mux, decoder)
+		encodeResponse = EncodeDeleteDirectoryRoleMappingResponse(encoder)
+		encodeError    = EncodeDeleteDirectoryRoleMappingError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteDirectoryRoleMapping")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountPreviewDirectoryRoleSetupHandler configures the mux to serve the
+// "access" service "previewDirectoryRoleSetup" endpoint.
+func MountPreviewDirectoryRoleSetupHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.previewDirectoryRoleSetup", f)
+}
+
+// NewPreviewDirectoryRoleSetupHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "previewDirectoryRoleSetup"
+// endpoint.
+func NewPreviewDirectoryRoleSetupHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodePreviewDirectoryRoleSetupRequest(mux, decoder)
+		encodeResponse = EncodePreviewDirectoryRoleSetupResponse(encoder)
+		encodeError    = EncodePreviewDirectoryRoleSetupError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "previewDirectoryRoleSetup")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountApplyDirectoryRoleSetupHandler configures the mux to serve the "access"
+// service "applyDirectoryRoleSetup" endpoint.
+func MountApplyDirectoryRoleSetupHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.applyDirectoryRoleSetup", f)
+}
+
+// NewApplyDirectoryRoleSetupHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "applyDirectoryRoleSetup"
+// endpoint.
+func NewApplyDirectoryRoleSetupHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeApplyDirectoryRoleSetupRequest(mux, decoder)
+		encodeResponse = EncodeApplyDirectoryRoleSetupResponse(encoder)
+		encodeError    = EncodeApplyDirectoryRoleSetupError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "applyDirectoryRoleSetup")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListDirectoryReviewItemsHandler configures the mux to serve the
+// "access" service "listDirectoryReviewItems" endpoint.
+func MountListDirectoryReviewItemsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listDirectoryReviewItems", f)
+}
+
+// NewListDirectoryReviewItemsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "listDirectoryReviewItems"
+// endpoint.
+func NewListDirectoryReviewItemsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDirectoryReviewItemsRequest(mux, decoder)
+		encodeResponse = EncodeListDirectoryReviewItemsResponse(encoder)
+		encodeError    = EncodeListDirectoryReviewItemsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDirectoryReviewItems")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountResolveDirectoryReviewItemHandler configures the mux to serve the
+// "access" service "resolveDirectoryReviewItem" endpoint.
+func MountResolveDirectoryReviewItemHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.resolveDirectoryReviewItem", f)
+}
+
+// NewResolveDirectoryReviewItemHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "resolveDirectoryReviewItem"
+// endpoint.
+func NewResolveDirectoryReviewItemHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeResolveDirectoryReviewItemRequest(mux, decoder)
+		encodeResponse = EncodeResolveDirectoryReviewItemResponse(encoder)
+		encodeError    = EncodeResolveDirectoryReviewItemError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "resolveDirectoryReviewItem")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetDirectoryReviewSettingsHandler configures the mux to serve the
+// "access" service "getDirectoryReviewSettings" endpoint.
+func MountGetDirectoryReviewSettingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.getDirectoryReviewSettings", f)
+}
+
+// NewGetDirectoryReviewSettingsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "getDirectoryReviewSettings"
+// endpoint.
+func NewGetDirectoryReviewSettingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetDirectoryReviewSettingsRequest(mux, decoder)
+		encodeResponse = EncodeGetDirectoryReviewSettingsResponse(encoder)
+		encodeError    = EncodeGetDirectoryReviewSettingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getDirectoryReviewSettings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateDirectoryReviewSettingsHandler configures the mux to serve the
+// "access" service "updateDirectoryReviewSettings" endpoint.
+func MountUpdateDirectoryReviewSettingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.updateDirectoryReviewSettings", f)
+}
+
+// NewUpdateDirectoryReviewSettingsHandler creates a HTTP handler which loads
+// the HTTP request and calls the "access" service
+// "updateDirectoryReviewSettings" endpoint.
+func NewUpdateDirectoryReviewSettingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateDirectoryReviewSettingsRequest(mux, decoder)
+		encodeResponse = EncodeUpdateDirectoryReviewSettingsResponse(encoder)
+		encodeError    = EncodeUpdateDirectoryReviewSettingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateDirectoryReviewSettings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountListScopesHandler configures the mux to serve the "access" service
 // "listScopes" endpoint.
 func MountListScopesHandler(mux goahttp.Muxer, h http.Handler) {
@@ -461,6 +1262,59 @@ func NewListScopesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listScopes")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAgentPolicyScopesHandler configures the mux to serve the "access"
+// service "listAgentPolicyScopes" endpoint.
+func MountListAgentPolicyScopesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listAgentPolicyScopes", f)
+}
+
+// NewListAgentPolicyScopesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listAgentPolicyScopes" endpoint.
+func NewListAgentPolicyScopesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAgentPolicyScopesRequest(mux, decoder)
+		encodeResponse = EncodeListAgentPolicyScopesResponse(encoder)
+		encodeError    = EncodeListAgentPolicyScopesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAgentPolicyScopes")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -750,6 +1604,60 @@ func NewGetShadowMCPInventoryServerHandler(
 	})
 }
 
+// MountFindShadowMCPInventoryServersHandler configures the mux to serve the
+// "access" service "findShadowMCPInventoryServers" endpoint.
+func MountFindShadowMCPInventoryServersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.findShadowMCPInventoryServers", f)
+}
+
+// NewFindShadowMCPInventoryServersHandler creates a HTTP handler which loads
+// the HTTP request and calls the "access" service
+// "findShadowMCPInventoryServers" endpoint.
+func NewFindShadowMCPInventoryServersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeFindShadowMCPInventoryServersRequest(mux, decoder)
+		encodeResponse = EncodeFindShadowMCPInventoryServersResponse(encoder)
+		encodeError    = EncodeFindShadowMCPInventoryServersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "findShadowMCPInventoryServers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountUpdateShadowMCPInventoryServerNameHandler configures the mux to serve
 // the "access" service "updateShadowMCPInventoryServerName" endpoint.
 func MountUpdateShadowMCPInventoryServerNameHandler(mux goahttp.Muxer, h http.Handler) {
@@ -781,6 +1689,60 @@ func NewUpdateShadowMCPInventoryServerNameHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateShadowMCPInventoryServerName")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetShadowMCPOfficialServerHandler configures the mux to serve the
+// "access" service "setShadowMCPOfficialServer" endpoint.
+func MountSetShadowMCPOfficialServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.setShadowMCPOfficialServer", f)
+}
+
+// NewSetShadowMCPOfficialServerHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "setShadowMCPOfficialServer"
+// endpoint.
+func NewSetShadowMCPOfficialServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetShadowMCPOfficialServerRequest(mux, decoder)
+		encodeResponse = EncodeSetShadowMCPOfficialServerResponse(encoder)
+		encodeError    = EncodeSetShadowMCPOfficialServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setShadowMCPOfficialServer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -943,6 +1905,431 @@ func NewResolveShadowMCPInventoryRequestHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "resolveShadowMCPInventoryRequest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAIDetectionsHandler configures the mux to serve the "access"
+// service "listAIDetections" endpoint.
+func MountListAIDetectionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listAIDetections", f)
+}
+
+// NewListAIDetectionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listAIDetections" endpoint.
+func NewListAIDetectionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAIDetectionsRequest(mux, decoder)
+		encodeResponse = EncodeListAIDetectionsResponse(encoder)
+		encodeError    = EncodeListAIDetectionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAIDetections")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListEmployeeAIDetectionsHandler configures the mux to serve the
+// "access" service "listEmployeeAIDetections" endpoint.
+func MountListEmployeeAIDetectionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listEmployeeAIDetections", f)
+}
+
+// NewListEmployeeAIDetectionsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "listEmployeeAIDetections"
+// endpoint.
+func NewListEmployeeAIDetectionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListEmployeeAIDetectionsRequest(mux, decoder)
+		encodeResponse = EncodeListEmployeeAIDetectionsResponse(encoder)
+		encodeError    = EncodeListEmployeeAIDetectionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listEmployeeAIDetections")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAIDetectionUsersHandler configures the mux to serve the "access"
+// service "listAIDetectionUsers" endpoint.
+func MountListAIDetectionUsersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listAIDetectionUsers", f)
+}
+
+// NewListAIDetectionUsersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listAIDetectionUsers" endpoint.
+func NewListAIDetectionUsersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAIDetectionUsersRequest(mux, decoder)
+		encodeResponse = EncodeListAIDetectionUsersResponse(encoder)
+		encodeError    = EncodeListAIDetectionUsersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAIDetectionUsers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetAIToolDecisionHandler configures the mux to serve the "access"
+// service "setAIToolDecision" endpoint.
+func MountSetAIToolDecisionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.setAIToolDecision", f)
+}
+
+// NewSetAIToolDecisionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "setAIToolDecision" endpoint.
+func NewSetAIToolDecisionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetAIToolDecisionRequest(mux, decoder)
+		encodeResponse = EncodeSetAIToolDecisionResponse(encoder)
+		encodeError    = EncodeSetAIToolDecisionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setAIToolDecision")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListResourceAudienceHandler configures the mux to serve the "access"
+// service "listResourceAudience" endpoint.
+func MountListResourceAudienceHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listResourceAudience", f)
+}
+
+// NewListResourceAudienceHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listResourceAudience" endpoint.
+func NewListResourceAudienceHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListResourceAudienceRequest(mux, decoder)
+		encodeResponse = EncodeListResourceAudienceResponse(encoder)
+		encodeError    = EncodeListResourceAudienceError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listResourceAudience")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetResourceAudienceHandler configures the mux to serve the "access"
+// service "setResourceAudience" endpoint.
+func MountSetResourceAudienceHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.setResourceAudience", f)
+}
+
+// NewSetResourceAudienceHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "setResourceAudience" endpoint.
+func NewSetResourceAudienceHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetResourceAudienceRequest(mux, decoder)
+		encodeResponse = EncodeSetResourceAudienceResponse(encoder)
+		encodeError    = EncodeSetResourceAudienceError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setResourceAudience")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAudienceOptionsHandler configures the mux to serve the "access"
+// service "listAudienceOptions" endpoint.
+func MountListAudienceOptionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listAudienceOptions", f)
+}
+
+// NewListAudienceOptionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listAudienceOptions" endpoint.
+func NewListAudienceOptionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAudienceOptionsRequest(mux, decoder)
+		encodeResponse = EncodeListAudienceOptionsResponse(encoder)
+		encodeError    = EncodeListAudienceOptionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAudienceOptions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountExplainResourceAccessHandler configures the mux to serve the "access"
+// service "explainResourceAccess" endpoint.
+func MountExplainResourceAccessHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.explainResourceAccess", f)
+}
+
+// NewExplainResourceAccessHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "explainResourceAccess" endpoint.
+func NewExplainResourceAccessHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeExplainResourceAccessRequest(mux, decoder)
+		encodeResponse = EncodeExplainResourceAccessResponse(encoder)
+		encodeError    = EncodeExplainResourceAccessError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "explainResourceAccess")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -1155,6 +2542,430 @@ func NewResolveChallengeHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "resolveChallenge")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListIdentityAccessHandler configures the mux to serve the "access"
+// service "listIdentityAccess" endpoint.
+func MountListIdentityAccessHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listIdentityAccess", f)
+}
+
+// NewListIdentityAccessHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listIdentityAccess" endpoint.
+func NewListIdentityAccessHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListIdentityAccessRequest(mux, decoder)
+		encodeResponse = EncodeListIdentityAccessResponse(encoder)
+		encodeError    = EncodeListIdentityAccessError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listIdentityAccess")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateTemporaryGrantHandler configures the mux to serve the "access"
+// service "createTemporaryGrant" endpoint.
+func MountCreateTemporaryGrantHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.createTemporaryGrant", f)
+}
+
+// NewCreateTemporaryGrantHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "createTemporaryGrant" endpoint.
+func NewCreateTemporaryGrantHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateTemporaryGrantRequest(mux, decoder)
+		encodeResponse = EncodeCreateTemporaryGrantResponse(encoder)
+		encodeError    = EncodeCreateTemporaryGrantError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createTemporaryGrant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListTemporaryGrantsHandler configures the mux to serve the "access"
+// service "listTemporaryGrants" endpoint.
+func MountListTemporaryGrantsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listTemporaryGrants", f)
+}
+
+// NewListTemporaryGrantsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listTemporaryGrants" endpoint.
+func NewListTemporaryGrantsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListTemporaryGrantsRequest(mux, decoder)
+		encodeResponse = EncodeListTemporaryGrantsResponse(encoder)
+		encodeError    = EncodeListTemporaryGrantsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listTemporaryGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRenewTemporaryGrantHandler configures the mux to serve the "access"
+// service "renewTemporaryGrant" endpoint.
+func MountRenewTemporaryGrantHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.renewTemporaryGrant", f)
+}
+
+// NewRenewTemporaryGrantHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "renewTemporaryGrant" endpoint.
+func NewRenewTemporaryGrantHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRenewTemporaryGrantRequest(mux, decoder)
+		encodeResponse = EncodeRenewTemporaryGrantResponse(encoder)
+		encodeError    = EncodeRenewTemporaryGrantError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "renewTemporaryGrant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevokeTemporaryGrantHandler configures the mux to serve the "access"
+// service "revokeTemporaryGrant" endpoint.
+func MountRevokeTemporaryGrantHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.revokeTemporaryGrant", f)
+}
+
+// NewRevokeTemporaryGrantHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "revokeTemporaryGrant" endpoint.
+func NewRevokeTemporaryGrantHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevokeTemporaryGrantRequest(mux, decoder)
+		encodeResponse = EncodeRevokeTemporaryGrantResponse(encoder)
+		encodeError    = EncodeRevokeTemporaryGrantError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revokeTemporaryGrant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAccessRequestsHandler configures the mux to serve the "access"
+// service "listAccessRequests" endpoint.
+func MountListAccessRequestsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listAccessRequests", f)
+}
+
+// NewListAccessRequestsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listAccessRequests" endpoint.
+func NewListAccessRequestsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAccessRequestsRequest(mux, decoder)
+		encodeResponse = EncodeListAccessRequestsResponse(encoder)
+		encodeError    = EncodeListAccessRequestsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAccessRequests")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDecideAccessRequestHandler configures the mux to serve the "access"
+// service "decideAccessRequest" endpoint.
+func MountDecideAccessRequestHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.decideAccessRequest", f)
+}
+
+// NewDecideAccessRequestHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "decideAccessRequest" endpoint.
+func NewDecideAccessRequestHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDecideAccessRequestRequest(mux, decoder)
+		encodeResponse = EncodeDecideAccessRequestResponse(encoder)
+		encodeError    = EncodeDecideAccessRequestError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "decideAccessRequest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountWithdrawAccessRequestHandler configures the mux to serve the "access"
+// service "withdrawAccessRequest" endpoint.
+func MountWithdrawAccessRequestHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.withdrawAccessRequest", f)
+}
+
+// NewWithdrawAccessRequestHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "withdrawAccessRequest" endpoint.
+func NewWithdrawAccessRequestHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeWithdrawAccessRequestRequest(mux, decoder)
+		encodeResponse = EncodeWithdrawAccessRequestResponse(encoder)
+		encodeError    = EncodeWithdrawAccessRequestError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "withdrawAccessRequest")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

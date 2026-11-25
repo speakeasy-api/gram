@@ -1,0 +1,99 @@
+package gram
+
+import (
+	"context"
+	"flag"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
+
+	"github.com/speakeasy-api/gram/server/internal/netingress"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+)
+
+func TestServerCommandsOwnSeparateListenerFlags(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		command *cli.Command
+		absent  []string
+	}{
+		{newStartCommand(), []string{"netingress-address", "netingress-tls-cert-file", "netingress-tls-key-file"}},
+		{newNetworkIngressServerCommand(), []string{"address", "ssl-key-file", "ssl-cert-file"}},
+	} {
+		seen := map[string]bool{}
+		for _, f := range test.command.Flags {
+			for _, name := range f.Names() {
+				require.NotContains(t, test.absent, name, test.command.Name)
+				require.False(t, seen[name], "duplicate flag %s on %s", name, test.command.Name)
+				seen[name] = true
+			}
+		}
+	}
+	for _, name := range []string{"address", "ssl-key-file", "ssl-cert-file"} {
+		requireFlag(t, newStartCommand().Flags, name)
+	}
+	requireFlag(t, newStartCommand().Flags, "network-ingress-enabled")
+	requireFlag(t, newStartCommand().Flags, networkIngressQueueFlag)
+	for _, name := range []string{"gcp-project-id", "local-kms-signing-algorithm", "pubsub-emulator-host"} {
+		requireFlag(t, newNetworkIngressServerCommand().Flags, name)
+	}
+}
+
+func TestPrivateIngressActionRejectsDisabledRuntimeBeforeDependencies(t *testing.T) {
+	t.Parallel()
+	set := flag.NewFlagSet("private-ingress", flag.ContinueOnError)
+	set.Bool("network-ingress-enabled", false, "")
+	c := cli.NewContext(nil, set, nil)
+	err := newNetworkIngressServerCommand().Action(c)
+	require.EqualError(t, err, "private network ingress runtime is disabled")
+}
+
+func TestPrivateIngressRuntimeClosesInReverseOrderAfterCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	var closed []int
+	runtime := &privateIngressRuntime{}
+	for i := range 3 {
+		runtime.cleanup = append(runtime.cleanup, func(ctx context.Context) error {
+			require.NoError(t, ctx.Err())
+			closed = append(closed, i)
+			return nil
+		})
+	}
+	runtime.Close(ctx)
+	require.Equal(t, []int{2, 1, 0}, closed)
+}
+
+func TestPrivateGatewayPrincipalIsRequired(t *testing.T) {
+	t.Parallel()
+	require.Error(t, validatePrivateGatewayPrincipal("", ""), "only the gateway can attest, so it must be configured")
+	require.NoError(t, validatePrivateGatewayPrincipal("gram-gateway", "gram-tailnet-gateway"))
+	require.Error(t, validatePrivateGatewayPrincipal("gram-gateway", ""))
+	require.Error(t, validatePrivateGatewayPrincipal("", "gram-tailnet-gateway"))
+	for _, name := range []string{"netingress-gateway-namespace", "netingress-gateway-service-account"} {
+		requireFlag(t, newNetworkIngressServerCommand().Flags, name)
+	}
+}
+
+func TestPrivateIngressLocalTokenReviewerOnlyInLocalEnvironment(t *testing.T) {
+	t.Parallel()
+
+	keyFile := filepath.Join(t.TempDir(), "token.key")
+	_, err := netingress.LoadOrCreateLocalTokenKey(keyFile)
+	require.NoError(t, err)
+
+	reviewer, err := newPrivateIngressTokenReviewer(t.Context(), testenv.NewLogger(t), "local", keyFile)
+	require.NoError(t, err)
+	require.IsType(t, &netingress.LocalTokenReviewer{}, reviewer)
+
+	for _, environment := range []string{"dev", "prod", ""} {
+		_, err := newPrivateIngressTokenReviewer(t.Context(), testenv.NewLogger(t), environment, keyFile)
+		require.ErrorContains(t, err, "only accepted in the local environment", "environment %q", environment)
+	}
+
+	_, err = newPrivateIngressTokenReviewer(t.Context(), testenv.NewLogger(t), "local", "")
+	require.ErrorContains(t, err, "local token key", "without a key, local development has no reviewer")
+}

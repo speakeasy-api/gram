@@ -10,7 +10,7 @@ package usersessions
 import (
 	"net/url"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
 // AuthCodeTokenRequest is the RFC 6749 §4.1.3 token request issued by a
@@ -98,6 +98,38 @@ func (r *RefreshTokenRequest) SetDefaults() {}
 func (r *RefreshTokenRequest) Validate() error {
 	if r.RefreshToken == "" {
 		return &oauthwire.Error{Code: "invalid_request", Description: "refresh_token is required"}
+	}
+	return nil
+}
+
+// JWTBearerTokenRequest is the RFC 7523 JWT authorization grant request used
+// by enterprise-managed authorization clients to present an ID-JAG.
+type JWTBearerTokenRequest struct {
+	Assertion string
+
+	// Resources holds every RFC 8707 `resource` indicator submitted with the
+	// assertion grant. Empty is permitted; submitted values are validated
+	// against the addressed endpoint by the token handler.
+	Resources []string
+}
+
+// JWTBearerTokenRequestFromForm decodes from url.Values (typically
+// r.PostForm).
+func JWTBearerTokenRequestFromForm(form url.Values) *JWTBearerTokenRequest {
+	return &JWTBearerTokenRequest{
+		Assertion: form.Get("assertion"),
+		Resources: oauthwire.ResourceIndicatorsFrom(form),
+	}
+}
+
+// SetDefaults is a no-op because assertion is required.
+func (r *JWTBearerTokenRequest) SetDefaults() {}
+
+// Validate checks the request shape. Assertion contents are authenticated by
+// the ID-JAG validator in the token handler.
+func (r *JWTBearerTokenRequest) Validate() error {
+	if r.Assertion == "" {
+		return &oauthwire.Error{Code: "invalid_request", Description: "assertion is required"}
 	}
 	return nil
 }

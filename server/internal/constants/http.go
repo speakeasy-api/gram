@@ -10,4 +10,10 @@ const (
 	// setup thread listable and URL-addressable like runtime assistant
 	// threads.
 	HeaderAssistantID = "Gram-Assistant-ID"
+	// HeaderContentEncoding names the coding applied to a request or response
+	// body.
+	HeaderContentEncoding = "Content-Encoding"
+
+	// UserAgent identifies requests Speakeasy originates to third parties.
+	UserAgent = "Speakeasy-Gram/1.0"
 )

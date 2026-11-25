@@ -26,10 +26,6 @@ import {
 
 export type RiskOverviewResult = {
   /**
-   * Enabled risk policies for the current project.
-   */
-  activePolicies: number;
-  /**
    * Policy findings in the window.
    */
   findings: number;
@@ -41,10 +37,6 @@ export type RiskOverviewResult = {
    * Inclusive start of the overview window.
    */
   from: Date;
-  /**
-   * Messages analyzed by risk policies in the window.
-   */
-  messagesScanned: number;
   /**
    * Time-series finding counts by category in the window.
    */
@@ -73,14 +65,12 @@ export const RiskOverviewResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    active_policies: z.int(),
     findings: z.int(),
     flagged_sessions: z.int(),
     from: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    messages_scanned: z.int(),
     time_series_findings: z.array(RiskOverviewTimeSeriesFinding$inboundSchema),
     to: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     top_categories: z.array(RiskOverviewCategory$inboundSchema),
@@ -89,9 +79,7 @@ export const RiskOverviewResult$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      "active_policies": "activePolicies",
       "flagged_sessions": "flaggedSessions",
-      "messages_scanned": "messagesScanned",
       "time_series_findings": "timeSeriesFindings",
       "top_categories": "topCategories",
       "top_rules": "topRules",

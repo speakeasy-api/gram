@@ -1,5 +1,6 @@
-import { forwardRef, HTMLAttributes } from "react";
-import { HighlightedCode } from "@/components/ui/lib/codeUtils";
+import type { HTMLAttributes } from "react";
+import { forwardRef } from "react";
+import type { HighlightedCode } from "@/components/ui/lib/codeUtils";
 import { cn } from "@/lib/utils";
 
 export interface PreProps extends Omit<

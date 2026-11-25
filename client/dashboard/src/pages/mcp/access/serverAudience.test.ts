@@ -1,0 +1,419 @@
+// @vitest-environment node
+import { unrecognized } from "@gram/client/types/unrecognized.js";
+import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
+import { toolDisposition } from "@/pages/access/mcpAccessModel";
+import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
+import { describe, expect, it } from "vitest";
+import {
+  audienceIcon,
+  blockingRules,
+  coversTool,
+  effectiveReach,
+  narrowingLabel,
+} from "./serverAudience";
+
+function entry(
+  overrides: Partial<ResourceAudienceEntry> & { principalUrn: string },
+): ResourceAudienceEntry {
+  return {
+    kind: "role",
+    displayName: "GTM",
+    level: "use",
+    appliesTo: "all_resources",
+    ...overrides,
+  } as ResourceAudienceEntry;
+}
+
+const gtmGrant = entry({ principalUrn: "role:organization:gtm", level: "use" });
+const adminBlock = entry({
+  principalUrn: "role:global:admin",
+  displayName: "Admin",
+  level: "blocked",
+  appliesTo: "resource",
+});
+
+describe("blockingRules", () => {
+  // The shape that made a role of eleven show four people underneath it: the
+  // seven missing were administrators too, and a block on that role outranks
+  // the grant that put them in the list.
+  it("names the block that cancelled every capability", () => {
+    const reaching = [gtmGrant, adminBlock];
+
+    expect(effectiveReach(reaching)).toBeNull();
+    expect(blockingRules(reaching).map((rule) => rule.displayName)).toEqual([
+      "Admin",
+    ]);
+  });
+
+  it("says nothing about someone the rules still reach", () => {
+    expect(blockingRules([gtmGrant])).toEqual([]);
+  });
+
+  it("says nothing about someone no rule names", () => {
+    expect(blockingRules([])).toEqual([]);
+  });
+
+  // A block narrowed to some tools leaves the rest reachable, so it is not
+  // what took someone off the server and must not be named as if it were.
+  it("ignores a block that only trims tools", () => {
+    const reaching = [
+      gtmGrant,
+      entry({
+        principalUrn: "role:global:admin",
+        displayName: "Admin",
+        level: "blocked",
+        appliesTo: "resource",
+        dispositions: ["destructive"],
+      }),
+    ];
+
+    expect(effectiveReach(reaching)).not.toBeNull();
+    expect(blockingRules(reaching)).toEqual([]);
+  });
+});
+
+describe("blockingRules names only the blocks that took something away", () => {
+  // A block on a capability nobody was granted changed nothing, and naming it
+  // sends an administrator to a role that is not the reason.
+  it("names a view block that took manage away too", () => {
+    const viewBlock = entry({
+      principalUrn: "role:global:admin",
+      displayName: "Admin",
+      level: "blocked_view",
+      appliesTo: "resource",
+    });
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      viewBlock,
+    ];
+
+    expect(effectiveReach(reaching)).toBeNull();
+    expect(blockingRules(reaching).map((rule) => rule.displayName)).toEqual([
+      "Admin",
+    ]);
+  });
+
+  it("ignores a block on a capability the grants never opened", () => {
+    const reaching = [
+      gtmGrant,
+      adminBlock,
+      entry({
+        principalUrn: "role:organization:ops",
+        displayName: "Ops",
+        level: "blocked_manage",
+        appliesTo: "resource",
+      }),
+    ];
+
+    expect(blockingRules(reaching).map((rule) => rule.displayName)).toEqual([
+      "Admin",
+    ]);
+  });
+});
+
+describe("principal precedence", () => {
+  const hana = "user:u1";
+  const ownRule = (overrides: Partial<ResourceAudienceEntry> = {}) =>
+    entry({
+      principalUrn: hana,
+      kind: "user",
+      displayName: "Hana Sato",
+      appliesTo: "resource",
+      ...overrides,
+    });
+
+  it("lets a person's own rule here outrank a role's block", () => {
+    const reaching = [gtmGrant, adminBlock, ownRule()];
+
+    expect(effectiveReach(reaching, [], hana)?.toolsLabel).toBe("All tools");
+    expect(blockingRules(reaching, hana)).toEqual([]);
+  });
+
+  it("keeps a narrowed own rule's tools past a role's block", () => {
+    const reaching = [gtmGrant, adminBlock, ownRule({ tools: ["search"] })];
+
+    expect(effectiveReach(reaching, [], hana)?.toolsLabel).toBe("Search");
+  });
+
+  it("keeps the person's own block", () => {
+    const reaching = [
+      ownRule(),
+      ownRule({ level: "blocked", appliesTo: "resource" }),
+    ];
+
+    expect(effectiveReach(reaching, [], hana)).toBeNull();
+  });
+
+  it("lets a narrowed own view rule outrank a role's view block", () => {
+    const viewBlock = entry({
+      principalUrn: "role:global:admin",
+      displayName: "Admin",
+      level: "blocked_view",
+      appliesTo: "resource",
+    });
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "view" }),
+      viewBlock,
+      ownRule({ level: "view", tools: ["search"] }),
+    ];
+
+    expect(effectiveReach(reaching, [], hana)?.capabilities).toContain("view");
+  });
+
+  it("lets an own view rule outrank a role's view block for view only", () => {
+    // The view block also takes manage; a direct view rule restores view and
+    // nothing it does not grant.
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      entry({
+        principalUrn: "role:global:admin",
+        displayName: "Admin",
+        level: "blocked_view",
+        appliesTo: "resource",
+      }),
+      ownRule({ level: "view" }),
+    ];
+
+    expect(effectiveReach(reaching, [], hana)?.capabilities).toEqual(["view"]);
+  });
+
+  it("keeps narrowed connect when a view block takes whole-server manage", () => {
+    // The view block takes view and manage; the narrowed connect rule is
+    // independent of both and still reaches its tools.
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      entry({
+        principalUrn: "role:organization:gtm",
+        level: "use",
+        tools: ["search"],
+      }),
+      entry({
+        principalUrn: "role:global:admin",
+        displayName: "Admin",
+        level: "blocked_view",
+        appliesTo: "resource",
+      }),
+    ];
+
+    const reach = effectiveReach(reaching, [
+      { name: "search", disposition: "unannotated" },
+    ]);
+    expect(reach?.capabilities).toEqual(["use"]);
+    expect(reach?.toolsLabel).toBe("Search");
+  });
+
+  it("does not let a rule covering every server outrank a block", () => {
+    const reaching = [adminBlock, ownRule({ appliesTo: "all_resources" })];
+
+    expect(effectiveReach(reaching, [], hana)).toBeNull();
+  });
+});
+
+describe("effective tool counts with direct overrides", () => {
+  const user = "user:1";
+  const catalog: ToolSelectionTool[] = [
+    { name: "search", disposition: "read_only" },
+    { name: "delete", disposition: "destructive" },
+  ];
+  const direct = entry({
+    principalUrn: user,
+    kind: "user",
+    appliesTo: "resource",
+    tools: ["search"],
+  });
+
+  it("counts a tool restored past a narrowed role block", () => {
+    const reach = effectiveReach(
+      [gtmGrant, { ...adminBlock, tools: ["search"] }, direct],
+      catalog,
+      user,
+    );
+    expect(reach?.toolsLabel).toBe("2 tools");
+    expect(reach?.reachableTools).toEqual(["search", "delete"]);
+  });
+
+  it("counts only directly granted tools past a whole-server role block", () => {
+    const reach = effectiveReach([gtmGrant, adminBlock, direct], catalog, user);
+    expect(reach?.toolsLabel).toBe("1 tool");
+    expect(reach?.reachableTools).toEqual(["search"]);
+  });
+
+  it("keeps the user's own narrowed block effective", () => {
+    const reach = effectiveReach(
+      [
+        gtmGrant,
+        { ...adminBlock, tools: ["search"] },
+        direct,
+        { ...direct, level: "blocked" },
+      ],
+      catalog,
+      user,
+    );
+    expect(reach?.toolsLabel).toBe("1 tool");
+    expect(reach?.reachableTools).toEqual(["delete"]);
+  });
+
+  it("restores only the tools covered by a direct disposition grant", () => {
+    const reach = effectiveReach(
+      [
+        gtmGrant,
+        adminBlock,
+        { ...direct, tools: [], dispositions: ["read_only"] },
+      ],
+      catalog,
+      user,
+    );
+    expect(reach?.reachableTools).toEqual(["search"]);
+  });
+});
+
+describe("unknown audience values", () => {
+  const known = entry({
+    principalUrn: "user:known",
+    displayName: "Known grant",
+    level: "use",
+    tools: ["Search"],
+  });
+
+  it.each(["future_level", "__proto__", "constructor"])(
+    "shows access as unknown for %s without inferring grants or blocks",
+    (level) => {
+      const unknown = entry({
+        principalUrn: "user:future",
+        displayName: "Future grant",
+        level: unrecognized(level),
+        tools: ["Delete"],
+      });
+      for (const rules of [
+        [known, unknown],
+        [unknown],
+        [gtmGrant, adminBlock, unknown],
+      ]) {
+        expect(effectiveReach(rules)).toEqual({
+          toolsLabel: "Access unknown",
+          capabilities: [],
+          scopedLevels: [],
+          excluded: [],
+          grantedBy: [],
+          reachableTools: [],
+        });
+        expect(blockingRules(rules)).toEqual([]);
+      }
+    },
+  );
+
+  it("does not claim known access survives an unknown block level", () => {
+    const unknown = entry({
+      principalUrn: "user:future",
+      level: unrecognized("future_block"),
+    });
+    expect(effectiveReach([known, unknown])?.toolsLabel).toBe("Access unknown");
+  });
+
+  it.each(["future_kind", "__proto__", "constructor"])(
+    "uses the neutral icon for unknown principal kind %s",
+    (kind) => {
+      expect(audienceIcon(kind)).toBe(audienceIcon("unknown"));
+    },
+  );
+});
+
+it("does not infer access from an unknown applicability", () => {
+  expect(
+    effectiveReach([
+      entry({
+        principalUrn: "user:example",
+        appliesTo: unrecognized("future_applicability"),
+      }),
+    ])?.toolsLabel,
+  ).toBe("Access unknown");
+});
+
+it("deduplicates generic unknown annotation labels", () => {
+  expect(
+    narrowingLabel({
+      dispositions: [
+        "future_one",
+        "read_only",
+        "future_two",
+        "constructor",
+        "read_only",
+      ],
+    }),
+  ).toBe("unknown annotation, read-only tools");
+});
+
+it("does not infer access for an unsupported principal kind", () => {
+  expect(
+    effectiveReach([
+      entry({
+        principalUrn: "group:future",
+        kind: unrecognized("future_group"),
+      }),
+    ])?.toolsLabel,
+  ).toBe("Access unknown");
+});
+
+it("counts distinct tools when multiple grants contribute to a summary", () => {
+  expect(narrowingLabel({ tools: ["search", "search"] })).toBe("search");
+  expect(narrowingLabel({ tools: ["search", "fetch", "search"] })).toBe(
+    "2 tools",
+  );
+  expect(
+    narrowingLabel({
+      tools: ["search", "search"],
+      dispositions: ["future_one", "future_two"],
+    }),
+  ).toBe("unknown annotation tools and search");
+});
+
+describe("effectiveReach without an explicit connect rule", () => {
+  // mcp:read and mcp:write do not imply mcp:connect, so viewing or managing
+  // a server reaches none of its tools.
+  it("does not count view or manage as connect", () => {
+    const tools: ToolSelectionTool[] = [
+      { name: "search", disposition: "unannotated" },
+      { name: "deploy", disposition: "unannotated" },
+    ];
+    for (const level of ["view", "manage"] as const) {
+      const rules = [entry({ principalUrn: "role:organization:gtm", level })];
+      for (const catalog of [[], tools]) {
+        const reach = effectiveReach(rules, catalog);
+        expect(reach?.capabilities).not.toContain("use");
+        expect(reach?.capabilities).toContain("view");
+        expect(reach?.toolsLabel).toBe("None");
+        expect(reach?.reachableTools).toEqual([]);
+      }
+    }
+  });
+});
+
+describe("coversTool", () => {
+  const readOnlyAndIdempotent: ToolSelectionTool = {
+    name: "list",
+    disposition: toolDisposition({
+      annotations: { readOnlyHint: true, idempotentHint: true },
+    }),
+  };
+
+  it("matches a tool by the disposition the server picks for it", () => {
+    expect(
+      coversTool({ dispositions: ["read_only"] }, readOnlyAndIdempotent),
+    ).toBe(true);
+  });
+
+  it("does not match a tool by a hint the server passes over", () => {
+    expect(
+      coversTool({ dispositions: ["idempotent"] }, readOnlyAndIdempotent),
+    ).toBe(false);
+  });
+
+  it("matches a tool without annotations only by an unannotated rule", () => {
+    const create: ToolSelectionTool = {
+      name: "create",
+      disposition: "unannotated",
+    };
+    expect(coversTool({ dispositions: ["read_only"] }, create)).toBe(false);
+    expect(coversTool({ dispositions: ["unannotated"] }, create)).toBe(true);
+  });
+});

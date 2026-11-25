@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * serveFunction assets
  *
  * @remarks
- * Serve a Gram Functions asset from Gram.
+ * Serve a Speakeasy Functions asset from Speakeasy.
  */
 export function assetsServeFunction(
   client: GramCore,

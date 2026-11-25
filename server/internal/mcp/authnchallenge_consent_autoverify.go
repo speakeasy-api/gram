@@ -1,0 +1,194 @@
+package mcp
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+)
+
+// autoVerifications admits the probes committed grants start off the request
+// path, remembers which client each one is for while it runs, and drains them
+// once on shutdown. Admission and registration share one lock, so a probe is
+// never admitted after the drain has started.
+type autoVerifications struct {
+	mu     sync.Mutex
+	wg     sync.WaitGroup
+	closed bool
+}
+
+func newAutoVerifications() *autoVerifications {
+	return &autoVerifications{mu: sync.Mutex{}, wg: sync.WaitGroup{}, closed: false}
+}
+
+// admit runs fn on its own goroutine; false once admission is closed.
+func (a *autoVerifications) admit(fn func()) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.closed {
+		return false
+	}
+	a.wg.Go(func() {
+		fn()
+	})
+	return true
+}
+
+func (a *autoVerifications) closeAdmission() {
+	a.mu.Lock()
+	a.closed = true
+	a.mu.Unlock()
+}
+
+// shutdown closes admission, then waits for every admitted probe or ctx.
+func (a *autoVerifications) shutdown(ctx context.Context) error {
+	a.closeAdmission()
+	drained := make(chan struct{})
+	go func() {
+		a.wg.Wait()
+		close(drained)
+	}()
+	select {
+	case <-drained:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err() //nolint:wrapcheck // the caller names the drain
+	}
+}
+
+// Shutdown stops admitting automatic verifications and the keepalive
+// re-check, releases code runtimes and drains the probes in flight, then
+// closes the tool call logger. Run it after the HTTP servers have drained and
+// before the database and cache close: the probes detach from their requests
+// and still write verdicts and close upstream sessions.
+func (s *Service) Shutdown(ctx context.Context) error {
+	// Covers a provider POST's 10s timeout and a normal store. Shorter than the
+	// wait a stalled database gets while serving, so a stall delays shutdown less.
+	const upstreamRefreshDrainBudget = 15 * time.Second
+
+	// Stop automatic verification admission before releasing runtimes.
+	s.autoVerifications.closeAdmission()
+	var errs []error
+	if runtime, ok := s.codeExecutor.(interface{ Shutdown(context.Context) error }); ok {
+		if err := runtime.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("shutdown code runtime: %w", err))
+		}
+	}
+	if s.codeSessions != nil {
+		s.codeSessions.close(ctx, true)
+	}
+	if err := s.remoteSessionRecheck.shutdown(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("drain remote session re-checks: %w", err))
+	}
+	if err := s.autoVerifications.shutdown(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("drain automatic verifications: %w", err))
+	}
+	endingCtx, cancelEndings := context.WithTimeout(context.WithoutCancel(ctx), attemptEndingTimeout)
+	defer cancelEndings()
+	if err := s.attemptEndings.drain(endingCtx); err != nil {
+		errs = append(errs, fmt.Errorf("drain connection attempt endings: %w", err))
+	}
+	// Last, since the drains above can start refreshes, and on its own budget,
+	// since they may have spent ctx.
+	if s.remoteChallengeMgr != nil {
+		refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamRefreshDrainBudget)
+		defer cancel()
+		if err := s.remoteChallengeMgr.DrainRefreshes(refreshCtx); err != nil {
+			errs = append(errs, fmt.Errorf("drain upstream token refreshes: %w", err))
+		}
+	}
+	s.toolCallLogger.Close()
+	return errors.Join(errs...)
+}
+
+// verifyRemoteGrant probes a grant the remote login callback just committed, so
+// a connect or reconnect carries its own verdict. Everything, placement
+// included, runs off the request path under the probe's own budget; the caller
+// is held for at most AutoVerifyWait so a fast member's verdict is on the first
+// render. Best effort: anything that cannot be placed leaves the card at "Not
+// yet verified" for the manual Verify.
+func (s *Service) verifyRemoteGrant(ctx context.Context, fromRequest mcpconnectionattempts.Option, grant remotesessions.RemoteGrant) time.Time {
+	logger := s.logger.With(attr.SlogRemoteSessionClientID(grant.RemoteSessionClientID.String()))
+	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.metaRuntime.ValidationTimeout)
+	deadline, _ := probeCtx.Deadline()
+	done := make(chan struct{})
+	admitted := s.autoVerifications.admit(func() {
+		defer cancel()
+		defer close(done)
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				logger.ErrorContext(probeCtx, "verify new remote grant panicked", attr.SlogError(fmt.Errorf("%v", recovered)))
+			}
+		}()
+		endpoint, challengeState, ok := s.placeRemoteGrant(probeCtx, logger, grant)
+		if ok {
+			s.probeRemoteGrant(probeCtx, logger, fromRequest, endpoint, challengeState, grant)
+		}
+	})
+	if !admitted {
+		cancel()
+		logger.InfoContext(ctx, "new remote grant not verified: shutting down")
+		return time.Time{}
+	}
+	wait := time.NewTimer(s.metaRuntime.AutoVerifyWait)
+	defer wait.Stop()
+	select {
+	case <-done:
+		return time.Time{}
+	case <-wait.C:
+		logger.InfoContext(ctx, "new remote grant still verifying")
+		return deadline
+	}
+}
+
+// placeRemoteGrant finds the consent challenge the grant belongs to and the
+// endpoint it was minted for, the same resolution the IdP callback trusts.
+func (s *Service) placeRemoteGrant(ctx context.Context, logger *slog.Logger, grant remotesessions.RemoteGrant) (*ResolvedMcpEndpoint, AuthnChallengeState, bool) {
+	var none AuthnChallengeState
+	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+grant.ParentChallengeID)
+	if err != nil {
+		logger.InfoContext(ctx, "new remote grant not verified: consent challenge not found", attr.SlogError(err))
+		return nil, none, false
+	}
+	if challengeState.UserSessionIssuerID != grant.UserSessionIssuerID ||
+		challengeState.Subject == nil || challengeState.Subject.String() != grant.Subject.String() {
+		logger.InfoContext(ctx, "new remote grant not verified: grant does not belong to the consent challenge")
+		return nil, none, false
+	}
+	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
+	if err != nil {
+		logger.InfoContext(ctx, "new remote grant not verified: endpoint not resolved", attr.SlogError(err))
+		return nil, none, false
+	}
+	if err := endpoint.ValidateGlobalChallenge(ctx, s.db, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+		logger.InfoContext(ctx, "new remote grant not verified: challenge no longer valid for its endpoint", attr.SlogError(err))
+		return nil, none, false
+	}
+	return endpoint, challengeState, true
+}
+
+// probeRemoteGrant runs the probe for the grant's card on the endpoint.
+func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, fromRequest mcpconnectionattempts.Option, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, grant remotesessions.RemoteGrant) {
+	clients, offered, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
+	if err != nil {
+		logger.WarnContext(ctx, "new remote grant not verified: list clients", attr.SlogError(err))
+		return
+	}
+	clients = subjectConnectedClients(clients)
+	client := findConsentClient(clients, grant.RemoteSessionClientID)
+	if client == nil {
+		logger.InfoContext(ctx, "new remote grant not verified: client is not bound to this endpoint")
+		return
+	}
+	// The probe logs its own refusals; this only says the verdict did not land.
+	if err := s.probeRemoteSession(ctx, consentRefreshAttribution(s.aiCatalog.SnapshotFor(ctx), nil, endpoint, challengeState), logger, fromRequest, endpoint, challengeState, *client, offered, &grant, remotesessionmetrics.ValidationTriggerConnect); err != nil {
+		logger.InfoContext(ctx, "new remote grant not verified", attr.SlogError(err))
+	}
+}

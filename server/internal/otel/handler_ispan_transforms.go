@@ -3,6 +3,7 @@ package otel
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"log/slog"
 	"slices"
 
@@ -22,9 +23,9 @@ const normalizedInstrumentationScopeName = "com.speakeasy.ai.tracing"
 
 type SpanTransformHandler struct {
 	logger        *slog.Logger
-	metrics       *metrics
+	instruments   *enrich.Instruments
 	spanPublisher gcp.Publisher[*otelv1.Span]
-	enrichers     []SpanEnricher
+	enrichers     []enrich.SpanEnricher
 }
 
 func NewSpanTransformHandler(
@@ -35,34 +36,27 @@ func NewSpanTransformHandler(
 	cacheImpl cache.Cache,
 ) *SpanTransformHandler {
 	logger = logger.With(attr.SlogComponent("span-transform-handler"))
+	in := enrich.NewInstruments(logger, meterProvider)
+
+	enrichers := []enrich.SpanEnricher{
+		enrich.NewSpanTenancy(),
+		enrich.NewSpanTokens(),
+		enrich.NewSpanDirectory(logger, replicaDB, cacheImpl),
+	}
+	enrichers = append(enrichers, enrich.SpanAgentAttributes()...)
 
 	return &SpanTransformHandler{
 		logger:        logger,
-		metrics:       newMetrics(logger, meterProvider),
+		instruments:   in,
 		spanPublisher: spanPublisher,
-		enrichers: []SpanEnricher{
-			&enrichTenancy{},
-			NewEnrichSpeakeasyTokens(),
-			NewEnrichDirectory(logger, replicaDB, cacheImpl),
-		},
+		enrichers:     enrichers,
 	}
 }
 
 func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan, _ gcp.MessageMetadata) error {
-	out, err := spanFromInboundSpan(m)
+	out, err := transformInboundSpan(ctx, h.instruments, m, h.enrichers)
 	if err != nil {
-		return fmt.Errorf("convert inbound span: %w", o11y.LogError(ctx, h.logger, err, "failed to convert inbound span"))
-	}
-	if err := rewriteInstrumentationScope(out); err != nil {
-		return fmt.Errorf("rewrite instrumentation scope: %w", err)
-	}
-
-	enrichments, err := enrichSpan(ctx, h.metrics, m, h.enrichers)
-	if err != nil {
-		return fmt.Errorf("enrich span: %w", o11y.LogError(ctx, h.logger, err, "failed to enrich span"))
-	}
-	if err := applySpanEnrichments(out, enrichments); err != nil {
-		return fmt.Errorf("apply span enrichments: %w", o11y.LogError(ctx, h.logger, err, "failed to apply span enrichments"))
+		return o11y.LogError(ctx, h.logger, err, "failed to transform inbound span")
 	}
 
 	res := h.spanPublisher.Publish(ctx, out)
@@ -72,6 +66,31 @@ func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan
 	}
 
 	return nil
+}
+
+// transformInboundSpan turns an inbound span into what every consumer and relay receives.
+func transformInboundSpan(ctx context.Context, instruments *enrich.Instruments, m *otelv1.InboundSpan, enrichers []enrich.SpanEnricher) (*otelv1.Span, error) {
+	out, err := spanFromInboundSpan(m)
+	if err != nil {
+		return nil, fmt.Errorf("convert inbound span: %w", err)
+	}
+	// The producer's copy of anything in the pipeline's namespace goes
+	// before the pipeline writes its own, so the scope rewrite below and
+	// the enrichers after it leave exactly one copy of each key.
+	dropReservedSpanAttributes(out)
+	stripSpanTestEventMarks(out)
+	if err := rewriteInstrumentationScope(out); err != nil {
+		return nil, fmt.Errorf("rewrite instrumentation scope: %w", err)
+	}
+
+	enrichments, err := enrich.Span(ctx, instruments, m, enrichers)
+	if err != nil {
+		return nil, fmt.Errorf("enrich span: %w", err)
+	}
+	if err := applySpanEnrichments(out, enrichments); err != nil {
+		return nil, fmt.Errorf("apply span enrichments: %w", err)
+	}
+	return out, nil
 }
 
 func rewriteInstrumentationScope(span *otelv1.Span) error {
@@ -92,8 +111,25 @@ func rewriteInstrumentationScope(span *otelv1.Span) error {
 	}
 
 	return applySpanEnrichments(span, []otelattr.KeyValue{
-		OriginalInstrumentationScopeName(originalName),
+		enrich.OriginalInstrumentationScopeName(originalName),
 	})
+}
+
+// dropReservedSpanAttributes removes what a producer sent under the
+// namespaces the pipeline writes, speakeasy and directory, exactly as the
+// log transform does for a log record: only
+// the pipeline writes there, and a producer that sends one would otherwise
+// classify its own span, claim another tenant, pose as another producer's
+// scope, or give a person a group or department. The enrichers read
+// the inbound span, so what they see is unchanged.
+func dropReservedSpanAttributes(span *otelv1.Span) {
+	attributes := span.GetAttributes()
+	kept := slices.DeleteFunc(attributes, func(kv *otelv1.Span_KeyValue) bool {
+		return enrich.IsPipelineKey(kv.GetKey())
+	})
+	if len(kept) != len(attributes) {
+		span.SetAttributes(kept)
+	}
 }
 
 func applySpanEnrichments(out *otelv1.Span, enrichments []otelattr.KeyValue) error {
@@ -183,6 +219,20 @@ func spanAnyValue(value otelattr.Value) (*otelv1.Span_AnyValue, error) {
 		}
 		return (&otelv1.Span_AnyValue_builder{
 			ArrayValue: (&otelv1.Span_ArrayValue_builder{Values: values}).Build(),
+		}).Build(), nil
+	case otelattr.MAP:
+		input := value.AsMap()
+		values := make([]*otelv1.Span_KeyValue, len(input))
+		for i, item := range input {
+			converted, err := spanAnyValue(item.Value)
+			if err != nil {
+				return nil, fmt.Errorf("convert map item %d: %w", i, err)
+			}
+			key := string(item.Key)
+			values[i] = (&otelv1.Span_KeyValue_builder{Key: &key, Value: converted}).Build()
+		}
+		return (&otelv1.Span_AnyValue_builder{
+			KvlistValue: (&otelv1.Span_KeyValueList_builder{Values: values}).Build(),
 		}).Build(), nil
 	case otelattr.EMPTY:
 		return (&otelv1.Span_AnyValue_builder{}).Build(), nil

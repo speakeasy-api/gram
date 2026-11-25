@@ -22,11 +22,17 @@ type CreateAssistantRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
+	// replaces the assistant's hosted servers.
 	Toolsets []*AssistantToolsetRefRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers to attach. When sent, replaces the assistant's servers that are
+	// not hosted (toolset-backed). A hosted server listed here is attached if it
+	// is not already; attached hosted servers are left unchanged, and toolsets
+	// governs them when both are sent.
 	McpServers []*AssistantMCPServerRefRequestBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Optional warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
@@ -45,16 +51,28 @@ type UpdateAssistantRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
+	// replaces the assistant's hosted servers.
 	Toolsets []*AssistantToolsetRefRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers to attach. When sent, replaces the assistant's servers that are
+	// not hosted (toolset-backed). A hosted server listed here is attached if it
+	// is not already; attached hosted servers are left unchanged, and toolsets
+	// governs them when both are sent.
 	McpServers []*AssistantMCPServerRefRequestBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching
+	// requires the assistant and all background work to be settled.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
+	// The runtime version read before requesting a switch. Required with
+	// runtime_version; conflicts require a fresh read.
+	ExpectedRuntimeVersion *int `form:"expected_runtime_version,omitempty" json:"expected_runtime_version,omitempty" xml:"expected_runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 }
@@ -87,6 +105,29 @@ type InterruptTurnRequestBody struct {
 	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
 }
 
+// SetExecutionProfileChoiceRequestBody is the type of the "assistants" service
+// "setExecutionProfileChoice" endpoint HTTP request body.
+type SetExecutionProfileChoiceRequestBody struct {
+	// The assistant ID.
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// The root trigger.
+	TriggerInstanceID *string `form:"trigger_instance_id,omitempty" json:"trigger_instance_id,omitempty" xml:"trigger_instance_id,omitempty"`
+	// Whether the turns act for the user their event identified.
+	ExecutionContext *string `form:"execution_context,omitempty" json:"execution_context,omitempty" xml:"execution_context,omitempty"`
+	// The MCP server.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The auth client to use.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// Use no upstream authentication.
+	NoAuth *bool `form:"no_auth,omitempty" json:"no_auth,omitempty" xml:"no_auth,omitempty"`
+	// Remove the choice so the next turn makes it from the server's configuration.
+	Automatic *bool `form:"automatic,omitempty" json:"automatic,omitempty" xml:"automatic,omitempty"`
+	// The profile version the change was decided from, from a fresh
+	// listExecutionProfiles read. A profile that changed since is refused with a
+	// conflict.
+	ExpectedVersion *int64 `form:"expected_version,omitempty" json:"expected_version,omitempty" xml:"expected_version,omitempty"`
+}
+
 // ListAssistantsResponseBody is the type of the "assistants" service
 // "listAssistants" endpoint HTTP response body.
 type ListAssistantsResponseBody struct {
@@ -103,15 +144,25 @@ type GetAssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
@@ -119,6 +170,9 @@ type GetAssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -136,15 +190,25 @@ type CreateAssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
@@ -152,6 +216,9 @@ type CreateAssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -169,15 +236,25 @@ type UpdateAssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
@@ -185,6 +262,9 @@ type UpdateAssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -227,15 +307,25 @@ type GetManagedAssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
@@ -243,6 +333,9 @@ type GetManagedAssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -260,15 +353,25 @@ type EnsureManagedAssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
@@ -276,12 +379,37 @@ type EnsureManagedAssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Last update timestamp.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListExecutionProfilesResponseBody is the type of the "assistants" service
+// "listExecutionProfiles" endpoint HTTP response body.
+type ListExecutionProfilesResponseBody struct {
+	// Each root trigger and execution context.
+	Profiles []*AssistantExecutionProfileResponseBody `form:"profiles" json:"profiles" xml:"profiles"`
+}
+
+// SetExecutionProfileChoiceResponseBody is the type of the "assistants"
+// service "setExecutionProfileChoice" endpoint HTTP response body.
+type SetExecutionProfileChoiceResponseBody struct {
+	// The root trigger.
+	TriggerInstanceID string `form:"trigger_instance_id" json:"trigger_instance_id" xml:"trigger_instance_id"`
+	// The root trigger's name.
+	TriggerName string `form:"trigger_name" json:"trigger_name" xml:"trigger_name"`
+	// Whether the turns act for the user their event identified.
+	ExecutionContext string `form:"execution_context" json:"execution_context" xml:"execution_context"`
+	// The latest version; 0 before the first turn or change.
+	Version int64 `form:"version" json:"version" xml:"version"`
+	// Each server the turns reach.
+	Servers []*ExecutionProfileServerResponseBody `form:"servers" json:"servers" xml:"servers"`
 }
 
 // ListAssistantsUnauthorizedResponseBody is the type of the "assistants"
@@ -1954,6 +2082,386 @@ type EnsureManagedAssistantGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListExecutionProfilesUnauthorizedResponseBody is the type of the
+// "assistants" service "listExecutionProfiles" endpoint HTTP response body for
+// the "unauthorized" error.
+type ListExecutionProfilesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExecutionProfilesForbiddenResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "forbidden" error.
+type ListExecutionProfilesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExecutionProfilesBadRequestResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "bad_request" error.
+type ListExecutionProfilesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExecutionProfilesNotFoundResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "not_found" error.
+type ListExecutionProfilesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExecutionProfilesConflictResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "conflict" error.
+type ListExecutionProfilesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExecutionProfilesUnsupportedMediaResponseBody is the type of the
+// "assistants" service "listExecutionProfiles" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListExecutionProfilesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExecutionProfilesInvalidResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "invalid" error.
+type ListExecutionProfilesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExecutionProfilesInvariantViolationResponseBody is the type of the
+// "assistants" service "listExecutionProfiles" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListExecutionProfilesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExecutionProfilesUnexpectedResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "unexpected" error.
+type ListExecutionProfilesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListExecutionProfilesGatewayErrorResponseBody is the type of the
+// "assistants" service "listExecutionProfiles" endpoint HTTP response body for
+// the "gateway_error" error.
+type ListExecutionProfilesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetExecutionProfileChoiceUnauthorizedResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetExecutionProfileChoiceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetExecutionProfileChoiceForbiddenResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "forbidden" error.
+type SetExecutionProfileChoiceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetExecutionProfileChoiceBadRequestResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "bad_request" error.
+type SetExecutionProfileChoiceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetExecutionProfileChoiceNotFoundResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "not_found" error.
+type SetExecutionProfileChoiceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetExecutionProfileChoiceConflictResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "conflict" error.
+type SetExecutionProfileChoiceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetExecutionProfileChoiceUnsupportedMediaResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetExecutionProfileChoiceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetExecutionProfileChoiceInvalidResponseBody is the type of the "assistants"
+// service "setExecutionProfileChoice" endpoint HTTP response body for the
+// "invalid" error.
+type SetExecutionProfileChoiceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetExecutionProfileChoiceInvariantViolationResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetExecutionProfileChoiceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetExecutionProfileChoiceUnexpectedResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "unexpected" error.
+type SetExecutionProfileChoiceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetExecutionProfileChoiceGatewayErrorResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetExecutionProfileChoiceGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AssistantResponseBody is used to define fields on response body types.
 type AssistantResponseBody struct {
 	// The assistant ID.
@@ -1962,15 +2470,25 @@ type AssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills" json:"skills" xml:"skills"`
@@ -1978,6 +2496,9 @@ type AssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -1998,14 +2519,14 @@ type AssistantToolsetRefResponseBody struct {
 // AssistantMCPServerRefResponseBody is used to define fields on response body
 // types.
 type AssistantMCPServerRefResponseBody struct {
-	// The MCP server slug exposed to the assistant. Covers remote- and
-	// tunnelled-backed MCP servers, which have no toolset to attach.
+	// The MCP server slug exposed to the assistant. Covers every backend,
+	// including hosted (toolset-backed) servers.
 	McpServerSlug string `form:"mcp_server_slug" json:"mcp_server_slug" xml:"mcp_server_slug"`
 	// Optional environment slug used when connecting to the MCP server.
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
-	// The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}).
-	// Populated on reads; ignored on writes. Absent when the server has no
-	// Gram-hosted endpoint.
+	// The slug of the server's Speakeasy-hosted MCP endpoint
+	// (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when
+	// the server has no Speakeasy-hosted endpoint.
 	EndpointSlug *string `form:"endpoint_slug,omitempty" json:"endpoint_slug,omitempty" xml:"endpoint_slug,omitempty"`
 }
 
@@ -2020,6 +2541,54 @@ type AssistantSkillRefResponseBody struct {
 	ResolvedVersionID string `form:"resolved_version_id" json:"resolved_version_id" xml:"resolved_version_id"`
 }
 
+// AssistantExecutionProfileResponseBody is used to define fields on response
+// body types.
+type AssistantExecutionProfileResponseBody struct {
+	// The root trigger.
+	TriggerInstanceID string `form:"trigger_instance_id" json:"trigger_instance_id" xml:"trigger_instance_id"`
+	// The root trigger's name.
+	TriggerName string `form:"trigger_name" json:"trigger_name" xml:"trigger_name"`
+	// Whether the turns act for the user their event identified.
+	ExecutionContext string `form:"execution_context" json:"execution_context" xml:"execution_context"`
+	// The latest version; 0 before the first turn or change.
+	Version int64 `form:"version" json:"version" xml:"version"`
+	// Each server the turns reach.
+	Servers []*ExecutionProfileServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+}
+
+// ExecutionProfileServerResponseBody is used to define fields on response body
+// types.
+type ExecutionProfileServerResponseBody struct {
+	// The MCP server.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// Whether the server has a choice.
+	Chosen bool `form:"chosen" json:"chosen" xml:"chosen"`
+	// The chosen auth client. Absent with a choice means no upstream
+	// authentication.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// How the choice was made: admin, issuance, backfill, or automatic for one the
+	// next turn makes on its own.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Whether the server offers no enabled auth client and has no upstream
+	// credentials left to record as one, so no-auth can be chosen.
+	NoAuthAllowed bool `form:"no_auth_allowed" json:"no_auth_allowed" xml:"no_auth_allowed"`
+	// Why a server without a choice gets none on its own.
+	GapReason *string `form:"gap_reason,omitempty" json:"gap_reason,omitempty" xml:"gap_reason,omitempty"`
+	// The credentials that can be chosen.
+	Options []*ExecutionProfileOptionResponseBody `form:"options" json:"options" xml:"options"`
+}
+
+// ExecutionProfileOptionResponseBody is used to define fields on response body
+// types.
+type ExecutionProfileOptionResponseBody struct {
+	// The auth client.
+	AuthClientID string `form:"auth_client_id" json:"auth_client_id" xml:"auth_client_id"`
+	// The auth client's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The auth client's type.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+}
+
 // AssistantToolsetRefRequestBody is used to define fields on request body
 // types.
 type AssistantToolsetRefRequestBody struct {
@@ -2032,14 +2601,14 @@ type AssistantToolsetRefRequestBody struct {
 // AssistantMCPServerRefRequestBody is used to define fields on request body
 // types.
 type AssistantMCPServerRefRequestBody struct {
-	// The MCP server slug exposed to the assistant. Covers remote- and
-	// tunnelled-backed MCP servers, which have no toolset to attach.
+	// The MCP server slug exposed to the assistant. Covers every backend,
+	// including hosted (toolset-backed) servers.
 	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
 	// Optional environment slug used when connecting to the MCP server.
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
-	// The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}).
-	// Populated on reads; ignored on writes. Absent when the server has no
-	// Gram-hosted endpoint.
+	// The slug of the server's Speakeasy-hosted MCP endpoint
+	// (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when
+	// the server has no Speakeasy-hosted endpoint.
 	EndpointSlug *string `form:"endpoint_slug,omitempty" json:"endpoint_slug,omitempty" xml:"endpoint_slug,omitempty"`
 }
 
@@ -2078,11 +2647,15 @@ func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody
 		ID:              res.ID,
 		ProjectID:       res.ProjectID,
 		CreatedByUserID: res.CreatedByUserID,
+		IdentityState:   res.IdentityState,
+		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
+		RuntimeVersion:  res.RuntimeVersion,
 		Status:          res.Status,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -2133,11 +2706,15 @@ func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantRespon
 		ID:              res.ID,
 		ProjectID:       res.ProjectID,
 		CreatedByUserID: res.CreatedByUserID,
+		IdentityState:   res.IdentityState,
+		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
+		RuntimeVersion:  res.RuntimeVersion,
 		Status:          res.Status,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -2188,11 +2765,15 @@ func NewUpdateAssistantResponseBody(res *types.Assistant) *UpdateAssistantRespon
 		ID:              res.ID,
 		ProjectID:       res.ProjectID,
 		CreatedByUserID: res.CreatedByUserID,
+		IdentityState:   res.IdentityState,
+		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
+		RuntimeVersion:  res.RuntimeVersion,
 		Status:          res.Status,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -2265,11 +2846,15 @@ func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssista
 		ID:              res.ID,
 		ProjectID:       res.ProjectID,
 		CreatedByUserID: res.CreatedByUserID,
+		IdentityState:   res.IdentityState,
+		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
+		RuntimeVersion:  res.RuntimeVersion,
 		Status:          res.Status,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -2320,11 +2905,15 @@ func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedA
 		ID:              res.ID,
 		ProjectID:       res.ProjectID,
 		CreatedByUserID: res.CreatedByUserID,
+		IdentityState:   res.IdentityState,
+		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
+		RuntimeVersion:  res.RuntimeVersion,
 		Status:          res.Status,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -2364,6 +2953,50 @@ func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedA
 		}
 	} else {
 		body.Skills = []*AssistantSkillRefResponseBody{}
+	}
+	return body
+}
+
+// NewListExecutionProfilesResponseBody builds the HTTP response body from the
+// result of the "listExecutionProfiles" endpoint of the "assistants" service.
+func NewListExecutionProfilesResponseBody(res *assistants.ListExecutionProfilesResult) *ListExecutionProfilesResponseBody {
+	body := &ListExecutionProfilesResponseBody{}
+	if res.Profiles != nil {
+		body.Profiles = make([]*AssistantExecutionProfileResponseBody, len(res.Profiles))
+		for i, val := range res.Profiles {
+			if val == nil {
+				body.Profiles[i] = nil
+				continue
+			}
+			body.Profiles[i] = marshalAssistantsAssistantExecutionProfileToAssistantExecutionProfileResponseBody(val)
+		}
+	} else {
+		body.Profiles = []*AssistantExecutionProfileResponseBody{}
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceResponseBody builds the HTTP response body from
+// the result of the "setExecutionProfileChoice" endpoint of the "assistants"
+// service.
+func NewSetExecutionProfileChoiceResponseBody(res *assistants.AssistantExecutionProfile) *SetExecutionProfileChoiceResponseBody {
+	body := &SetExecutionProfileChoiceResponseBody{
+		TriggerInstanceID: res.TriggerInstanceID,
+		TriggerName:       res.TriggerName,
+		ExecutionContext:  res.ExecutionContext,
+		Version:           res.Version,
+	}
+	if res.Servers != nil {
+		body.Servers = make([]*ExecutionProfileServerResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalAssistantsExecutionProfileServerToExecutionProfileServerResponseBody(val)
+		}
+	} else {
+		body.Servers = []*ExecutionProfileServerResponseBody{}
 	}
 	return body
 }
@@ -3660,6 +4293,306 @@ func NewEnsureManagedAssistantGatewayErrorResponseBody(res *goa.ServiceError) *E
 	return body
 }
 
+// NewListExecutionProfilesUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listExecutionProfiles" endpoint of the
+// "assistants" service.
+func NewListExecutionProfilesUnauthorizedResponseBody(res *goa.ServiceError) *ListExecutionProfilesUnauthorizedResponseBody {
+	body := &ListExecutionProfilesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExecutionProfilesForbiddenResponseBody builds the HTTP response body
+// from the result of the "listExecutionProfiles" endpoint of the "assistants"
+// service.
+func NewListExecutionProfilesForbiddenResponseBody(res *goa.ServiceError) *ListExecutionProfilesForbiddenResponseBody {
+	body := &ListExecutionProfilesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExecutionProfilesBadRequestResponseBody builds the HTTP response body
+// from the result of the "listExecutionProfiles" endpoint of the "assistants"
+// service.
+func NewListExecutionProfilesBadRequestResponseBody(res *goa.ServiceError) *ListExecutionProfilesBadRequestResponseBody {
+	body := &ListExecutionProfilesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExecutionProfilesNotFoundResponseBody builds the HTTP response body
+// from the result of the "listExecutionProfiles" endpoint of the "assistants"
+// service.
+func NewListExecutionProfilesNotFoundResponseBody(res *goa.ServiceError) *ListExecutionProfilesNotFoundResponseBody {
+	body := &ListExecutionProfilesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExecutionProfilesConflictResponseBody builds the HTTP response body
+// from the result of the "listExecutionProfiles" endpoint of the "assistants"
+// service.
+func NewListExecutionProfilesConflictResponseBody(res *goa.ServiceError) *ListExecutionProfilesConflictResponseBody {
+	body := &ListExecutionProfilesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExecutionProfilesUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listExecutionProfiles" endpoint of the
+// "assistants" service.
+func NewListExecutionProfilesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListExecutionProfilesUnsupportedMediaResponseBody {
+	body := &ListExecutionProfilesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExecutionProfilesInvalidResponseBody builds the HTTP response body
+// from the result of the "listExecutionProfiles" endpoint of the "assistants"
+// service.
+func NewListExecutionProfilesInvalidResponseBody(res *goa.ServiceError) *ListExecutionProfilesInvalidResponseBody {
+	body := &ListExecutionProfilesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExecutionProfilesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listExecutionProfiles" endpoint of the
+// "assistants" service.
+func NewListExecutionProfilesInvariantViolationResponseBody(res *goa.ServiceError) *ListExecutionProfilesInvariantViolationResponseBody {
+	body := &ListExecutionProfilesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExecutionProfilesUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listExecutionProfiles" endpoint of the "assistants"
+// service.
+func NewListExecutionProfilesUnexpectedResponseBody(res *goa.ServiceError) *ListExecutionProfilesUnexpectedResponseBody {
+	body := &ListExecutionProfilesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListExecutionProfilesGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listExecutionProfiles" endpoint of the
+// "assistants" service.
+func NewListExecutionProfilesGatewayErrorResponseBody(res *goa.ServiceError) *ListExecutionProfilesGatewayErrorResponseBody {
+	body := &ListExecutionProfilesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "setExecutionProfileChoice" endpoint of
+// the "assistants" service.
+func NewSetExecutionProfileChoiceUnauthorizedResponseBody(res *goa.ServiceError) *SetExecutionProfileChoiceUnauthorizedResponseBody {
+	body := &SetExecutionProfileChoiceUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceForbiddenResponseBody builds the HTTP response
+// body from the result of the "setExecutionProfileChoice" endpoint of the
+// "assistants" service.
+func NewSetExecutionProfileChoiceForbiddenResponseBody(res *goa.ServiceError) *SetExecutionProfileChoiceForbiddenResponseBody {
+	body := &SetExecutionProfileChoiceForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceBadRequestResponseBody builds the HTTP response
+// body from the result of the "setExecutionProfileChoice" endpoint of the
+// "assistants" service.
+func NewSetExecutionProfileChoiceBadRequestResponseBody(res *goa.ServiceError) *SetExecutionProfileChoiceBadRequestResponseBody {
+	body := &SetExecutionProfileChoiceBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceNotFoundResponseBody builds the HTTP response
+// body from the result of the "setExecutionProfileChoice" endpoint of the
+// "assistants" service.
+func NewSetExecutionProfileChoiceNotFoundResponseBody(res *goa.ServiceError) *SetExecutionProfileChoiceNotFoundResponseBody {
+	body := &SetExecutionProfileChoiceNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceConflictResponseBody builds the HTTP response
+// body from the result of the "setExecutionProfileChoice" endpoint of the
+// "assistants" service.
+func NewSetExecutionProfileChoiceConflictResponseBody(res *goa.ServiceError) *SetExecutionProfileChoiceConflictResponseBody {
+	body := &SetExecutionProfileChoiceConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setExecutionProfileChoice" endpoint of
+// the "assistants" service.
+func NewSetExecutionProfileChoiceUnsupportedMediaResponseBody(res *goa.ServiceError) *SetExecutionProfileChoiceUnsupportedMediaResponseBody {
+	body := &SetExecutionProfileChoiceUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceInvalidResponseBody builds the HTTP response
+// body from the result of the "setExecutionProfileChoice" endpoint of the
+// "assistants" service.
+func NewSetExecutionProfileChoiceInvalidResponseBody(res *goa.ServiceError) *SetExecutionProfileChoiceInvalidResponseBody {
+	body := &SetExecutionProfileChoiceInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setExecutionProfileChoice" endpoint of
+// the "assistants" service.
+func NewSetExecutionProfileChoiceInvariantViolationResponseBody(res *goa.ServiceError) *SetExecutionProfileChoiceInvariantViolationResponseBody {
+	body := &SetExecutionProfileChoiceInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceUnexpectedResponseBody builds the HTTP response
+// body from the result of the "setExecutionProfileChoice" endpoint of the
+// "assistants" service.
+func NewSetExecutionProfileChoiceUnexpectedResponseBody(res *goa.ServiceError) *SetExecutionProfileChoiceUnexpectedResponseBody {
+	body := &SetExecutionProfileChoiceUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "setExecutionProfileChoice" endpoint of
+// the "assistants" service.
+func NewSetExecutionProfileChoiceGatewayErrorResponseBody(res *goa.ServiceError) *SetExecutionProfileChoiceGatewayErrorResponseBody {
+	body := &SetExecutionProfileChoiceGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListAssistantsPayload builds a assistants service listAssistants endpoint
 // payload.
 func NewListAssistantsPayload(sessionToken *string, projectSlugInput *string) *assistants.ListAssistantsPayload {
@@ -3692,6 +4625,12 @@ func NewCreateAssistantPayload(body *CreateAssistantRequestBody, sessionToken *s
 		MaxConcurrency: body.MaxConcurrency,
 		Status:         body.Status,
 	}
+	if body.ReasoningEffort != nil {
+		v.ReasoningEffort = *body.ReasoningEffort
+	}
+	if body.ReasoningEffort == nil {
+		v.ReasoningEffort = "medium"
+	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
 		if val == nil {
@@ -3720,13 +4659,16 @@ func NewCreateAssistantPayload(body *CreateAssistantRequestBody, sessionToken *s
 // endpoint payload.
 func NewUpdateAssistantPayload(body *UpdateAssistantRequestBody, sessionToken *string, projectSlugInput *string) *assistants.UpdateAssistantPayload {
 	v := &assistants.UpdateAssistantPayload{
-		ID:             *body.ID,
-		Name:           body.Name,
-		Model:          body.Model,
-		Instructions:   body.Instructions,
-		WarmTTLSeconds: body.WarmTTLSeconds,
-		MaxConcurrency: body.MaxConcurrency,
-		Status:         body.Status,
+		ID:                     *body.ID,
+		Name:                   body.Name,
+		Model:                  body.Model,
+		ReasoningEffort:        body.ReasoningEffort,
+		Instructions:           body.Instructions,
+		WarmTTLSeconds:         body.WarmTTLSeconds,
+		MaxConcurrency:         body.MaxConcurrency,
+		RuntimeVersion:         body.RuntimeVersion,
+		ExpectedRuntimeVersion: body.ExpectedRuntimeVersion,
+		Status:                 body.Status,
 	}
 	if body.Toolsets != nil {
 		v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
@@ -3829,6 +4771,36 @@ func NewEnsureManagedAssistantPayload(sessionToken *string, projectSlugInput *st
 	return v
 }
 
+// NewListExecutionProfilesPayload builds a assistants service
+// listExecutionProfiles endpoint payload.
+func NewListExecutionProfilesPayload(assistantID string, sessionToken *string, projectSlugInput *string) *assistants.ListExecutionProfilesPayload {
+	v := &assistants.ListExecutionProfilesPayload{}
+	v.AssistantID = assistantID
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewSetExecutionProfileChoicePayload builds a assistants service
+// setExecutionProfileChoice endpoint payload.
+func NewSetExecutionProfileChoicePayload(body *SetExecutionProfileChoiceRequestBody, sessionToken *string, projectSlugInput *string) *assistants.SetExecutionProfileChoicePayload {
+	v := &assistants.SetExecutionProfileChoicePayload{
+		AssistantID:       *body.AssistantID,
+		TriggerInstanceID: *body.TriggerInstanceID,
+		ExecutionContext:  *body.ExecutionContext,
+		McpServerID:       *body.McpServerID,
+		AuthClientID:      body.AuthClientID,
+		NoAuth:            body.NoAuth,
+		Automatic:         body.Automatic,
+		ExpectedVersion:   *body.ExpectedVersion,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateAssistantRequestBody runs the validations defined on
 // CreateAssistantRequestBody
 func ValidateCreateAssistantRequestBody(body *CreateAssistantRequestBody) (err error) {
@@ -3843,6 +4815,11 @@ func ValidateCreateAssistantRequestBody(body *CreateAssistantRequestBody) (err e
 	}
 	if body.Toolsets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
+	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
@@ -3875,6 +4852,11 @@ func ValidateUpdateAssistantRequestBody(body *UpdateAssistantRequestBody) (err e
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
+	}
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefRequestBody(e); err2 != nil {
@@ -3887,6 +4869,16 @@ func ValidateUpdateAssistantRequestBody(body *UpdateAssistantRequestBody) (err e
 			if err2 := ValidateAssistantMCPServerRefRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
+		}
+	}
+	if body.ExpectedRuntimeVersion != nil {
+		if !(*body.ExpectedRuntimeVersion == 2 || *body.ExpectedRuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.expected_runtime_version", *body.ExpectedRuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {
@@ -3955,6 +4947,49 @@ func ValidateInterruptTurnRequestBody(body *InterruptTurnRequestBody) (err error
 	}
 	if body.ChatID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceRequestBody runs the validations defined on
+// SetExecutionProfileChoiceRequestBody
+func ValidateSetExecutionProfileChoiceRequestBody(body *SetExecutionProfileChoiceRequestBody) (err error) {
+	if body.AssistantID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assistant_id", "body"))
+	}
+	if body.TriggerInstanceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trigger_instance_id", "body"))
+	}
+	if body.ExecutionContext == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("execution_context", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ExpectedVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expected_version", "body"))
+	}
+	if body.AssistantID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", *body.AssistantID, goa.FormatUUID))
+	}
+	if body.TriggerInstanceID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trigger_instance_id", *body.TriggerInstanceID, goa.FormatUUID))
+	}
+	if body.ExecutionContext != nil {
+		if !(*body.ExecutionContext == "user_backed" || *body.ExecutionContext == "userless") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.execution_context", *body.ExecutionContext, []any{"user_backed", "userless"}))
+		}
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	if body.ExpectedVersion != nil {
+		if *body.ExpectedVersion < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expected_version", *body.ExpectedVersion, 0, true))
+		}
 	}
 	return
 }

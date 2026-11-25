@@ -3,7 +3,7 @@ import { Eye, EyeOff } from "lucide-react";
 import * as React from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
-import { IconName } from "../Icon/names";
+import type { IconName } from "../Icon/names";
 
 export interface InputProps extends Omit<
   React.ComponentProps<"input">,
@@ -30,10 +30,25 @@ export interface InputProps extends Omit<
   /** A prefix the value must carry; shown as static text inside the field. */
   requiredPrefix?: string;
   /**
+   * Keeps the placeholder muted while focused. For type-to-confirm fields,
+   * whose placeholder is the exact value to type and must not look entered.
+   */
+  mutedPlaceholder?: boolean;
+  /**
    * Renders a password field with a built-in show/hide eye toggle. Replaces the
    * former standalone PrivateInput wrapper.
    */
   reveal?: boolean;
+  /**
+   * Keeps password managers out of the field. A credential you paste into a
+   * service — an upstream token, an OAuth client secret — is not the user's
+   * own login, so a manager offering to fill or save one is noise.
+   *
+   * Sends `autocomplete="new-password"` on secret fields, because browsers
+   * ignore `off` on password inputs, plus the vendor opt-outs for 1Password,
+   * LastPass, Bitwarden and Dashlane.
+   */
+  noAutofill?: boolean;
   className?: string;
 }
 
@@ -49,7 +64,9 @@ export function Input({
   lines,
   error,
   requiredPrefix,
+  mutedPlaceholder = false,
   reveal,
+  noAutofill,
   className,
   children,
   disabled,
@@ -59,6 +76,21 @@ export function Input({
 }: InputProps): React.JSX.Element {
   const [isRevealed, setIsRevealed] = useState(false);
   const effectiveType = reveal ? (isRevealed ? "text" : "password") : type;
+  const isSecret = reveal || type === "password";
+  const autofillProps = noAutofill
+    ? {
+        // `off` is honored on ordinary fields but widely ignored on password
+        // inputs, where `new-password` is what actually suppresses a fill.
+        autoComplete: isSecret ? "new-password" : "off",
+        autoCorrect: "off",
+        autoCapitalize: "off",
+        spellCheck: false,
+        "data-1p-ignore": "true",
+        "data-lpignore": "true",
+        "data-bwignore": "true",
+        "data-form-type": "other",
+      }
+    : {};
   const runValidation = (val: string) => {
     if (val === "") return null;
 
@@ -71,6 +103,16 @@ export function Input({
   const [validationError, setValidationError] = useState<string | null>(() =>
     runValidation(value ?? ""),
   );
+  const validationErrorId = React.useId();
+  const describedBy =
+    [
+      props["aria-describedby"],
+      validationError && validationError !== DEFAULT_ERROR
+        ? validationErrorId
+        : undefined,
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
   const [isFocused, setIsFocused] = useState(false);
 
   const handleFocus = (
@@ -124,7 +166,7 @@ export function Input({
 
   const fieldClassName = cn(
     "h-full w-full bg-transparent text-sm text-default shadow-none outline-none placeholder:text-placeholder disabled:cursor-not-allowed disabled:opacity-50",
-    isFocused && "placeholder:text-default",
+    isFocused && !mutedPlaceholder && "placeholder:text-default",
   );
 
   const displayValue =
@@ -137,6 +179,7 @@ export function Input({
   const field = asTextarea ? (
     <textarea
       {...(props as React.ComponentProps<"textarea">)}
+      {...autofillProps}
       value={displayValue}
       placeholder={placeholder}
       disabled={disabled}
@@ -146,10 +189,12 @@ export function Input({
       onFocus={handleFocus}
       onBlur={handleBlur}
       className={cn(fieldClassName, "max-h-60 min-h-16 resize-y py-1")}
+      aria-describedby={describedBy}
     />
   ) : (
     <input
       {...props}
+      {...autofillProps}
       type={effectiveType}
       value={displayValue}
       placeholder={placeholder}
@@ -164,6 +209,7 @@ export function Input({
         ...props.style,
       }}
       className={fieldClassName}
+      aria-describedby={describedBy}
     />
   );
 
@@ -174,6 +220,9 @@ export function Input({
       <div
         className={cn(
           "flex items-center gap-3 border border-input bg-surface-primary-default px-4 py-2 text-muted-foreground",
+          // The field recolours its own border on focus, so the global focus
+          // outline would double it up.
+          "focus-within:outline-none",
           icon && "px-3",
           isFocused && "border-focus text-default",
           hasError && "border-destructive-default",
@@ -208,7 +257,10 @@ export function Input({
         )}
       </div>
       {validationError && validationError !== DEFAULT_ERROR && (
-        <span className="text-xs text-default-destructive">
+        <span
+          id={validationErrorId}
+          className="text-xs text-default-destructive"
+        >
           {validationError}
         </span>
       )}

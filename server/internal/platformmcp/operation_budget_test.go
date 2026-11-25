@@ -4,11 +4,78 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
+
+func TestWorkflowRateLimitsAllowBulkAdministration(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name         string
+		connection   int
+		organization int
+		want         int
+	}{
+		{name: "skills", connection: SkillsOperationsPerConnectionPerMinute, organization: SkillsOperationsPerOrganizationPerMinute, want: 120},
+		{name: "docs", connection: DocsQueriesPerConnectionPerMinute, organization: DocsQueriesPerOrganizationPerMinute, want: 120},
+		{name: "plugins", connection: PluginQueriesPerConnectionPerMinute, organization: PluginQueriesPerOrganizationPerMinute, want: 120},
+		{name: "tool catalogue", connection: ToolExposureReadsPerConnectionPerMinute, organization: ToolExposureReadsPerOrganizationPerMinute, want: 120},
+		{name: "lifecycle", connection: LifecycleOperationsPerConnectionPerMinute, organization: LifecycleOperationsPerOrganizationPerMinute, want: 30},
+		{name: "plugin assignments", connection: PluginAssignmentMutationsPerConnectionPerMinute, organization: PluginAssignmentMutationsPerOrganizationPerMinute, want: 30},
+		{name: "access roles", connection: AccessRoleMutationsPerConnectionPerMinute, organization: AccessRoleMutationsPerOrganizationPerMinute, want: 30},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, ratelimit.Rate{Tokens: test.want, Interval: time.Minute, Burst: test.want}, ratelimit.PerMinute(test.connection))
+			require.Equal(t, ratelimit.Rate{Tokens: test.want * 10, Interval: time.Minute, Burst: test.want * 10}, ratelimit.PerMinute(test.organization))
+		})
+	}
+}
+
+func TestOperationBudgetsValidRequiresAccessReads(t *testing.T) {
+	t.Parallel()
+
+	budget := allowBudget()
+	budgets := OperationBudgets{
+		Catalog: budget, Registration: budget, ReviewRequests: budget, Handoff: budget, SetupStart: budget,
+		Repair: budget, Docs: budget, Skills: budget, LifecycleMetadata: budget,
+		Plugins: budget, AccessReads: budget, AccessRoleMutations: budget, Diagnostics: budget,
+		SensitiveDiagnostics: budget, SensitiveSessionRecall: budget, RiskMutations: budget, RiskFindings: budget,
+		TeamMemory:      budget,
+		DrilldownVolume: DrilldownVolumeBudget{Rows: allowOperationLimiter{}, MetricQueries: allowOperationLimiter{}},
+	}
+	require.True(t, budgets.Valid())
+
+	budgets.RiskFindings.Connection = nil
+	require.False(t, budgets.Valid())
+	budgets.RiskFindings.Connection = allowOperationLimiter{}
+	budgets.RiskFindings.Organization = nil
+	require.False(t, budgets.Valid())
+	budgets.RiskFindings = budget
+
+	budgets.AccessReads.Connection = nil
+	require.False(t, budgets.Valid())
+	budgets.AccessReads.Connection = allowOperationLimiter{}
+	budgets.AccessReads.Organization = nil
+	require.False(t, budgets.Valid())
+	budgets.AccessReads = budget
+	budgets.Plugins.Connection = nil
+	require.False(t, budgets.Valid())
+	budgets.Plugins.Connection = allowOperationLimiter{}
+	budgets.Plugins.Organization = nil
+	require.False(t, budgets.Valid())
+	budgets.Plugins = budget
+	budgets.AccessRoleMutations.Connection = nil
+	require.False(t, budgets.Valid())
+	budgets.AccessRoleMutations.Connection = allowOperationLimiter{}
+	budgets.AccessRoleMutations.Organization = nil
+	require.False(t, budgets.Valid())
+}
 
 func TestOperationBudgetChargesConnectionBeforeOrganization(t *testing.T) {
 	t.Parallel()

@@ -13,7 +13,7 @@ import (
 
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
-// ReadingRow is one row destined for billing_meter_readings.
+// ReadingRow is one row destined for billing_meter_readings_by_time.
 type ReadingRow struct {
 	// ID is the deterministic reading UUID.
 	ID uuid.UUID `ch:"id"`
@@ -33,13 +33,19 @@ type ReadingRow struct {
 	// Unit is the workload measurement unit.
 	Unit string `ch:"unit"`
 
+	// MeasurementMethod identifies how the workload quantity was measured.
+	MeasurementMethod string `ch:"measurement_method"`
+
 	// Value is the signed workload value.
 	Value int64 `ch:"value"`
 
 	// OccurredAt is the UTC work-execution time.
 	OccurredAt time.Time `ch:"occurred_at"`
 
-	// InsertedAt is the UTC ingestion time shared by the received batch.
+	// ProducedAt is the UTC production time of the accepted reading.
+	ProducedAt time.Time `ch:"produced_at"`
+
+	// InsertedAt is the UTC ClickHouse ingestion time used for delivery diagnostics.
 	InsertedAt time.Time `ch:"inserted_at"`
 
 	// CorrectsReadingID identifies the original reading for a compensation.
@@ -49,7 +55,7 @@ type ReadingRow struct {
 	Attributes map[string]string `ch:"attributes"`
 }
 
-// Queries writes billing meter readings to ClickHouse.
+// Queries reads and writes billing meter data in ClickHouse.
 type Queries struct {
 	conn clickhouse.Conn
 }
@@ -60,20 +66,25 @@ func New(conn clickhouse.Conn) *Queries {
 }
 
 // InsertReadings synchronously inserts a nonempty batch in one statement.
+// Callers must preserve usage fields and the full sorting key across redelivery.
+// Readers must use FINAL with SETTINGS do_not_merge_across_partitions_select_final = 1
+// before aggregating, since replacement merges are asynchronous.
 func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 	if len(rows) == 0 {
 		return nil
 	}
 
-	builder := sq.Insert("billing_meter_readings").Columns(
+	builder := sq.Insert("billing_meter_readings_by_time").Columns(
 		"id",
 		"organization_id",
 		"project_id",
 		"meter_id",
 		"operation_id",
 		"unit",
+		"measurement_method",
 		"value",
 		"occurred_at",
+		"produced_at",
 		"inserted_at",
 		"corrects_reading_id",
 		"attributes",
@@ -90,8 +101,10 @@ func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 			row.MeterID,
 			row.OperationID,
 			row.Unit,
+			row.MeasurementMethod,
 			row.Value,
 			row.OccurredAt.Format("2006-01-02 15:04:05.999999999"),
+			row.ProducedAt.Format("2006-01-02 15:04:05.999999999"),
 			row.InsertedAt.Format("2006-01-02 15:04:05.999999999"),
 			correctsReadingID,
 			row.Attributes,
@@ -100,12 +113,12 @@ func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 
 	query, args, err := builder.ToSql()
 	if err != nil {
-		return fmt.Errorf("build billing_meter_readings insert query: %w", err)
+		return fmt.Errorf("build billing_meter_readings_by_time insert query: %w", err)
 	}
 
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"async_insert": 0}))
 	if err := q.conn.Exec(ctx, query, args...); err != nil {
-		return fmt.Errorf("insert billing_meter_readings: %w", err)
+		return fmt.Errorf("insert billing_meter_readings_by_time: %w", err)
 	}
 	return nil
 }

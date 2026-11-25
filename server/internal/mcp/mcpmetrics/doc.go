@@ -1,7 +1,7 @@
 // Package mcpmetrics owns every OpenTelemetry instrument the MCP runtime
 // publishes: the per-request census counter, the handshake counter, the
-// tool-call counter, the request-duration histogram, and the user-facing
-// OAuth flow counters.
+// tool-call counter, the skill-read counter, the request-duration histogram,
+// and the user-facing OAuth flow counters.
 //
 // It is a leaf package for the same reason as its sibling mcprequests: the
 // remote MCP proxy stack (server/internal/remotemcp) publishes the

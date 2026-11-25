@@ -57,8 +57,20 @@ const (
 	chatAnalysisSweepWorkflowID = chatAnalysisSweepScheduleID + "/scheduled"
 	// chatAnalysisSweepInterval is how often the estate is swept for work no
 	// signal ever arrived for and for reservations whose owner died.
-	chatAnalysisSweepInterval   = 15 * time.Minute
+	chatAnalysisSweepInterval = 15 * time.Minute
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	chatAnalysisSweepCatchupWindow = chatAnalysisSweepInterval - time.Second
+
 	chatAnalysisSweepRunTimeout = 60 * time.Minute
+	// chatAnalysisPublishPasses bounds how many passes, the first included,
+	// one reserved batch gets while its evaluations keep reporting model
+	// failures or throttling. It matches the attempts one evaluation may
+	// spend, so a batch is never re-run past the point its rows can change.
+	// chatAnalysisPublishBackoff is the pause before the second pass, doubling
+	// each time.
+	chatAnalysisPublishPasses  = analysis.MaxModelAttempts
+	chatAnalysisPublishBackoff = 5 * time.Second
 )
 
 // ChatAnalysisCoordinatorParams identifies the project this coordinator runs
@@ -190,12 +202,25 @@ func ChatAnalysisCoordinatorWorkflow(ctx workflow.Context, params ChatAnalysisCo
 			break
 		}
 
-		var published activities.PublishChatAnalysisBatchResult
-		if err := workflow.ExecuteActivity(publishCtx, a.PublishChatAnalysisBatch, activities.PublishChatAnalysisBatchParams{
-			ProjectID: params.ProjectID,
-			IDs:       ids,
-		}).Get(ctx, &published); err != nil {
-			return fmt.Errorf("publish chat analysis batch: %w", err)
+		// A model failure or a throttled call is a transient judge problem, so
+		// the pass is run again against the same reserved rows after a pause.
+		// The rows already published are skipped on the re-run. Doing this here
+		// rather than through the activity retry policy keeps a rate-limited
+		// judge from being reported as an activity failure.
+		for attempt := range chatAnalysisPublishPasses {
+			var published activities.PublishChatAnalysisBatchResult
+			if err := workflow.ExecuteActivity(publishCtx, a.PublishChatAnalysisBatch, activities.PublishChatAnalysisBatchParams{
+				ProjectID: params.ProjectID,
+				IDs:       ids,
+			}).Get(ctx, &published); err != nil {
+				return fmt.Errorf("publish chat analysis batch: %w", err)
+			}
+			if published.ModelFailures == 0 && published.Throttled == 0 || attempt == chatAnalysisPublishPasses-1 {
+				break
+			}
+			if err := workflow.Sleep(ctx, chatAnalysisPublishBackoff<<attempt); err != nil {
+				return fmt.Errorf("wait before retrying chat analysis model failures: %w", err)
+			}
 		}
 
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
@@ -301,7 +326,8 @@ func AddChatAnalysisSweepSchedule(ctx context.Context, temporalEnv *tenv.Environ
 	}
 
 	_, err := scheduleClient.Create(ctx, client.ScheduleOptions{
-		ID: chatAnalysisSweepScheduleID,
+		CatchupWindow: chatAnalysisSweepCatchupWindow,
+		ID:            chatAnalysisSweepScheduleID,
 		// A tick that overlaps the previous one would re-signal projects the
 		// running sweep is still working through, so a slow sweep skips rather
 		// than doubles.
@@ -315,6 +341,7 @@ func AddChatAnalysisSweepSchedule(ctx context.Context, temporalEnv *tenv.Environ
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, chatAnalysisSweepCatchupWindow)
 				return &client.ScheduleUpdate{Schedule: &input.Description.Schedule, TypedSearchAttributes: nil}, nil
 			},
 		}); err != nil {
@@ -340,6 +367,9 @@ var _ analysis.Signaler = (*TemporalChatAnalysisSignaler)(nil)
 // run is live. The workflow id is the project's, so a signal raised while a run
 // is in flight joins that run instead of starting a second one.
 func (s *TemporalChatAnalysisSignaler) Signal(ctx context.Context, projectID uuid.UUID) error {
+	if s == nil || s.TemporalEnv == nil {
+		return tenv.ErrNotConfigured
+	}
 	workflowID := chatAnalysisCoordinatorWorkflowID(projectID)
 
 	_, err := s.TemporalEnv.Client().SignalWithStartWorkflow(

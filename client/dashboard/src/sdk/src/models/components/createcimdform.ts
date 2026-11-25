@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.
+ * Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Speakeasy generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.
  */
 export type CreateCimdForm = {
   /**

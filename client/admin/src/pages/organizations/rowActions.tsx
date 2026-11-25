@@ -1,56 +1,42 @@
+import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
 import {
   useMutation,
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { useCallback } from "react";
 
 import {
   cancelOrganizationFetches,
   invalidateOrganizations,
   invalidateOrganizationActivity,
+  invalidateOrganizationDetails,
   invalidateOrganizationStats,
-  organizationQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
 import {
   bulkUpdateAccountType,
-  disableOrganization,
-  enableOrganization,
-  extendTrial,
-  rearmTrial,
   type AdminOrganization,
   type BulkUpdateAccountTypeRequest,
   type BulkUpdateAccountTypeResult,
-  type ExtendTrialRequest,
-  type RearmTrialRequest,
   type TrialState,
 } from "@/lib/gramAdminApi";
+import {
+  disableOrganization,
+  enableOrganization,
+  extendTrial,
+  changeTrialEndDate,
+  rearmTrial,
+  startTrial,
+} from "@/lib/gramAdminClient";
+import type { ExtendTrialRequestBody } from "@gram/admin-client/models/components/extendtrialrequestbody";
+import type { RearmTrialRequestBody } from "@gram/admin-client/models/components/rearmtrialrequestbody";
+import type { StartTrialRequestBody } from "@gram/admin-client/models/components/starttrialrequestbody";
 
 // The row's own behavior lives here, so the slices that add a row menu, a
 // disable action and a trial extension all land in one file. The peek control
 // is a component, and a file that mixes a hook with components loses fast
 // refresh, so it sits in `PeekTrigger.tsx` instead. The controls these hooks
 // drive sit in `OrganizationActions.tsx` for the same reason.
-export function useOpenOrganization(): (org: AdminOrganization) => void {
-  const navigate = useNavigate();
-  const qc = useQueryClient();
-
-  return useCallback(
-    (org: AdminOrganization) => {
-      const idOrSlug = org.slug || org.id;
-      // The row already holds the whole record, so the detail page paints from
-      // it on the first frame instead of showing a spinner. The detail query
-      // still refetches behind that: the snapshot is stale the moment it
-      // lands, and an admin reading a stale record is worse than one request.
-      qc.setQueryData(organizationQuery(idOrSlug).queryKey, org);
-      void navigate({ to: "/organizations/$idOrSlug", params: { idOrSlug } });
-    },
-    [navigate, qc],
-  );
-}
-
 // The two states the server will extend. Everything else is refused there:
 // converted, demoted and expired are all rejected with a conflict, and an
 // organization with no trial has no end date to add days to. Offering the
@@ -95,6 +81,24 @@ export function canRearmTrial(org: AdminOrganization): boolean {
   );
 }
 
+// The two states the server will start. A running trial is extend's job, a
+// demoted one is re-arm's, and a converted one has become a contract. An
+// organization that never trialled, or whose trial has expired without the
+// sweeper demoting it yet, is the grant this action exists for.
+const STARTABLE_TRIAL_STATES: ReadonlySet<TrialState> = new Set([
+  "none",
+  "expired",
+]);
+
+// Not for a disabled organization, for the reason canExtendTrial gives.
+export function canStartTrial(org: AdminOrganization): boolean {
+  return (
+    !org.disabled_at &&
+    org.trial_state !== undefined &&
+    STARTABLE_TRIAL_STATES.has(org.trial_state)
+  );
+}
+
 type OrganizationWrite<TVariables> = UseMutationResult<
   AdminOrganization,
   Error,
@@ -106,19 +110,21 @@ function finishOrganizationWrite(
   org: AdminOrganization,
 ): void {
   writeOrganizationToCache(qc, org);
+  invalidateOrganizationDetails(qc, org);
   invalidateOrganizationActivity(qc, org.id);
 }
 
-// All four writes answer with the organization in its new state and put it in
-// the cache the same way, so the list and the peek repaint from the response.
-// Their audited activity is invalidated from the same success path so an open
-// Activity view includes the new event.
+// All five writes answer with the organization in its new state and put it in
+// the cache the same way, so the list and the peek repaint immediately. The
+// detail is then invalidated for a canonical refetch, and audited activity is
+// invalidated from the same success path so an open Activity view includes the
+// new event.
 //
-// All four drop the reads already in flight first. React Query awaits
+// All five drop the reads already in flight first. React Query awaits
 // `onMutate` before it sends the request, so the stale fetch is cancelled
 // before the write leaves rather than racing it home.
 //
-// A write that fails replaces none of what it cancelled, so all four ask for
+// A write that fails replaces none of what it cancelled, so all five ask for
 // the totals again on that path. The row needs nothing: it was never repainted.
 export function useDisableOrganization(): OrganizationWrite<string> {
   const qc = useQueryClient();
@@ -156,12 +162,25 @@ export function useBulkUpdateAccountType(): UseMutationResult<
   });
 }
 
-export function useExtendTrial(): OrganizationWrite<ExtendTrialRequest> {
+export function useExtendTrial(): OrganizationWrite<ExtendTrialRequestBody> {
   const qc = useQueryClient();
   return useMutation({
     // Wrapped, so the body is the only argument the client is handed: the
     // mutation passes its own context as a second one.
-    mutationFn: (body: ExtendTrialRequest) => extendTrial(body),
+    mutationFn: (body: ExtendTrialRequestBody) => extendTrial(body),
+    onMutate: () => cancelOrganizationFetches(qc),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
+    onError: () => invalidateOrganizationStats(qc),
+  });
+}
+
+export function useChangeTrialEndDate(): OrganizationWrite<ChangeTrialEndDateRequestBody> {
+  const qc = useQueryClient();
+  return useMutation({
+    // Wrapped, so the body is the only argument the client is handed: the
+    // mutation passes its own context as a second one.
+    mutationFn: (body: ChangeTrialEndDateRequestBody) =>
+      changeTrialEndDate(body),
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),
@@ -172,10 +191,20 @@ export function useExtendTrial(): OrganizationWrite<ExtendTrialRequest> {
 // and the new end date, so the row repaints from it. A refetch would move the
 // row instead: the re-armed record no longer matches a filter on the demoted
 // state the operator was very likely looking at.
-export function useRearmTrial(): OrganizationWrite<RearmTrialRequest> {
+export function useRearmTrial(): OrganizationWrite<RearmTrialRequestBody> {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: RearmTrialRequest) => rearmTrial(body),
+    mutationFn: (body: RearmTrialRequestBody) => rearmTrial(body),
+    onMutate: () => cancelOrganizationFetches(qc),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
+    onError: () => invalidateOrganizationStats(qc),
+  });
+}
+
+export function useStartTrial(): OrganizationWrite<StartTrialRequestBody> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: StartTrialRequestBody) => startTrial(body),
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),

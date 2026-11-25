@@ -2,10 +2,13 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -51,57 +54,6 @@ func TestCanonicalDirectRemoteURLRejectsUnsafeShapes(t *testing.T) {
 	}
 }
 
-func TestDirectRemoteRequestAcceptsJSONAndSSE(t *testing.T) {
-	t.Parallel()
-
-	client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
-		require.Equal(t, "application/json, text/event-stream", request.Header.Get("Accept"))
-		return directRemoteTestResponse(request, http.StatusOK, `{"jsonrpc":"2.0","id":1,"result":{}}`)
-	})
-
-	_, _, _, status, err := directRemoteRequest(t.Context(), client, "https://remote.example.test/mcp", "initialize", map[string]any{}, "", &directRemoteResponseBudget{remaining: 1024, requestsRemaining: 1})
-
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, status)
-}
-
-func TestDirectRemoteNotificationAcceptsJSONAndSSE(t *testing.T) {
-	t.Parallel()
-
-	client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
-		require.Equal(t, "application/json, text/event-stream", request.Header.Get("Accept"))
-		require.Equal(t, "session-id", request.Header.Get("Mcp-Session-Id"))
-		return directRemoteTestResponse(request, http.StatusAccepted, "")
-	})
-
-	_, status, err := directRemoteNotification(t.Context(), client, "https://remote.example.test/mcp", "notifications/initialized", map[string]any{}, "session-id", &directRemoteResponseBudget{remaining: 1024, requestsRemaining: 1})
-
-	require.NoError(t, err)
-	require.Equal(t, http.StatusAccepted, status)
-}
-
-func TestDirectRemoteRequestRejectsOversizedSessionID(t *testing.T) {
-	t.Parallel()
-
-	client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
-		response := directRemoteTestResponse(request, http.StatusOK, `{"jsonrpc":"2.0","id":1,"result":{}}`)
-		response.Header.Set("Mcp-Session-Id", strings.Repeat("x", directRemoteSessionIDMaxBytes+1))
-		return response
-	})
-
-	_, _, _, _, err := directRemoteRequest(t.Context(), client, "https://remote.example.test/mcp", "initialize", map[string]any{}, "", &directRemoteResponseBudget{remaining: 1024, requestsRemaining: 1})
-
-	require.ErrorIs(t, err, ErrDirectRemoteRejected)
-}
-
-func TestDirectRemoteRequestRejectsOversizedOutboundSessionID(t *testing.T) {
-	t.Parallel()
-
-	_, _, _, _, err := directRemoteRequest(context.Background(), http.DefaultClient, "https://remote.example.test/mcp", "tools/list", map[string]any{}, strings.Repeat("x", directRemoteSessionIDMaxBytes+1), &directRemoteResponseBudget{remaining: 1024, requestsRemaining: 1})
-
-	require.ErrorIs(t, err, ErrDirectRemoteRejected)
-}
-
 func TestDirectRemoteOAuthDiscoveryScansForDCR(t *testing.T) {
 	t.Parallel()
 
@@ -119,9 +71,11 @@ func TestDirectRemoteOAuthDiscoveryScansForDCR(t *testing.T) {
 			return directRemoteTestResponse(request, http.StatusNotFound, `{}`)
 		}
 	})
-	result := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), client, "https://remote.example.test/mcp", &directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8})
+	result, attachable, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
 
+	require.NoError(t, err)
 	require.Equal(t, "available_dcr", result)
+	require.True(t, attachable)
 	require.Equal(t, []string{
 		"https://remote.example.test/.well-known/oauth-protected-resource/mcp",
 		"https://first.example.test/.well-known/oauth-authorization-server",
@@ -146,7 +100,102 @@ func TestDirectRemoteOAuthDiscoveryUsesOIDCCompatibleCandidate(t *testing.T) {
 		}
 	})
 
-	require.Equal(t, "available_dcr", directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), client, "https://remote.example.test/mcp", &directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}))
+	result, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Equal(t, "available_dcr", result)
+}
+
+// A provider with no registration_endpoint that advertises Client ID Metadata
+// Document support for public clients is set up automatically, not by hand.
+func TestDirectRemoteOAuthDiscoveryReportsCIMDWithoutDCR(t *testing.T) {
+	t.Parallel()
+
+	client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
+		switch request.URL.String() {
+		case "https://remote.example.test/.well-known/oauth-protected-resource/mcp":
+			return directRemoteTestResponse(request, http.StatusOK, `{"authorization_servers":["https://auth.example.test"]}`)
+		case "https://auth.example.test/.well-known/oauth-authorization-server":
+			return directRemoteTestResponse(request, http.StatusOK, `{"issuer":"https://auth.example.test","authorization_endpoint":"https://auth.example.test/authorize","token_endpoint":"https://auth.example.test/token","client_id_metadata_document_supported":true,"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256"]}`)
+		default:
+			return directRemoteTestResponse(request, http.StatusNotFound, `{}`)
+		}
+	})
+
+	result, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Equal(t, "available_cimd", result)
+}
+
+// Attachment skips a server whose dynamic registration endpoint it cannot use
+// and connects a later one, so discovery keeps checking past that server and
+// reports it only when no later server can be attached.
+func TestDirectRemoteOAuthDiscoveryPrefersAnAttachableLaterServer(t *testing.T) {
+	t.Parallel()
+
+	dashboardOnly := `{"registration_endpoint":"https://first.example.test/register","token_endpoint_auth_methods_supported":["none"]}`
+	for _, test := range []struct {
+		name       string
+		second     string
+		want       string
+		attachable bool
+	}{
+		{name: "later server attachable", second: `{"client_id_metadata_document_supported":true}`, want: "available_cimd", attachable: true},
+		{name: "no later server attachable", second: `{}`, want: "available_dcr", attachable: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
+				switch request.URL.String() {
+				case "https://remote.example.test/.well-known/oauth-protected-resource/mcp":
+					return directRemoteTestResponse(request, http.StatusOK, `{"authorization_servers":["https://first.example.test","https://second.example.test"]}`)
+				case "https://first.example.test/.well-known/oauth-authorization-server":
+					return directRemoteTestResponse(request, http.StatusOK, dashboardOnly)
+				case "https://second.example.test/.well-known/oauth-authorization-server":
+					return directRemoteTestResponse(request, http.StatusOK, test.second)
+				default:
+					return directRemoteTestResponse(request, http.StatusNotFound, `{}`)
+				}
+			})
+
+			result, attachable, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
+			require.NoError(t, err)
+			require.Equal(t, test.want, result)
+			require.Equal(t, test.attachable, attachable)
+		})
+	}
+}
+
+func TestDirectRemoteAutomaticRegistration(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		metadata   string
+		want       string
+		attachable bool
+	}{
+		{name: "dynamic registration", metadata: `{"registration_endpoint":"https://auth.example.test/register"}`, want: "available_dcr", attachable: true},
+		{name: "dynamic registration preferred over CIMD", metadata: `{"registration_endpoint":"https://auth.example.test/register","client_id_metadata_document_supported":true}`, want: "available_dcr", attachable: true},
+		{name: "CIMD without enumerated methods", metadata: `{"client_id_metadata_document_supported":true}`, want: "available_cimd", attachable: true},
+		{name: "plain http registration endpoint", metadata: `{"registration_endpoint":"http://auth.example.test/register"}`, want: ""},
+		{name: "relative registration endpoint", metadata: `{"registration_endpoint":"/register"}`, want: ""},
+		{name: "dynamic registration without client_secret_basic prefers CIMD", metadata: `{"registration_endpoint":"https://auth.example.test/register","client_id_metadata_document_supported":true,"token_endpoint_auth_methods_supported":["none"]}`, want: "available_cimd", attachable: true},
+		{name: "dynamic registration without client_secret_basic or CIMD", metadata: `{"registration_endpoint":"https://auth.example.test/register","token_endpoint_auth_methods_supported":["none"]}`, want: "available_dcr"},
+		{name: "unusable registration endpoint falls back to CIMD", metadata: `{"registration_endpoint":"http://auth.example.test/register","client_id_metadata_document_supported":true}`, want: "available_cimd", attachable: true},
+		{name: "CIMD refusing public clients", metadata: `{"client_id_metadata_document_supported":true,"token_endpoint_auth_methods_supported":["client_secret_basic"]}`, want: ""},
+		{name: "CIMD flag not a boolean", metadata: `{"client_id_metadata_document_supported":"true"}`, want: ""},
+		{name: "neither", metadata: `{"token_endpoint_auth_methods_supported":["none"]}`, want: ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var metadata map[string]any
+			require.NoError(t, json.Unmarshal([]byte(test.metadata), &metadata))
+			discovery, attachable := directRemoteAutomaticRegistration(metadata)
+			require.Equal(t, test.want, discovery)
+			require.Equal(t, test.attachable, attachable)
+		})
+	}
 }
 
 func TestDirectRemoteOAuthDiscoveryReportsAvailableWithoutDCR(t *testing.T) {
@@ -163,7 +212,9 @@ func TestDirectRemoteOAuthDiscoveryReportsAvailableWithoutDCR(t *testing.T) {
 		}
 	})
 
-	require.Equal(t, "available", directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), client, "https://remote.example.test/mcp", &directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}))
+	result, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Equal(t, "available", result)
 }
 
 func TestDirectRemoteOAuthDiscoveryReportsIncompleteWithoutAuthorizationMetadata(t *testing.T) {
@@ -173,7 +224,82 @@ func TestDirectRemoteOAuthDiscoveryReportsIncompleteWithoutAuthorizationMetadata
 		return directRemoteTestResponse(request, http.StatusNotFound, `{}`)
 	})
 
-	require.Equal(t, "incomplete", directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), client, "https://remote.example.test/mcp", &directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}))
+	result, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Equal(t, "incomplete", result)
+}
+
+func TestDirectRemoteOAuthDiscoveryPreservesAvailableResultWhenLaterProbeExhaustsBudget(t *testing.T) {
+	t.Parallel()
+
+	requests := 0
+	client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
+		requests++
+		switch requests {
+		case 1:
+			return directRemoteTestResponse(request, http.StatusOK, `{"authorization_servers":["https://issuer.example.test"]}`)
+		case 2:
+			return directRemoteTestResponse(request, http.StatusOK, `{}`)
+		default:
+			t.Fatalf("request must not run after the budget is exhausted: %s", request.URL)
+			return nil
+		}
+	})
+	result, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 2}), "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Equal(t, "available", result)
+	require.Equal(t, 2, requests)
+}
+
+func TestDirectRemoteOAuthDiscoveryPropagatesRequestBudgetExhaustion(t *testing.T) {
+	t.Parallel()
+
+	client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
+		t.Fatalf("request must not run after the budget is exhausted: %s", request.URL)
+		return nil
+	})
+	result, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 0}), "https://remote.example.test/mcp")
+	require.Empty(t, result)
+	require.ErrorIs(t, err, ErrDirectRemoteUnavailable)
+	require.Equal(t, SetupCategoryTemporarilyUnavailable, setupCategoryFromError(err))
+}
+
+func TestDirectRemoteOAuthDiscoveryPropagatesTransientMetadataStatus(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout} {
+		client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
+			return directRemoteTestResponse(request, status, `{}`)
+		})
+		result, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
+		require.Empty(t, result)
+		require.ErrorIs(t, err, ErrDirectRemoteUnavailable)
+		require.Equal(t, SetupCategoryTemporarilyUnavailable, setupCategoryFromError(err))
+	}
+}
+
+func TestDirectRemoteOAuthDiscoveryKeepsNonTransientMissingMetadataIncomplete(t *testing.T) {
+	t.Parallel()
+
+	client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
+		return directRemoteTestResponse(request, http.StatusNotFound, `{}`)
+	})
+	result, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Equal(t, "incomplete", result)
+}
+
+func TestDirectRemoteOAuthDiscoveryPropagatesByteBudgetExhaustion(t *testing.T) {
+	t.Parallel()
+
+	client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
+		t.Fatalf("request must not run after the byte budget is exhausted: %s", request.URL)
+		return nil
+	})
+	result, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 0, requestsRemaining: 1}), "https://remote.example.test/mcp")
+	require.Empty(t, result)
+	require.ErrorIs(t, err, ErrDirectRemoteUnavailable)
+	require.Equal(t, SetupCategoryTemporarilyUnavailable, setupCategoryFromError(err))
 }
 
 func directRemoteTestPolicy(t *testing.T) *guardian.Policy {
@@ -215,5 +341,36 @@ func directRemoteTestResponse(request *http.Request, status int, body string) *h
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Request:    request,
+	}
+}
+
+func clientWithDirectRemoteBudget(t *testing.T, client *http.Client, budget directRemoteResponseBudget) *http.Client {
+	t.Helper()
+	transport := &directRemoteRoundTripper{base: client.Transport, policy: directRemoteTestPolicy(t), ctx: t.Context(), budget: budget}
+	return &http.Client{Transport: transport, CheckRedirect: transport.checkRedirect}
+}
+
+func TestDirectRemoteValidationTimeout(t *testing.T) {
+	t.Parallel()
+	for _, failAt := range []int{1, 2} {
+		t.Run(fmt.Sprintf("lookup_%d", failAt), func(t *testing.T) {
+			t.Parallel()
+			var lookups atomic.Int32
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithResolver(dns.NewMockResolver(dns.MockResolverConfig{
+				LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) {
+					if lookups.Add(1) >= int32(failAt) {
+						return nil, context.DeadlineExceeded
+					}
+					return []net.IP{net.ParseIP("8.8.8.8")}, nil
+				},
+			})))
+			require.NoError(t, err)
+			client := directRemoteTestClient(t, func(r *http.Request) *http.Response {
+				t.Error("a validation timeout must prevent egress")
+				return directRemoteTestResponse(r, http.StatusOK, `{}`)
+			})
+			_, err = NewGuardianDirectRemoteInspector(policy).inspect(t.Context(), "https://remote.example.test/mcp", client)
+			require.Equal(t, SetupCategoryTimeout, setupCategoryFromError(err))
+		})
 	}
 }

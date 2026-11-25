@@ -5,12 +5,15 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 )
 
@@ -18,19 +21,21 @@ import (
 // agent.GetAgentPluginSet into the tool-agnostic marketplaces + plugins view
 // the agent endpoint returns.
 //
-// For every marketplace the query returns it emits the marketplace and its
-// always-required observability plugin, then layers on the user's assigned
-// plugins (the non-null plugin rows). The query already scopes which projects
-// appear — the org's default project always, non-default projects only where the
-// caller has a matching assignment — so this builder emits a marketplace for
-// every row it receives. Rows arrive grouped by project (`ORDER BY pr.id,
-// p.slug`); the default project can still yield one row with null plugin columns
-// when the caller has no assignment there.
+// For every marketplace the query returns it emits the marketplace and, when
+// the project has not disabled it, its observability plugin, then layers on the
+// user's assigned plugins (the non-null plugin rows). The query already scopes
+// which projects appear — the org's default project always, non-default
+// projects only where the caller has a matching assignment — so this builder
+// emits a marketplace for every row it receives. Rows arrive grouped by
+// project (`ORDER BY pr.id, p.slug`); the default project can still yield one
+// row with null plugin columns when the caller has no assignment there.
 //
 // Each project's marketplace name is resolved the same way the publish path
-// resolves it: the per-project override (project_marketplace_settings) when set,
-// else the shared `naming` default — the bare org-derived name for the org's
-// default project, project-scoped (`<org>-<project>-speakeasy`) for the rest.
+// resolves it, through naming.ResolveMarketplaceName: the per-project override
+// (project_marketplace_settings) when set, else the name the project last
+// published under (recorded in its published hooks config snapshot), else the
+// computed name: the bare org-derived name for the org's default project,
+// project-scoped (`<org>-<project>-speakeasy`) for the rest.
 // Matching the publish path exactly matters because tools resolve marketplaces
 // by that name — any mismatch silently fails to enable plugins. The
 // observability slug stays org-derived; plugin slugs are scoped within a
@@ -45,86 +50,215 @@ import (
 // that first row is the org's default project (oldest, lowest id) rather than an
 // arbitrary alphabetically-first one.
 //
+// openToken returns the marketplace token of a row's project; the caller owns
+// how stored tokens open (package marketplacetokens), so this builder stays
+// free of keys. It is called once for every marketplace the view serves, and
+// its error fails the whole view: a device keeps its cached policy when a poll
+// fails, but removes a marketplace a successful poll leaves out.
+//
 // marketplaceURL constructs the public marketplace git URL from a token; the
 // caller owns the URL shape so this builder stays free of server-side config.
-func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func(token string) string) *gen.GetPluginsResult {
+//
+// servers holds each assigned plugin's MCP servers by plugin id. A plugin
+// missing from it gets an empty list. A nil map means the lists could not be
+// read, so every plugin's list is left off. The observability plugin carries
+// hooks rather than servers, so it never gets a list.
+func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, openToken MarketplaceTokenOpener, marketplaceURL func(token string) string, servers map[uuid.UUID][]*gen.AgentPluginServer) (*gen.GetPluginsResult, error) {
 	var marketplaces []*gen.AgentMarketplace
 	var plugins []*gen.AgentPlugin
-	// marketplace name -> the project that owns it (the first/lowest-pr.id row to
-	// claim that name). Used to drop assigned plugins from projects whose name
-	// collided and collapsed: their plugins live in a different repo than the one
-	// served under this name, so emitting them would reference a marketplace that
-	// doesn't contain them.
-	marketplaceOwner := make(map[string]uuid.UUID)
 	etag := sha256.New()
 
-	for _, row := range rows {
-		if !row.MarketplaceToken.Valid || row.MarketplaceToken.String == "" {
-			continue
-		}
-
-		// The per-project override, when set, is the name the project actually
-		// published under (UpdateMarketplaceSettings republishes on change), so
-		// prefer it over the org-derived default.
-		name := naming.MarketplaceName(row.OrganizationName, row.ProjectSlug, row.IsDefaultProject)
-		if row.MarketplaceNameOverride.Valid && row.MarketplaceNameOverride.String != "" {
-			name = row.MarketplaceNameOverride.String
-		}
-		owner, seen := marketplaceOwner[name]
-		if !seen {
-			owner = row.ProjectID
-			marketplaceOwner[name] = owner
+	err := walkAgentPluginRows(rows, func(row repo.GetAgentPluginSetRow, name string, firstForName, delivered bool) error {
+		if firstForName {
+			token, err := openToken(row)
+			if err != nil {
+				return fmt.Errorf("open marketplace token of project %s: %w", row.ProjectID, err)
+			}
 			marketplaces = append(marketplaces, &gen.AgentMarketplace{
 				Name: name,
-				URL:  marketplaceURL(row.MarketplaceToken.String),
+				URL:  marketplaceURL(token),
 			})
+			// The token itself, not its hash, so a connection the backfill
+			// moves from the plaintext column keeps its ETag.
 			writeAgentPluginsETag(
 				etag,
 				"marketplace\x00%s\x00%s\x00%s\x00%d\n",
 				name,
 				row.OrganizationName,
-				row.MarketplaceToken.String,
+				token,
 				row.MarketplaceUpdatedAt.Time.UnixNano(),
 			)
-			// Observability is required on every published marketplace,
-			// independent of assignments. The slug must name the plugin as it
-			// exists in the published repo: the hooks rollout gate can pin the
+			// Observability ships with every published marketplace unless the
+			// project disabled it. The slug must name the plugin as it exists
+			// in the published repo: the hooks rollout gate can pin the
 			// subtree under a pre-rename org name, recorded in the published
 			// hooks config snapshot.
-			hooksOrgName := conv.Default(naming.PublishedHooksOrgName(row.PublishedHooksConfig), row.OrganizationName)
-			observabilitySlug := naming.ObservabilitySlug(hooksOrgName)
-			plugins = append(plugins, &gen.AgentPlugin{
-				Slug:            observabilitySlug,
-				MarketplaceName: name,
-			})
-			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, observabilitySlug, int64(0))
+			if row.ObservabilityEnabled {
+				hooksOrgName := conv.Default(naming.PublishedHooksOrgName(row.PublishedHooksConfig), row.OrganizationName)
+				observabilitySlug := naming.ObservabilitySlug(hooksOrgName)
+				// Observability carries the hooks that report usage, so users
+				// can't turn it off.
+				plugins = append(plugins, &gen.AgentPlugin{
+					Slug:            observabilitySlug,
+					MarketplaceName: name,
+					InstallMode:     string(installmode.Required),
+					Name:            nil,
+					Description:     nil,
+					Servers:         nil,
+				})
+				writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, observabilitySlug, int64(0), installmode.Required)
+			}
 		}
 
-		// Assigned plugin for this project, if the LEFT JOIN matched one — but
-		// only when this row's project owns the marketplace under this name. A
-		// collapsed (losing) project's marketplace isn't served, so its plugins
-		// would reference a repo that doesn't contain them.
-		if row.ProjectID == owner && row.PluginID.Valid && row.PluginSlug.Valid {
+		if delivered {
+			mode := installmode.FromStored(row.PluginInstallMode)
+			pluginServers := servers[row.PluginID.UUID]
+			if servers != nil && pluginServers == nil {
+				pluginServers = []*gen.AgentPluginServer{}
+			}
 			plugins = append(plugins, &gen.AgentPlugin{
 				Slug:            row.PluginSlug.String,
 				MarketplaceName: name,
+				InstallMode:     string(mode),
+				Name:            conv.FromPGText[string](row.PluginName),
+				Description:     conv.FromPGText[string](row.PluginDescription),
+				Servers:         pluginServers,
 			})
-			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, row.PluginSlug.String, row.PluginUpdatedAt.Time.UnixNano())
+			// Name and description changes bump plugins.updated_at, so the
+			// timestamp already covers them. Server membership and the
+			// caller's dashboard access do not, so each server is hashed.
+			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, row.PluginSlug.String, row.PluginUpdatedAt.Time.UnixNano(), mode)
+			for _, server := range pluginServers {
+				writeAgentPluginsETag(etag, "server\x00%s\x00%s\x00%s\n", conv.PtrValOr(server.ID, ""), server.Name, conv.PtrValOr(server.DashboardURL, ""))
+			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Omitted lists must not share an ETag with empty ones, or an agent that
+	// polled while the lists were unreadable would keep that result after
+	// they recover.
+	if servers == nil {
+		writeAgentPluginsETag(etag, "servers\x00unavailable\n")
 	}
 
 	return &gen.GetPluginsResult{
-		Etag:          hex.EncodeToString(etag.Sum(nil)),
-		Marketplaces:  marketplaces,
-		Plugins:       plugins,
-		Configuration: nil,
+		Etag:                   hex.EncodeToString(etag.Sum(nil)),
+		Marketplaces:           marketplaces,
+		Plugins:                plugins,
+		Configuration:          nil,
+		OrganizationGatewayURL: nil,
+		Principal:              nil,
+		McpServers:             []*gen.AgentMCPServer{},
+	}, nil
+}
+
+// MarketplaceTokenOpener returns the marketplace token of a row's project.
+type MarketplaceTokenOpener func(row repo.GetAgentPluginSetRow) (string, error)
+
+// DeliveredAgentPluginRows returns the rows whose assigned plugin
+// BuildAgentPluginsView lists, so anything derived from a poll's plugins, such
+// as its MCP servers, covers exactly the plugins the device receives.
+func DeliveredAgentPluginRows(rows []repo.GetAgentPluginSetRow) []repo.GetAgentPluginSetRow {
+	var delivered []repo.GetAgentPluginSetRow
+	_ = walkAgentPluginRows(rows, func(row repo.GetAgentPluginSetRow, _ string, _, ok bool) error {
+		if ok {
+			delivered = append(delivered, row)
+		}
+		return nil
+	})
+	return delivered
+}
+
+// ObservabilityPluginRow returns the row whose observability plugin
+// BuildAgentPluginsView delivers first: the first row to claim its marketplace
+// name, among published rows, that has not disabled observability. Nil when the
+// view would deliver none. Callers that hand out the same plugin through
+// another channel use this so they never serve one devices don't receive.
+func ObservabilityPluginRow(rows []repo.GetAgentPluginSetRow) *repo.GetAgentPluginSetRow {
+	var found *repo.GetAgentPluginSetRow
+	_ = walkAgentPluginRows(rows, func(row repo.GetAgentPluginSetRow, _ string, firstForName, _ bool) error {
+		if found == nil && firstForName && row.ObservabilityEnabled {
+			found = &row
+		}
+		return nil
+	})
+	return found
+}
+
+// walkAgentPluginRows visits each row with a published marketplace, stopping
+// at the first error visit returns. Same-named rows collapse to the first,
+// since a collapsed project's marketplace isn't served.
+func walkAgentPluginRows(rows []repo.GetAgentPluginSetRow, visit func(row repo.GetAgentPluginSetRow, name string, firstForName, delivered bool) error) error {
+	// marketplace name -> the project that owns it (the first/lowest-pr.id
+	// row to claim that name).
+	marketplaceOwner := make(map[string]uuid.UUID)
+	for _, row := range rows {
+		if !hasMarketplaceToken(row) {
+			continue
+		}
+
+		// Resolve through the same function the publish path uses: the
+		// per-project override (UpdateMarketplaceSettings republishes on
+		// change), else the name the project last published under, else the
+		// computed name. The published name is frozen, so an org rename, a slug
+		// change, or a new default project never moves it here either.
+		name := naming.ResolveMarketplaceName(
+			conv.FromPGTextOrEmpty[string](row.MarketplaceNameOverride),
+			row.PublishedHooksConfig,
+			row.OrganizationName,
+			row.ProjectSlug,
+			row.IsDefaultProject,
+		)
+		owner, seen := marketplaceOwner[name]
+		if !seen {
+			owner = row.ProjectID
+			marketplaceOwner[name] = owner
+		}
+		if err := visit(row, name, !seen, row.ProjectID == owner && row.PluginID.Valid && row.PluginSlug.Valid); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// hasMarketplaceToken reports whether the row's project holds a marketplace
+// token: its hash, or one the marketplace token backfill has not moved out of
+// the plaintext column yet.
+func hasMarketplaceToken(row repo.GetAgentPluginSetRow) bool {
+	return marketplacetokens.Present(row.MarketplaceTokenHash, row.MarketplaceToken)
+}
+
+// AttachAgentMCPServers sets an agent-key poll's MCP servers and folds each
+// rendered entry into the ETag, so adding, removing, or re-addressing one
+// reaches devices on their next poll. Human polls never call this.
+func AttachAgentMCPServers(result *gen.GetPluginsResult, servers []*gen.AgentMCPServer) {
+	result.McpServers = servers
+	hash := sha256.New()
+	writeAgentPluginsETag(hash, "plugins=%s\n", result.Etag)
+	for _, server := range servers {
+		writeAgentPluginsETag(hash, "mcp\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\n",
+			server.Name, server.URL, strings.Join(server.Tools, ","),
+			conv.PtrValOr(server.TokenEndpoint, ""), conv.PtrValOr(server.Audience, ""), conv.PtrValOr(server.Resource, ""))
+	}
+	result.Etag = hex.EncodeToString(hash.Sum(nil))
+}
+
+// AttachAgentPrincipal sets an agent-key poll's principal and folds it into the
+// ETag so a rename invalidates cached polls. Human polls never call this.
+func AttachAgentPrincipal(result *gen.GetPluginsResult, principal *gen.AgentPollingPrincipal) {
+	result.Principal = principal
+	hash := sha256.New()
+	writeAgentPluginsETag(hash, "plugins=%s\nprincipal=%s\x00%s\n", result.Etag, principal.Urn, principal.DisplayName)
+	result.Etag = hex.EncodeToString(hash.Sum(nil))
 }
 
 // writeAgentPluginsETag hashes only the contributions emitted into the result:
 // the first marketplace for each rendered marketplace name, its observability
-// plugin, and each rendered assigned plugin. Deployment config (e.g. the server
-// URL) is deliberately excluded so it does not bust the cache.
+// plugin when enabled, and each rendered assigned plugin. Deployment config
+// (e.g. the server URL) is deliberately excluded so it does not bust the cache.
 func writeAgentPluginsETag(etag io.Writer, format string, args ...any) {
 	// sha256.Hash never errors from Write; assign to _ to satisfy errcheck.
 	_, _ = fmt.Fprintf(etag, format, args...)

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -41,7 +42,7 @@ func TestApplyIssuerGate_AssistantFallbackStampsAssistantProvenance(t *testing.T
 		AudienceURN:         urn.NewUserSessionIssuer(uuid.New()).String(),
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                "provenance-gate",
 		UserSessionIssuerID: uuid.New(),
 	}
@@ -81,7 +82,7 @@ func TestApplyIssuerGate_RejectedAssistantTokenStampsNothing(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   otherProject.ID,
 		UserID:      authCtx.UserID,
@@ -95,7 +96,7 @@ func TestApplyIssuerGate_RejectedAssistantTokenStampsNothing(t *testing.T) {
 		AudienceURN:         urn.NewUserSessionIssuer(uuid.New()).String(),
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                "provenance-gate-reject",
 		UserSessionIssuerID: uuid.New(),
 	}
@@ -175,6 +176,47 @@ func TestTryPublicIdentityAuth_StampsCredentialProvenance(t *testing.T) {
 		require.True(t, stamped)
 		require.Equal(t, mcpidentity.KindChatSession, identity.Kind())
 		require.Empty(t, identity.UserID())
+		require.Empty(t, identity.ChatSessionMinterUserID())
+	})
+
+	t.Run("dashboard-minted chat-session token records its minter", func(t *testing.T) {
+		t.Parallel()
+		sessionID := "dashboard-session"
+		token, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+			OrgID:            authCtx.ActiveOrganizationID,
+			ProjectID:        authCtx.ProjectID.String(),
+			OrganizationSlug: authCtx.OrganizationSlug,
+			ProjectSlug:      *authCtx.ProjectSlug,
+			UserID:           authCtx.UserID,
+			SessionID:        &sessionID,
+		}, "http://localhost", 3600)
+		require.NoError(t, err)
+
+		identity, stamped := authorize(t, token)
+		require.True(t, stamped)
+		require.Equal(t, mcpidentity.KindChatSession, identity.Kind())
+		require.Empty(t, identity.UserID(), "a chat session is never a user session")
+		require.Equal(t, authCtx.UserID, identity.ChatSessionMinterUserID())
+	})
+
+	t.Run("key-minted chat-session token records no minter", func(t *testing.T) {
+		t.Parallel()
+		sessionID := "not-a-dashboard-session"
+		token, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+			OrgID:            authCtx.ActiveOrganizationID,
+			ProjectID:        authCtx.ProjectID.String(),
+			OrganizationSlug: authCtx.OrganizationSlug,
+			ProjectSlug:      *authCtx.ProjectSlug,
+			APIKeyID:         uuid.NewString(),
+			UserID:           authCtx.UserID,
+			SessionID:        &sessionID,
+		}, "http://localhost", 3600)
+		require.NoError(t, err)
+
+		identity, stamped := authorize(t, token)
+		require.True(t, stamped)
+		require.Equal(t, mcpidentity.KindChatSession, identity.Kind())
+		require.Empty(t, identity.ChatSessionMinterUserID())
 	})
 
 	t.Run("rejected token stays unattributed", func(t *testing.T) {

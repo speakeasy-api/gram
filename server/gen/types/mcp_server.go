@@ -18,6 +18,11 @@ type McpServer struct {
 	Name *string
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string
+	// Deprecated: always absent.
+	LegacyPlatformSlug *string
 	// The ID of the environment associated with the server
 	EnvironmentID *string
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -30,13 +35,32 @@ type McpServer struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility McpServerVisibility
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode NetworkAccessMode
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummary
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string
 	// When the MCP server was created
 	CreatedAt string
 	// When the MCP server was last updated

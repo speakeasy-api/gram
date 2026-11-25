@@ -20,6 +20,7 @@ type Endpoints struct {
 	ListServers           goa.Endpoint
 	GetServer             goa.Endpoint
 	ListServerConnections goa.Endpoint
+	GetServerMetrics      goa.Endpoint
 	UpdateServer          goa.Endpoint
 	RotateServerKey       goa.Endpoint
 	DeleteServer          goa.Endpoint
@@ -34,6 +35,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListServers:           NewListServersEndpoint(s, a.APIKeyAuth),
 		GetServer:             NewGetServerEndpoint(s, a.APIKeyAuth),
 		ListServerConnections: NewListServerConnectionsEndpoint(s, a.APIKeyAuth),
+		GetServerMetrics:      NewGetServerMetricsEndpoint(s, a.APIKeyAuth),
 		UpdateServer:          NewUpdateServerEndpoint(s, a.APIKeyAuth),
 		RotateServerKey:       NewRotateServerKeyEndpoint(s, a.APIKeyAuth),
 		DeleteServer:          NewDeleteServerEndpoint(s, a.APIKeyAuth),
@@ -46,6 +48,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListServers = m(e.ListServers)
 	e.GetServer = m(e.GetServer)
 	e.ListServerConnections = m(e.ListServerConnections)
+	e.GetServerMetrics = m(e.GetServerMetrics)
 	e.UpdateServer = m(e.UpdateServer)
 	e.RotateServerKey = m(e.RotateServerKey)
 	e.DeleteServer = m(e.DeleteServer)
@@ -284,6 +287,65 @@ func NewListServerConnectionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.ListServerConnections(ctx, p)
+	}
+}
+
+// NewGetServerMetricsEndpoint returns an endpoint function that calls the
+// method "getServerMetrics" of service "tunneledMcp".
+func NewGetServerMetricsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetServerMetricsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetServerMetrics(ctx, p)
 	}
 }
 

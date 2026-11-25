@@ -1,6 +1,8 @@
 import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
+import { authPageHref } from "@/lib/safe-external-url";
 import { buildLoginRedirectURL } from "@/lib/utils";
+import { isServerRenderedPath } from "@/lib/session-expired";
 import { AuthShell } from "./components/auth-shell";
 import { LoginPanel } from "./components/login-panel";
 import { useSearchParams, useNavigate } from "react-router";
@@ -12,6 +14,7 @@ export default function Login(): JSX.Element {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  const partnerCode = searchParams.get("partner_code") ?? "";
   const explicitRedirect = searchParams.get("redirect");
   const disposition = searchParams.get("disposition");
   const redirectTo =
@@ -23,20 +26,42 @@ export default function Login(): JSX.Element {
       // auto-provision can run for users with zero orgs. Force an IDP
       // round-trip even when a session already exists.
       if (disposition && redirectTo) {
-        window.location.href = buildLoginRedirectURL(redirectTo);
+        window.location.href = buildLoginRedirectURL(
+          redirectTo,
+          undefined,
+          undefined,
+          partnerCode,
+        );
         return;
       }
-      if (redirectTo) {
+      if (partnerCode && session.activeOrganizationId === "") {
+        void navigate(authPageHref("/sign-up", redirectTo, partnerCode), {
+          replace: true,
+        });
+        return;
+      }
+      if (redirectTo && isServerRenderedPath(redirectTo)) {
+        // Server-rendered install page, not a dashboard route.
+        window.location.replace(redirectTo);
+      } else if (redirectTo) {
         void navigate(redirectTo, { replace: true });
       } else {
         routes.home.goTo();
       }
     }
-  }, [session.session, disposition, redirectTo, navigate, routes.home]);
+  }, [
+    session.session,
+    session.activeOrganizationId,
+    disposition,
+    redirectTo,
+    partnerCode,
+    navigate,
+    routes.home,
+  ]);
 
   return (
     <AuthShell page="Login">
-      <LoginPanel redirectTo={redirectTo} />
+      <LoginPanel redirectTo={redirectTo} partnerCode={partnerCode} />
     </AuthShell>
   );
 }

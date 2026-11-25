@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -20,6 +21,14 @@ import {
   ShadowMCPInventoryRequestSummary,
   ShadowMCPInventoryRequestSummary$inboundSchema,
 } from "./shadowmcpinventoryrequestsummary.js";
+import {
+  ShadowMCPOfficialServer,
+  ShadowMCPOfficialServer$inboundSchema,
+} from "./shadowmcpofficialserver.js";
+import {
+  ShadowMCPSuggestedOfficialServer,
+  ShadowMCPSuggestedOfficialServer$inboundSchema,
+} from "./shadowmcpsuggestedofficialserver.js";
 
 /**
  * Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.
@@ -33,7 +42,7 @@ export const Access = {
 /**
  * Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.
  */
-export type Access = ClosedEnum<typeof Access>;
+export type Access = OpenEnum<typeof Access>;
 
 /**
  * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
@@ -45,7 +54,7 @@ export const TargetKind = {
 /**
  * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
  */
-export type TargetKind = ClosedEnum<typeof TargetKind>;
+export type TargetKind = OpenEnum<typeof TargetKind>;
 
 export type ShadowMCPInventoryServer = {
   /**
@@ -62,6 +71,10 @@ export type ShadowMCPInventoryServer = {
    */
   approvalRequest?: ShadowMCPInventoryApprovalRequest | undefined;
   /**
+   * Calls to this server that a Speakeasy hook blocked, within the telemetry retention window. Included in observed_use_count. Optional for one release so a dashboard deployed ahead of the server still loads the inventory; the server always sends it.
+   */
+  blockedCallCount: number;
+  /**
    * Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
    */
   blockedPolicyIds: Array<string>;
@@ -71,26 +84,43 @@ export type ShadowMCPInventoryServer = {
   lastSeen: Date;
   latestRequest?: ShadowMCPInventoryRequestSummary | undefined;
   observedUseCount: number;
+  /**
+   * The official, Speakeasy-served version of a Shadow MCP server: a project MCP server that proxies to its URL, or one an administrator chose.
+   */
+  officialServer?: ShadowMCPOfficialServer | undefined;
+  /**
+   * True when an administrator chose to keep using the Shadow MCP server directly, so no official server is chosen automatically.
+   */
+  officialServerDeclined?: boolean | undefined;
   requestCount: number;
   serverName?: string | undefined;
   serverSlug: string;
   /**
+   * A project MCP server that already serves a Shadow MCP server's upstream URL and can be made its official version.
+   */
+  suggestedOfficialServer?: ShadowMCPSuggestedOfficialServer | undefined;
+  /**
    * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
    */
   targetKind?: TargetKind | undefined;
+  /**
+   * The users who reached this server most.
+   */
   topUsers: Array<string>;
   urlHost: string;
+  /**
+   * Distinct users who reached this server.
+   */
   userCount: number;
 };
 
 /** @internal */
-export const Access$inboundSchema: z.ZodMiniEnum<typeof Access> = z.enum(
-  Access,
-);
+export const Access$inboundSchema: z.ZodMiniType<Access, unknown> = openEnums
+  .inboundSchema(Access);
 
 /** @internal */
-export const TargetKind$inboundSchema: z.ZodMiniEnum<typeof TargetKind> = z
-  .enum(TargetKind);
+export const TargetKind$inboundSchema: z.ZodMiniType<TargetKind, unknown> =
+  openEnums.inboundSchema(TargetKind);
 
 /** @internal */
 export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
@@ -104,6 +134,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     approval_request: z.optional(
       ShadowMCPInventoryApprovalRequest$inboundSchema,
     ),
+    blocked_call_count: z._default(z.int(), 0),
     blocked_policy_ids: z.array(z.string()),
     canonical_server_url: z.string(),
     first_seen: z.pipe(
@@ -119,9 +150,14 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     ),
     latest_request: z.optional(ShadowMCPInventoryRequestSummary$inboundSchema),
     observed_use_count: z.int(),
+    official_server: z.optional(ShadowMCPOfficialServer$inboundSchema),
+    official_server_declined: z.optional(z.boolean()),
     request_count: z.int(),
     server_name: z.optional(z.string()),
     server_slug: z.string(),
+    suggested_official_server: z.optional(
+      ShadowMCPSuggestedOfficialServer$inboundSchema,
+    ),
     target_kind: z.optional(TargetKind$inboundSchema),
     top_users: z.array(z.string()),
     url_host: z.string(),
@@ -132,6 +168,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
       "access_summary": "accessSummary",
       "allowed_policy_ids": "allowedPolicyIds",
       "approval_request": "approvalRequest",
+      "blocked_call_count": "blockedCallCount",
       "blocked_policy_ids": "blockedPolicyIds",
       "canonical_server_url": "canonicalServerUrl",
       "first_seen": "firstSeen",
@@ -139,9 +176,12 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
       "last_seen": "lastSeen",
       "latest_request": "latestRequest",
       "observed_use_count": "observedUseCount",
+      "official_server": "officialServer",
+      "official_server_declined": "officialServerDeclined",
       "request_count": "requestCount",
       "server_name": "serverName",
       "server_slug": "serverSlug",
+      "suggested_official_server": "suggestedOfficialServer",
       "target_kind": "targetKind",
       "top_users": "topUsers",
       "url_host": "urlHost",

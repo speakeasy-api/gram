@@ -46,6 +46,18 @@ func (r *Reader) ListProjectsLimited(ctx context.Context, organizationID string,
 	return projects, nil
 }
 
+func (r *Reader) ListProjectsPage(ctx context.Context, organizationID string, afterID uuid.UUID, limit int32) ([]projectsrepo.Project, error) {
+	projects, err := r.projects.ListProjectsByOrganizationPage(ctx, projectsrepo.ListProjectsByOrganizationPageParams{
+		OrganizationID: organizationID,
+		AfterID:        afterID,
+		LimitValue:     limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list project page by organization: %w", err)
+	}
+	return projects, nil
+}
+
 func (r *Reader) GetProject(ctx context.Context, projectID uuid.UUID, organizationID string) (projectsrepo.Project, error) {
 	project, err := r.projects.GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
 		ID:             projectID,

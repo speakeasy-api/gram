@@ -1,0 +1,1987 @@
+package delegation
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/stretchr/testify/require"
+)
+
+// CAS advances the generation on credential writes, including claim acquisition.
+// All state is copied under the mutex so refresh/callback interleavings are real.
+type delegationMemoryStore struct {
+	mu              sync.Mutex
+	rows            map[Binding]delegationCredential
+	claimError      error
+	finishError     error
+	attemptError    error
+	attemptConflict bool
+	attemptedAt     time.Time
+	trustRemoved    bool
+	claims          int
+	clock           func() time.Time
+}
+
+func (s *delegationMemoryStore) load(_ context.Context, b Binding) (delegationCredential, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.rows[b]
+	if !ok || s.trustRemoved {
+		return delegationCredential{}, pgx.ErrNoRows
+	}
+	return c, nil
+}
+func (s *delegationMemoryStore) save(_ context.Context, b Binding, g int64, next delegationCredential) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.rows[b].generation != g {
+		return false, nil
+	}
+	next.generation = g + 1
+	// The callback upsert clears claims; refusal must not use it on an active claim.
+	next.claim = uuid.Nil
+	s.rows[b] = next
+	return true, nil
+}
+func (s *delegationMemoryStore) claim(_ context.Context, b Binding, g int64, id uuid.UUID, _ time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.claims++
+	if s.claimError != nil {
+		return false, s.claimError
+	}
+	c, ok := s.rows[b]
+	if !ok || c.generation != g || c.claim != uuid.Nil {
+		return false, nil
+	}
+	c.claim = id
+	c.generation++
+	c.updatedAt = s.clock()
+	s.rows[b] = c
+	return true, nil
+}
+func (s *delegationMemoryStore) markRefreshAttempt(_ context.Context, b Binding, g int64, id uuid.UUID, now time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.attemptError != nil {
+		return false, s.attemptError
+	}
+	c, ok := s.rows[b]
+	if !ok || c.generation != g || c.claim != id || s.attemptConflict {
+		return false, nil
+	}
+	s.attemptedAt = now
+	c.updatedAt = now
+	s.rows[b] = c
+	return true, nil
+}
+func (s *delegationMemoryStore) revoke(_ context.Context, b Binding) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.rows[b]
+	if !ok {
+		return nil
+	}
+	c = clearDelegationSecrets(c)
+	c.generation++
+	c.status = "reauthentication_required"
+	s.rows[b] = c
+	return nil
+}
+func (s *delegationMemoryStore) release(_ context.Context, b Binding, g int64, id uuid.UUID) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.rows[b]
+	if !ok || c.generation != g || c.claim != id {
+		return false, nil
+	}
+	c.claim = uuid.Nil
+	c.generation++
+	s.rows[b] = c
+	return true, nil
+}
+func (s *delegationMemoryStore) finish(_ context.Context, b Binding, g int64, id uuid.UUID, next delegationCredential) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.finishError != nil {
+		return false, s.finishError
+	}
+	c, ok := s.rows[b]
+	if !ok || c.generation != g || c.claim != id {
+		return false, nil
+	}
+	next.generation = g + 1
+	next.updatedAt = s.clock()
+	s.rows[b] = next
+	return true, nil
+}
+func (s *delegationMemoryStore) clearExpired(_ context.Context, b Binding, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.rows[b]
+	if !ok {
+		return nil
+	}
+	// Repository expiry cleanup erases only the assertion without changing CAS.
+	if c.assertion.present() && !c.assertionExpiry.After(now) {
+		c.assertion = secret{}
+		c.assertionExpiry = time.Time{}
+		s.rows[b] = c
+	}
+	return nil
+}
+
+type delegationTestAuthority func(context.Context, Binding) error
+
+func (f delegationTestAuthority) AuthorizeDelegation(ctx context.Context, b Binding) error {
+	return f(ctx, b)
+}
+
+func newDelegationUnitFixture(t *testing.T) (*Service, *delegationMemoryStore, *fixtureProvider, Binding, Authorizer) {
+	t.Helper()
+	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
+	require.NoError(t, err)
+	p := federatedFixture(t)
+	b := delegationBinding(p, "human-test")
+	require.True(t, validDelegationBinding(b))
+	store := &delegationMemoryStore{rows: make(map[Binding]delegationCredential)}
+	now := time.Unix(1700000000, 0)
+	service := &Service{store: store, tokens: &platformSecretKeys{enc: enc, unusable: nil}, now: func() time.Time { return now }}
+	store.clock = func() time.Time { return service.now() }
+	service.loadProvider = func(_ context.Context, org string, issuer, client uuid.UUID) (Provider, error) {
+		if org != p.organizationID || issuer != p.issuer.ID || client != p.client.ID {
+			return nil, ErrConfiguration
+		}
+		return p, nil
+	}
+	service.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return nil, errors.New("unexpected refresh")
+	}
+	allow := delegationTestAuthority(func(_ context.Context, got Binding) error {
+		if got != b {
+			return errors.New("not authorized")
+		}
+		return nil
+	})
+	service.loadBinding = service.loadProvider
+	return service, store, p, b, allow
+}
+func delegationLogin(p Provider, now time.Time, id, refresh string, ttl time.Duration) *FederatedIdentity {
+	return &FederatedIdentity{Issuer: p.IssuerURL(), Subject: "secret-subject", Nonce: "secret-nonce", ExpiresAt: now.Add(ttl), credentials: &federatedCredentialState{value: EphemeralFederatedCredentials{idToken: id, refreshToken: refresh, receivedAt: now}}}
+}
+func delegationRenewal(p Provider, now time.Time, id, refresh string) *RefreshResult {
+	r := &RefreshResult{Credentials: &FederatedRefreshCredentials{EphemeralFederatedCredentials: EphemeralFederatedCredentials{idToken: id, refreshToken: refresh, receivedAt: now}}}
+	if id != "" {
+		r.Identity = &FederatedIdentity{Issuer: p.IssuerURL(), Subject: "secret-subject", ExpiresAt: now.Add(time.Hour)}
+	}
+	return r
+}
+
+// delegationPlain is a secret's value: as set, or opened from the platform-key
+// copy the fixture planted.
+func delegationPlain(t *testing.T, s *Service, value secret) string {
+	t.Helper()
+	if value.stored == nil {
+		return value.plain
+	}
+	if !value.stored.Platform.Valid {
+		return ""
+	}
+	keys, ok := s.tokens.(*platformSecretKeys)
+	require.True(t, ok)
+	plain, err := keys.enc.Decrypt(value.stored.Platform.String)
+	require.NoError(t, err)
+	return plain
+}
+
+// platformSecretKeys opens planted platform-key copies the way a process
+// without organization encryption opens them for an organization in
+// platform_key, with no transition state to read. unusable, when set, is the
+// key problem every call reports.
+type platformSecretKeys struct {
+	enc      *encryption.Client
+	unusable error
+}
+
+func (k *platformSecretKeys) Open(_ context.Context, _ repo.DBTX, _ pgtype.Text, _ orgencryption.CopyColumns, stored orgencryption.Copies) (string, error) {
+	if k.unusable != nil {
+		return "", k.unusable
+	}
+	if !stored.Platform.Valid {
+		return "", orgencryption.ErrMissing
+	}
+	plain, err := k.enc.Decrypt(stored.Platform.String)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", orgencryption.ErrUnreadable, err)
+	}
+	return plain, nil
+}
+
+func (k *platformSecretKeys) RequireUsable(context.Context, repo.DBTX, pgtype.Text) error {
+	return k.unusable
+}
+
+// unreadableSecret is a stored platform-key copy that does not decrypt.
+func unreadableSecret(ciphertext string) secret {
+	return storedSecret(pgtype.Text{String: ciphertext, Valid: true}, pgtype.Text{String: "", Valid: false})
+}
+
+// plantedSecret is a platform-key copy of plain the fixture's key seals.
+func plantedSecret(t *testing.T, s *Service, plain string) secret {
+	t.Helper()
+	keys, ok := s.tokens.(*platformSecretKeys)
+	require.True(t, ok)
+	ciphertext, err := keys.enc.Encrypt([]byte(plain))
+	require.NoError(t, err)
+	return storedSecret(pgtype.Text{String: ciphertext, Valid: true}, pgtype.Text{String: "", Valid: false})
+}
+
+func TestDelegationServiceConcurrentRefresh(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+	started, release := make(chan struct{}), make(chan struct{})
+	var posts atomic.Int64
+	s.refreshIdentity = func(_ context.Context, _ Provider, refresh, subject, nonce string) (*RefreshResult, error) {
+		posts.Add(1)
+		close(started)
+		<-release
+		if refresh != "old-refresh" || subject != "secret-subject" || nonce != "secret-nonce" {
+			return nil, ErrConfiguration
+		}
+		return delegationRenewal(p, s.now(), "new-id", "new-refresh"), nil
+	}
+	type outcome struct {
+		assertion Assertion
+		err       error
+	}
+	winner := make(chan outcome, 1)
+	go func() { a, err := s.Resolve(t.Context(), b, allow); winner <- outcome{a, err} }()
+	<-started
+	losers := make(chan error, 16)
+	for range 16 {
+		go func() { _, err := s.Resolve(t.Context(), b, allow); losers <- err }()
+	}
+	for range 16 {
+		require.ErrorIs(t, <-losers, ErrTemporary)
+	}
+	require.Equal(t, int64(1), posts.Load())
+	close(release)
+	result := <-winner
+	require.NoError(t, result.err)
+	require.Equal(t, "new-id", result.assertion.Value())
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, 1, store.claims)
+	require.Equal(t, int64(3), c.generation)
+	require.Equal(t, c.obtainedAt, result.assertion.ObtainedAt(), "a refresh keeps the sign-in the credential came from")
+	require.Equal(t, uuid.Nil, c.claim)
+	require.Equal(t, "new-refresh", delegationPlain(t, s, c.refresh))
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "new-id", a.Value())
+	require.Equal(t, c.obtainedAt, a.ObtainedAt(), "a cached assertion carries the persisted sign-in time")
+	require.Equal(t, int64(1), posts.Load())
+}
+
+func TestDelegationServiceClaimFailureNeverPosts(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+	store.claimError = errors.New("database unavailable")
+	var posts atomic.Int64
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		posts.Add(1)
+		return nil, nil
+	}
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrTemporary)
+	require.Zero(t, posts.Load())
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), c.generation)
+	require.Equal(t, uuid.Nil, c.claim)
+}
+
+func TestDelegationServiceAmbiguousNeverReplays(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name          string
+		failure       error
+		finishFailure bool
+	}{
+		{name: "timeout", failure: &RefreshError{Kind: RefreshAmbiguous}},
+		{name: "unknown transport error", failure: context.DeadlineExceeded},
+		{name: "nil response"},
+		{name: "rotation persistence failed", finishFailure: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			var posts int
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				posts++
+				if tc.finishFailure {
+					return delegationRenewal(p, s.now(), "new-id", "new-refresh"), nil
+				}
+				return nil, tc.failure
+			}
+			if tc.finishFailure {
+				store.finishError = errors.New("write failed")
+			}
+			_, err := s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrTemporary)
+			_, err = s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrTemporary, "the renewal may still be running")
+			later := s.now().Add(24 * time.Hour)
+			s.now = func() time.Time { return later }
+			_, err = s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrReauthentication, "nothing is running and only a sign-in clears the claim")
+			require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+			require.Equal(t, 1, posts)
+			c, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.NotEqual(t, uuid.Nil, c.claim)
+		})
+	}
+}
+
+func TestDelegationServiceCallbackWinsRefresh(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []RefreshFailure{"", RefreshInvalidGrant, RefreshInvalidIdentity} {
+		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			started, release := make(chan struct{}), make(chan struct{})
+			done := make(chan error, 1)
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				close(started)
+				<-release
+				if kind != "" {
+					return nil, &RefreshError{Kind: kind}
+				}
+				return delegationRenewal(p, s.now(), "loser-id", "loser-refresh"), nil
+			}
+			go func() { _, err := s.Resolve(t.Context(), b, allow); done <- err }()
+			<-started
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "winner-id", "winner-refresh", time.Hour), true))
+			winner, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			close(release)
+			require.ErrorIs(t, <-done, ErrTemporary)
+			after, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Equal(t, winner, after)
+			a, err := s.Resolve(t.Context(), b, allow)
+			require.NoError(t, err)
+			require.Equal(t, "winner-id", a.Value())
+			require.Equal(t, "winner-refresh", delegationPlain(t, s, after.refresh))
+		})
+	}
+}
+
+func TestDelegationServiceRefreshRotation(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, id, refresh, wantRefresh string
+		expiry                         bool
+	}{
+		{name: "rotation", id: "new-id", refresh: "new-refresh", wantRefresh: "new-refresh"},
+		{name: "refresh omitted", id: "new-id", wantRefresh: "old-refresh"},
+		{name: "ID omitted", refresh: "new-refresh", wantRefresh: "new-refresh"},
+		{name: "both omitted", wantRefresh: "old-refresh"},
+		{name: "known refresh expiry", id: "new-id", refresh: "new-refresh", wantRefresh: "new-refresh", expiry: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			posts := 0
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				posts++
+				r := delegationRenewal(p, s.now(), tc.id, tc.refresh)
+				if tc.expiry {
+					expiry := s.now().Add(2 * time.Hour)
+					credentials, ok := r.Credentials.(*FederatedRefreshCredentials)
+					require.True(t, ok)
+					credentials.refreshExpiresAt = &expiry
+				}
+				return r, nil
+			}
+			a, err := s.Resolve(t.Context(), b, allow)
+			if tc.id == "" {
+				require.ErrorIs(t, err, ErrReauthentication)
+				require.Empty(t, a.Value())
+				for range 3 {
+					again, err := s.Resolve(t.Context(), b, allow)
+					require.ErrorIs(t, err, ErrReauthentication)
+					require.Empty(t, again.Value())
+				}
+				require.Equal(t, 1, posts, "missing ID token must stop portable renewal, not spend more refresh grants")
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.id, a.Value())
+			}
+			c, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Equal(t, uuid.Nil, c.claim)
+			require.Equal(t, s.now(), c.refreshedAt, "successful refresh is observed even without an ID token")
+			require.Equal(t, tc.wantRefresh, delegationPlain(t, s, c.refresh))
+			require.Equal(t, tc.id, delegationPlain(t, s, c.assertion))
+			if tc.expiry {
+				require.Equal(t, s.now().Add(2*time.Hour), c.refreshExpiry)
+			} else {
+				require.True(t, c.refreshExpiry.IsZero())
+			}
+		})
+	}
+}
+
+func TestDelegationServiceAssertionSafetyWindow(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		ttl  time.Duration
+		want bool
+	}{
+		{"usable", time.Minute + time.Second, true}, {"boundary", time.Minute, false}, {"near expiry", time.Second, false}, {"expired", -time.Second, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "secret-id", "", tc.ttl), false))
+			posts := 0
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				posts++
+				return nil, nil
+			}
+			a, err := s.Resolve(t.Context(), b, allow)
+			if tc.want {
+				require.NoError(t, err)
+				require.Equal(t, "secret-id", a.Value())
+			} else {
+				require.ErrorIs(t, err, ErrReauthentication)
+				require.Empty(t, a.Value())
+			}
+			require.Zero(t, posts)
+			c, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Empty(t, c.refresh)
+			if tc.ttl < 0 {
+				require.Empty(t, c.assertion)
+			}
+		})
+	}
+}
+
+func TestDelegationServiceAuthorizationAndTenantIsolation(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"nil authority", "denied", "other tenant", "other human", "changed configuration"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "secret-id", "secret-refresh", time.Hour), true))
+			posts := 0
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				posts++
+				return nil, nil
+			}
+			request := b
+			switch name {
+			case "nil authority":
+				allow = nil
+			case "denied":
+				allow = delegationTestAuthority(func(context.Context, Binding) error { return errors.New("denied") })
+			case "other tenant":
+				request.OrganizationID = "other-org"
+				allow = delegationTestAuthority(func(context.Context, Binding) error { return nil })
+			case "other human":
+				request.HumanID = "other-human"
+				allow = delegationTestAuthority(func(context.Context, Binding) error { return nil })
+			case "changed configuration":
+				p.client.ClientID = "replacement-client"
+			}
+			before, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			a, err := s.Resolve(t.Context(), request, allow)
+			require.Error(t, err)
+			require.Empty(t, a.Value())
+			require.Zero(t, posts)
+			after, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Equal(t, before, after)
+		})
+	}
+}
+
+func TestDelegationServiceEncryptedRetentionAndRedaction(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	identity := delegationLogin(p, s.now(), "secret-id", "secret-refresh", time.Hour)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, identity, true))
+	require.NotNil(t, identity.credentials)
+	require.Equal(t, EphemeralFederatedCredentials{}, identity.credentials.value)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	// The store seals each value it writes; the service only holds it.
+	for _, pair := range []struct {
+		value secret
+		plain string
+	}{{c.assertion, "secret-id"}, {c.refresh, "secret-refresh"}, {c.subject, "secret-subject"}, {c.nonce, "secret-nonce"}} {
+		require.True(t, pair.value.present())
+		require.Equal(t, pair.plain, delegationPlain(t, s, pair.value))
+		require.NotContains(t, fmt.Sprintf("%v %+v %#v", pair.value, pair.value, pair.value), pair.plain)
+	}
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	for _, value := range []any{a, &a, c, &c} {
+		require.NotContains(t, fmt.Sprintf("%v %+v %#v", value, value, value), "secret-")
+		data, err := json.Marshal(value)
+		require.NoError(t, err)
+		require.NotContains(t, string(data), "secret-")
+	}
+	require.True(t, c.refreshExpiry.IsZero())
+}
+
+func TestDelegationServiceRefusalAndNormalLogin(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, _ := newDelegationUnitFixture(t)
+	require.NoError(t, s.RecordOfflineRefusal(t.Context(), p, b.HumanID))
+	status, err := s.OfflineStatus(t.Context(), p, b.HumanID)
+	require.NoError(t, err)
+	require.True(t, status.Refused)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "normal-id", "", time.Hour), false))
+	status, err = s.OfflineStatus(t.Context(), p, b.HumanID)
+	require.NoError(t, err)
+	require.True(t, status.Refused)
+	require.False(t, status.UsableRefresh)
+	p.client.ClientID = "changed-client"
+	status, err = s.OfflineStatus(t.Context(), p, b.HumanID)
+	require.NoError(t, err)
+	require.False(t, status.Refused)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "new-id", "new-refresh", time.Hour), true))
+	before, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	normal := delegationLogin(p, s.now(), "normal-new-id", "", time.Hour)
+	normal.Nonce = "new-login-nonce"
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, normal, false))
+	after, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, before.refresh, after.refresh)
+	require.Equal(t, before.nonce, after.nonce)
+	status, err = s.OfflineStatus(t.Context(), p, b.HumanID)
+	require.NoError(t, err)
+	require.True(t, status.UsableRefresh)
+	require.False(t, status.Refused)
+	// A refusal arriving after a successful login cannot erase durable access.
+	require.NoError(t, s.RecordOfflineRefusal(t.Context(), p, b.HumanID))
+	final, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, after, final)
+}
+
+func TestDelegationServiceRefreshRechecksAuthorityAndConfiguration(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"authority revoked", "configuration changed", "identity changed"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			revoked := false
+			if name == "authority revoked" {
+				allow = delegationTestAuthority(func(context.Context, Binding) error {
+					if revoked {
+						return ErrReauthentication
+					}
+					return nil
+				})
+			}
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				result := delegationRenewal(p, s.now(), "new-id", "new-refresh")
+				switch name {
+				case "authority revoked":
+					revoked = true
+				case "configuration changed":
+					p.client.ClientID = "changed-client"
+				case "identity changed":
+					identity, ok := result.Identity.(*FederatedIdentity)
+					require.True(t, ok)
+					identity.Subject = "other-subject"
+				}
+				return result, nil
+			}
+			a, err := s.Resolve(t.Context(), b, allow)
+			if name == "identity changed" {
+				require.ErrorIs(t, err, ErrReauthentication, "the row is erased and a sign-in replaces it")
+			} else {
+				require.ErrorIs(t, err, ErrConfiguration)
+			}
+			require.Empty(t, a.Value())
+			c, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Empty(t, c.assertion)
+			require.Empty(t, c.refresh)
+			require.Empty(t, c.subject)
+			require.Empty(t, c.nonce)
+		})
+	}
+}
+
+func TestDelegationServiceRefusalDoesNotReleaseRefreshClaim(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+	started, release := make(chan struct{}), make(chan struct{})
+	done := make(chan error, 1)
+	var posts atomic.Int64
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		if posts.Add(1) == 1 {
+			close(started)
+			<-release
+			return delegationRenewal(p, s.now(), "new-id", "new-refresh"), nil
+		}
+		return nil, &RefreshError{Kind: RefreshInvalidGrant}
+	}
+	go func() { _, err := s.Resolve(t.Context(), b, allow); done <- err }()
+	<-started
+	// Always unblock the original refresh, even if a regression fails assertions.
+	defer func() {
+		close(release)
+		require.NoError(t, <-done)
+	}()
+	claimed, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.NoError(t, s.RecordOfflineRefusal(t.Context(), p, b.HumanID))
+	current, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, claimed.claim, current.claim, "refusal must not release rotating-token ownership")
+	require.Equal(t, claimed.generation, current.generation, "refusal must not supersede the refresh winner")
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrTemporary)
+	require.Equal(t, int64(1), posts.Load())
+}
+
+func TestDelegationServicePreservedRefreshUsesOriginalNonce(t *testing.T) {
+	t.Parallel()
+	s, _, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "initial-id", "original-refresh", time.Hour), true))
+	normal := delegationLogin(p, s.now(), "callback-id", "", 30*time.Second)
+	normal.Nonce = "replacement-login-nonce"
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, normal, false))
+	var gotRefresh, gotNonce string
+	s.refreshIdentity = func(_ context.Context, _ Provider, refresh, subject, nonce string) (*RefreshResult, error) {
+		gotRefresh = refresh
+		gotNonce = nonce
+		return delegationRenewal(p, s.now(), "renewed-id", "rotated-refresh"), nil
+	}
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "renewed-id", a.Value())
+	require.Equal(t, "original-refresh", gotRefresh)
+	require.Equal(t, "secret-nonce", gotNonce)
+}
+
+func TestDelegationServiceRefusalSurvivesSecretCleanup(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, _ := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "", time.Hour), true))
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.False(t, c.refusedAt.IsZero())
+	// Maintenance erases personal data but deliberately retains refusal metadata.
+	clean := clearDelegationSecrets(c)
+	ok, err := store.save(t.Context(), b, c.generation, clean)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "normal-id", "", time.Hour), false))
+	status, err := s.OfflineStatus(t.Context(), p, b.HumanID)
+	require.NoError(t, err)
+	require.True(t, status.Refused)
+	require.False(t, status.UsableRefresh)
+	after, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, c.refusedAt, after.refusedAt)
+	require.Equal(t, c.requestConfig, after.requestConfig)
+}
+
+func TestDelegationServiceNormalLoginCannotReviveAmbiguousRefresh(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "spent-refresh", 30*time.Second), true))
+	posts := 0
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		posts++
+		return nil, &RefreshError{Kind: RefreshAmbiguous}
+	}
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrTemporary)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "callback-id", "", 30*time.Second), false))
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Empty(t, c.refresh)
+	require.Equal(t, uuid.Nil, c.claim)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrReauthentication)
+	require.Equal(t, 1, posts)
+}
+
+func TestDelegationServiceRefreshScopeErrorRequiresRemediation(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+	posts := 0
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		posts++
+		return nil, &RefreshError{Kind: RefreshConfiguration}
+	}
+	for range 2 {
+		a, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrRetainedConfiguration)
+		require.Empty(t, a.Value())
+		require.NotContains(t, err.Error(), "secret-")
+	}
+	require.Equal(t, 1, posts)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.True(t, c.refusedAt.IsZero())
+	require.Equal(t, "configuration_failure", c.status)
+	require.Equal(t, "old-refresh", delegationPlain(t, s, c.refresh))
+}
+
+func delegationMoveClock(s *Service, by time.Duration) {
+	later := s.now().Add(by)
+	s.now = func() time.Time { return later }
+}
+
+// failedConfigurationFixture retains a login whose first renewal the provider refused.
+func failedConfigurationFixture(t *testing.T) (*Service, *delegationMemoryStore, *fixtureProvider, Binding, Authorizer) {
+	t.Helper()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return nil, &RefreshError{Kind: RefreshConfiguration}
+	}
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrConfiguration)
+	return s, store, p, b, allow
+}
+
+func TestDelegationConfigurationFailureRecoversWithTheSameToken(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := failedConfigurationFixture(t)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "old-refresh", delegationPlain(t, s, c.refresh))
+	require.Equal(t, "secret-subject", delegationPlain(t, s, c.subject))
+	require.Equal(t, "secret-nonce", delegationPlain(t, s, c.nonce))
+	require.Empty(t, c.assertion)
+	require.Equal(t, uuid.Nil, c.claim)
+
+	var submitted []string
+	s.refreshIdentity = func(_ context.Context, _ Provider, token, _, _ string) (*RefreshResult, error) {
+		submitted = append(submitted, token)
+		return delegationRenewal(p, s.now(), "new-id", "rotated-refresh"), nil
+	}
+	delegationMoveClock(s, configurationRetryDelay)
+	require.NoError(t, s.Check(t.Context(), b, allow))
+	require.NoError(t, s.CheckResolvable(t.Context(), b, allow))
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "new-id", a.Value())
+	require.Equal(t, []string{"old-refresh"}, submitted)
+	c, err = store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "durable_credential_present", c.status)
+	require.True(t, c.retryAfter.IsZero())
+	require.Equal(t, "rotated-refresh", delegationPlain(t, s, c.refresh))
+}
+
+func TestDelegationConfigurationFailurePausesEveryCheckUntilRetry(t *testing.T) {
+	t.Parallel()
+	s, _, _, b, allow := failedConfigurationFixture(t)
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		t.Error("the provider must not be contacted during the pause")
+		return nil, &RefreshError{Kind: RefreshConfiguration}
+	}
+	for _, at := range []time.Duration{0, configurationRetryDelay - time.Second} {
+		probe := *s
+		later := s.now().Add(at)
+		probe.now = func() time.Time { return later }
+		_, err := probe.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrConfiguration)
+		err = probe.Check(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrRetainedConfiguration)
+		require.NotErrorIs(t, err, ErrStaleRegistration)
+		require.ErrorIs(t, probe.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+	}
+	refused := delegationTestAuthority(func(context.Context, Binding) error { return ErrConfiguration })
+	err := s.Check(t.Context(), b, refused)
+	require.ErrorIs(t, err, ErrConfiguration)
+	require.NotErrorIs(t, err, ErrRetainedConfiguration, "a refused authority keeps no sign-in to retry")
+}
+
+func TestDelegationConfigurationFailureRetriesOncePerDelay(t *testing.T) {
+	t.Parallel()
+	s, _, _, b, allow := failedConfigurationFixture(t)
+	posts := 0
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		posts++
+		return nil, &RefreshError{Kind: RefreshConfiguration}
+	}
+	// A busy client: one request every second for three retry delays.
+	for range 3 * int(configurationRetryDelay/time.Second) {
+		delegationMoveClock(s, time.Second)
+		_, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrConfiguration)
+	}
+	require.Equal(t, 3, posts)
+}
+
+// concurrentRetryWait bounds waiting for an in-process retry that starts at once.
+const concurrentRetryWait = 10 * time.Second
+
+func TestDelegationConfigurationFailureConcurrentRetryPostsOnce(t *testing.T) {
+	t.Parallel()
+	s, _, _, b, allow := failedConfigurationFixture(t)
+	delegationMoveClock(s, configurationRetryDelay)
+	var posts atomic.Int32
+	entered, finish := make(chan struct{}), make(chan struct{})
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		if posts.Add(1) == 1 {
+			close(entered)
+		}
+		<-finish
+		return nil, &RefreshError{Kind: RefreshConfiguration}
+	}
+	var holder sync.WaitGroup
+	var holderErr error
+	holder.Go(func() {
+		_, holderErr = s.Resolve(t.Context(), b, allow)
+	})
+	select {
+	case <-entered:
+	case <-time.After(concurrentRetryWait):
+		close(finish)
+		holder.Wait()
+		require.Fail(t, "no retry reached the provider", "holder error: %v", holderErr)
+	}
+	for range 20 {
+		_, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrTemporary, "a retry in flight answers temporary")
+	}
+	close(finish)
+	holder.Wait()
+	require.ErrorIs(t, holderErr, ErrConfiguration)
+	require.EqualValues(t, 1, posts.Load())
+}
+
+func TestDelegationConfigurationFailureThenInvalidGrantDropsToken(t *testing.T) {
+	t.Parallel()
+	s, store, _, b, allow := failedConfigurationFixture(t)
+	posts := 0
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		posts++
+		return nil, &RefreshError{Kind: RefreshInvalidGrant}
+	}
+	delegationMoveClock(s, configurationRetryDelay)
+	for range 2 {
+		_, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrReauthentication)
+	}
+	require.Equal(t, 1, posts)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Empty(t, c.refresh)
+	require.Equal(t, "reauthentication_required", c.status)
+}
+
+func TestDelegationConfigurationFailureThenInvalidIdentityStaysErased(t *testing.T) {
+	t.Parallel()
+	s, store, _, b, allow := failedConfigurationFixture(t)
+	posts := 0
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		posts++
+		return nil, &RefreshError{Kind: RefreshInvalidIdentity}
+	}
+	delegationMoveClock(s, configurationRetryDelay)
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrReauthentication)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Empty(t, c.refresh)
+	require.Empty(t, c.subject)
+	require.Equal(t, "configuration_failure", c.status, "stored downstream tokens must stay closed")
+	require.True(t, c.retryAfter.IsZero())
+	delegationMoveClock(s, 24*time.Hour)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrReauthentication, "no administrator can restore an erased row")
+	require.ErrorIs(t, s.Check(t.Context(), b, allow), ErrReauthentication)
+	require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+	require.Equal(t, 1, posts)
+}
+
+func TestDelegationClientPauseWritesNothing(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		fixture func(*testing.T) (*Service, *delegationMemoryStore, *fixtureProvider, Binding, Authorizer)
+	}{
+		{name: "healthy row", fixture: func(t *testing.T) (*Service, *delegationMemoryStore, *fixtureProvider, Binding, Authorizer) {
+			t.Helper()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			return s, store, p, b, allow
+		}},
+		{name: "row waiting to retry", fixture: func(t *testing.T) (*Service, *delegationMemoryStore, *fixtureProvider, Binding, Authorizer) {
+			t.Helper()
+			s, store, p, b, allow := failedConfigurationFixture(t)
+			delegationMoveClock(s, configurationRetryDelay)
+			return s, store, p, b, allow
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := tc.fixture(t)
+			posts := 0
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				posts++
+				return delegationRenewal(p, s.now(), "new-id", "rotated-refresh"), nil
+			}
+			paused := true
+			s.refreshPaused = func(context.Context, Provider) bool { return paused }
+			before, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			claims := store.claims
+
+			_, err = s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrConfiguration)
+			require.Zero(t, posts)
+			require.Equal(t, claims, store.claims)
+			after, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Equal(t, before, after)
+
+			paused = false
+			a, err := s.Resolve(t.Context(), b, allow)
+			require.NoError(t, err)
+			require.Equal(t, "new-id", a.Value())
+			require.Equal(t, 1, posts)
+		})
+	}
+}
+
+func TestDelegationConfigurationFailureSignInLiftsThePause(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := failedConfigurationFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "fresh-id", "", time.Hour), false))
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "fresh-id", a.Value())
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "assertion_only", c.status)
+	require.Empty(t, c.refresh, "a kept token that may be dead must not survive a sign-in")
+	require.True(t, c.retryAfter.IsZero())
+	status, err := s.OfflineStatus(t.Context(), p, b.HumanID)
+	require.NoError(t, err)
+	require.False(t, status.UsableRefresh)
+}
+
+func TestDelegationConfigurationFailureSignInReplacesDeadToken(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := failedConfigurationFixture(t)
+	status, err := s.OfflineStatus(t.Context(), p, b.HumanID)
+	require.NoError(t, err)
+	require.False(t, status.UsableRefresh, "the next sign-in must ask for a new token")
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "fresh-id", "new-refresh", 30*time.Second), true))
+
+	var submitted []string
+	s.refreshIdentity = func(_ context.Context, _ Provider, token, _, _ string) (*RefreshResult, error) {
+		submitted = append(submitted, token)
+		return delegationRenewal(p, s.now(), "renewed-id", ""), nil
+	}
+	delegationMoveClock(s, time.Hour)
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "renewed-id", a.Value())
+	require.Equal(t, []string{"new-refresh"}, submitted)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "durable_credential_present", c.status)
+}
+
+func TestDelegationConfigurationFailureNewSubjectResetsTheRow(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := failedConfigurationFixture(t)
+	login := delegationLogin(p, s.now(), "other-id", "other-refresh", time.Hour)
+	login.Subject = "other-subject"
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, login, true))
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "other-subject", delegationPlain(t, s, c.subject))
+	require.Equal(t, "other-refresh", delegationPlain(t, s, c.refresh))
+	require.Equal(t, "durable_credential_present", c.status)
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "other-id", a.Value())
+}
+
+func TestDelegationConfigurationFailureAsksForANewToken(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, _ := failedConfigurationFixture(t)
+	status, err := s.OfflineStatus(t.Context(), p, b.HumanID)
+	require.NoError(t, err)
+	require.False(t, status.UsableRefresh)
+	require.NoError(t, s.RecordOfflineRefusal(t.Context(), p, b.HumanID))
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "configuration_failure", c.status)
+	require.Equal(t, "old-refresh", delegationPlain(t, s, c.refresh))
+}
+
+func TestDelegationConfigurationFailureRetryKeepsStatus(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		kind      RefreshFailure
+		want      error
+		holdClaim bool
+	}{
+		{name: "retryable", kind: RefreshRetryable, want: ErrConfiguration},
+		{name: "ambiguous", kind: RefreshAmbiguous, want: ErrTemporary, holdClaim: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, _, b, allow := failedConfigurationFixture(t)
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				return nil, &RefreshError{Kind: tc.kind}
+			}
+			delegationMoveClock(s, configurationRetryDelay)
+			_, err := s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, tc.want)
+			c, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Equal(t, "configuration_failure", c.status, "stored downstream tokens must stay closed")
+			require.Equal(t, tc.holdClaim, c.claim != uuid.Nil)
+			if tc.holdClaim {
+				_, err = s.Resolve(t.Context(), b, allow)
+				require.ErrorIs(t, err, ErrTemporary, "no administrator message between the retry and the sign-in")
+				delegationMoveClock(s, refreshClaimLimit)
+				_, err = s.Resolve(t.Context(), b, allow)
+				require.ErrorIs(t, err, ErrReauthentication)
+				return
+			}
+			require.Equal(t, s.now().Add(time.Minute), c.retryAfter)
+			_, err = s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrConfiguration, "the retry and the pause give the same answer")
+		})
+	}
+}
+
+func TestDelegationConfigurationFailureRecoversAfterRetryableFailure(t *testing.T) {
+	t.Parallel()
+	s, _, p, b, allow := failedConfigurationFixture(t)
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return nil, &RefreshError{Kind: RefreshRetryable}
+	}
+	delegationMoveClock(s, configurationRetryDelay)
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrConfiguration)
+
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return delegationRenewal(p, s.now(), "new-id", "rotated-refresh"), nil
+	}
+	delegationMoveClock(s, time.Minute)
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "new-id", a.Value())
+}
+
+func TestDelegationConfigurationFailureInvalidGrantAfterRetryableFailure(t *testing.T) {
+	t.Parallel()
+	s, store, _, b, allow := failedConfigurationFixture(t)
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return nil, &RefreshError{Kind: RefreshRetryable}
+	}
+	delegationMoveClock(s, configurationRetryDelay)
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrConfiguration)
+
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return nil, &RefreshError{Kind: RefreshInvalidGrant}
+	}
+	delegationMoveClock(s, time.Minute)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrReauthentication)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Empty(t, c.refresh)
+	require.Equal(t, "reauthentication_required", c.status)
+}
+
+func TestDelegationRetryableFailureWithoutRetainedFailureReleasesClaim(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return nil, &RefreshError{Kind: RefreshRetryable}
+	}
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrTemporary)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, uuid.Nil, c.claim)
+	require.Equal(t, "temporary_failure", c.status)
+	require.Equal(t, s.now().Add(time.Minute), c.retryAfter)
+
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return delegationRenewal(p, s.now(), "new-id", "rotated-refresh"), nil
+	}
+	delegationMoveClock(s, time.Minute)
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "new-id", a.Value())
+}
+
+func TestDelegationConfigurationFailureAfterTokenExpiryNeedsSignIn(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	login := delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second)
+	expiry := s.now().Add(time.Minute)
+	login.credentials.value.refreshExpiresAt = &expiry
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, login, true))
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return nil, &RefreshError{Kind: RefreshConfiguration}
+	}
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrConfiguration)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "old-refresh", delegationPlain(t, s, c.refresh))
+	delegationMoveClock(s, configurationRetryDelay)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrReauthentication)
+	require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+}
+
+func TestDelegationServiceRefreshErasesAssertionExpiredBeforeWrite(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		result := delegationRenewal(p, s.now(), "new-id", "rotated-refresh")
+		identity, ok := result.Identity.(*FederatedIdentity)
+		require.True(t, ok)
+		identity.ExpiresAt = s.now().Add(2 * time.Second)
+		return result, nil
+	}
+	initial := s.now()
+	calls := 0
+	s.loadBinding = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) {
+		calls++
+		// Model a slow live configuration/authorization read after token validation.
+		if calls == 2 {
+			s.now = func() time.Time { return initial.Add(3 * time.Second) }
+		}
+		return p, nil
+	}
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrReauthentication)
+	require.Empty(t, a.Value())
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Empty(t, c.assertion, "an assertion that expired during the final live check must not be persisted")
+	require.True(t, c.assertionExpiry.IsZero())
+	require.Equal(t, "rotated-refresh", delegationPlain(t, s, c.refresh))
+}
+
+type delegationLoadHookStore struct {
+	delegationStore
+	afterLoad func()
+}
+
+func (s delegationLoadHookStore) load(ctx context.Context, b Binding) (delegationCredential, error) {
+	c, err := s.delegationStore.load(ctx, b)
+	s.afterLoad()
+	return c, err
+}
+
+func TestDelegationServiceLoginErasesAssertionExpiredBeforeWrite(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, _ := newDelegationUnitFixture(t)
+	initial := s.now()
+	s.store = delegationLoadHookStore{delegationStore: store, afterLoad: func() { s.now = func() time.Time { return initial.Add(3 * time.Second) } }}
+	identity := delegationLogin(p, initial, "expiring-id", "fresh-refresh", time.Second)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, identity, true))
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Empty(t, c.assertion, "callback must recheck expiry after reading the stored generation")
+	require.True(t, c.assertionExpiry.IsZero())
+	require.Equal(t, "fresh-refresh", delegationPlain(t, s, c.refresh))
+}
+
+func TestDelegationServiceInvalidGrantPreservesUsableAssertion(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "valid-id", "invalid-refresh", time.Hour), true))
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	claim := uuid.New()
+	ok, err := store.claim(t.Context(), b, c.generation, claim, s.now())
+	require.NoError(t, err)
+	require.True(t, ok)
+	claimed, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	err = s.recordRefreshFailure(t.Context(), b, claimed, claim, &RefreshError{Kind: RefreshInvalidGrant})
+	require.ErrorIs(t, err, ErrReauthentication)
+	after, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Empty(t, after.refresh)
+	require.Equal(t, "reauthentication_required", after.status)
+	require.Equal(t, c.assertion, after.assertion)
+	require.Equal(t, c.subject, after.subject)
+	posts := 0
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		posts++
+		return nil, nil
+	}
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "valid-id", a.Value())
+	later := s.now().Add(time.Hour)
+	s.now = func() time.Time { return later }
+	a, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrReauthentication)
+	require.Empty(t, a.Value())
+	require.Zero(t, posts)
+}
+
+func TestDelegationServiceRejectsSubjectRebinding(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, _ := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", time.Hour), true))
+	before, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	login := delegationLogin(p, s.now(), "other-id", "other-refresh", time.Hour)
+	login.Subject = "other-subject"
+	require.ErrorIs(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, login, true), ErrConfiguration)
+	after, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
+func TestDelegationServiceValidAssertionAvoidsDiscovery(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "valid-id", "refresh", time.Hour), true))
+	s.loadProvider = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) {
+		t.Error("valid assertion must not load discovery")
+		return nil, errors.New("discovery unavailable")
+	}
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "valid-id", a.Value())
+	require.Zero(t, store.claims)
+}
+
+func TestDelegationServicePostRefreshVerification(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                              string
+		providerFailure, authorityFailure error
+		changed                           bool
+		definitive                        bool
+	}{
+		{name: "provider transient", providerFailure: context.DeadlineExceeded},
+		{name: "authority transient", authorityFailure: errors.New("authority unavailable")},
+		{name: "provider revoked", providerFailure: ErrConfiguration, definitive: true},
+		{name: "authority revoked", authorityFailure: ErrReauthentication, definitive: true},
+		{name: "configuration changed", changed: true, definitive: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, _ := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			renewed := false
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				renewed = true
+				return delegationRenewal(p, s.now(), "new-id", "rotation"), nil
+			}
+			s.loadBinding = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) {
+				if renewed {
+					if tc.providerFailure != nil {
+						return nil, tc.providerFailure
+					}
+					if tc.changed {
+						changed := *p
+						changed.client.ClientID = "changed-client"
+						return &changed, nil
+					}
+				}
+				return p, nil
+			}
+			authority := delegationTestAuthority(func(context.Context, Binding) error {
+				if renewed {
+					return tc.authorityFailure
+				}
+				return nil
+			})
+			a, err := s.Resolve(t.Context(), b, authority)
+			require.Empty(t, a.Value())
+			if tc.definitive {
+				require.ErrorIs(t, err, ErrConfiguration)
+			} else {
+				require.ErrorIs(t, err, ErrTemporary)
+			}
+			c, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Equal(t, s.now(), c.refreshedAt)
+			if tc.definitive {
+				require.Empty(t, c.refresh)
+				require.Empty(t, c.assertion)
+				require.Equal(t, uuid.Nil, c.claim)
+			} else {
+				require.Equal(t, "rotation", delegationPlain(t, s, c.refresh))
+				require.NotEqual(t, uuid.Nil, c.claim)
+				// Even after dependencies recover, a quarantined assertion is not released.
+				renewed = false
+				_, err = s.Resolve(t.Context(), b, authority)
+				require.ErrorIs(t, err, ErrTemporary)
+				require.Equal(t, 1, store.claims)
+			}
+		})
+	}
+}
+
+func TestDelegationServiceOfflineStatusRejectsNonresolvableCredentials(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"configuration_failure", "reauthentication_required", "refused", "unknown"} {
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, _ := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+			c := store.rows[b]
+			c.status = status
+			store.rows[b] = c
+			result, err := s.OfflineStatus(t.Context(), p, b.HumanID)
+			require.NoError(t, err)
+			require.False(t, result.UsableRefresh)
+		})
+	}
+}
+
+func TestDelegationServiceRevokeAfterTrustRemoval(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+	store.trustRemoved = true
+	s.loadBinding = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) {
+		t.Fatal("revocation must not require live trust")
+		return nil, ErrConfiguration
+	}
+	require.ErrorIs(t, s.Revoke(t.Context(), b, nil), ErrConfiguration)
+	require.NotEmpty(t, store.rows[b].refresh)
+	require.NoError(t, s.Revoke(t.Context(), b, allow))
+	c := store.rows[b]
+	require.Empty(t, c.refresh)
+	require.Empty(t, c.assertion)
+	require.Empty(t, c.subject)
+	require.Empty(t, c.nonce)
+	require.Equal(t, int64(2), c.generation)
+}
+
+func TestDelegationServicePrePOSTAttempt(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"decrypt failure", "CAS conflict", "database failure", "success"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
+			switch name {
+			case "decrypt failure":
+				c := store.rows[b]
+				c.refresh = unreadableSecret("invalid ciphertext")
+				store.rows[b] = c
+			case "CAS conflict":
+				store.attemptConflict = true
+			case "database failure":
+				store.attemptError = errors.New("database unavailable")
+			}
+			posts := 0
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				posts++
+				require.Equal(t, s.now(), store.attemptedAt)
+				return delegationRenewal(p, s.now(), "new-id", "new-refresh"), nil
+			}
+			_, err := s.Resolve(t.Context(), b, allow)
+			switch name {
+			case "success":
+				require.NoError(t, err)
+				require.Equal(t, 1, posts)
+			case "decrypt failure":
+				require.ErrorIs(t, err, ErrConfiguration)
+			default:
+				require.ErrorIs(t, err, ErrTemporary)
+			}
+			if name != "success" {
+				require.Zero(t, posts)
+				require.True(t, store.attemptedAt.IsZero())
+				require.Equal(t, uuid.Nil, store.rows[b].claim)
+			}
+			if name == "database failure" || name == "CAS conflict" {
+				store.attemptError = nil
+				store.attemptConflict = false
+				_, err = s.Resolve(t.Context(), b, allow)
+				require.NoError(t, err)
+				require.Equal(t, 1, posts)
+			}
+		})
+	}
+}
+
+func TestDelegationServiceLoadsProviderAfterClaim(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"fresh provider", "changed registration", "deleted", "invalid", "temporary"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
+			fresh := *p
+			fresh.metadata.TokenEndpoint = "https://issuer.example/new-token"
+			want := ErrConfiguration
+			s.loadProvider = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) {
+				require.NotEqual(t, uuid.Nil, store.rows[b].claim, "full provider must be loaded after claim")
+				switch name {
+				case "changed registration":
+					fresh.client.ClientID = "replacement-client"
+				case "deleted":
+					return nil, pgx.ErrNoRows
+				case "invalid":
+					return nil, ErrConfiguration
+				case "temporary":
+					return nil, errors.New("discovery unavailable")
+				}
+				return &fresh, nil
+			}
+			posts := 0
+			s.refreshIdentity = func(_ context.Context, got Provider, _, _, _ string) (*RefreshResult, error) {
+				posts++
+				require.Same(t, &fresh, got)
+				return delegationRenewal(p, s.now(), "new-id", "rotation"), nil
+			}
+			_, err := s.Resolve(t.Context(), b, allow)
+			if name == "fresh provider" {
+				require.NoError(t, err)
+				require.Equal(t, 1, posts)
+			} else {
+				if name == "temporary" {
+					want = ErrTemporary
+				}
+				require.ErrorIs(t, err, want)
+				require.Zero(t, posts)
+			}
+			require.Equal(t, uuid.Nil, store.rows[b].claim)
+		})
+	}
+}
+
+func TestDelegationServiceInitialAuthorizationErrors(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{ErrTemporary, errors.New("dependency unavailable"), ErrConfiguration, ErrReauthentication} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, _ := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+			before := store.rows[b]
+			a, err := s.Resolve(t.Context(), b, delegationTestAuthority(func(context.Context, Binding) error {
+				return fmt.Errorf("authorization: %w", cause)
+			}))
+			want := ErrTemporary
+			if definitiveDelegationFailure(cause) {
+				want = ErrConfiguration
+			}
+			require.ErrorIs(t, err, want)
+			require.Empty(t, a.Value())
+			require.Equal(t, before, store.rows[b])
+		})
+	}
+}
+
+func TestDelegationServiceOfflineStatusInvalidPolicy(t *testing.T) {
+	t.Parallel()
+	for _, retained := range []bool{false, true} {
+		t.Run(fmt.Sprint(retained), func(t *testing.T) {
+			t.Parallel()
+			s, _, p, b, _ := newDelegationUnitFixture(t)
+			if retained {
+				require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+			}
+			p.client.Scope = []string{"openid"}
+			require.Empty(t, p.OfflineConfigurationHash())
+			status, err := s.OfflineStatus(t.Context(), p, b.HumanID)
+			require.ErrorIs(t, err, ErrConfiguration)
+			require.Equal(t, OfflineStatus{}, status)
+		})
+	}
+}
+
+type delegationAttemptHookStore struct {
+	delegationStore
+	beforeAttempt    func()
+	finishContextErr error
+}
+
+func (s *delegationAttemptHookStore) markRefreshAttempt(ctx context.Context, b Binding, generation int64, claim uuid.UUID, now time.Time) (bool, error) {
+	s.beforeAttempt()
+	return s.delegationStore.markRefreshAttempt(ctx, b, generation, claim, now)
+}
+
+func (s *delegationAttemptHookStore) release(ctx context.Context, b Binding, generation int64, claim uuid.UUID) (bool, error) {
+	s.finishContextErr = ctx.Err()
+	return s.delegationStore.release(ctx, b, generation, claim)
+}
+
+func TestDelegationServiceAttemptFailureReleaseSafety(t *testing.T) {
+	t.Parallel()
+	for _, superseded := range []bool{false, true} {
+		t.Run(fmt.Sprint(superseded), func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var callback delegationCredential
+			hook := &delegationAttemptHookStore{delegationStore: store}
+			hook.beforeAttempt = func() {
+				if superseded {
+					require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "callback-id", "callback-refresh", time.Hour), true))
+					callback = store.rows[b]
+				} else {
+					store.attemptError = errors.New("database unavailable")
+				}
+				cancel()
+			}
+			s.store = hook
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				t.Fatal("failed attempt must not POST")
+				return nil, nil
+			}
+			_, err := s.Resolve(ctx, b, allow)
+			require.ErrorIs(t, err, ErrTemporary)
+			require.NoError(t, hook.finishContextErr, "claim release must survive caller cancellation")
+			require.Equal(t, uuid.Nil, store.rows[b].claim)
+			if superseded {
+				require.Equal(t, callback, store.rows[b], "release must not overwrite a newer callback")
+			} else {
+				require.Equal(t, "refresh", delegationPlain(t, s, store.rows[b].refresh))
+			}
+		})
+	}
+}
+
+// Pause the second load after durable claim acquisition to exercise competing writes.
+type delegationRereadHookStore struct {
+	delegationStore
+	loads            int
+	beforeReread     func()
+	rereadError      error
+	finishCalls      int
+	finishContextErr error
+	finishDeadline   time.Time
+}
+
+func (s *delegationRereadHookStore) load(ctx context.Context, b Binding) (delegationCredential, error) {
+	s.loads++
+	if s.loads == 2 {
+		s.beforeReread()
+		if s.rereadError != nil {
+			return delegationCredential{}, s.rereadError
+		}
+	}
+	return s.delegationStore.load(ctx, b)
+}
+
+func (s *delegationRereadHookStore) release(ctx context.Context, b Binding, generation int64, claim uuid.UUID) (bool, error) {
+	s.finishCalls++
+	s.finishContextErr = ctx.Err()
+	s.finishDeadline, _ = ctx.Deadline()
+	return s.delegationStore.release(ctx, b, generation, claim)
+}
+
+func TestDelegationServicePostClaimRereadReleaseSafety(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		cancel    bool
+		supersede string
+		readFails bool
+	}{
+		{name: "read failure", readFails: true},
+		{name: "canceled read", cancel: true, readFails: true},
+		{name: "callback before failed read", supersede: "callback", readFails: true},
+		{name: "callback before mismatched read", supersede: "callback"},
+		{name: "revocation before failed read", supersede: "revoke", readFails: true},
+		{name: "revocation before mismatched read", supersede: "revoke"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
+			callbackService := *s
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			started, release := make(chan struct{}), make(chan struct{})
+			hook := &delegationRereadHookStore{delegationStore: store, beforeReread: func() { close(started); <-release }}
+			if tc.readFails {
+				hook.rereadError = errors.New("database unavailable")
+			}
+			s.store = hook
+			var posts atomic.Int32
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				posts.Add(1)
+				return delegationRenewal(p, s.now(), "renewed-id", ""), nil
+			}
+			done := make(chan error, 1)
+			go func() { _, err := s.Resolve(ctx, b, allow); done <- err }()
+			<-started
+			claimed, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.NotEqual(t, uuid.Nil, claimed.claim)
+			switch tc.supersede {
+			case "callback":
+				require.NoError(t, callbackService.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "callback-id", "callback-refresh", time.Hour), true))
+			case "revoke":
+				require.NoError(t, store.revoke(t.Context(), b))
+			}
+			winner, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			if tc.cancel {
+				cancel()
+			}
+			close(release)
+			require.ErrorIs(t, <-done, ErrTemporary)
+			require.Zero(t, posts.Load(), "pre-dispatch failure must not POST")
+			require.Equal(t, 1, hook.finishCalls)
+			require.NoError(t, hook.finishContextErr, "cleanup must survive cancellation")
+			require.False(t, hook.finishDeadline.IsZero(), "cleanup must be bounded")
+			require.WithinDuration(t, time.Now().Add(5*time.Second), hook.finishDeadline, time.Second)
+			after, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			if tc.supersede != "" {
+				require.Equal(t, winner, after, "cleanup must not overwrite callback or revocation")
+			} else {
+				want := claimed
+				want.claim = uuid.Nil
+				want.generation++
+				require.Equal(t, want, after, "cleanup must preserve the unspent credentials")
+				assertion, err := s.Resolve(t.Context(), b, allow)
+				require.NoError(t, err)
+				require.Equal(t, "renewed-id", assertion.Value())
+				require.Equal(t, int32(1), posts.Load())
+			}
+		})
+	}
+}
+
+type invalidHashProvider struct {
+	Provider
+	configuration, request string
+}
+
+func (p invalidHashProvider) DelegationConfigurationHash() string { return p.configuration }
+func (p invalidHashProvider) OfflineConfigurationHash() string    { return p.request }
+
+func TestDelegationRefusalRejectsInvalidPolicyWithoutMutation(t *testing.T) {
+	t.Parallel()
+	for _, retained := range []bool{false, true} {
+		for _, invalid := range []string{"configuration", "offline", "both"} {
+			t.Run(fmt.Sprintf("retained=%t/%s", retained, invalid), func(t *testing.T) {
+				t.Parallel()
+				s, store, p, b, _ := newDelegationUnitFixture(t)
+				if retained {
+					require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "expired-id", "refresh", time.Second), true))
+					now := s.now().Add(2 * time.Second)
+					s.now = func() time.Time { return now }
+				}
+				before := store.rows[b]
+				policy := invalidHashProvider{Provider: p, configuration: p.DelegationConfigurationHash(), request: p.OfflineConfigurationHash()}
+				if invalid != "offline" {
+					policy.configuration = ""
+				}
+				if invalid != "configuration" {
+					policy.request = ""
+				}
+				require.ErrorIs(t, s.RecordOfflineRefusal(t.Context(), policy, b.HumanID), ErrConfiguration)
+				require.Equal(t, before, store.rows[b], "invalid policy must not even clear expired state")
+				require.Equal(t, retained, len(store.rows) == 1)
+			})
+		}
+	}
+}
+
+func TestDelegationServiceCheck(t *testing.T) {
+	t.Parallel()
+	t.Run("current registration", func(t *testing.T) {
+		t.Parallel()
+		s, _, p, b, allow := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+		require.NoError(t, s.Check(t.Context(), b, allow))
+	})
+	t.Run("expired assertion still belongs to the registration", func(t *testing.T) {
+		t.Parallel()
+		s, store, p, b, allow := newDelegationUnitFixture(t)
+		signedIn := s.now()
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, signedIn, "id", "refresh", 30*time.Second), true))
+		s.now = func() time.Time { return signedIn.Add(time.Minute) }
+		before, err := store.load(t.Context(), b)
+		require.NoError(t, err)
+		require.True(t, before.assertionExpiry.Before(s.now()), "the assertion has expired")
+		require.NoError(t, s.Check(t.Context(), b, allow), "Check never judges assertion lifetime")
+		after, err := store.load(t.Context(), b)
+		require.NoError(t, err)
+		require.Equal(t, before, after, "Check never renews or rewrites the credential")
+	})
+	t.Run("changed registration", func(t *testing.T) {
+		t.Parallel()
+		s, _, p, b, allow := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+		p.client.ClientID = "rotated-client"
+		require.ErrorIs(t, s.Check(t.Context(), b, allow), ErrConfiguration)
+	})
+	t.Run("nothing retained", func(t *testing.T) {
+		t.Parallel()
+		s, _, _, b, allow := newDelegationUnitFixture(t)
+		require.ErrorIs(t, s.Check(t.Context(), b, allow), ErrReauthentication)
+	})
+	t.Run("authority revoked", func(t *testing.T) {
+		t.Parallel()
+		s, _, p, b, _ := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+		deny := delegationTestAuthority(func(context.Context, Binding) error { return ErrReauthentication })
+		require.ErrorIs(t, s.Check(t.Context(), b, deny), ErrConfiguration)
+	})
+}
+
+func TestDelegationServiceCheckResolvable(t *testing.T) {
+	t.Parallel()
+	retained := func(t *testing.T, refresh string, ttl time.Duration, edit func(*delegationCredential)) (*Service, Binding, Authorizer) {
+		t.Helper()
+		s, store, p, b, allow := newDelegationUnitFixture(t)
+		signedIn := s.now()
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, signedIn, "id", refresh, ttl), true))
+		s.now = func() time.Time { return signedIn.Add(10 * time.Minute) }
+		if edit != nil {
+			store.mu.Lock()
+			c := store.rows[b]
+			edit(&c)
+			store.rows[b] = c
+			store.mu.Unlock()
+		}
+		return s, b, allow
+	}
+	t.Run("live assertion", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Hour, nil)
+		require.NoError(t, s.CheckResolvable(t.Context(), b, allow))
+	})
+	t.Run("expired assertion with a refresh grant", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, nil)
+		require.NoError(t, s.CheckResolvable(t.Context(), b, allow))
+	})
+	t.Run("expired assertion without a refresh grant", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Minute, nil)
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+		require.NoError(t, s.Check(t.Context(), b, allow), "Check alone still reads the registration as current")
+	})
+	t.Run("reauthentication recorded", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) {
+			c.status = "reauthentication_required"
+			c.refresh = secret{}
+		})
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+		require.NoError(t, s.Check(t.Context(), b, allow), "Check alone does not see a recorded reauthentication")
+	})
+	t.Run("reauthentication recorded with a live assertion", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) { c.status = "reauthentication_required" })
+		require.NoError(t, s.CheckResolvable(t.Context(), b, allow), "Resolve still returns the live assertion")
+	})
+	t.Run("renewal backing off", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.retryAfter = time.Unix(1700000000, 0).Add(time.Hour) })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrTemporary)
+	})
+	t.Run("nothing retained", func(t *testing.T) {
+		t.Parallel()
+		s, _, _, b, allow := newDelegationUnitFixture(t)
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+	})
+	t.Run("retained under an earlier registration", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Hour, func(c *delegationCredential) { c.config = "earlier-registration" })
+		err := s.CheckResolvable(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrStaleRegistration)
+		require.ErrorIs(t, err, ErrConfiguration, "a stale registration is still a configuration failure to callers that do not ask")
+		require.EqualError(t, err, ErrConfiguration.Error())
+		require.ErrorIs(t, s.Check(t.Context(), b, allow), ErrStaleRegistration)
+	})
+	t.Run("renewal in flight with a live assertion", func(t *testing.T) {
+		t.Parallel()
+		tenMinutesIn := time.Unix(1700000000, 0).Add(10 * time.Minute)
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) {
+			c.claim = uuid.New()
+			c.updatedAt = tenMinutesIn
+		})
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrTemporary)
+		_, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrTemporary)
+	})
+	t.Run("claim with nothing running behind it and a live assertion", func(t *testing.T) {
+		t.Parallel()
+		tenMinutesIn := time.Unix(1700000000, 0).Add(10 * time.Minute)
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) {
+			c.claim = uuid.New()
+			c.updatedAt = tenMinutesIn.Add(-refreshClaimLimit)
+		})
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+		_, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrReauthentication)
+	})
+	t.Run("live assertion that does not decrypt", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) { c.assertion = unreadableSecret("not-a-ciphertext") })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+		_, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrConfiguration)
+	})
+	t.Run("live assertion whose subject does not decrypt", func(t *testing.T) {
+		t.Parallel()
+		s, store, p, b, allow := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "", time.Hour), true))
+		store.mu.Lock()
+		c := store.rows[b]
+		c.subject = unreadableSecret("not-a-ciphertext")
+		store.rows[b] = c
+		store.mu.Unlock()
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+		require.ErrorIs(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "", time.Hour), true), ErrConfiguration, "a fresh sign-in cannot repair it")
+	})
+	t.Run("refresh grant that does not decrypt", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.refresh = unreadableSecret("not-a-ciphertext") })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+		_, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrConfiguration)
+	})
+	t.Run("refresh grant whose nonce does not decrypt", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.nonce = unreadableSecret("not-a-ciphertext") })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+	})
+	t.Run("assertion inside the safety window without a refresh grant", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", 10*time.Minute+30*time.Second, nil)
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication, "Resolve does not release an assertion with 30 seconds left")
+	})
+	t.Run("refresh grant without a subject", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.subject = secret{} })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+	})
+	t.Run("refresh grant whose subject seals an empty value", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, nil)
+		sealed := plantedSecret(t, s, "")
+		store, ok := s.store.(*delegationMemoryStore)
+		require.True(t, ok)
+		store.mu.Lock()
+		c := store.rows[b]
+		c.subject = sealed
+		store.rows[b] = c
+		store.mu.Unlock()
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+	})
+	t.Run("configuration failure under the current registration", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Hour, func(c *delegationCredential) {
+			c.status = "configuration_failure"
+			c.retryAfter = time.Unix(1700000000, 0).Add(time.Hour)
+		})
+		err := s.CheckResolvable(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrConfiguration)
+		require.NotErrorIs(t, err, ErrStaleRegistration)
+	})
+	t.Run("erased after a configuration failure", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) { c.status = "configuration_failure" })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication, "a sign-in replaces an erased row")
+	})
+}
+
+func TestDelegationServiceEchoedRefreshTokenKeepsStoredCopies(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		ambiguous bool
+	}{
+		{name: "renewed", ambiguous: false},
+		{name: "ambiguous result", ambiguous: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			// Both copies, as dual_write stores them. The fixture's key opens
+			// the platform copy; the organization copy only has to survive.
+			planted := plantedSecret(t, s, "old-refresh")
+			planted.stored.Org = pgtype.Text{String: "organization-key-copy", Valid: true}
+			store.mu.Lock()
+			row := store.rows[b]
+			row.refresh = planted
+			store.rows[b] = row
+			store.mu.Unlock()
+
+			posts := 0
+			s.refreshIdentity = func(_ context.Context, _ Provider, refresh, _, _ string) (*RefreshResult, error) {
+				posts++
+				require.Equal(t, "old-refresh", refresh)
+				r := delegationRenewal(p, s.now(), "new-id", "old-refresh")
+				if tc.ambiguous {
+					return r, errors.New("connection reset after the provider answered")
+				}
+				return r, nil
+			}
+			a, err := s.Resolve(t.Context(), b, allow)
+			require.Equal(t, 1, posts, "the refresh reached the provider")
+			if tc.ambiguous {
+				require.ErrorIs(t, err, ErrTemporary)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, "new-id", a.Value())
+			}
+
+			c, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.NotNil(t, c.refresh.stored, "an echoed refresh token is not a rotation, so nothing is sealed again")
+			require.Equal(t, *planted.stored, *c.refresh.stored, "both stored copies are kept as they were")
+		})
+	}
+}

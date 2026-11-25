@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -21,6 +23,50 @@ var ErrPrincipalNotFound = errors.New("principal not found")
 // ErrPrincipalInvalid reports caller input that cannot identify a supported
 // principal.
 var ErrPrincipalInvalid = errors.New("principal invalid")
+
+// ResolveActorPrincipals resolves the principals an audience or bypass check
+// considers for the request: the effective agent and its roles when an agent or
+// an admitted workload acts, else userID's principals.
+func ResolveActorPrincipals(ctx context.Context, db repo.DBTX, organizationID string, userID string) ([]urn.Principal, error) {
+	if agent, ok := contextvalues.EffectiveAgent(ctx); ok {
+		return ResolveAgentPrincipals(ctx, db, organizationID, agent)
+	}
+	return ResolveUserPrincipals(ctx, db, organizationID, userID)
+}
+
+// ResolveAgentPrincipals resolves the principals considered for an agent actor:
+// user:all (so everyone-audience policies still apply), the agent, and the
+// roles it holds. The agent must be active in the organization.
+func ResolveAgentPrincipals(ctx context.Context, db repo.DBTX, organizationID string, agent urn.Principal) ([]urn.Principal, error) {
+	if organizationID == "" {
+		return nil, fmt.Errorf("organization id is required")
+	}
+	resolved, err := agents.ResolvePrincipal(ctx, db, organizationID, agent)
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent principal: %w", err)
+	}
+	// An inactive or owner-latched agent holds no principals of its own.
+	if agents.DeriveLifecycle(resolved) != agents.LifecycleActive || resolved.OwnerReassignmentRequiredAt.Valid {
+		return []urn.Principal{AllUsersPrincipal()}, nil
+	}
+
+	principals := []urn.Principal{AllUsersPrincipal(), urn.NewPrincipal(urn.PrincipalTypeAgent, resolved.ID.String())}
+	roleURNs, err := repo.New(db).ListAgentRolePrincipals(ctx, repo.ListAgentRolePrincipalsParams{
+		OrganizationID: organizationID,
+		AgentID:        resolved.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent role principals: %w", err)
+	}
+	for _, raw := range roleURNs {
+		principal, err := parseRolePrincipalURN(raw)
+		if err != nil {
+			return nil, err
+		}
+		principals = append(principals, principal)
+	}
+	return principals, nil
+}
 
 // ResolveUserPrincipals resolves the principals that should be considered for
 // an organization-scoped request. Every request with a known organization gets
@@ -57,8 +103,9 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 		urn.NewPrincipal(urn.PrincipalTypeUser, userID).String(): {},
 	}
 
-	q := repo.New(db)
-	roleRows, err := q.ListMemberRolePrincipalsByUser(ctx, repo.ListMemberRolePrincipalsByUserParams{
+	// Direct role assignments come first, then roles granted through
+	// directory role mappings.
+	roleRows, err := repo.New(db).ListUserRolePrincipals(ctx, repo.ListUserRolePrincipalsParams{
 		OrganizationID: organizationID,
 		UserID:         userID,
 	})
@@ -66,8 +113,8 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 		return nil, fmt.Errorf("resolve role principals: %w", err)
 	}
 
-	for _, role := range roleRows {
-		principal, err := parseRolePrincipalURN(role.PrincipalUrn)
+	for _, row := range roleRows {
+		principal, err := parseRolePrincipalURN(row.PrincipalUrn)
 		if err != nil {
 			return nil, err
 		}
@@ -84,10 +131,11 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 
 // ValidatePrincipal verifies that principal is a valid grant target in the
 // organization. Unlike ResolveUserPrincipals, this is strict: concrete users
-// must be active organization members and role principals must identify an
-// active role in the organization. Caller-input problems are reported via
-// ErrPrincipalInvalid and ErrPrincipalNotFound; any other error is an
-// infrastructure failure, not a verdict on the principal.
+// must be active organization members, role principals must identify an active
+// role, and agent principals must identify a non-deleted agent in the tenant.
+// Caller-input problems are reported via ErrPrincipalInvalid and
+// ErrPrincipalNotFound; any other error is an infrastructure failure, not a
+// verdict on the principal.
 func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal) error {
 	if organizationID == "" {
 		return fmt.Errorf("organization id is required")
@@ -136,6 +184,28 @@ func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string,
 		if row.RoleUrn != principal.String() {
 			return fmt.Errorf("%w: role principal %q does not match active role %q", ErrPrincipalNotFound, principal.String(), row.RoleUrn)
 		}
+	case urn.PrincipalTypeAgent:
+		if _, err := agents.ResolvePrincipal(ctx, db, organizationID, principal); err != nil {
+			switch {
+			case errors.Is(err, agents.ErrPrincipalInvalid):
+				return fmt.Errorf("%w: agent principal %q", ErrPrincipalInvalid, principal.String())
+			case errors.Is(err, agents.ErrPrincipalNotFound):
+				return fmt.Errorf("validate agent principal %q: %w", principal.String(), ErrPrincipalNotFound)
+			default:
+				return fmt.Errorf("validate agent principal %q: %w", principal.String(), err)
+			}
+		}
+	case urn.PrincipalTypeAPIKey:
+		// A key's policy is written only through the keys service, so no
+		// audience, assignment or policy elsewhere can target one.
+		return fmt.Errorf("%w: api key principal %q holds grants only through its key policy", ErrPrincipalInvalid, principal.String())
+	case urn.PrincipalTypeSystem:
+		// A system principal is an audit actor, never a grant target.
+		return fmt.Errorf("%w: system principal %q cannot hold grants", ErrPrincipalInvalid, principal.String())
+	case urn.PrincipalTypeWorkload:
+		// A workload holds no grants of its own; it inherits the permission
+		// policies of the agents assigned to it.
+		return fmt.Errorf("%w: workload principal %q cannot hold grants", ErrPrincipalInvalid, principal.String())
 	default:
 		return fmt.Errorf("%w: unsupported principal type %q", ErrPrincipalInvalid, principal.Type)
 	}
@@ -159,14 +229,17 @@ func DeleteRoleGrants(ctx context.Context, q *repo.Queries, orgID, rolePrincipal
 	return nil
 }
 
-// PatchPrincipalGrants applies exact grant additions and removals for one
-// principal without treating omitted grants as deletes.
+// PatchPrincipalGrants leaves grants that are neither added nor removed
+// untouched.
 func PatchPrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID string, principal urn.Principal, addGrants []*RoleGrant, removeGrants []*RoleGrant) error {
 	if orgID == "" {
 		return fmt.Errorf("organization id is required")
 	}
 	if _, err := principal.Value(); err != nil {
 		return fmt.Errorf("invalid grant principal: %w", err)
+	}
+	if err := RequireUpstreamSelectorWritesForGrants(ctx, orgID, addGrants); err != nil {
+		return err
 	}
 
 	removeRows, err := flattenRoleGrants(removeGrants)
@@ -230,7 +303,7 @@ func parseRolePrincipalURN(rolePrincipalURN string) (urn.Principal, error) {
 
 func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, principal urn.Principal, rows []roleGrantRow) error {
 	for _, row := range rows {
-		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		if err := upsertGrant(ctx, q, repo.UpsertPrincipalGrantParams{
 			OrganizationID: orgID,
 			PrincipalUrn:   principal,
 			Scope:          string(row.Scope),
@@ -244,6 +317,11 @@ func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, p
 }
 
 func insertRoleGrantsIfAbsent(ctx context.Context, q *repo.Queries, orgID string, roleSlug string, principal urn.Principal, rows []roleGrantRow) error {
+	for _, row := range rows {
+		if err := RequireUpstreamSelectorWrites(ctx, orgID, row.Selector); err != nil {
+			return err
+		}
+	}
 	for _, row := range rows {
 		if _, err := q.InsertPrincipalGrantIfAbsent(ctx, repo.InsertPrincipalGrantIfAbsentParams{
 			OrganizationID: orgID,

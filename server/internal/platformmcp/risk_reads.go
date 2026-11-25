@@ -29,10 +29,6 @@ var (
 	ErrRiskReadNotFound = errors.New("platform mcp risk resource not found")
 )
 
-type riskPolicyReader interface {
-	ListPage(ctx context.Context, organizationID string, projectID uuid.UUID, cursor *policycore.PageCursor, limit int32) ([]policycore.Policy, error)
-}
-
 type riskExclusionReader interface {
 	ListPage(ctx context.Context, projectID uuid.UUID, policyID uuid.NullUUID, cursor *exclusioncore.PageCursor, limit int32) ([]exclusioncore.Exclusion, error)
 }
@@ -77,25 +73,23 @@ func (r postgresRiskProjectResolver) Resolve(ctx context.Context, organizationID
 }
 
 type RiskReadService struct {
-	projects           riskProjectResolver
-	policies           riskPolicyReader
+	projects riskProjectResolver
+
 	exclusions         riskExclusionReader
+	loadPolicyPage     func(context.Context, string, uuid.UUID, *policycore.PageCursor, int32) ([]riskPolicySnapshot, error)
 	cursor             *riskCursorCodec
 	catalog            policycatalog.Catalog
 	catalogFingerprint string
 	redactionKey       []byte
 	versions           *riskVersionCodec
-	loadPolicyDetail   func(context.Context, uuid.UUID, uuid.UUID) (policycore.Policy, string, error)
+	loadPolicyDetail   func(context.Context, uuid.UUID, uuid.UUID) (riskPolicySnapshot, string, error)
 }
 
 func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService, error) {
 	if db == nil {
 		return nil, ErrUnavailable
 	}
-	cursor, err := newRiskCursorCodec(keyMaterial)
-	if err != nil {
-		return nil, err
-	}
+	cursor := newRiskCursorCodec(keyMaterial)
 	catalog, err := policycatalog.Build()
 	if err != nil {
 		return nil, fmt.Errorf("build risk policy catalog: %w", err)
@@ -110,15 +104,34 @@ func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService,
 	}
 	redactionKey := sha256.Sum256([]byte("platform-mcp-risk-value:" + keyMaterial))
 	return &RiskReadService{
-		projects:           postgresRiskProjectResolver{queries: platformrepo.New(db)},
-		policies:           policycore.New(db),
+		projects: postgresRiskProjectResolver{queries: platformrepo.New(db)},
+
 		exclusions:         exclusioncore.New(db),
 		cursor:             cursor,
 		catalog:            catalog,
 		catalogFingerprint: fingerprint,
 		redactionKey:       redactionKey[:],
 		versions:           versions,
-		loadPolicyDetail: func(ctx context.Context, projectID, policyID uuid.UUID) (policycore.Policy, string, error) {
+		loadPolicyPage: func(ctx context.Context, organizationID string, projectID uuid.UUID, cursor *policycore.PageCursor, limit int32) ([]riskPolicySnapshot, error) {
+			tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
+			if err != nil {
+				return nil, fmt.Errorf("begin risk policy page snapshot: %w", err)
+			}
+			defer func() { _ = tx.Rollback(ctx) }()
+			policies, err := policycore.New(tx).ListPage(ctx, organizationID, projectID, cursor, limit)
+			if err != nil {
+				return nil, fmt.Errorf("load risk policy page snapshot: %w", err)
+			}
+			result, err := loadShadowPolicySnapshots(ctx, tx, policies, limit)
+			if err != nil {
+				return nil, err
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return nil, fmt.Errorf("commit risk policy page snapshot: %w", err)
+			}
+			return result, nil
+		},
+		loadPolicyDetail: func(ctx context.Context, projectID, policyID uuid.UUID) (riskPolicySnapshot, string, error) {
 			tx, err := db.BeginTx(ctx, pgx.TxOptions{
 				IsoLevel:       pgx.RepeatableRead,
 				AccessMode:     pgx.ReadOnly,
@@ -127,25 +140,29 @@ func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService,
 				CommitQuery:    "",
 			})
 			if err != nil {
-				return policycore.Policy{}, "", fmt.Errorf("begin risk policy detail snapshot: %w", err)
+				return riskPolicySnapshot{}, "", fmt.Errorf("begin risk policy detail snapshot: %w", err)
 			}
 			defer func() { _ = tx.Rollback(ctx) }()
 			policy, err := policycore.New(tx).Get(ctx, projectID, policyID)
 			if err != nil {
-				return policycore.Policy{}, "", fmt.Errorf("load risk policy detail snapshot: %w", err)
+				return riskPolicySnapshot{}, "", fmt.Errorf("load risk policy detail snapshot: %w", err)
 			}
-			state, err := riskPolicyVersionState(ctx, tx, policy, false)
+			state, err := riskPolicyVersionState(ctx, tx, policy)
 			if err != nil {
-				return policycore.Policy{}, "", err
+				return riskPolicySnapshot{}, "", err
 			}
 			version, err := versions.PolicyVersion(state)
 			if err != nil {
-				return policycore.Policy{}, "", err
+				return riskPolicySnapshot{}, "", err
+			}
+			decisions, err := shadowPolicyDecisionsFromVersionState(state)
+			if err != nil {
+				return riskPolicySnapshot{}, "", err
 			}
 			if err := tx.Commit(ctx); err != nil {
-				return policycore.Policy{}, "", fmt.Errorf("commit risk policy detail snapshot: %w", err)
+				return riskPolicySnapshot{}, "", fmt.Errorf("commit risk policy detail snapshot: %w", err)
 			}
-			return policy, version, nil
+			return riskPolicySnapshot{policy: policy, shadowDecisions: decisions}, version, nil
 		},
 	}, nil
 }
@@ -162,16 +179,17 @@ type RiskCompatibility struct {
 }
 
 type RiskPolicySummary struct {
-	ID            string            `json:"id"`
-	Name          string            `json:"name"`
-	PolicyType    string            `json:"policy_type"`
-	Enabled       bool              `json:"enabled"`
-	Action        string            `json:"action,omitempty"`
-	Sources       []string          `json:"sources"`
-	Score         float64           `json:"score"`
-	CreatedAt     string            `json:"created_at"`
-	UpdatedAt     string            `json:"updated_at"`
-	Compatibility RiskCompatibility `json:"compatibility"`
+	ID              string                 `json:"id"`
+	Name            string                 `json:"name"`
+	PolicyType      string                 `json:"policy_type"`
+	Enabled         bool                   `json:"enabled"`
+	Action          string                 `json:"action,omitempty"`
+	Sources         []string               `json:"sources"`
+	Score           float64                `json:"score"`
+	CreatedAt       string                 `json:"created_at"`
+	UpdatedAt       string                 `json:"updated_at"`
+	Compatibility   RiskCompatibility      `json:"compatibility"`
+	ShadowDecisions *ShadowPolicyDecisions `json:"shadow_decisions,omitempty"`
 }
 
 type RiskDetectionScope struct {
@@ -179,23 +197,55 @@ type RiskDetectionScope struct {
 	MessageTypes []string `json:"message_types"`
 }
 
+// RiskPolicyMCPScope is present when a policy is limited to MCP tool calls
+// through chosen servers and checked at the gateway before the tool runs.
+// Absent means the policy applies to agent sessions instead.
+type RiskPolicyMCPScope struct {
+	AllServers      bool                       `json:"all_servers"`
+	ToolAnnotations []string                   `json:"tool_annotations"`
+	Servers         []RiskPolicyMCPServerScope `json:"servers"`
+}
+
+// RiskPolicyMCPServerScope selects one server. Tools is absent when the
+// server follows the policy's tool_annotations rule, and ["*"] when every
+// tool on it is in scope.
+type RiskPolicyMCPServerScope struct {
+	MCPServerID string   `json:"mcp_server_id"`
+	Tools       []string `json:"tools,omitempty"`
+}
+
+func riskPolicyMCPScopeView(scope *policycore.MCPScope) *RiskPolicyMCPScope {
+	if scope == nil {
+		return nil
+	}
+	view := &RiskPolicyMCPScope{
+		AllServers:      scope.AllServers,
+		ToolAnnotations: append([]string{}, scope.ToolAnnotations...),
+		Servers:         make([]RiskPolicyMCPServerScope, 0, len(scope.Servers)),
+	}
+	for _, server := range scope.Servers {
+		view.Servers = append(view.Servers, RiskPolicyMCPServerScope{MCPServerID: server.MCPServerID.String(), Tools: slices.Clone(server.Tools)})
+	}
+	return view
+}
+
 type RiskPolicyDetail struct {
+	Audience *RiskPolicyAudience `json:"audience,omitempty"`
 	RiskPolicySummary
 	Version                string               `json:"version"`
 	PresidioEntities       []string             `json:"presidio_entities"`
 	PresidioScoreThreshold *float64             `json:"presidio_score_threshold,omitempty"`
 	ApprovedEmailDomains   []string             `json:"approved_email_domains"`
 	DisabledRules          []string             `json:"disabled_rules"`
-	MessageTypes           []string             `json:"message_types"`
 	DetectionScopes        []RiskDetectionScope `json:"detection_scopes"`
+	MCPScope               *RiskPolicyMCPScope  `json:"mcp_scope,omitempty"`
 	UserMessage            *string              `json:"user_message,omitempty"`
 	Prompt                 *string              `json:"prompt,omitempty"`
-	PendingMessages        *int64               `json:"pending_messages,omitempty"`
-	TotalMessages          *int64               `json:"total_messages,omitempty"`
 }
 
 type ListRiskPoliciesInput struct {
-	ProjectID   string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
 	ProjectSlug string `json:"project_slug,omitempty"`
 	Cursor      string `json:"cursor,omitempty"`
 	Limit       int    `json:"limit,omitempty"`
@@ -210,7 +260,8 @@ type ListRiskPoliciesOutput struct {
 }
 
 type GetRiskPolicyInput struct {
-	ProjectID   string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
 	ProjectSlug string `json:"project_slug,omitempty"`
 	PolicyID    string `json:"policy_id"`
 }
@@ -239,7 +290,8 @@ type RiskExclusionSummary struct {
 }
 
 type ListRiskExclusionsInput struct {
-	ProjectID   string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
 	ProjectSlug string `json:"project_slug,omitempty"`
 	PolicyID    string `json:"policy_id,omitempty"`
 	Cursor      string `json:"cursor,omitempty"`
@@ -274,16 +326,16 @@ func (s *RiskReadService) ListPolicies(ctx context.Context, principal Principal,
 		}
 		pageCursor = &policycore.PageCursor{CreatedAt: decoded.CreatedAt, ID: decoded.ID}
 	}
-	policies, err := s.policies.ListPage(ctx, principal.OrganizationID, project.ID, pageCursor, int32(limit)) // #nosec G115 -- riskPageLimit caps at 50.
+	policies, err := s.loadPolicyPage(ctx, principal.OrganizationID, project.ID, pageCursor, int32(limit)) // #nosec G115 -- riskPageLimit caps at 50.
 	if err != nil {
 		return ListRiskPoliciesOutput{}, fmt.Errorf("list risk policy page: %w", err)
 	}
 	output := ListRiskPoliciesOutput{Project: riskProject(project), CatalogVersion: s.catalog.Schema, CatalogFingerprint: s.catalogFingerprint, Policies: make([]RiskPolicySummary, 0, min(len(policies), limit)), NextCursor: ""}
 	for _, policy := range policies[:min(len(policies), limit)] {
-		output.Policies = append(output.Policies, s.policySummary(policy))
+		output.Policies = append(output.Policies, s.policySummary(policy.policy, policy.shadowDecisions))
 	}
 	if len(policies) > limit {
-		last := policies[limit-1]
+		last := policies[limit-1].policy
 		output.NextCursor, err = s.cursor.Encode(riskCursor{Kind: "policies", OrganizationID: principal.OrganizationID, Binding: principalCursorBinding(principal), ProjectID: project.ID, PolicyID: uuid.Nil, CreatedAt: last.CreatedAt, ID: last.ID})
 		if err != nil {
 			return ListRiskPoliciesOutput{}, err
@@ -311,8 +363,16 @@ func (s *RiskReadService) GetPolicy(ctx context.Context, principal Principal, in
 	if err != nil {
 		return GetRiskPolicyOutput{}, fmt.Errorf("get risk policy detail: %w", err)
 	}
-	detail := s.policyDetail(policy)
+	detail := s.policyDetail(policy.policy, policy.shadowDecisions)
 	detail.Version = version
+	if externalRiskAudiencePrincipal(principal) {
+		principals := []string{}
+		if policy.policy.AudienceType != "everyone" {
+			principals = append(principals, policy.policy.AudiencePrincipalURNs...)
+		}
+		// Everyone's internal user:all grant is not a targeted audience identity.
+		detail.Audience = &RiskPolicyAudience{Type: policy.policy.AudienceType, PrincipalURNs: principals}
+	}
 	return GetRiskPolicyOutput{Project: riskProject(project), CatalogVersion: s.catalog.Schema, CatalogFingerprint: s.catalogFingerprint, Policy: detail}, nil
 }
 
@@ -367,7 +427,7 @@ func (s *RiskReadService) ListExclusions(ctx context.Context, principal Principa
 }
 
 func (s *RiskReadService) valid() bool {
-	return s != nil && s.projects != nil && s.policies != nil && s.exclusions != nil && s.cursor != nil && len(s.redactionKey) > 0 && s.versions != nil && s.catalog.Schema != "" && s.catalogFingerprint != "" && s.loadPolicyDetail != nil
+	return s != nil && s.projects != nil && s.exclusions != nil && s.cursor != nil && len(s.redactionKey) > 0 && s.versions != nil && s.catalog.Schema != "" && s.catalogFingerprint != "" && s.loadPolicyPage != nil && s.loadPolicyDetail != nil
 }
 
 func riskPageLimit(value int) (int, error) {
@@ -384,7 +444,7 @@ func riskProject(project ResolvedProject) RiskProject {
 	return RiskProject{ID: project.ID.String(), Name: project.Name, Slug: project.Slug}
 }
 
-func (s *RiskReadService) policySummary(policy policycore.Policy) RiskPolicySummary {
+func (s *RiskReadService) policySummary(policy policycore.Policy, shadowDecisions *ShadowPolicyDecisions) RiskPolicySummary {
 	unsupported := s.policyUnsupported(policy)
 	action := policy.Action
 	if !s.policyActionSupported(policy) {
@@ -394,25 +454,24 @@ func (s *RiskReadService) policySummary(policy policycore.Policy) RiskPolicySumm
 		ID: policy.ID.String(), Name: policy.Name, PolicyType: policy.PolicyType,
 		Enabled: policy.Enabled, Action: action, Sources: allowlisted(policy.Sources, s.catalog.Sources),
 		Score: policy.Score, CreatedAt: policy.CreatedAt.UTC().Format(time.RFC3339Nano), UpdatedAt: policy.UpdatedAt.UTC().Format(time.RFC3339Nano),
-		Compatibility: compatibility(unsupported),
+		Compatibility: compatibility(unsupported), ShadowDecisions: shadowDecisions,
 	}
 }
 
-func (s *RiskReadService) policyDetail(policy policycore.Policy) RiskPolicyDetail {
+func (s *RiskReadService) policyDetail(policy policycore.Policy, shadowDecisions *ShadowPolicyDecisions) RiskPolicyDetail {
 	detectionScopes, _ := s.projectDetectionScopes(policy)
 	detail := RiskPolicyDetail{
-		RiskPolicySummary:      s.policySummary(policy),
+		Audience:               nil,
+		RiskPolicySummary:      s.policySummary(policy, shadowDecisions),
 		Version:                "",
 		PresidioEntities:       allowlisted(policy.PresidioEntities, s.catalog.PresidioEntities),
 		PresidioScoreThreshold: policy.PresidioScoreThreshold,
 		ApprovedEmailDomains:   append([]string{}, policy.ApprovedEmailDomains...),
 		DisabledRules:          allowlisted(policy.DisabledRules, s.catalog.DisabledRules),
-		MessageTypes:           allowlisted(policy.MessageTypes, s.catalog.PolicyMessageTypes),
 		DetectionScopes:        detectionScopes,
+		MCPScope:               riskPolicyMCPScopeView(policy.MCPScope),
 		UserMessage:            policy.UserMessage,
 		Prompt:                 nil,
-		PendingMessages:        policy.PendingMessages,
-		TotalMessages:          policy.TotalMessages,
 	}
 	if policy.PolicyType == "prompt_based" && policy.Prompt != nil && utf8.RuneCountInString(*policy.Prompt) <= 4000 {
 		detail.Prompt = policy.Prompt
@@ -425,8 +484,8 @@ func (s *RiskReadService) policyUnsupported(policy policycore.Policy) []string {
 	if !s.policyActionSupported(policy) {
 		unsupported = append(unsupported, "unsupported_action")
 	}
-	if policy.AudienceType != "everyone" {
-		unsupported = append(unsupported, "targeted_audience")
+	if policy.AudienceType != "everyone" && policy.AudienceType != "targeted" {
+		unsupported = append(unsupported, "unsupported_audience")
 	}
 	if len(policy.CustomRuleIDs) > 0 {
 		unsupported = append(unsupported, "custom_rules")
@@ -434,17 +493,20 @@ func (s *RiskReadService) policyUnsupported(policy policycore.Policy) []string {
 	if policy.ModelConfig != nil {
 		unsupported = append(unsupported, "model_config")
 	}
+	if policy.ApprovalConfig != nil {
+		unsupported = append(unsupported, "approval_config")
+	}
 	if policy.ShadowMCPDisposition != nil {
 		unsupported = append(unsupported, "shadow_mcp_url_decisions")
 	}
 	_, scopesSupported := s.projectDetectionScopes(policy)
-	if policy.ScopeInclude != nil || policy.ScopeExempt != nil || !scopesSupported {
+	if !scopesSupported {
 		unsupported = append(unsupported, "raw_scope")
 	}
 	if policy.Prompt != nil && utf8.RuneCountInString(*policy.Prompt) > 4000 {
 		unsupported = append(unsupported, "prompt_too_long")
 	}
-	if hasUnknown(policy.Sources, s.catalog.Sources) || hasUnknown(policy.PresidioEntities, s.catalog.PresidioEntities) || hasUnknown(policy.DisabledRules, s.catalog.DisabledRules) || hasUnknown(policy.MessageTypes, s.catalog.PolicyMessageTypes) || len(policy.PromptInjectionRules) > 0 {
+	if hasUnknown(policy.Sources, s.catalog.Sources) || hasUnknown(policy.PresidioEntities, s.catalog.PresidioEntities) || hasUnknown(policy.DisabledRules, s.catalog.DisabledRules) || len(policy.PromptInjectionRules) > 0 {
 		unsupported = append(unsupported, "unknown_detector_value")
 	}
 	slices.Sort(unsupported)

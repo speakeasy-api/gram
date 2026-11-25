@@ -1,0 +1,1012 @@
+package oktaresourceconnections
+
+import (
+	"bytes"
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/url"
+	"regexp"
+	"slices"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
+	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
+
+	gen "github.com/speakeasy-api/gram/server/gen/http/okta_resource_connections/server"
+	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	"github.com/speakeasy-api/gram/server/internal/oktaissuer"
+	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+// Client binding states reported per row.
+const (
+	ClientBindingBound     = "bound"
+	ClientBindingSingle    = "single"
+	ClientBindingAmbiguous = "ambiguous"
+	ClientBindingMissing   = "missing"
+)
+
+// Okta-operated org domains; deep links are only built for these because a
+// custom domain has no derivable admin host.
+var oktaOrgHostSuffixes = []string{"okta.com", "oktapreview.com", "okta-emea.com", "okta-gov.com", "okta.mil", "trexcloud.com"}
+
+// Okta application instance ids.
+var oktaAppIDPattern = regexp.MustCompile(`^0oa[A-Za-z0-9]{10,40}$`)
+
+type Service struct {
+	tracer   trace.Tracer
+	logger   *slog.Logger
+	db       *pgxpool.Pool
+	auth     *auth.Auth
+	authz    *authz.Engine
+	audit    *audit.Logger
+	features feature.Provider
+}
+
+var (
+	_ srv.Service = (*Service)(nil)
+	_ srv.Auther  = (*Service)(nil)
+)
+
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessionManager *sessions.Manager,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+	features feature.Provider,
+) *Service {
+	logger = logger.With(attr.SlogComponent("oktaresourceconnections"))
+	return &Service{
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"),
+		logger:   logger,
+		db:       db,
+		auth:     auth.New(logger, db, sessionManager, authzEngine),
+		authz:    authzEngine,
+		audit:    auditLogger,
+		features: features,
+	}
+}
+
+func Attach(mux goahttp.Muxer, service *Service) {
+	endpoints := srv.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
+	endpoints.Use(middleware.TraceMethods(service.tracer))
+	gen.Mount(
+		mux,
+		gen.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
+	)
+}
+
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
+}
+
+// DeleteForConnection removes every resource connection recorded for an
+// identity provider connection; the revoke path calls it inside its own
+// transaction.
+func DeleteForConnection(ctx context.Context, dbtx repo.DBTX, organizationID string, connectionID uuid.UUID) error {
+	_, err := repo.New(dbtx).DeleteResourceConnectionsForConnection(ctx, repo.DeleteResourceConnectionsForConnectionParams{OrganizationID: organizationID, IdentityProviderConnectionID: connectionID})
+	if err != nil {
+		return fmt.Errorf("delete resource connections: %w", err)
+	}
+	return nil
+}
+
+// ExistForConnection reports whether any resource connection is recorded
+// for an identity provider connection.
+func ExistForConnection(ctx context.Context, dbtx repo.DBTX, organizationID string, connectionID uuid.UUID) (bool, error) {
+	has, err := repo.New(dbtx).HasResourceConnections(ctx, repo.HasResourceConnectionsParams{OrganizationID: organizationID, IdentityProviderConnectionID: connectionID})
+	if err != nil {
+		return false, fmt.Errorf("read resource connections: %w", err)
+	}
+	return has, nil
+}
+
+// authorize runs RBAC; a mutation additionally refuses support sessions and non-principal API keys.
+func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.AuthContext, *slog.Logger, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, s.logger, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
+		return nil, logger, err
+	}
+	if mutation {
+		if mode, byKey := contextvalues.APIKeyAuthorization(ctx); byKey && mode != contextvalues.APIKeyAuthorizationModePrincipal {
+			return nil, logger, oops.E(oops.CodeForbidden, nil, "resource connections cannot be changed with an API key").LogWarn(ctx, logger)
+		}
+		if contextvalues.IsSupportSession(ctx) {
+			return nil, logger, oops.E(oops.CodeForbidden, nil, "resource connections cannot be changed from a support session").LogWarn(ctx, logger)
+		}
+	}
+	return authCtx, logger, nil
+}
+
+// readable keeps the servers the caller may read, as the MCP server lists do:
+// org:admin does not imply mcp:read.
+func (s *Service) readable(ctx context.Context, servers []repo.ListEligibleServersRow) ([]repo.ListEligibleServersRow, error) {
+	checks := make([]authz.Check, len(servers))
+	for i, sv := range servers {
+		checks[i] = authz.MCPServer(authz.MCPServerIDOf(sv.ID), authz.ProjectIDOf(sv.ProjectID)).Read()
+	}
+	allowedIDs, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, fmt.Errorf("filter readable servers: %w", err)
+	}
+	allowed := make(map[string]struct{}, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowed[id] = struct{}{}
+	}
+	out := make([]repo.ListEligibleServersRow, 0, len(allowedIDs))
+	for _, sv := range servers {
+		if _, ok := allowed[sv.ID.String()]; ok {
+			out = append(out, sv)
+		}
+	}
+	return out, nil
+}
+
+// actor is the canonical principal for the audit log; a principal credential
+// carries no user id, so its URN stands in.
+func actor(ctx context.Context, authCtx *contextvalues.AuthContext) urn.Principal {
+	if p, ok := contextvalues.AuthenticatedActor(ctx); ok {
+		return p
+	}
+	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+}
+
+// upstreamKey identifies the resource the administrator connects in Okta.
+type upstreamKey struct {
+	issuerID uuid.UUID
+	resource string
+}
+
+// record is a resource connection row with the app instance label from the
+// snapshot, when it still has one.
+type record struct {
+	repo.OktaResourceConnection
+	label string
+}
+
+// row is one server joined with its readiness inputs.
+type row struct {
+	server     repo.ListEligibleServersRow
+	connection *record
+	clientID   string
+	binding    string
+	scopes     []string
+	resource   string
+	state      State
+	reason     string
+	broken     string
+}
+
+func (r row) key() upstreamKey {
+	return upstreamKey{issuerID: r.server.IssuerID, resource: r.resource}
+}
+
+// snapshot is the org's connection, every derived row, and the lookups
+// needed to derive one more.
+type snapshot struct {
+	connection   repo.GetLiveConnectionRow
+	rows         []row
+	total        int
+	pending      int
+	undiscovered int
+	clients      map[uuid.UUID][]repo.ListIssuerClientsRow
+	bindings     map[uuid.UUID][]repo.ListEMABindingsRow
+	records      map[upstreamKey]*record
+	deepLink     string
+
+	// resources is the cached protected resource row per remote-backed
+	// server, read once; the login probes, this surface never does.
+	resources map[resourceKey]repo.ListRemoteProtectedResourceScopesRow
+
+	// discoverScopes applies the resource's challenge scopes, pin, and advertised scopes.
+	discoverScopes bool
+
+	// owners holds, per remote-backed server, which bound clients own its
+	// resource, as login decides it; only an owner's login reads the row.
+	owners map[uuid.UUID]map[uuid.UUID]bool
+
+	// now is when the snapshot was read; cached advertised scopes older than
+	// a login would still trust are dropped against it.
+	now time.Time
+}
+
+// resourceKey is a remote-backed server's protected resource row key.
+type resourceKey struct {
+	projectID uuid.UUID
+	url       string
+}
+
+// resourceScopes is what the cached resource row for sv says about scopes,
+// for each client. Behind a login issuer only a client that owns the
+// resource reads the row, as its login would; under typed enforcement the
+// server's offers decide ownership instead. A server without a login issuer
+// has no login to match, so its resolved client reads it.
+func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) func(clientID uuid.UUID) remotesessions.ResourceScopes {
+	none := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: snap.discoverScopes}
+	row := snap.resourceRow(sv)
+	return func(clientID uuid.UUID) remotesessions.ResourceScopes {
+		switch {
+		case row == nil:
+			return none
+		case sv.UsesTypedOffers:
+			if !slices.Contains(sv.OfferedClientIds, clientID) {
+				return none
+			}
+			return *row
+		case sv.UserSessionIssuerID.Valid && !snap.owners[sv.ID][clientID]:
+			return none
+		default:
+			return *row
+		}
+	}
+}
+
+// resourceRow is the cached resource row for sv as a login would read it;
+// nil when sv is not remote-backed, discovery is off, or no row exists.
+func (snap *snapshot) resourceRow(sv repo.ListEligibleServersRow) *remotesessions.ResourceScopes {
+	out := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: snap.discoverScopes}
+	if !snap.discoverScopes || !sv.RemoteUrl.Valid {
+		return nil
+	}
+	row, ok := snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}]
+	if !ok {
+		return nil
+	}
+	// A login trusts a cached advertised list for seven days and then falls
+	// through to the issuer; the pin and challenge scopes stand regardless.
+	out.Pin, out.ChallengeScopes, out.ScopesSupported = row.ScopeOverride, row.ChallengeScopes, protectedresource.LastGoodAdvertisedScopes(row.ScopesSupported, row.MetadataFetchedAt, snap.now)
+	return &out
+}
+
+// documentResource is the resource sv's cached protected resource document
+// names, or empty.
+func (snap *snapshot) documentResource(sv repo.ListEligibleServersRow) string {
+	if !sv.RemoteUrl.Valid {
+		return ""
+	}
+	return snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}].DocumentResource
+}
+
+func (snap *snapshot) agentRecorded() bool {
+	return snap.connection.AgentID.Valid && snap.connection.AgentID.String != ""
+}
+
+// derive fills the computed fields of a row from the snapshot's lookups.
+func (snap *snapshot) derive(sv repo.ListEligibleServersRow) row {
+	r := row{server: sv, connection: nil, clientID: "", binding: "", scopes: nil, resource: resourceIndicator(sv), state: "", reason: "", broken: ""}
+	r.connection = snap.records[r.key()]
+	r.clientID, r.scopes, r.binding = resolveClient(sv, r.resource, snap.documentResource(sv), snap.clients[sv.IssuerID], snap.bindings[sv.IssuerID], snap.resourceScopes(sv))
+	in := inputsFor(sv, r.connection, snap.agentRecorded())
+	r.state = Derive(in)
+	r.reason = NotApplicableReason(in)
+	r.broken = BrokenReason(in)
+	return r
+}
+
+// load reads the connection, the eligible servers, and the recorded resource
+// connections, and derives every state. It reads outside any transaction.
+func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID string) (*snapshot, error) {
+	q := repo.New(s.db)
+	connection, err := q.GetLiveConnection(ctx, organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeFailedPrecondition, nil, "connect an identity provider before checking readiness")
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load identity provider connection").LogError(ctx, logger)
+	}
+
+	all, err := q.ListEligibleServers(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list servers").LogError(ctx, logger)
+	}
+	all, err = s.readable(ctx, all)
+	if err != nil {
+		return nil, err
+	}
+	snap := &snapshot{
+		connection:     connection,
+		rows:           make([]row, 0, len(all)),
+		total:          0,
+		pending:        0,
+		undiscovered:   0,
+		clients:        map[uuid.UUID][]repo.ListIssuerClientsRow{},
+		bindings:       map[uuid.UUID][]repo.ListEMABindingsRow{},
+		records:        map[upstreamKey]*record{},
+		deepLink:       deepLink(connection),
+		resources:      map[resourceKey]repo.ListRemoteProtectedResourceScopesRow{},
+		discoverScopes: true,
+		owners:         map[uuid.UUID]map[uuid.UUID]bool{},
+		now:            time.Now(),
+	}
+	servers := make([]repo.ListEligibleServersRow, 0, len(all))
+	seen := map[uuid.UUID]bool{}
+	issuerIDs := make([]uuid.UUID, 0, len(all))
+	for _, sv := range all {
+		if !sv.MetadataFetchedAt.Valid {
+			snap.undiscovered++
+			continue
+		}
+		servers = append(servers, sv)
+		if !seen[sv.IssuerID] {
+			seen[sv.IssuerID] = true
+			issuerIDs = append(issuerIDs, sv.IssuerID)
+		}
+	}
+	snap.total = len(servers)
+
+	clients, err := q.ListIssuerClients(ctx, repo.ListIssuerClientsParams{IssuerIds: issuerIDs, OrganizationID: organizationID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list issuer clients").LogError(ctx, logger)
+	}
+	for _, c := range clients {
+		snap.clients[c.RemoteSessionIssuerID] = append(snap.clients[c.RemoteSessionIssuerID], c)
+	}
+	var projectIDs []uuid.UUID
+	var resourceURLs []string
+	for _, sv := range servers {
+		if sv.RemoteUrl.Valid {
+			projectIDs = append(projectIDs, sv.ProjectID)
+			resourceURLs = append(resourceURLs, sv.RemoteUrl.String)
+		}
+	}
+	if len(projectIDs) > 0 {
+		resources, err := q.ListRemoteProtectedResourceScopes(ctx, repo.ListRemoteProtectedResourceScopesParams{OrganizationID: organizationID, ProjectIds: projectIDs, ResourceIdentifiers: resourceURLs})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list protected resource scopes").LogError(ctx, logger)
+		}
+		for _, r := range resources {
+			snap.resources[resourceKey{projectID: r.ProjectID, url: r.ResourceIdentifier}] = r
+		}
+	}
+	if snap.discoverScopes {
+		var asks []remotesessions.ResourceOwnerQuery
+		for _, sv := range servers {
+			if sv.UsesTypedOffers || !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
+				continue
+			}
+			if _, ok := snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}]; !ok {
+				continue
+			}
+			asks = append(asks, remotesessions.ResourceOwnerQuery{ServerID: sv.ID, ProjectID: sv.ProjectID, UserSessionIssuerID: sv.UserSessionIssuerID.UUID, Upstream: sv.RemoteUrl.String})
+		}
+		owners, err := remotesessions.ResourceOwnersForServers(ctx, s.db, organizationID, asks, feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "decide protected resource ownership").LogError(ctx, logger)
+		}
+		snap.owners = owners
+	}
+	bindings, err := q.ListEMABindings(ctx, repo.ListEMABindingsParams{OrganizationID: organizationID, IssuerIds: issuerIDs})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list identity chaining bindings").LogError(ctx, logger)
+	}
+	for _, b := range bindings {
+		snap.bindings[b.RemoteSessionIssuerID] = append(snap.bindings[b.RemoteSessionIssuerID], b)
+	}
+	records, err := q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: organizationID, IdentityProviderConnectionID: connection.ID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list resource connections").LogError(ctx, logger)
+	}
+	for _, rec := range records {
+		rc := &record{OktaResourceConnection: rec.OktaResourceConnection, label: rec.OktaApplicationLabel.String}
+		snap.records[upstreamKey{issuerID: rc.RemoteSessionIssuerID, resource: rc.Resource}] = rc
+	}
+
+	for _, sv := range servers {
+		r := snap.derive(sv)
+		if r.state.Pending() {
+			snap.pending++
+		}
+		snap.rows = append(snap.rows, r)
+	}
+	return snap, nil
+}
+
+func inputsFor(sv repo.ListEligibleServersRow, rc *record, agentRecorded bool) Inputs {
+	in := Inputs{
+		AdvertisesIDJAG: AdvertisesIDJAG(sv.GrantTypesSupported, sv.AuthorizationGrantProfilesSupported),
+		AgentRecorded:   agentRecorded,
+		Confirmed:       rc != nil,
+		Observed:        "",
+	}
+	if rc != nil {
+		in.Observed = Result(rc.ObservedResult.String)
+	}
+	return in
+}
+
+// ResourceIndicator is the resource readiness reports for an eligible server.
+func ResourceIndicator(sv repo.ListEligibleServersRow) string { return resourceIndicator(sv) }
+
+// resourceIndicator is the RFC 9728 identifier when the server declares one,
+// else the server URL.
+func resourceIndicator(sv repo.ListEligibleServersRow) string {
+	switch {
+	case sv.TunneledResourceIdentifier.Valid && sv.TunneledResourceIdentifier.String != "":
+		return strings.TrimRight(sv.TunneledResourceIdentifier.String, "/")
+	case sv.RemoteUrl.Valid:
+		return strings.TrimRight(sv.RemoteUrl.String, "/")
+	case sv.UnproxiedUrl.Valid:
+		return strings.TrimRight(sv.UnproxiedUrl.String, "/")
+	default:
+		return ""
+	}
+}
+
+// resolveClient picks Speakeasy's client at the server's authorization server:
+// bindings for the resource that agree on one client win; else the single
+// attached client in the server's project or the organization, preferring
+// one registered for this resource; else ambiguous or missing.
+func resolveClient(sv repo.ListEligibleServersRow, resource, documentResource string, clients []repo.ListIssuerClientsRow, bindings []repo.ListEMABindingsRow, resourceScopes func(clientID uuid.UUID) remotesessions.ResourceScopes) (string, []string, string) {
+	byID := make(map[uuid.UUID]repo.ListIssuerClientsRow, len(clients))
+	for _, c := range clients {
+		byID[c.ID] = c
+	}
+	resource = strings.TrimRight(resource, "/")
+	var bound *repo.ListEMABindingsRow
+	var boundScopes []string
+	for i := range bindings {
+		b := &bindings[i]
+		if b.RemoteSessionIssuerID != sv.IssuerID || b.ProjectID != sv.ProjectID || strings.TrimRight(b.Resource, "/") != resource || !b.RemoteSessionClientID.Valid {
+			continue
+		}
+		if sv.UserSessionIssuerID.Valid && b.UserSessionIssuerID != sv.UserSessionIssuerID.UUID {
+			continue
+		}
+		c, ok := byID[b.RemoteSessionClientID.UUID]
+		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
+			continue
+		}
+		if sv.UsesTypedOffers && !slices.Contains(sv.OfferedClientIds, c.ID) {
+			continue
+		}
+		// Identity chaining requests the scopes recorded at Turn on.
+		for _, scope := range remotesessions.GrantScopes(b.RequestedScopes) {
+			if !slices.Contains(boundScopes, scope) {
+				boundScopes = append(boundScopes, scope)
+			}
+		}
+		if bound == nil {
+			bound = b
+			continue
+		}
+		if bound.RemoteSessionClientID.UUID != b.RemoteSessionClientID.UUID {
+			return "", nil, ClientBindingAmbiguous
+		}
+	}
+	if bound != nil {
+		c := byID[bound.RemoteSessionClientID.UUID]
+		slices.Sort(boundScopes)
+		return c.ClientID, boundScopes, ClientBindingBound
+	}
+	var candidates, forResource []repo.ListIssuerClientsRow
+	for _, c := range clients {
+		if c.RemoteSessionIssuerID != sv.IssuerID || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
+			continue
+		}
+		switch {
+		case sv.UsesTypedOffers:
+			if !slices.Contains(sv.OfferedClientIds, c.ID) {
+				continue
+			}
+		case sv.UserSessionIssuerID.Valid && !slices.Contains(c.UserSessionIssuerIds, sv.UserSessionIssuerID.UUID):
+			continue
+		}
+		candidates = append(candidates, c)
+		if c.ResourceIdentifier.Valid && strings.TrimRight(c.ResourceIdentifier.String, "/") == resource {
+			forResource = append(forResource, c)
+		}
+	}
+	if len(forResource) > 0 {
+		candidates = forResource
+	}
+	switch len(candidates) {
+	case 0:
+		return "", nil, ClientBindingMissing
+	case 1:
+		return candidates[0].ClientID, turnOnScopes(sv, documentResource, candidates[0], resourceScopes(candidates[0].ID)), ClientBindingSingle
+	default:
+		return "", nil, ClientBindingAmbiguous
+	}
+}
+
+// turnOnScopes is what identity chaining through c would request for sv after
+// Turn on now, from the cached resource row; this surface never probes. Turn
+// on keys a connection only when the server's URL, or the resource its cached
+// document names, is exactly the resource the binding would select; otherwise
+// its scopes would come from the request.
+func turnOnScopes(sv repo.ListEligibleServersRow, documentResource string, c repo.ListIssuerClientsRow, resource remotesessions.ResourceScopes) []string {
+	var connection *remotesessions.ScopeResolution
+	if sv.RemoteUrl.Valid && remotesessions.ServesBindingResource(sv.RemoteUrl.String, documentResource, bindingResource(sv)) {
+		resolution := remotesessions.ClientConnectionScopes(remotesessions.ConnectionScopeInput{
+			ClientID:                c.ID,
+			ClientScope:             c.Scope,
+			IssuerScopesSupported:   c.IssuerScopesSupported,
+			IssuerScopeOverride:     c.IssuerScopeOverride,
+			IssuerOmitScopeFallback: c.IssuerOmitScopeFallback.Valid && c.IssuerOmitScopeFallback.Bool,
+		}, resource, true)
+		connection = &resolution
+	}
+	return remotesessions.GrantScopes(remotesessions.BindingScopes(connection, nil).Scopes)
+}
+
+// bindingResource is the resource a binding for sv would select, untrimmed.
+func bindingResource(sv repo.ListEligibleServersRow) string {
+	if sv.TunneledResourceIdentifier.Valid && sv.TunneledResourceIdentifier.String != "" {
+		return sv.TunneledResourceIdentifier.String
+	}
+	return sv.RemoteUrl.String
+}
+
+func (s *Service) List(ctx context.Context, payload *srv.ListPayload) (*srv.ListOktaResourceConnectionsResult, error) {
+	authCtx, logger, err := s.authorize(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	servers := make([]*srv.OktaResourceConnectionServer, 0, len(snap.rows))
+	for _, r := range orderRows(snap.rows) {
+		if !payload.IncludeAll && !r.state.Pending() {
+			continue
+		}
+		servers = append(servers, buildRow(snap, r))
+	}
+	return &srv.ListOktaResourceConnectionsResult{
+		Servers:           servers,
+		PendingCount:      snap.pending,
+		TotalCount:        snap.total,
+		UndiscoveredCount: snap.undiscovered,
+		AgentRecorded:     snap.agentRecorded(),
+		ConnectionID:      conv.PtrEmpty(snap.connection.ID.String()),
+		DeepLink:          conv.PtrEmpty(snap.deepLink),
+	}, nil
+}
+
+// lockConnection holds the live connection for the write; a pending or
+// revoked one cannot take confirmations.
+func lockConnection(ctx context.Context, q *repo.Queries, organizationID string, connectionID uuid.UUID, logger *slog.Logger) error {
+	_, err := q.LockLiveConnection(ctx, repo.LockLiveConnectionParams{ID: connectionID, OrganizationID: organizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeFailedPrecondition, nil, "verify the identity provider connection first")
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock identity provider connection").LogError(ctx, logger)
+	}
+	return nil
+}
+
+// confirmation is one validated item of a confirm request.
+type confirmation struct {
+	serverID uuid.UUID
+	audience string
+	appID    pgtype.Text
+}
+
+// parseConfirmations validates and dedupes identical requests for a server.
+// Items are sorted so concurrent calls lock rows in one order.
+func parseConfirmations(items []*srv.OktaResourceConnectionConfirmation) ([]confirmation, error) {
+	byServer := make(map[uuid.UUID]confirmation, len(items))
+	for _, item := range items {
+		if item == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "empty confirmation")
+		}
+		id, err := uuid.Parse(item.McpServerID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid server id")
+		}
+		audience, err := normalizeAudience(item.Audience)
+		if err != nil {
+			return nil, err
+		}
+		var appID pgtype.Text
+		if item.OktaApplicationID != nil && *item.OktaApplicationID != "" {
+			if !oktaAppIDPattern.MatchString(*item.OktaApplicationID) {
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid identity provider application id")
+			}
+			appID = conv.ToPGText(*item.OktaApplicationID)
+		}
+		if previous, ok := byServer[id]; ok && (previous.audience != audience || previous.appID != appID) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "conflicting confirmations for the same server")
+		}
+		byServer[id] = confirmation{serverID: id, audience: audience, appID: appID}
+	}
+	out := make([]confirmation, 0, len(byServer))
+	for _, c := range byServer {
+		out = append(out, c)
+	}
+	slices.SortFunc(out, func(a, b confirmation) int { return bytes.Compare(a.serverID[:], b.serverID[:]) })
+	return out, nil
+}
+
+// normalizeAudience accepts the issuer URL as Okta shows it: https, a host,
+// an optional path, nothing else. Okta compares audiences byte for byte, so
+// only whitespace is trimmed.
+func normalizeAudience(raw string) (string, error) {
+	if utf8.RuneCountInString(raw) > 512 {
+		return "", oops.E(oops.CodeBadRequest, nil, "audience must be at most 512 characters")
+	}
+	audience := strings.TrimSpace(raw)
+	if err := oktaissuer.ValidateAudience(audience); err != nil {
+		return "", oops.E(oops.CodeBadRequest, nil, "audience must be an https URL without query or fragment")
+	}
+	return audience, nil
+}
+
+func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*srv.ConfirmOktaResourceConnectionsResult, error) {
+	authCtx, logger, err := s.authorize(ctx, true)
+	if err != nil {
+		return nil, err
+	}
+	items, err := parseConfirmations(payload.Connections)
+	if err != nil {
+		return nil, err
+	}
+	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	principal := actor(ctx, authCtx)
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	q := repo.New(dbtx)
+	if err := lockConnection(ctx, q, authCtx.ActiveOrganizationID, snap.connection.ID, logger); err != nil {
+		return nil, err
+	}
+
+	// RecordAgent takes this same lock before changing the agent and clearing
+	// its resource connections. Never confirm using the pre-lock agent snapshot.
+	current, err := q.GetLiveConnection(ctx, authCtx.ActiveOrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeConflict, nil, "identity provider connection changed; refresh and retry")
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "reload identity provider connection").LogError(ctx, logger)
+	}
+	if current.ID != snap.connection.ID || current.AgentID != snap.connection.AgentID || current.AgentAppID != snap.connection.AgentAppID {
+		return nil, oops.E(oops.CodeConflict, nil, "identity provider agent changed; refresh and retry")
+	}
+	snap.connection = current
+	snap.deepLink = deepLink(current)
+
+	// All keys belong to the locked connection. Validate aliases before any
+	// writes: multiple servers can refer to the same issuer and resource.
+	reloadedIssuers := make(map[uuid.UUID]bool)
+	servers := make([]repo.ListEligibleServersRow, 0, len(items))
+	byUpstream := make(map[upstreamKey]confirmation, len(items))
+	for _, item := range items {
+		sv, err := q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerID: item.serverID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, nil, "server not found")
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load server").LogError(ctx, logger)
+		}
+		server := repo.ListEligibleServersRow(sv)
+		if visible, err := s.readable(ctx, []repo.ListEligibleServersRow{server}); err != nil {
+			return nil, err
+		} else if len(visible) == 0 {
+			return nil, oops.E(oops.CodeNotFound, nil, "server not found")
+		}
+		if !AdvertisesIDJAG(server.GrantTypesSupported, server.AuthorizationGrantProfilesSupported) {
+			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server's authorization server does not support Cross App Access")
+		}
+		resource := resourceIndicator(server)
+		if resource == "" {
+			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no resource indicator")
+		}
+		if !reloadedIssuers[server.IssuerID] {
+			if err := snap.reloadIssuer(ctx, q, logger, authCtx.ActiveOrganizationID, server.IssuerID); err != nil {
+				return nil, err
+			}
+			reloadedIssuers[server.IssuerID] = true
+		}
+		if _, _, binding := resolveClient(server, resource, snap.documentResource(server), snap.clients[server.IssuerID], snap.bindings[server.IssuerID], snap.resourceScopes(server)); binding == ClientBindingMissing || binding == ClientBindingAmbiguous {
+			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no single client registered at its authorization server")
+		}
+		key := upstreamKey{issuerID: server.IssuerID, resource: resource}
+		if previous, ok := byUpstream[key]; ok && (previous.audience != item.audience || previous.appID != item.appID) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "conflicting confirmations for the same resource")
+		}
+		byUpstream[key] = item
+		servers = append(servers, server)
+	}
+
+	written := make(map[upstreamKey]bool, len(byUpstream))
+	for _, server := range servers {
+		resource := resourceIndicator(server)
+		key := upstreamKey{issuerID: server.IssuerID, resource: resource}
+		if written[key] {
+			continue
+		}
+		item := byUpstream[key]
+		before, err := resourceConnectionForUpdate(ctx, q, authCtx.ActiveOrganizationID, snap.connection.ID, server.IssuerID, resource)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load resource connection").LogError(ctx, logger)
+		}
+		after, err := q.UpsertResourceConnection(ctx, repo.UpsertResourceConnectionParams{
+			OrganizationID:               authCtx.ActiveOrganizationID,
+			IdentityProviderConnectionID: snap.connection.ID,
+			RemoteSessionIssuerID:        server.IssuerID,
+			Resource:                     resource,
+			Audience:                     item.audience,
+			OktaApplicationID:            item.appID,
+		})
+		if isForeignKeyViolation(err) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "the identity provider application is not in the latest applications snapshot")
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "confirm connection").LogError(ctx, logger)
+		}
+		rc := &record{OktaResourceConnection: after, label: ""}
+		if after.OktaApplicationID.Valid {
+			label, err := q.GetOktaApplicationLabel(ctx, repo.GetOktaApplicationLabelParams{OrganizationID: authCtx.ActiveOrganizationID, IdentityProviderConnectionID: snap.connection.ID, OktaAppID: after.OktaApplicationID.String})
+			if errors.Is(err, pgx.ErrNoRows) && item.appID.Valid {
+				return nil, oops.E(oops.CodeBadRequest, nil, "the identity provider application is not in the latest applications snapshot")
+			}
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeUnexpected, err, "load application label").LogError(ctx, logger)
+			}
+			rc.label = label
+		}
+		snap.records[upstreamKey{issuerID: server.IssuerID, resource: resource}] = rc
+		r := snap.derive(server)
+		if err := s.audit.LogOktaResourceConnectionConfirm(ctx, dbtx, s.auditEvent(authCtx, principal, snap, r, before, rc)); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "log confirmation").LogError(ctx, logger)
+		}
+		written[key] = true
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit confirmation").LogError(ctx, logger)
+	}
+	out := make([]*srv.OktaResourceConnectionServer, 0, len(servers))
+	for _, server := range servers {
+		out = append(out, buildRow(snap, snap.derive(server)))
+	}
+	return &srv.ConfirmOktaResourceConnectionsResult{Servers: out}, nil
+}
+
+func isForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation
+}
+
+func resourceConnectionForUpdate(ctx context.Context, q *repo.Queries, organizationID string, connectionID, issuerID uuid.UUID, resource string) (*record, error) {
+	rc, err := q.GetResourceConnectionForUpdate(ctx, repo.GetResourceConnectionForUpdateParams{OrganizationID: organizationID, IdentityProviderConnectionID: connectionID, RemoteSessionIssuerID: issuerID, Resource: resource})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lock resource connection: %w", err)
+	}
+	return &record{OktaResourceConnection: rc, label: ""}, nil
+}
+
+// reloadIssuer updates the response and validation inputs after the write's
+// eligible server is read under the connection lock.
+func (snap *snapshot) reloadIssuer(ctx context.Context, q *repo.Queries, logger *slog.Logger, organizationID string, issuerID uuid.UUID) error {
+	issuerIDs := []uuid.UUID{issuerID}
+	clients, err := q.ListIssuerClients(ctx, repo.ListIssuerClientsParams{OrganizationID: organizationID, IssuerIds: issuerIDs})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "reload issuer clients").LogError(ctx, logger)
+	}
+	bindings, err := q.ListEMABindings(ctx, repo.ListEMABindingsParams{OrganizationID: organizationID, IssuerIds: issuerIDs})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "reload identity chaining bindings").LogError(ctx, logger)
+	}
+	snap.clients[issuerID], snap.bindings[issuerID] = clients, bindings
+	return nil
+}
+
+func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.OktaResourceConnectionServer, error) {
+	authCtx, logger, err := s.authorize(ctx, true)
+	if err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(payload.McpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id")
+	}
+	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	principal := actor(ctx, authCtx)
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	q := repo.New(dbtx)
+	if err := lockConnection(ctx, q, authCtx.ActiveOrganizationID, snap.connection.ID, logger); err != nil {
+		return nil, err
+	}
+	sv, err := q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeNotFound, nil, "server not found")
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load server").LogError(ctx, logger)
+	}
+	server := repo.ListEligibleServersRow(sv)
+	if visible, err := s.readable(ctx, []repo.ListEligibleServersRow{server}); err != nil {
+		return nil, err
+	} else if len(visible) == 0 {
+		return nil, oops.E(oops.CodeNotFound, nil, "server not found")
+	}
+	if err := snap.reloadIssuer(ctx, q, logger, authCtx.ActiveOrganizationID, server.IssuerID); err != nil {
+		return nil, err
+	}
+	resource := resourceIndicator(server)
+	before, err := resourceConnectionForUpdate(ctx, q, authCtx.ActiveOrganizationID, snap.connection.ID, server.IssuerID, resource)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load resource connection").LogError(ctx, logger)
+	}
+	if before == nil {
+		return nil, oops.E(oops.CodeFailedPrecondition, nil, "nothing is confirmed for this server")
+	}
+	if _, err := q.DeleteResourceConnection(ctx, repo.DeleteResourceConnectionParams{OrganizationID: authCtx.ActiveOrganizationID, IdentityProviderConnectionID: snap.connection.ID, RemoteSessionIssuerID: server.IssuerID, Resource: resource}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "reset connection").LogError(ctx, logger)
+	}
+	delete(snap.records, upstreamKey{issuerID: server.IssuerID, resource: resource})
+	r := snap.derive(server)
+	if err := s.audit.LogOktaResourceConnectionReset(ctx, dbtx, s.auditEvent(authCtx, principal, snap, r, before, nil)); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log reset").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit reset").LogError(ctx, logger)
+	}
+	return buildRow(snap, r), nil
+}
+
+// orderRows puts pending servers first, then by name.
+func orderRows(rows []row) []row {
+	out := slices.Clone(rows)
+	slices.SortStableFunc(out, func(a, b row) int {
+		if a.state.Pending() != b.state.Pending() {
+			if a.state.Pending() {
+				return -1
+			}
+			return 1
+		}
+		if c := cmp.Compare(a.server.Name.String, b.server.Name.String); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.server.ID.String(), b.server.ID.String())
+	})
+	return out
+}
+
+// deepLink opens the add-resource-connection form of the AI agent in the
+// identity provider console. Only Okta-operated domains have a derivable
+// admin host.
+func deepLink(c repo.GetLiveConnectionRow) string {
+	if !c.AgentID.Valid || c.AgentID.String == "" {
+		return ""
+	}
+	base, err := url.Parse(c.OrgUrl)
+	if err != nil || base.Scheme != "https" {
+		return ""
+	}
+	host := strings.ToLower(base.Hostname())
+	for _, suffix := range oktaOrgHostSuffixes {
+		label, ok := strings.CutSuffix(host, "."+suffix)
+		if !ok || label == "" || strings.Contains(label, ".") {
+			continue
+		}
+		label = strings.TrimSuffix(label, "-admin")
+		return "https://" + label + "-admin." + suffix + "/admin/workload-principals/ai-agents/" + url.PathEscape(c.AgentID.String) + "/resource-connections/create"
+	}
+	return ""
+}
+
+func buildRow(snap *snapshot, r row) *srv.OktaResourceConnectionServer {
+	out := &srv.OktaResourceConnectionServer{
+		McpServerID:               r.server.ID.String(),
+		ProjectID:                 r.server.ProjectID.String(),
+		ProjectSlug:               r.server.ProjectSlug,
+		ServerName:                r.server.Name.String,
+		ServerSlug:                r.server.Slug.String,
+		State:                     string(r.state),
+		NotApplicableReason:       conv.PtrEmpty(r.reason),
+		Pending:                   r.state.Pending(),
+		ResourceIndicator:         r.resource,
+		IssuerID:                  new(r.server.IssuerID.String()),
+		AuthorizationServerIssuer: conv.PtrEmpty(r.server.Issuer),
+		ClientID:                  conv.PtrEmpty(r.clientID),
+		ClientBinding:             r.binding,
+		Scopes:                    conv.DefaultSlice(r.scopes, []string{}),
+		DeepLink:                  conv.PtrEmpty(snap.deepLink),
+		Audience:                  nil,
+		OktaApplicationID:         nil,
+		OktaApplicationLabel:      nil,
+		ConfirmedAt:               nil,
+		BrokenReason:              conv.PtrEmpty(r.broken),
+		ObservedResult:            nil,
+		ObservedAt:                nil,
+	}
+	if rc := r.connection; rc != nil {
+		out.ObservedResult = conv.FromPGText[string](rc.ObservedResult)
+		if rc.ObservedAt.Valid {
+			out.ObservedAt = conv.PtrEmpty(conv.FromPGTimestamptz(rc.ObservedAt))
+		}
+		out.Audience = conv.PtrEmpty(rc.Audience)
+		out.OktaApplicationID = conv.FromPGText[string](rc.OktaApplicationID)
+		out.OktaApplicationLabel = conv.PtrEmpty(rc.label)
+		out.ConfirmedAt = conv.PtrEmpty(conv.FromPGTimestamptz(rc.CreatedAt))
+	}
+	return out
+}
+
+func (s *Service) auditEvent(authCtx *contextvalues.AuthContext, principal urn.Principal, snap *snapshot, r row, before, after *record) audit.LogOktaResourceConnectionEvent {
+	subject := before
+	if after != nil {
+		subject = after
+	}
+	return audit.LogOktaResourceConnectionEvent{
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ProjectID:             r.server.ProjectID,
+		Actor:                 principal,
+		ActorDisplayName:      authCtx.Email,
+		ActorSlug:             nil,
+		ResourceConnectionURN: urn.NewOktaResourceConnection(subject.ID),
+		ServerName:            r.server.Name.String,
+		ServerSlug:            r.server.Slug.String,
+		SnapshotBefore:        auditSnapshot(r, before, snap.agentRecorded()),
+		SnapshotAfter:         auditSnapshot(r, after, snap.agentRecorded()),
+	}
+}
+
+func auditSnapshot(r row, rc *record, agentRecorded bool) *audit.OktaResourceConnectionSnapshot {
+	if rc == nil {
+		return nil
+	}
+	return &audit.OktaResourceConnectionSnapshot{
+		ConnectionID:      rc.IdentityProviderConnectionID.String(),
+		IssuerID:          rc.RemoteSessionIssuerID.String(),
+		Resource:          rc.Resource,
+		Audience:          rc.Audience,
+		OktaApplicationID: rc.OktaApplicationID.String,
+		ObservedResult:    rc.ObservedResult.String,
+		State:             string(Derive(inputsFor(r.server, rc, agentRecorded))),
+	}
+}

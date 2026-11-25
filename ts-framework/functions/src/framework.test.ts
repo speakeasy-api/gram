@@ -496,6 +496,109 @@ test("ctx.fail() body omits any stack trace", async () => {
   }
 });
 
+test("input validation failure reports each issue once, on one line", async () => {
+  expect.hasAssertions();
+  const g = new Gram().tool({
+    name: "lookup",
+    description: "Looks an org up",
+    inputSchema: { org_id: z.string() },
+    async execute(ctx) {
+      return ctx.json({ ok: true });
+    },
+  });
+
+  try {
+    await g.handleToolCall({ name: "lookup", input: {} as any });
+  } catch (err) {
+    expect(err).toBeInstanceOf(Response);
+    const response = err as Response;
+    expect(response.status).toBe(400);
+
+    const data = (await response.json()) as {
+      error: string;
+      issues: unknown[];
+    };
+    expect(data.error).toBe(
+      "org_id: Invalid input: expected string, received undefined",
+    );
+    expect(data.issues).toHaveLength(1);
+    expect(data).not.toHaveProperty("stack");
+  }
+});
+
+test("input validation failure names the path of a nested issue", async () => {
+  expect.hasAssertions();
+  const g = new Gram().tool({
+    name: "search",
+    description: "Searches with filters",
+    inputSchema: { filters: z.array(z.object({ name: z.string() })) },
+    async execute(ctx) {
+      return ctx.json({ ok: true });
+    },
+  });
+
+  try {
+    await g.handleToolCall({
+      name: "search",
+      input: { filters: [{ name: 1 }] } as any,
+    });
+  } catch (err) {
+    expect(err).toBeInstanceOf(Response);
+    const response = err as Response;
+    expect(response.status).toBe(400);
+
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toBe(
+      "filters[0].name: Invalid input: expected string, received number",
+    );
+  }
+});
+
+test("input validation failure brackets a path segment that is not an identifier", async () => {
+  expect.hasAssertions();
+  const g = new Gram().tool({
+    name: "fetch",
+    description: "Fetches a field",
+    inputSchema: { "a.b": z.string() },
+    async execute(ctx) {
+      return ctx.json({ ok: true });
+    },
+  });
+
+  try {
+    await g.handleToolCall({ name: "fetch", input: {} as any });
+  } catch (err) {
+    const data = (await (err as Response).json()) as { error: string };
+    expect(data.error).toBe(
+      '["a.b"]: Invalid input: expected string, received undefined',
+    );
+  }
+});
+
+test("input validation failure flattens a multi-line custom message", async () => {
+  expect.hasAssertions();
+  const g = new Gram().tool({
+    name: "check",
+    description: "Checks a value",
+    inputSchema: {
+      value: z.string().refine((v) => v.length > 5, {
+        error: "first line\nsecond line",
+      }),
+    },
+    async execute(ctx) {
+      return ctx.json({ ok: true });
+    },
+  });
+
+  try {
+    await g.handleToolCall({ name: "check", input: { value: "no" } });
+  } catch (err) {
+    const data = (await (err as Response).json()) as { error: string };
+    expect(data.error).toBe("value: first line second line");
+    expect(data.error).not.toContain("\n");
+  }
+});
+
 test("assert does not throw when condition is true", () => {
   expect(() => {
     assert(true, { error: "This should not throw" });
@@ -899,6 +1002,38 @@ test("tool meta flows through to manifest", () => {
   const manifest = g.manifest();
   const tool = manifest.tools?.find((t) => t.name === "generate-chart");
   expect(tool?.meta).toEqual({ "ui/resourceUri": "ui://charts/bar" });
+});
+
+test("resource meta flows through to manifest", () => {
+  const csp = { connectDomains: ["https://api.example.com"] };
+  const g = new Gram()
+    .experimental_uiResource({
+      name: "chart",
+      description: "Bar chart",
+      content: "<html>chart</html>",
+      meta: { ui: { csp } },
+    })
+    .resource({
+      name: "direct",
+      uri: "resource://direct",
+      description: "Direct resource with meta",
+      content: "hello",
+      meta: { owner: "docs" },
+    })
+    .resource({
+      name: "plain",
+      uri: "resource://plain",
+      description: "No meta",
+      content: "hello",
+    });
+
+  const manifest = g.manifest();
+  const chart = manifest.resources?.find((r) => r.name === "chart");
+  expect(chart?.meta).toEqual({ ui: { csp } });
+  const direct = manifest.resources?.find((r) => r.name === "direct");
+  expect(direct?.meta).toEqual({ owner: "docs" });
+  const plain = manifest.resources?.find((r) => r.name === "plain");
+  expect(plain).not.toHaveProperty("meta");
 });
 
 test("manifest omits resources key when no resources registered", () => {

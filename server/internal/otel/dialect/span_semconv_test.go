@@ -118,3 +118,37 @@ func TestSemconvSpanSkipsNonArrayOutputMessages(t *testing.T) {
 	require.Empty(t, contentKey)
 	require.Nil(t, content)
 }
+
+// TestSemconvSpanModelSkipsAnEmptyResponseModel: an attribute that is present
+// but empty states nothing, so a stated request model must still be found. The
+// log accessor already skips empties; this keeps the two signals in step.
+func TestSemconvSpanModelSkipsAnEmptyResponseModel(t *testing.T) {
+	t.Parallel()
+
+	span := (&otelv1.InboundSpan_builder{
+		Attributes: []*otelv1.InboundSpan_KeyValue{
+			stringAttribute("gen_ai.response.model", ""),
+			stringAttribute("gen_ai.request.model", "claude-opus-5"),
+		},
+	}).Build()
+
+	key, value, err := SemconvSpan{}.Model(span)
+	require.NoError(t, err)
+	require.Equal(t, "gen_ai.request.model", key)
+	require.Equal(t, "claude-opus-5", value)
+}
+
+// TestSemconvSpanDurationIgnoresAMissingStart: a zero start is a start the
+// producer never stated, not the epoch. Subtracting it would report the time
+// since 1970 as the span's duration.
+func TestSemconvSpanDurationIgnoresAMissingStart(t *testing.T) {
+	t.Parallel()
+
+	end := uint64(1_700_000_000_000_000_000)
+	span := (&otelv1.InboundSpan_builder{EndTimeUnixNano: &end}).Build()
+
+	key, duration, err := SemconvSpan{}.DurationNano(span)
+	require.NoError(t, err)
+	require.Empty(t, key)
+	require.Zero(t, duration)
+}

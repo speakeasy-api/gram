@@ -1,19 +1,19 @@
 ---
 name: datadog-insights
-description: Investigate Gram production health and post a digest to Slack
+description: Investigate Speakeasy production health and post a digest to Slack
 ---
 
-# Gram Production Health Digest
+# Speakeasy Production Health Digest
 
-You are producing a health report for Gram's production services. The report must be **actionable** and **visually structured** — critical issues must stand out immediately, tabular data must use code blocks, and every section must be separated by a divider.
+You are producing a health report for Speakeasy's production services. The report must be **actionable** and **visually structured** — critical issues must stand out immediately, tabular data must use code blocks, and every section must be separated by a divider.
 
-**Before starting**: activate the `datadog` skill for Gram service names, MCP tools, and query guidelines.
+**Before starting**: activate the `datadog` skill for Speakeasy service names, MCP tools, and query guidelines.
 
 > ⚠️ **MANDATORY FORMAT RULES — READ BEFORE COMPOSING THE MESSAGE:**
 >
 > 1. **Every major section MUST be preceded by a Unicode divider line**: `──────────────────────────────────────` on its own line, with a blank line above and below.
 > 2. **Top endpoints, error type breakdowns, and latency tables MUST use triple-backtick code blocks** — never bullet points for tabular data.
-> 3. **Code block tables must have aligned columns** using spaces. Minimum widths: endpoint 38 chars, count 8 chars, err% 6 chars, p95 8 chars.
+> 3. **Code block tables must have aligned columns** using spaces. Minimum widths: endpoint 38 chars, count 8 chars, 4xx% 6 chars, 5xx% 6 chars, p95 8 chars.
 > 4. **Each monitor in alert MUST get its own paragraph** — never combine multiple monitors into one block.
 > 5. **Do NOT collapse or omit data** to save space. If there are 8 monitors, show all 8.
 
@@ -62,8 +62,17 @@ sum:trace.http.server.request.hits{service:gram-server,env:prod} by {resource_na
 Collect the **top 10 endpoints** with:
 
 - Request count
-- Error rate (% of requests returning 4xx/5xx)
+- 4xx count and rate (% of requests returning 4xx)
+- 5xx count and rate (% of requests returning 5xx)
 - p95 latency
+
+Keep 4xx and 5xx separate — never fold them into a single error rate. 4xx is mostly client behaviour (bad auth, missing resources) and is expected on public endpoints like `/mcp/{mcpSlug}`, while 5xx indicates a server fault. Use `get_datadog_metric` grouped by status code and bucket the series by leading digit:
+
+```
+sum:trace.http.server.request.hits{service:gram-server,env:prod} by {resource_name,http.status_code}.rollup(sum, 86400)
+```
+
+If the metric is missing the `http.status_code` tag, fall back to `aggregate_spans` over `service:gram-server env:prod` grouped by `resource_name`, once with `@http.status_code:[400 TO 499]` and once with `@http.status_code:[500 TO 599]`.
 
 ---
 
@@ -108,7 +117,7 @@ Report:
 
 ## Step 5: Create a Datadog Notebook
 
-Call `create_datadog_notebook` with name `"Gram Health Digest — <DAY> <DATE>"` (e.g. `"Gram Health Digest — Fri 2026-03-27"`). Use `absolute_time: true` with `start_time` = 24h ago and `end_time` = now. One notebook is created per run — old ones accumulate and can be manually deleted periodically.
+Call `create_datadog_notebook` with name `"Speakeasy Health Digest — <DAY> <DATE>"` (e.g. `"Speakeasy Health Digest — Fri 2026-03-27"`). Use `absolute_time: true` with `start_time` = 24h ago and `end_time` = now. One notebook is created per run — old ones accumulate and can be manually deleted periodically.
 
 The notebook `cells` must be wrapped in `{"cells": [...]}`. Include:
 
@@ -262,7 +271,7 @@ The notebook `cells` must be wrapped in `{"cells": [...]}`. Include:
    }
    ```
 8. **Slow endpoints + top errors markdown table cell** with the real data from Steps 1–4.
-9. **All Gram services error log stream cell** — includes `source:fly` for Gram Functions logs:
+9. **All Speakeasy services error log stream cell** — includes `source:fly` for Speakeasy Functions logs:
    ```json
    {
      "type": "notebook_cells",
@@ -322,7 +331,10 @@ Build a list of Block Kit blocks. The message is structured around the **4 Golde
 ```json
 {
   "type": "header",
-  "text": { "type": "plain_text", "text": "Gram Health Digest — <DAY> <DATE>" }
+  "text": {
+    "type": "plain_text",
+    "text": "Speakeasy Health Digest — <DAY> <DATE>"
+  }
 }
 ```
 
@@ -383,10 +395,10 @@ Follow with a divider.
 
 **5. 📊 Traffic**
 
-Bullet prose for trend, then a **code block table** for top endpoints by volume.
+Bullet prose for trend, then a **code block table** for top endpoints by volume with separate 4xx and 5xx columns. Never merge 4xx and 5xx into one error column. Flag any endpoint with a 5xx rate > 1% with ⚠️.
 
 ````
-{"type": "section", "text": {"type": "mrkdwn", "text": "📊 *Traffic*\n• Previous 12h: ~Xk requests\n• Current 12h: ~Xk requests — *↑Y%* ⚠️ (flag if >30%)\n• Total 24h: ~Xk\n\n*Top endpoints by volume (24h):*\n```\nendpoint                                          hits\nPOST /mcp/{mcpSlug}                            103,784\nPOST /rpc/hooks.otel/v1/logs                    16,824\nPOST /rpc/hooks.claude                          14,956\nGET  /mcp/{mcpSlug}                             14,454\nGET  /.well-known/oauth-protected-resource       6,789\n```"}}
+{"type": "section", "text": {"type": "mrkdwn", "text": "📊 *Traffic*\n• Previous 12h: ~Xk requests\n• Current 12h: ~Xk requests — *↑Y%* ⚠️ (flag if >30%)\n• Total 24h: ~Xk · 4xx: N (X%) · 5xx: N (X%)\n\n*Top endpoints by volume (24h):*\n```\nendpoint                                      hits   4xx    5xx\nPOST /mcp/{mcpSlug}                        103,784  8.2%   0.1%\nPOST /rpc/hooks.otel/v1/logs                16,824  0.0%   0.0%\nPOST /rpc/hooks.claude                      14,956  0.3%   0.0%\nGET  /mcp/{mcpSlug}                         14,454  2.1%   1.4% ⚠️\nGET  /.well-known/oauth-protected-resource   6,789  0.0%   0.0%\n```"}}
 ````
 
 Follow with a divider.
@@ -473,7 +485,7 @@ if not token:
 
 channel = "C0AKLE930BX"  # #gram-datadog-insights — override with channel name if specified in prompt
 
-blocks = []  # replace with actual Block Kit blocks from Step 7 — use f"Gram Health Digest — {digest_date}" in the header block
+blocks = []  # replace with actual Block Kit blocks from Step 7 — use f"Speakeasy Health Digest — {digest_date}" in the header block
 
 def slack_post(payload):
     data = json.dumps(payload).encode()
@@ -488,7 +500,7 @@ def slack_post(payload):
 
 result = slack_post({
     "channel": channel,
-    "text": "Gram Health Digest",
+    "text": "Speakeasy Health Digest",
     "blocks": blocks,
 })
 if not result.get("ok"):

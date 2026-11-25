@@ -2,6 +2,7 @@ package productfeatures_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -196,6 +197,169 @@ func TestProductFeaturesService_SetProductFeature(t *testing.T) {
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	})
+}
+
+// The default test session is an org admin without the platform-admin bit, so
+// it must be refused staff-only entitlements like SSO.
+func TestProductFeaturesService_SetProductFeatureSSODeniedForOrgAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSSO),
+		Enabled:        true,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureSSO),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "denied toggle must not write the feature row")
+}
+
+// Disabling skills is a documented silent no-op (skills are always on), so it
+// must stay reachable for org admins instead of tripping the staff-only gate.
+func TestProductFeaturesService_SetProductFeatureSkillsDisableNoopForOrgAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkills),
+		Enabled:        false,
+	})
+	require.NoError(t, err)
+}
+
+func TestProductFeaturesService_SetProductFeatureSSOAllowedForPlatformAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	ctx = withPlatformAdmin(t, ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSSO),
+		Enabled:        true,
+	})
+	require.NoError(t, err)
+
+	enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureSSO),
+	})
+	require.NoError(t, err)
+	require.True(t, enabled)
+}
+
+func TestProductFeaturesService_SetProductFeatureRefusesUpstreamAuthEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	ctx = withPlatformAdmin(t, ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureUpstreamAuthEnforced),
+		Enabled:        true,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "refused toggle must not write the feature row")
+
+	require.NoError(t, ti.client.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureUpstreamAuthEnforced, true))
+	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureUpstreamAuthEnforced),
+		Enabled:        false,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	enabled, err = repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	require.True(t, enabled, "refused toggle must not clear enforcement")
+}
+
+// Org admins keep self-serve control of the logs toggle even with the
+// platform-admin bit set — staff toggling logs must keep working too.
+func TestProductFeaturesService_SetProductFeatureLogsAllowedForPlatformAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	ctx = withPlatformAdmin(t, ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    "logs",
+		Enabled:        true,
+	})
+	require.NoError(t, err)
+
+	enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    "logs",
+	})
+	require.NoError(t, err)
+	require.True(t, enabled)
+}
+
+// TestFeature_RequiresPlatformAdmin pins the org-settable/staff-only split:
+// the org-settable set mirrors the dashboard's self-serve organization
+// settings, everything else — including features added in the future — fails
+// closed to platform admins.
+func TestFeature_RequiresPlatformAdmin(t *testing.T) {
+	t.Parallel()
+
+	orgSettable := []productfeatures.Feature{
+		productfeatures.FeatureLogs,
+		productfeatures.FeatureToolIOLogs,
+		productfeatures.FeatureSessionCapture,
+		productfeatures.FeatureHooksBrowserLogin,
+		productfeatures.FeatureHooksFailOpen,
+		productfeatures.FeatureSkillCaptureMetadataOnly,
+		productfeatures.FeaturePlatformMCP,
+		productfeatures.FeatureOrganizationGatewayDisabled,
+	}
+	for _, feature := range orgSettable {
+		require.Falsef(t, feature.RequiresPlatformAdmin(), "feature %s must stay org-settable", feature)
+	}
+
+	staffOnly := []productfeatures.Feature{
+		productfeatures.FeatureSSO,
+		productfeatures.FeatureSCIM,
+		productfeatures.FeatureSkills,
+		productfeatures.FeatureAuthzChallengeLogging,
+		productfeatures.FeatureCustomModelKeys,
+		productfeatures.FeatureAIPlatformPushIntegrations,
+		productfeatures.FeatureCustomerManagedEncryptionKeys,
+		productfeatures.FeatureSessionPortability,
+		productfeatures.FeatureRemoteSessionAutoRefresh,
+		productfeatures.FeatureRemoteSessionAutoRefreshEnforced,
+	}
+	for _, feature := range staffOnly {
+		require.Truef(t, feature.RequiresPlatformAdmin(), "feature %s must require platform admin", feature)
+	}
+
+	require.True(t, productfeatures.Feature("some_future_feature").RequiresPlatformAdmin(), "unknown features must fail closed")
 }
 
 func TestProductFeaturesService_SetRemoteSessionAutoRefreshPolicy(t *testing.T) {
@@ -468,4 +632,60 @@ func TestProductFeaturesClient_SkillsAlwaysEnabled(t *testing.T) {
 	enabled, err := client.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills)
 	require.NoError(t, err)
 	require.True(t, enabled)
+}
+
+func TestProductFeaturesService_RejectsRetiredRolloutFlags(t *testing.T) {
+	t.Parallel()
+	for _, feature := range []string{"automatic-role-distribution", "provider_setup"} {
+		for _, staff := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/staff=%v", feature, staff), func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestProductFeaturesService(t)
+				if staff {
+					ctx = withPlatformAdmin(t, ctx)
+				}
+				err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+					OrganizationID: requestedOrganizationID(ctx),
+					FeatureName:    gen.ProductFeatureName(feature), Enabled: true,
+				})
+				requireOopsCode(t, err, oops.CodeInvalid)
+				enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: activeOrganizationID(t, ctx), FeatureName: feature})
+				require.NoError(t, err)
+				require.False(t, enabled)
+			})
+		}
+	}
+}
+
+func TestMutatorRejectsRetiredRolloutFlags(t *testing.T) {
+	t.Parallel()
+	mutator := productfeatures.NewMutator(nil, nil)
+	for _, feature := range []string{"automatic-role-distribution", "provider_setup"} {
+		for _, enabled := range []bool{false, true} {
+			changed, err := mutator.ApplyFeatureChangeTx(t.Context(), nil, "org_retired_flag", productfeatures.Feature(feature), enabled, productfeatures.MutationActor{})
+			require.False(t, changed)
+			requireOopsCode(t, err, oops.CodeInvalid)
+		}
+	}
+}
+
+func TestOrganizationGatewayRequiresExplicitOptIn(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	orgID := requestedOrganizationID(ctx)
+	require.True(t, ti.client.Snapshot(ctx, orgID).OrganizationGatewayDisabled)
+	requireDisabled := func(want bool) {
+		t.Helper()
+		live, err := ti.client.IsFeatureEnabledUncached(ctx, orgID, productfeatures.FeatureOrganizationGatewayDisabled)
+		require.NoError(t, err)
+		require.Equal(t, want, live)
+		require.Equal(t, want, ti.client.Snapshot(ctx, orgID).OrganizationGatewayDisabled)
+	}
+	requireDisabled(true)
+	for _, disabled := range []bool{false, false, true, true, false} {
+		require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+			OrganizationID: orgID, FeatureName: gen.ProductFeatureName(productfeatures.FeatureOrganizationGatewayDisabled), Enabled: disabled,
+		}))
+		requireDisabled(disabled)
+	}
 }

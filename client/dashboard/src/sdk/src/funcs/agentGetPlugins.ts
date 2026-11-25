@@ -113,6 +113,11 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
+    "Gram-Device-Environment": encodeSimple(
+      "Gram-Device-Environment",
+      payload?.["Gram-Device-Environment"],
+      { explode: false, charEncoding: "none" },
+    ),
     "Gram-Device-Hostname": encodeSimple(
       "Gram-Device-Hostname",
       payload?.["Gram-Device-Hostname"],
@@ -135,6 +140,13 @@ async function $do(
   }));
 
   const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Authorization",
+        type: "http:bearer",
+        value: security?.deviceAgentTokenHeaderAuthorization,
+      },
+    ],
     [
       {
         fieldName: "Gram-Key",

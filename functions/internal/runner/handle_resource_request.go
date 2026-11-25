@@ -27,11 +27,7 @@ func (s *Service) handleResourceRequest(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var payload CallResourcePayload
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		s.logger.ErrorContext(ctx, "failed to decode resource request", attr.SlogError(err))
-
-		msg := fmt.Sprintf("decode resource request: %s", err.Error())
-		http.Error(w, msg, http.StatusBadRequest)
+	if !s.decodeRequestBody(w, r, &payload) {
 		return
 	}
 
@@ -56,7 +52,7 @@ func (s *Service) getResource(ctx context.Context, logger *slog.Logger, payload 
 
 	reqCopy := payload
 	reqCopy.Environment = nil
-	reqArg, err := json.Marshal(reqCopy)
+	request, err := json.Marshal(reqCopy)
 	if err != nil {
 		return svc.NewPermanentError(
 			fmt.Errorf("serialize resource request: %w", err),
@@ -72,7 +68,7 @@ func (s *Service) getResource(ctx context.Context, logger *slog.Logger, payload 
 	}
 
 	return s.executeRequest(ctx, logger, callRequest{
-		requestArg:  reqArg,
+		request:     request,
 		environment: payload.Environment,
 		requestType: "resource",
 	}, w)

@@ -13,7 +13,7 @@ func TestLogFallbackUsesSemconvOutput(t *testing.T) {
 
 	record := (&otelv1.InboundLogRecord_builder{
 		Scope: (&otelv1.InboundLogRecord_InstrumentationScope_builder{
-			Name: new("com.anthropic.claude_code.tracing"),
+			Name: new("com.anthropic.claude_code.events"),
 		}).Build(),
 		Attributes: []*otelv1.InboundLogRecord_KeyValue{
 			logDialectStringAttribute("gen_ai.output.messages", `[{"role":"assistant","parts":[{"type":"text","content":"done"}],"finish_reason":"stop"}]`),

@@ -2,6 +2,7 @@ package gcp
 
 import (
 	pubsubv1beta1 "github.com/GoogleCloudPlatform/k8s-config-connector/pkg/clients/generated/apis/pubsub/v1beta1"
+	storagev1beta1 "github.com/GoogleCloudPlatform/k8s-config-connector/pkg/clients/generated/apis/storage/v1beta1"
 )
 
 // pubSubValuesDocument is the top-level Helm values document emitted by the
@@ -9,6 +10,33 @@ import (
 // under the `pubsub` key to render Config Connector resources.
 type pubSubValuesDocument struct {
 	PubSub pubSubValues `json:"pubsub"`
+
+	// Storage is omitted when no storage subscriptions declare buckets.
+	Storage *storageValues `json:"storage,omitempty"`
+}
+
+type storageValues struct {
+	// APIs are required before the chart reconciles bucket resources.
+	APIs []string `json:"apis"`
+
+	// Buckets are deduplicated by logical name, not subscription or payload.
+	Buckets []storageBucketValue `json:"buckets"`
+}
+
+type storageBucketValue struct {
+	// Name is logical. The chart sets resourceID and metadata.name from the
+	// deployment's physical-name mapping and injects that mapping into runners.
+	Name string `json:"name"`
+
+	// Annotations are mandatory preservation policy for chart-rendered metadata.
+	Annotations map[string]string `json:"annotations"`
+
+	// Labels identify resources managed by the proto topology generator.
+	Labels map[string]string `json:"labels"`
+
+	// Spec contains generator-owned privacy settings; deployment adds location,
+	// physical identity, lifecycle and IAM configuration.
+	Spec storagev1beta1.StorageBucketSpec `json:"spec"`
 }
 
 // pubSubValues is the Pub/Sub topology projected as Helm values. Per-resource

@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const acceptInvitation = `-- name: AcceptInvitation :execrows
+const acceptInvitation = `-- name: AcceptInvitation :one
 UPDATE organization_invitations
 SET state = 'accepted',
     accepted_at = clock_timestamp(),
@@ -20,14 +20,27 @@ SET state = 'accepted',
 WHERE id = $1
   AND state = 'pending'
   AND expires_at > clock_timestamp()
+RETURNING id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
 `
 
-func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, acceptInvitation, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, acceptInvitation, id)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const acceptPendingInvitationForMember = `-- name: AcceptPendingInvitationForMember :one
@@ -67,6 +80,36 @@ func (q *Queries) AcceptPendingInvitationForMember(ctx context.Context, arg Acce
 	return i, err
 }
 
+const addVerifiedDomainByWorkosID = `-- name: AddVerifiedDomainByWorkosID :exec
+UPDATE organization_metadata
+SET verified_domains = CASE
+        WHEN EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) AS existing (domain)
+            WHERE lower(existing.domain) = lower($1::text)
+        ) THEN COALESCE(organization_metadata.verified_domains, '{}'::text[])
+        ELSE array_append(COALESCE(organization_metadata.verified_domains, '{}'::text[]), $1::text)
+    END,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_id = $3
+`
+
+type AddVerifiedDomainByWorkosIDParams struct {
+	Domain            string
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
+}
+
+// Add one domain to an organization's verified domains after a WorkOS
+// organization_domain.verified event. The match ignores case, so a domain
+// already in the list is not added twice. The event cursor is recorded even
+// when the list does not change.
+func (q *Queries) AddVerifiedDomainByWorkosID(ctx context.Context, arg AddVerifiedDomainByWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, addVerifiedDomainByWorkosID, arg.Domain, arg.WorkosLastEventID, arg.WorkosID)
+	return err
+}
+
 const attachWorkOSUserToOrg = `-- name: AttachWorkOSUserToOrg :exec
 INSERT INTO organization_user_relationships (
     organization_id,
@@ -95,6 +138,46 @@ type AttachWorkOSUserToOrgParams struct {
 // updated if it's not already set.
 func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUserToOrgParams) error {
 	_, err := q.db.Exec(ctx, attachWorkOSUserToOrg, arg.OrganizationID, arg.UserID, arg.WorkosMembershipID)
+	return err
+}
+
+const attributePartnerSignup = `-- name: AttributePartnerSignup :execrows
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id)
+SELECT $1, $2
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_promotion_applications WHERE organization_id = $1
+)
+ON CONFLICT DO NOTHING
+`
+
+type AttributePartnerSignupParams struct {
+	OrganizationID        pgtype.Text
+	StripePromotionCodeID string
+}
+
+// Acceptance is immutable even after redemption. Call only during signup or a
+// verified first partner Checkout, under the billing/offer acceptance locks.
+func (q *Queries) AttributePartnerSignup(ctx context.Context, arg AttributePartnerSignupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, attributePartnerSignup, arg.OrganizationID, arg.StripePromotionCodeID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearOnboardingDefaultPlaybook = `-- name: ClearOnboardingDefaultPlaybook :exec
+UPDATE onboarding_playbooks
+SET is_default = false, updated_at = clock_timestamp()
+WHERE use_case_id = $1 AND organization_id IS NULL AND is_default AND deleted_at IS NULL AND id <> $2
+`
+
+type ClearOnboardingDefaultPlaybookParams struct {
+	UseCaseID uuid.NullUUID
+	KeepID    uuid.UUID
+}
+
+func (q *Queries) ClearOnboardingDefaultPlaybook(ctx context.Context, arg ClearOnboardingDefaultPlaybookParams) error {
+	_, err := q.db.Exec(ctx, clearOnboardingDefaultPlaybook, arg.UseCaseID, arg.KeepID)
 	return err
 }
 
@@ -165,64 +248,182 @@ func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationPara
 	return i, err
 }
 
-const createOrganizationMetadata = `-- name: CreateOrganizationMetadata :exec
-INSERT INTO organization_metadata (id, name, slug)
-VALUES ($1, $2, $3)
+const createOnboardingPlaybook = `-- name: CreateOnboardingPlaybook :one
+INSERT INTO onboarding_playbooks (use_case_id, organization_id, name, description, is_default)
+VALUES ($1::uuid, $2::text, $3, $4, $5)
+RETURNING id, use_case_id, organization_id, name, description, is_default
 `
 
-type CreateOrganizationMetadataParams struct {
-	ID   string
-	Name string
-	Slug string
+type CreateOnboardingPlaybookParams struct {
+	UseCaseID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Name           string
+	Description    string
+	IsDefault      bool
 }
 
-func (q *Queries) CreateOrganizationMetadata(ctx context.Context, arg CreateOrganizationMetadataParams) error {
-	_, err := q.db.Exec(ctx, createOrganizationMetadata, arg.ID, arg.Name, arg.Slug)
-	return err
+type CreateOnboardingPlaybookRow struct {
+	ID             uuid.UUID
+	UseCaseID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Name           string
+	Description    string
+	IsDefault      bool
 }
 
-const createOrganizationMetadataFromWorkOS = `-- name: CreateOrganizationMetadataFromWorkOS :one
+func (q *Queries) CreateOnboardingPlaybook(ctx context.Context, arg CreateOnboardingPlaybookParams) (CreateOnboardingPlaybookRow, error) {
+	row := q.db.QueryRow(ctx, createOnboardingPlaybook,
+		arg.UseCaseID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Description,
+		arg.IsDefault,
+	)
+	var i CreateOnboardingPlaybookRow
+	err := row.Scan(
+		&i.ID,
+		&i.UseCaseID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Description,
+		&i.IsDefault,
+	)
+	return i, err
+}
+
+const createOnboardingUseCase = `-- name: CreateOnboardingUseCase :one
+INSERT INTO onboarding_use_cases (slug, name, description, sort_order)
+VALUES ($1, $2, $3, (SELECT coalesce(max(sort_order), 0) + 1 FROM onboarding_use_cases))
+RETURNING id, slug, name, description, sort_order
+`
+
+type CreateOnboardingUseCaseParams struct {
+	Slug        string
+	Name        string
+	Description string
+}
+
+type CreateOnboardingUseCaseRow struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Description string
+	SortOrder   int32
+}
+
+func (q *Queries) CreateOnboardingUseCase(ctx context.Context, arg CreateOnboardingUseCaseParams) (CreateOnboardingUseCaseRow, error) {
+	row := q.db.QueryRow(ctx, createOnboardingUseCase, arg.Slug, arg.Name, arg.Description)
+	var i CreateOnboardingUseCaseRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
+		&i.SortOrder,
+	)
+	return i, err
+}
+
+const createOrganizationMetadataFromWorkOSWithRequests = `-- name: CreateOrganizationMetadataFromWorkOSWithRequests :one
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
     slug,
     workos_id,
     workos_updated_at,
-    workos_last_event_id
+    workos_last_event_id,
+    verified_domains,
+    default_host
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7::text[],
+    $8::text
 )
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written
 `
 
-type CreateOrganizationMetadataFromWorkOSParams struct {
+type CreateOrganizationMetadataFromWorkOSWithRequestsParams struct {
 	ID                string
 	Name              string
 	Slug              string
 	WorkosID          pgtype.Text
 	WorkosUpdatedAt   pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
+	VerifiedDomains   []string
+	DefaultHost       pgtype.Text
 }
 
-// Create a Gram organization row from a WorkOS organization event. The caller
-// chooses the Gram org ID from WorkOS external_id or a deterministic fallback.
-// Slug is a Gram-owned initial value and is never updated by WorkOS sync.
-func (q *Queries) CreateOrganizationMetadataFromWorkOS(ctx context.Context, arg CreateOrganizationMetadataFromWorkOSParams) (OrganizationMetadatum, error) {
-	row := q.db.QueryRow(ctx, createOrganizationMetadataFromWorkOS,
+type CreateOrganizationMetadataFromWorkOSWithRequestsRow struct {
+	Requests           []byte
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
+	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
+// Create a Speakeasy organization row from a WorkOS organization event. The caller
+// chooses the Speakeasy org ID from WorkOS external_id or a deterministic fallback.
+// Slug is a Speakeasy-owned initial value and is never updated by WorkOS sync.
+func (q *Queries) CreateOrganizationMetadataFromWorkOSWithRequests(ctx context.Context, arg CreateOrganizationMetadataFromWorkOSWithRequestsParams) (CreateOrganizationMetadataFromWorkOSWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, createOrganizationMetadataFromWorkOSWithRequests,
 		arg.ID,
 		arg.Name,
 		arg.Slug,
 		arg.WorkosID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
+		arg.VerifiedDomains,
+		arg.DefaultHost,
 	)
-	var i OrganizationMetadatum
+	var i CreateOrganizationMetadataFromWorkOSWithRequestsRow
 	err := row.Scan(
+		&i.Requests,
 		&i.ID,
 		&i.Name,
 		&i.Slug,
@@ -237,11 +438,185 @@ func (q *Queries) CreateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const createOrganizationMetadataWithRequests = `-- name: CreateOrganizationMetadataWithRequests :one
+WITH written AS (
+INSERT INTO organization_metadata (id, name, slug, default_host)
+VALUES ($1, $2, $3, $4::text)
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, TRUE AS inserted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written
+`
+
+type CreateOrganizationMetadataWithRequestsParams struct {
+	ID          string
+	Name        string
+	Slug        string
+	DefaultHost pgtype.Text
+}
+
+type CreateOrganizationMetadataWithRequestsRow struct {
+	Requests           []byte
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
+	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
+func (q *Queries) CreateOrganizationMetadataWithRequests(ctx context.Context, arg CreateOrganizationMetadataWithRequestsParams) (CreateOrganizationMetadataWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, createOrganizationMetadataWithRequests,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.DefaultHost,
+	)
+	var i CreateOrganizationMetadataWithRequestsRow
+	err := row.Scan(
+		&i.Requests,
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const deleteOnboardingPlaybook = `-- name: DeleteOnboardingPlaybook :execrows
+UPDATE onboarding_playbooks
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) DeleteOnboardingPlaybook(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOnboardingPlaybook, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOnboardingPlaybookSteps = `-- name: DeleteOnboardingPlaybookSteps :exec
+DELETE FROM onboarding_playbook_steps WHERE playbook_id = $1
+`
+
+func (q *Queries) DeleteOnboardingPlaybookSteps(ctx context.Context, playbookID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteOnboardingPlaybookSteps, playbookID)
+	return err
+}
+
+const deleteOnboardingPlaybooksOfUseCase = `-- name: DeleteOnboardingPlaybooksOfUseCase :exec
+UPDATE onboarding_playbooks
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE use_case_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) DeleteOnboardingPlaybooksOfUseCase(ctx context.Context, useCaseID uuid.NullUUID) error {
+	_, err := q.db.Exec(ctx, deleteOnboardingPlaybooksOfUseCase, useCaseID)
+	return err
+}
+
+const deleteOnboardingStepDependencies = `-- name: DeleteOnboardingStepDependencies :exec
+DELETE FROM onboarding_step_dependencies WHERE step_id = $1
+`
+
+func (q *Queries) DeleteOnboardingStepDependencies(ctx context.Context, stepID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteOnboardingStepDependencies, stepID)
+	return err
+}
+
+const deleteOnboardingStepMethods = `-- name: DeleteOnboardingStepMethods :exec
+DELETE FROM onboarding_step_methods WHERE step_id = $1
+`
+
+func (q *Queries) DeleteOnboardingStepMethods(ctx context.Context, stepID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteOnboardingStepMethods, stepID)
+	return err
+}
+
+const deleteOnboardingUseCase = `-- name: DeleteOnboardingUseCase :execrows
+UPDATE onboarding_use_cases
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) DeleteOnboardingUseCase(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOnboardingUseCase, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOrganizationOnboardingVendors = `-- name: DeleteOrganizationOnboardingVendors :exec
+DELETE FROM organization_onboarding_vendors WHERE organization_id = $1
+`
+
+func (q *Queries) DeleteOrganizationOnboardingVendors(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationOnboardingVendors, organizationID)
+	return err
 }
 
 const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
@@ -259,6 +634,36 @@ type DeleteOrganizationUserRelationshipParams struct {
 func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg DeleteOrganizationUserRelationshipParams) error {
 	_, err := q.db.Exec(ctx, deleteOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
 	return err
+}
+
+const deleteRetiredOnboardingPlaybookSteps = `-- name: DeleteRetiredOnboardingPlaybookSteps :execrows
+DELETE FROM onboarding_playbook_steps ps
+USING onboarding_steps s
+WHERE s.id = ps.step_id
+  AND s.slug = ANY($1::text[])
+  AND EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      JOIN onboarding_steps successor ON successor.id = listed.step_id
+      WHERE listed.playbook_id = ps.playbook_id
+        AND successor.slug = $2::text
+        AND successor.deleted_at IS NULL
+  )
+`
+
+type DeleteRetiredOnboardingPlaybookStepsParams struct {
+	RetiredSlugs  []string
+	SuccessorSlug string
+}
+
+// Drops the retired slugs' steps from every playbook that lists the successor
+// slug. After the repoint, that is every playbook that listed one.
+func (q *Queries) DeleteRetiredOnboardingPlaybookSteps(ctx context.Context, arg DeleteRetiredOnboardingPlaybookStepsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRetiredOnboardingPlaybookSteps, arg.RetiredSlugs, arg.SuccessorSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const disableOrganizationByWorkosID = `-- name: DisableOrganizationByWorkosID :execrows
@@ -332,7 +737,7 @@ type FilterOrganizationMemberUserIDsParams struct {
 	UserIds        []string
 }
 
-// Returns the subset of the given Gram user IDs that are active members of
+// Returns the subset of the given Speakeasy user IDs that are active members of
 // the organization. Used to mask Speakeasy staff identities in customer-facing
 // audit feeds.
 func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg FilterOrganizationMemberUserIDsParams) ([]string, error) {
@@ -353,6 +758,37 @@ func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg Filte
 		return nil, err
 	}
 	return items, nil
+}
+
+const getAcceptedSignupOfferFlow = `-- name: GetAcceptedSignupOfferFlow :one
+SELECT 'tailscale_partner_gateway'::text AS signup_flow
+FROM organization_promotion_applications
+WHERE organization_id = $1::text
+LIMIT 1
+`
+
+// All accepted applications originate in the partner gateway signup path.
+// Derive display context from that immutable acceptance, not mutable offer mappings.
+// Persist the accepted flow before introducing another signup flow or ledger writer.
+func (q *Queries) GetAcceptedSignupOfferFlow(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getAcceptedSignupOfferFlow, organizationID)
+	var signup_flow string
+	err := row.Scan(&signup_flow)
+	return signup_flow, err
+}
+
+const getEnabledSignupOffer = `-- name: GetEnabledSignupOffer :one
+SELECT id FROM signup_offers
+WHERE stripe_promotion_code_id = $1
+  AND signup_flow = 'tailscale_partner_gateway' AND enabled
+FOR SHARE
+`
+
+func (q *Queries) GetEnabledSignupOffer(ctx context.Context, stripePromotionCodeID string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getEnabledSignupOffer, stripePromotionCodeID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getInvitationByID = `-- name: GetInvitationByID :one
@@ -407,8 +843,137 @@ func (q *Queries) GetInvitationByTokenHash(ctx context.Context, tokenHash string
 	return i, err
 }
 
+const getOnboardingDefaultPlaybook = `-- name: GetOnboardingDefaultPlaybook :one
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name
+FROM onboarding_playbooks p
+JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+WHERE p.use_case_id = $1 AND p.is_default AND p.organization_id IS NULL AND p.deleted_at IS NULL
+`
+
+type GetOnboardingDefaultPlaybookRow struct {
+	ID             uuid.UUID
+	UseCaseID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Name           string
+	Description    string
+	IsDefault      bool
+	UseCaseSlug    string
+	UseCaseName    string
+}
+
+func (q *Queries) GetOnboardingDefaultPlaybook(ctx context.Context, useCaseID uuid.NullUUID) (GetOnboardingDefaultPlaybookRow, error) {
+	row := q.db.QueryRow(ctx, getOnboardingDefaultPlaybook, useCaseID)
+	var i GetOnboardingDefaultPlaybookRow
+	err := row.Scan(
+		&i.ID,
+		&i.UseCaseID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Description,
+		&i.IsDefault,
+		&i.UseCaseSlug,
+		&i.UseCaseName,
+	)
+	return i, err
+}
+
+const getOnboardingPlaybook = `-- name: GetOnboardingPlaybook :one
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name,
+  om.name AS organization_name
+FROM onboarding_playbooks p
+LEFT JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+LEFT JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.id = $1 AND p.deleted_at IS NULL
+  AND (p.use_case_id IS NULL OR u.id IS NOT NULL)
+`
+
+type GetOnboardingPlaybookRow struct {
+	ID               uuid.UUID
+	UseCaseID        uuid.NullUUID
+	OrganizationID   pgtype.Text
+	Name             string
+	Description      string
+	IsDefault        bool
+	UseCaseSlug      pgtype.Text
+	UseCaseName      pgtype.Text
+	OrganizationName pgtype.Text
+}
+
+func (q *Queries) GetOnboardingPlaybook(ctx context.Context, id uuid.UUID) (GetOnboardingPlaybookRow, error) {
+	row := q.db.QueryRow(ctx, getOnboardingPlaybook, id)
+	var i GetOnboardingPlaybookRow
+	err := row.Scan(
+		&i.ID,
+		&i.UseCaseID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Description,
+		&i.IsDefault,
+		&i.UseCaseSlug,
+		&i.UseCaseName,
+		&i.OrganizationName,
+	)
+	return i, err
+}
+
+const getOnboardingUseCase = `-- name: GetOnboardingUseCase :one
+SELECT id, slug, name, description, sort_order
+FROM onboarding_use_cases
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+type GetOnboardingUseCaseRow struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Description string
+	SortOrder   int32
+}
+
+func (q *Queries) GetOnboardingUseCase(ctx context.Context, id uuid.UUID) (GetOnboardingUseCaseRow, error) {
+	row := q.db.QueryRow(ctx, getOnboardingUseCase, id)
+	var i GetOnboardingUseCaseRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
+		&i.SortOrder,
+	)
+	return i, err
+}
+
+const getOnboardingUseCaseBySlug = `-- name: GetOnboardingUseCaseBySlug :one
+SELECT id, slug, name, description, sort_order
+FROM onboarding_use_cases
+WHERE slug = $1 AND deleted_at IS NULL
+`
+
+type GetOnboardingUseCaseBySlugRow struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Description string
+	SortOrder   int32
+}
+
+func (q *Queries) GetOnboardingUseCaseBySlug(ctx context.Context, slug string) (GetOnboardingUseCaseBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getOnboardingUseCaseBySlug, slug)
+	var i GetOnboardingUseCaseBySlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
+		&i.SortOrder,
+	)
+	return i, err
+}
+
 const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE workos_id = $1
 `
@@ -431,6 +996,10 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -439,7 +1008,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 }
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -462,6 +1031,10 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -470,7 +1043,7 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 }
 
 const getOrganizationMetadataBySlug = `-- name: GetOrganizationMetadataBySlug :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE slug = $1
 `
@@ -493,6 +1066,10 @@ func (q *Queries) GetOrganizationMetadataBySlug(ctx context.Context, slug string
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -512,6 +1089,109 @@ func (q *Queries) GetOrganizationNameByWorkosID(ctx context.Context, workosID pg
 	var name string
 	err := row.Scan(&name)
 	return name, err
+}
+
+const getOrganizationOnboardingPlaybookID = `-- name: GetOrganizationOnboardingPlaybookID :one
+SELECT om.id AS organization_id, o.playbook_id
+FROM organization_metadata om
+LEFT JOIN organization_onboarding o ON o.organization_id = om.id
+WHERE om.id = $1
+`
+
+type GetOrganizationOnboardingPlaybookIDRow struct {
+	OrganizationID string
+	PlaybookID     uuid.NullUUID
+}
+
+func (q *Queries) GetOrganizationOnboardingPlaybookID(ctx context.Context, organizationID string) (GetOrganizationOnboardingPlaybookIDRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationOnboardingPlaybookID, organizationID)
+	var i GetOrganizationOnboardingPlaybookIDRow
+	err := row.Scan(&i.OrganizationID, &i.PlaybookID)
+	return i, err
+}
+
+const getOrganizationOnboardingSelection = `-- name: GetOrganizationOnboardingSelection :many
+SELECT onboarding.preset AS onboarding_preset, task.task_key, task.hidden_at
+FROM organization_metadata om
+LEFT JOIN organization_onboarding onboarding ON onboarding.organization_id = om.id
+LEFT JOIN organization_setup_tasks task ON task.organization_id = om.id
+WHERE om.id = $1
+`
+
+type GetOrganizationOnboardingSelectionRow struct {
+	OnboardingPreset pgtype.Text
+	TaskKey          pgtype.Text
+	HiddenAt         pgtype.Timestamptz
+}
+
+func (q *Queries) GetOrganizationOnboardingSelection(ctx context.Context, organizationID string) ([]GetOrganizationOnboardingSelectionRow, error) {
+	rows, err := q.db.Query(ctx, getOrganizationOnboardingSelection, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetOrganizationOnboardingSelectionRow
+	for rows.Next() {
+		var i GetOrganizationOnboardingSelectionRow
+		if err := rows.Scan(&i.OnboardingPreset, &i.TaskKey, &i.HiddenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getOrganizationOnboardingStack = `-- name: GetOrganizationOnboardingStack :one
+SELECT om.id, om.name, om.slug, onboarding.mdm_vendor, onboarding.mdm_vendor_name
+FROM organization_metadata om
+LEFT JOIN organization_onboarding onboarding ON onboarding.organization_id = om.id
+WHERE om.id = $1
+`
+
+type GetOrganizationOnboardingStackRow struct {
+	ID            string
+	Name          string
+	Slug          string
+	MdmVendor     pgtype.Text
+	MdmVendorName pgtype.Text
+}
+
+func (q *Queries) GetOrganizationOnboardingStack(ctx context.Context, organizationID string) (GetOrganizationOnboardingStackRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationOnboardingStack, organizationID)
+	var i GetOrganizationOnboardingStackRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.MdmVendor,
+		&i.MdmVendorName,
+	)
+	return i, err
+}
+
+const getOrganizationPromotionApplication = `-- name: GetOrganizationPromotionApplication :one
+SELECT redeemed_at, created_at, updated_at, organization_id, stripe_promotion_code_id, stripe_subscription_id, id FROM organization_promotion_applications
+WHERE organization_id = $1::text
+ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetOrganizationPromotionApplication(ctx context.Context, organizationID string) (OrganizationPromotionApplication, error) {
+	row := q.db.QueryRow(ctx, getOrganizationPromotionApplication, organizationID)
+	var i OrganizationPromotionApplication
+	err := row.Scan(
+		&i.RedeemedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.StripePromotionCodeID,
+		&i.StripeSubscriptionID,
+		&i.ID,
+	)
+	return i, err
 }
 
 const getOrganizationRelationshipForUser = `-- name: GetOrganizationRelationshipForUser :one
@@ -541,6 +1221,34 @@ func (q *Queries) GetOrganizationRelationshipForUser(ctx context.Context, arg Ge
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getOrganizationSetupTask = `-- name: GetOrganizationSetupTask :one
+SELECT organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at, created_at, updated_at
+FROM organization_setup_tasks
+WHERE organization_id = $1
+  AND task_key = $2
+`
+
+type GetOrganizationSetupTaskParams struct {
+	OrganizationID string
+	TaskKey        string
+}
+
+func (q *Queries) GetOrganizationSetupTask(ctx context.Context, arg GetOrganizationSetupTaskParams) (OrganizationSetupTask, error) {
+	row := q.db.QueryRow(ctx, getOrganizationSetupTask, arg.OrganizationID, arg.TaskKey)
+	var i OrganizationSetupTask
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.TaskKey,
+		&i.Status,
+		&i.AssigneeUserID,
+		&i.AssigneeEmail,
+		&i.HiddenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -630,6 +1338,57 @@ func (q *Queries) GetRoleAssignmentLinkedToDifferentWorkOSUser(ctx context.Conte
 	return i, err
 }
 
+const getSetupTaskCompletionFacts = `-- name: GetSetupTaskCompletionFacts :one
+SELECT
+    COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
+    COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
+    (COALESCE(cardinality(organization_metadata.verified_domains), 0) > 0)::boolean AS domain_verified,
+    (
+        SELECT COUNT(DISTINCT organization_features.feature_name) = 3
+        FROM organization_features
+        WHERE organization_features.organization_id = $1
+          AND organization_features.feature_name IN ('logs', 'tool_io_logs', 'session_capture')
+          AND organization_features.deleted IS FALSE
+    )::boolean AS logging_enabled,
+    -- Any message stored from a Claude transcript upload (Cowork sessions
+    -- shipped on Stop) in one of the organization's projects. Served by the
+    -- partial chat_messages_claude_transcript_project_idx.
+    EXISTS (
+        SELECT 1
+        FROM chat_messages
+        WHERE chat_messages.origin = 'claude-transcript'
+          AND chat_messages.project_id IN (
+              SELECT projects.id
+              FROM projects
+              WHERE projects.organization_id = $1
+                AND projects.deleted IS FALSE
+          )
+    ) AS claude_transcript_captured
+FROM organization_metadata
+WHERE organization_metadata.id = $1
+`
+
+type GetSetupTaskCompletionFactsRow struct {
+	SsoConfigured            bool
+	DsyncConfigured          bool
+	DomainVerified           bool
+	LoggingEnabled           bool
+	ClaudeTranscriptCaptured bool
+}
+
+func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationID string) (GetSetupTaskCompletionFactsRow, error) {
+	row := q.db.QueryRow(ctx, getSetupTaskCompletionFacts, organizationID)
+	var i GetSetupTaskCompletionFactsRow
+	err := row.Scan(
+		&i.SsoConfigured,
+		&i.DsyncConfigured,
+		&i.DomainVerified,
+		&i.LoggingEnabled,
+		&i.ClaudeTranscriptCaptured,
+	)
+	return i, err
+}
+
 const getSvixAppID = `-- name: GetSvixAppID :one
 SELECT svix_app_id
 FROM organization_metadata
@@ -661,7 +1420,7 @@ type HasActiveOrganizationUserParams struct {
 	OrganizationID string
 }
 
-// Returns whether a Gram user is an active member of the organization.
+// Returns whether a Speakeasy user is an active member of the organization.
 func (q *Queries) HasActiveOrganizationUser(ctx context.Context, arg HasActiveOrganizationUserParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasActiveOrganizationUser, arg.UserID, arg.OrganizationID)
 	var exists bool
@@ -689,6 +1448,131 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const hasOtherActiveOrganizationUsers = `-- name: HasOtherActiveOrganizationUsers :one
+SELECT EXISTS (
+    SELECT 1
+    FROM organization_user_relationships AS relationship
+    JOIN users ON users.id = relationship.user_id
+    WHERE relationship.organization_id = $1
+      AND relationship.deleted_at IS NULL
+      AND users.deleted_at IS NULL
+      AND users.id <> $2
+)
+`
+
+type HasOtherActiveOrganizationUsersParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) HasOtherActiveOrganizationUsers(ctx context.Context, arg HasOtherActiveOrganizationUsersParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOtherActiveOrganizationUsers, arg.OrganizationID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasPendingInvitationForEmail = `-- name: HasPendingInvitationForEmail :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_invitations
+  WHERE email = $1
+    AND state = 'pending'
+    AND expires_at > clock_timestamp()
+)
+`
+
+// Reports whether any organization has a live invitation outstanding for this
+// address. It is asked at first-time user creation to tell an invited signup
+// from an organic one, so it deliberately spans every organization rather than
+// one: the user does not exist yet and belongs to none.
+func (q *Queries) HasPendingInvitationForEmail(ctx context.Context, email string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingInvitationForEmail, email)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const insertOnboardingPlaybookStep = `-- name: InsertOnboardingPlaybookStep :execrows
+INSERT INTO onboarding_playbook_steps (playbook_id, step_id, position)
+SELECT $1, s.id, $2
+FROM onboarding_steps s
+WHERE s.slug = $3 AND s.deleted_at IS NULL
+`
+
+type InsertOnboardingPlaybookStepParams struct {
+	PlaybookID uuid.UUID
+	Position   int32
+	Slug       string
+}
+
+func (q *Queries) InsertOnboardingPlaybookStep(ctx context.Context, arg InsertOnboardingPlaybookStepParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertOnboardingPlaybookStep, arg.PlaybookID, arg.Position, arg.Slug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertOnboardingStepDependency = `-- name: InsertOnboardingStepDependency :exec
+INSERT INTO onboarding_step_dependencies (step_id, requires_step_id)
+SELECT $1, r.id
+FROM onboarding_steps r
+WHERE r.slug = $2
+ON CONFLICT DO NOTHING
+`
+
+type InsertOnboardingStepDependencyParams struct {
+	StepID       uuid.UUID
+	RequiresSlug string
+}
+
+func (q *Queries) InsertOnboardingStepDependency(ctx context.Context, arg InsertOnboardingStepDependencyParams) error {
+	_, err := q.db.Exec(ctx, insertOnboardingStepDependency, arg.StepID, arg.RequiresSlug)
+	return err
+}
+
+const insertOnboardingStepMethod = `-- name: InsertOnboardingStepMethod :execrows
+INSERT INTO onboarding_step_methods (step_id, integration_method_id)
+SELECT $1, m.id
+FROM support_matrix_integration_methods m
+WHERE m.slug = $2 AND m.deleted_at IS NULL
+ON CONFLICT DO NOTHING
+`
+
+type InsertOnboardingStepMethodParams struct {
+	StepID     uuid.UUID
+	MethodSlug string
+}
+
+func (q *Queries) InsertOnboardingStepMethod(ctx context.Context, arg InsertOnboardingStepMethodParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertOnboardingStepMethod, arg.StepID, arg.MethodSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertOrganizationOnboardingVendor = `-- name: InsertOrganizationOnboardingVendor :exec
+INSERT INTO organization_onboarding_vendors (organization_id, vendor, plan_id)
+VALUES (
+  $1,
+  $2,
+  (SELECT p.id FROM support_matrix_plans p WHERE p.slug = $3::text AND p.deleted_at IS NULL)
+)
+`
+
+type InsertOrganizationOnboardingVendorParams struct {
+	OrganizationID string
+	Vendor         string
+	PlanSlug       pgtype.Text
+}
+
+func (q *Queries) InsertOrganizationOnboardingVendor(ctx context.Context, arg InsertOrganizationOnboardingVendorParams) error {
+	_, err := q.db.Exec(ctx, insertOrganizationOnboardingVendor, arg.OrganizationID, arg.Vendor, arg.PlanSlug)
+	return err
 }
 
 const linkRelationshipsToUser = `-- name: LinkRelationshipsToUser :exec
@@ -790,7 +1674,7 @@ WHERE our.organization_id = $1
   AND u.deleted_at IS NULL
 `
 
-// Returns the Gram user IDs of active members of the organization. Used to
+// Returns the Speakeasy user IDs of active members of the organization. Used to
 // suppress challenges raised by users outside the organization (e.g. Speakeasy
 // staff impersonating a customer org) from the Challenge UI.
 func (q *Queries) ListActiveOrganizationUserIDs(ctx context.Context, organizationID string) ([]string, error) {
@@ -857,6 +1741,337 @@ func (q *Queries) ListActiveRoleAssignmentsByOrganization(ctx context.Context, o
 	return items, nil
 }
 
+const listOnboardingPlaybookSteps = `-- name: ListOnboardingPlaybookSteps :many
+SELECT ps.playbook_id, s.slug, s.title, ps.position
+FROM onboarding_playbook_steps ps
+JOIN onboarding_steps s ON s.id = ps.step_id AND s.deleted_at IS NULL
+WHERE ps.playbook_id = ANY($1::uuid[])
+ORDER BY ps.playbook_id, ps.position, s.slug
+`
+
+type ListOnboardingPlaybookStepsRow struct {
+	PlaybookID uuid.UUID
+	Slug       string
+	Title      string
+	Position   int32
+}
+
+func (q *Queries) ListOnboardingPlaybookSteps(ctx context.Context, playbookIds []uuid.UUID) ([]ListOnboardingPlaybookStepsRow, error) {
+	rows, err := q.db.Query(ctx, listOnboardingPlaybookSteps, playbookIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOnboardingPlaybookStepsRow
+	for rows.Next() {
+		var i ListOnboardingPlaybookStepsRow
+		if err := rows.Scan(
+			&i.PlaybookID,
+			&i.Slug,
+			&i.Title,
+			&i.Position,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOnboardingPlaybooks = `-- name: ListOnboardingPlaybooks :many
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name,
+  om.name AS organization_name
+FROM onboarding_playbooks p
+LEFT JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+LEFT JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.deleted_at IS NULL
+  AND (p.use_case_id IS NULL OR u.id IS NOT NULL)
+  AND (
+    $1::text IS NULL
+    OR p.organization_id IS NULL
+    OR p.organization_id = $1::text
+  )
+ORDER BY p.organization_id NULLS FIRST, u.sort_order, u.name, om.name, p.is_default DESC, p.name, p.id
+`
+
+type ListOnboardingPlaybooksRow struct {
+	ID               uuid.UUID
+	UseCaseID        uuid.NullUUID
+	OrganizationID   pgtype.Text
+	Name             string
+	Description      string
+	IsDefault        bool
+	UseCaseSlug      pgtype.Text
+	UseCaseName      pgtype.Text
+	OrganizationName pgtype.Text
+}
+
+// Every playbook, or, for an organization, the use cases' and its own. A
+// playbook belongs to a use case or to an organization, never both.
+func (q *Queries) ListOnboardingPlaybooks(ctx context.Context, organizationID pgtype.Text) ([]ListOnboardingPlaybooksRow, error) {
+	rows, err := q.db.Query(ctx, listOnboardingPlaybooks, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOnboardingPlaybooksRow
+	for rows.Next() {
+		var i ListOnboardingPlaybooksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UseCaseID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.Description,
+			&i.IsDefault,
+			&i.UseCaseSlug,
+			&i.UseCaseName,
+			&i.OrganizationName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOnboardingStepMethodApplicability = `-- name: ListOnboardingStepMethodApplicability :many
+SELECT s.slug AS step_slug, m.slug AS method_slug, m.vendor AS method_vendor,
+  -- Over the stack's platforms of the method's own vendor, or of every vendor
+  -- for a cross-platform method, so an unrelated vendor in the stack never
+  -- changes the verdict. A platform the matrix does not map the method to is
+  -- unknown, which is not the same as not applicable.
+  coalesce((
+    SELECT bool_and(mp.platform_id IS NOT NULL AND mp.applicability = 'na')
+    FROM support_matrix_platforms p
+    LEFT JOIN support_matrix_method_platforms mp ON mp.platform_id = p.id AND mp.integration_method_id = m.id AND mp.deleted_at IS NULL
+    WHERE p.deleted_at IS NULL AND p.vendor = ANY($1::text[])
+      AND (m.vendor = 'Cross-platform' OR p.vendor = m.vendor)
+  ), false)::boolean AS not_applicable_everywhere
+FROM onboarding_step_methods sm
+JOIN onboarding_steps s ON s.id = sm.step_id AND s.deleted_at IS NULL
+JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
+WHERE s.slug = ANY($2::text[])
+ORDER BY s.slug, m.sort_order, m.slug
+`
+
+type ListOnboardingStepMethodApplicabilityParams struct {
+	Vendors   []string
+	StepSlugs []string
+}
+
+type ListOnboardingStepMethodApplicabilityRow struct {
+	StepSlug                string
+	MethodSlug              string
+	MethodVendor            string
+	NotApplicableEverywhere bool
+}
+
+func (q *Queries) ListOnboardingStepMethodApplicability(ctx context.Context, arg ListOnboardingStepMethodApplicabilityParams) ([]ListOnboardingStepMethodApplicabilityRow, error) {
+	rows, err := q.db.Query(ctx, listOnboardingStepMethodApplicability, arg.Vendors, arg.StepSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOnboardingStepMethodApplicabilityRow
+	for rows.Next() {
+		var i ListOnboardingStepMethodApplicabilityRow
+		if err := rows.Scan(
+			&i.StepSlug,
+			&i.MethodSlug,
+			&i.MethodVendor,
+			&i.NotApplicableEverywhere,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOnboardingSteps = `-- name: ListOnboardingSteps :many
+SELECT s.id, s.slug, s.title, s.description, s.completion, s.hidden_by_default, s.sort_order,
+  p.slug AS parent_slug,
+  (
+    SELECT coalesce(array_agg(m.slug ORDER BY m.sort_order, m.slug), '{}')::text[]
+    FROM onboarding_step_methods sm
+    JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
+    WHERE sm.step_id = s.id
+  ) AS method_slugs,
+  (
+    SELECT coalesce(array_agg(r.slug ORDER BY r.sort_order, r.slug), '{}')::text[]
+    FROM onboarding_step_dependencies d
+    JOIN onboarding_steps r ON r.id = d.requires_step_id AND r.deleted_at IS NULL
+    WHERE d.step_id = s.id
+  ) AS requires_slugs
+FROM onboarding_steps s
+LEFT JOIN onboarding_steps p ON p.id = s.parent_step_id AND p.deleted_at IS NULL
+WHERE s.deleted_at IS NULL
+ORDER BY s.sort_order, s.slug
+`
+
+type ListOnboardingStepsRow struct {
+	ID              uuid.UUID
+	Slug            string
+	Title           string
+	Description     string
+	Completion      string
+	HiddenByDefault bool
+	SortOrder       int32
+	ParentSlug      pgtype.Text
+	MethodSlugs     []string
+	RequiresSlugs   []string
+}
+
+func (q *Queries) ListOnboardingSteps(ctx context.Context) ([]ListOnboardingStepsRow, error) {
+	rows, err := q.db.Query(ctx, listOnboardingSteps)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOnboardingStepsRow
+	for rows.Next() {
+		var i ListOnboardingStepsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Title,
+			&i.Description,
+			&i.Completion,
+			&i.HiddenByDefault,
+			&i.SortOrder,
+			&i.ParentSlug,
+			&i.MethodSlugs,
+			&i.RequiresSlugs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOnboardingUseCases = `-- name: ListOnboardingUseCases :many
+SELECT u.id, u.slug, u.name, u.description, u.sort_order,
+  d.id AS default_playbook_id
+FROM onboarding_use_cases u
+LEFT JOIN onboarding_playbooks d ON d.use_case_id = u.id AND d.is_default AND d.organization_id IS NULL AND d.deleted_at IS NULL
+WHERE u.deleted_at IS NULL
+ORDER BY u.sort_order, u.name, u.id
+`
+
+type ListOnboardingUseCasesRow struct {
+	ID                uuid.UUID
+	Slug              string
+	Name              string
+	Description       string
+	SortOrder         int32
+	DefaultPlaybookID uuid.NullUUID
+}
+
+func (q *Queries) ListOnboardingUseCases(ctx context.Context) ([]ListOnboardingUseCasesRow, error) {
+	rows, err := q.db.Query(ctx, listOnboardingUseCases)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOnboardingUseCasesRow
+	for rows.Next() {
+		var i ListOnboardingUseCasesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.Description,
+			&i.SortOrder,
+			&i.DefaultPlaybookID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationOnboardingPlaybookSteps = `-- name: ListOrganizationOnboardingPlaybookSteps :many
+SELECT s.slug
+FROM organization_onboarding o
+JOIN onboarding_playbooks p ON p.id = o.playbook_id AND p.deleted_at IS NULL
+JOIN onboarding_playbook_steps ps ON ps.playbook_id = p.id
+JOIN onboarding_steps s ON s.id = ps.step_id AND s.deleted_at IS NULL
+WHERE o.organization_id = $1
+ORDER BY ps.position, s.slug
+`
+
+func (q *Queries) ListOrganizationOnboardingPlaybookSteps(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listOrganizationOnboardingPlaybookSteps, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, err
+		}
+		items = append(items, slug)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationOnboardingVendors = `-- name: ListOrganizationOnboardingVendors :many
+SELECT v.vendor, p.slug AS plan_slug
+FROM organization_onboarding_vendors v
+LEFT JOIN support_matrix_plans p ON p.id = v.plan_id AND p.deleted_at IS NULL
+WHERE v.organization_id = $1
+ORDER BY v.vendor
+`
+
+type ListOrganizationOnboardingVendorsRow struct {
+	Vendor   string
+	PlanSlug pgtype.Text
+}
+
+func (q *Queries) ListOrganizationOnboardingVendors(ctx context.Context, organizationID string) ([]ListOrganizationOnboardingVendorsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationOnboardingVendors, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationOnboardingVendorsRow
+	for rows.Next() {
+		var i ListOrganizationOnboardingVendorsRow
+		if err := rows.Scan(&i.Vendor, &i.PlanSlug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationRoleAssignmentsByWorkOSUser = `-- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
 SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at
 FROM organization_role_assignments
@@ -891,6 +2106,41 @@ func (q *Queries) ListOrganizationRoleAssignmentsByWorkOSUser(ctx context.Contex
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationSetupTasks = `-- name: ListOrganizationSetupTasks :many
+SELECT organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at, created_at, updated_at
+FROM organization_setup_tasks
+WHERE organization_id = $1
+`
+
+func (q *Queries) ListOrganizationSetupTasks(ctx context.Context, organizationID string) ([]OrganizationSetupTask, error) {
+	rows, err := q.db.Query(ctx, listOrganizationSetupTasks, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationSetupTask
+	for rows.Next() {
+		var i OrganizationSetupTask
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.TaskKey,
+			&i.Status,
+			&i.AssigneeUserID,
+			&i.AssigneeEmail,
+			&i.HiddenAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1057,6 +2307,136 @@ func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const listPendingInvitationsForEmail = `-- name: ListPendingInvitationsForEmail :many
+SELECT
+  organization_invitations.id,
+  organization_invitations.organization_id,
+  organization_metadata.name AS organization_name,
+  organization_metadata.workos_id AS organization_workos_id,
+  COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_enabled,
+  COALESCE(organization_metadata.verified_domains, '{}'::text[])::text[] AS verified_domains
+FROM organization_invitations
+JOIN organization_metadata ON organization_metadata.id = organization_invitations.organization_id
+WHERE organization_invitations.email = $1
+  AND organization_invitations.state = 'pending'
+  AND organization_invitations.expires_at > clock_timestamp()
+  AND organization_metadata.disabled_at IS NULL
+ORDER BY organization_invitations.created_at DESC
+`
+
+type ListPendingInvitationsForEmailRow struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	OrganizationName     string
+	OrganizationWorkosID pgtype.Text
+	SsoEnabled           bool
+	VerifiedDomains      []string
+}
+
+// Lists the live invitations addressed to this email in every organization,
+// newest first. A signed-in user with no organization is offered these before
+// creating one, so an invited teammate joins their team instead.
+func (q *Queries) ListPendingInvitationsForEmail(ctx context.Context, email string) ([]ListPendingInvitationsForEmailRow, error) {
+	rows, err := q.db.Query(ctx, listPendingInvitationsForEmail, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingInvitationsForEmailRow
+	for rows.Next() {
+		var i ListPendingInvitationsForEmailRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationWorkosID,
+			&i.SsoEnabled,
+			&i.VerifiedDomains,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSupportMatrixPlansForOnboarding = `-- name: ListSupportMatrixPlansForOnboarding :many
+SELECT slug, vendor, name
+FROM support_matrix_plans
+WHERE deleted_at IS NULL
+ORDER BY sort_order, slug
+`
+
+type ListSupportMatrixPlansForOnboardingRow struct {
+	Slug   string
+	Vendor string
+	Name   string
+}
+
+func (q *Queries) ListSupportMatrixPlansForOnboarding(ctx context.Context) ([]ListSupportMatrixPlansForOnboardingRow, error) {
+	rows, err := q.db.Query(ctx, listSupportMatrixPlansForOnboarding)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSupportMatrixPlansForOnboardingRow
+	for rows.Next() {
+		var i ListSupportMatrixPlansForOnboardingRow
+		if err := rows.Scan(&i.Slug, &i.Vendor, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSupportMatrixPlatformsForOnboarding = `-- name: ListSupportMatrixPlatformsForOnboarding :many
+SELECT slug, name, vendor, family, surface
+FROM support_matrix_platforms
+WHERE deleted_at IS NULL
+ORDER BY sort_order, slug
+`
+
+type ListSupportMatrixPlatformsForOnboardingRow struct {
+	Slug    string
+	Name    string
+	Vendor  string
+	Family  string
+	Surface string
+}
+
+func (q *Queries) ListSupportMatrixPlatformsForOnboarding(ctx context.Context) ([]ListSupportMatrixPlatformsForOnboardingRow, error) {
+	rows, err := q.db.Query(ctx, listSupportMatrixPlatformsForOnboarding)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSupportMatrixPlatformsForOnboardingRow
+	for rows.Next() {
+		var i ListSupportMatrixPlatformsForOnboardingRow
+		if err := rows.Scan(
+			&i.Slug,
+			&i.Name,
+			&i.Vendor,
+			&i.Family,
+			&i.Surface,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockActiveOrganizationUser = `-- name: LockActiveOrganizationUser :one
 SELECT our.user_id
 FROM organization_user_relationships AS our
@@ -1078,6 +2458,134 @@ func (q *Queries) LockActiveOrganizationUser(ctx context.Context, arg LockActive
 	var user_id pgtype.Text
 	err := row.Scan(&user_id)
 	return user_id, err
+}
+
+const lockOnboardingPlaybooks = `-- name: LockOnboardingPlaybooks :exec
+SELECT pg_advisory_xact_lock(719438203)
+`
+
+func (q *Queries) LockOnboardingPlaybooks(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockOnboardingPlaybooks)
+	return err
+}
+
+const lockOnboardingSteps = `-- name: LockOnboardingSteps :exec
+SELECT pg_advisory_xact_lock(719438202)
+`
+
+func (q *Queries) LockOnboardingSteps(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockOnboardingSteps)
+	return err
+}
+
+const lockOrganizationForAdminConfiguration = `-- name: LockOrganizationForAdminConfiguration :one
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR NO KEY UPDATE
+`
+
+// Pin the displayed identity without blocking settings inserts that acquire
+// foreign-key KEY SHARE locks after the chat-analysis budget lock.
+func (q *Queries) LockOrganizationForAdminConfiguration(ctx context.Context, id string) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationForAdminConfiguration, id)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const lockOrganizationForInviteAcceptance = `-- name: LockOrganizationForInviteAcceptance :one
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockOrganizationForInviteAcceptance(ctx context.Context, id string) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationForInviteAcceptance, id)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const lockOrganizationForSetupTaskUpdate = `-- name: LockOrganizationForSetupTaskUpdate :one
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockOrganizationForSetupTaskUpdate(ctx context.Context, organizationID string) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationForSetupTaskUpdate, organizationID)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
 }
 
 const lockOrganizationSlug = `-- name: LockOrganizationSlug :exec
@@ -1117,20 +2625,24 @@ func (q *Queries) MarkRoleAssignmentsDeleted(ctx context.Context, arg MarkRoleAs
 	return err
 }
 
-const markWorkOSMembershipDeleted = `-- name: MarkWorkOSMembershipDeleted :exec
+const markWorkOSMembershipDeleted = `-- name: MarkWorkOSMembershipDeleted :many
 WITH updated_existing_user_relationship AS (
     UPDATE organization_user_relationships
-    SET workos_user_id = $3,
-        workos_membership_id = $4,
-        workos_updated_at = $5,
-        workos_last_event_id = $6,
+    SET workos_user_id = $1,
+        workos_membership_id = $2,
+        workos_updated_at = $3,
+        workos_last_event_id = $4,
         deleted_at = COALESCE(deleted_at, clock_timestamp()),
         updated_at = clock_timestamp()
-    WHERE organization_id = $1
-      AND user_id = $2
-      AND $2::text IS NOT NULL
-    RETURNING id
-)
+    WHERE organization_user_relationships.organization_id = $5
+      AND (
+          ($6::text IS NOT NULL AND organization_user_relationships.user_id = $6)
+          OR ($1::text IS NOT NULL AND organization_user_relationships.workos_user_id = $1)
+          OR ($2::text IS NOT NULL AND organization_user_relationships.workos_membership_id = $2)
+      )
+    RETURNING organization_user_relationships.user_id
+),
+inserted AS (
 INSERT INTO organization_user_relationships (
     organization_id,
     user_id,
@@ -1141,12 +2653,12 @@ INSERT INTO organization_user_relationships (
     deleted_at
 )
 SELECT
+    $5,
+    $6,
     $1,
     $2,
     $3,
     $4,
-    $5,
-    $6,
     clock_timestamp()
 WHERE NOT EXISTS (SELECT 1 FROM updated_existing_user_relationship)
 ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
@@ -1157,28 +2669,236 @@ ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     deleted_at = COALESCE(organization_user_relationships.deleted_at, clock_timestamp()),
     updated_at = clock_timestamp()
+RETURNING user_id
+)
+SELECT user_id FROM updated_existing_user_relationship
+UNION ALL
+SELECT user_id FROM inserted
 `
 
 type MarkWorkOSMembershipDeletedParams struct {
-	OrganizationID     string
-	UserID             pgtype.Text
 	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
+	OrganizationID     string
+	UserID             pgtype.Text
 }
 
 // Record a WorkOS membership delete, inserting a tombstone when the local
 // relationship did not exist so stale replayed creates cannot resurrect it.
-func (q *Queries) MarkWorkOSMembershipDeleted(ctx context.Context, arg MarkWorkOSMembershipDeletedParams) error {
-	_, err := q.db.Exec(ctx, markWorkOSMembershipDeleted,
-		arg.OrganizationID,
-		arg.UserID,
+func (q *Queries) MarkWorkOSMembershipDeleted(ctx context.Context, arg MarkWorkOSMembershipDeletedParams) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, markWorkOSMembershipDeleted,
 		arg.WorkosUserID,
 		arg.WorkosMembershipID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
+		arg.OrganizationID,
+		arg.UserID,
 	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var user_id pgtype.Text
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reassignOrganizationRoleAssignmentWorkOSID = `-- name: ReassignOrganizationRoleAssignmentWorkOSID :exec
+UPDATE organization_role_assignments
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE user_id = $2
+  AND workos_user_id <> $1
+  AND deleted_at IS NULL
+`
+
+type ReassignOrganizationRoleAssignmentWorkOSIDParams struct {
+	NewWorkosUserID string
+	UserID          pgtype.Text
+}
+
+// Move leftover assignments onto the new WorkOS id after colliding rows
+// have been retired.
+func (q *Queries) ReassignOrganizationRoleAssignmentWorkOSID(ctx context.Context, arg ReassignOrganizationRoleAssignmentWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, reassignOrganizationRoleAssignmentWorkOSID, arg.NewWorkosUserID, arg.UserID)
+	return err
+}
+
+const reassignOrganizationUserWorkOSID = `-- name: ReassignOrganizationUserWorkOSID :exec
+UPDATE organization_user_relationships
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE user_id = $2
+  AND workos_user_id IS NOT NULL
+  AND workos_user_id IS DISTINCT FROM $1
+`
+
+type ReassignOrganizationUserWorkOSIDParams struct {
+	NewWorkosUserID pgtype.Text
+	UserID          pgtype.Text
+}
+
+// Login reuses a Speakeasy user after WorkOS delete-and-signup, so membership
+// rows still pointing at a previous WorkOS user id must follow the new one.
+// Matches any leftover id so a retry after overwrite still converges.
+func (q *Queries) ReassignOrganizationUserWorkOSID(ctx context.Context, arg ReassignOrganizationUserWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, reassignOrganizationUserWorkOSID, arg.NewWorkosUserID, arg.UserID)
+	return err
+}
+
+const removeVerifiedDomainByWorkosID = `-- name: RemoveVerifiedDomainByWorkosID :exec
+UPDATE organization_metadata
+SET verified_domains = ARRAY(
+        SELECT existing.domain
+        FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) WITH ORDINALITY AS existing (domain, position)
+        WHERE lower(existing.domain) <> lower($1::text)
+        ORDER BY existing.position
+    ),
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_id = $3
+`
+
+type RemoveVerifiedDomainByWorkosIDParams struct {
+	Domain            string
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
+}
+
+// Remove one domain from an organization's verified domains after a WorkOS
+// organization_domain.deleted event. The match ignores case and keeps the
+// order of the remaining domains. The event cursor is recorded even when the
+// domain was not in the list.
+func (q *Queries) RemoveVerifiedDomainByWorkosID(ctx context.Context, arg RemoveVerifiedDomainByWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, removeVerifiedDomainByWorkosID, arg.Domain, arg.WorkosLastEventID, arg.WorkosID)
+	return err
+}
+
+const repointRetiredOnboardingPlaybookSteps = `-- name: RepointRetiredOnboardingPlaybookSteps :execrows
+WITH successor AS (
+    SELECT onboarding_steps.id
+    FROM onboarding_steps
+    WHERE onboarding_steps.slug = $1::text
+      AND onboarding_steps.deleted_at IS NULL
+),
+firsts AS (
+    SELECT DISTINCT ON (ps.playbook_id) ps.playbook_id, ps.step_id
+    FROM onboarding_playbook_steps ps
+    JOIN onboarding_steps s ON s.id = ps.step_id
+    WHERE s.slug = ANY($2::text[])
+    ORDER BY ps.playbook_id, ps.position
+)
+UPDATE onboarding_playbook_steps ps
+SET step_id = successor.id, updated_at = clock_timestamp()
+FROM firsts, successor
+WHERE ps.playbook_id = firsts.playbook_id
+  AND ps.step_id = firsts.step_id
+  AND NOT EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      WHERE listed.playbook_id = ps.playbook_id
+        AND listed.step_id = successor.id
+  )
+`
+
+type RepointRetiredOnboardingPlaybookStepsParams struct {
+	SuccessorSlug string
+	RetiredSlugs  []string
+}
+
+// Moves each playbook's first step among the retired slugs onto the successor
+// slug, keeping its position, unless the playbook already lists the
+// successor. Retired slugs match whether or not they are retired yet.
+func (q *Queries) RepointRetiredOnboardingPlaybookSteps(ctx context.Context, arg RepointRetiredOnboardingPlaybookStepsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, repointRetiredOnboardingPlaybookSteps, arg.SuccessorSlug, arg.RetiredSlugs)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const retireCollidingOrganizationRoleAssignments = `-- name: RetireCollidingOrganizationRoleAssignments :exec
+UPDATE organization_role_assignments AS old
+SET deleted_at = COALESCE(old.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE old.user_id = $1
+  AND old.workos_user_id <> $2
+  AND old.deleted_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM organization_role_assignments AS neu
+      WHERE neu.organization_id = old.organization_id
+        AND neu.workos_user_id = $2
+        AND neu.role_urn = old.role_urn
+        AND neu.deleted_at IS NULL
+  )
+`
+
+type RetireCollidingOrganizationRoleAssignmentsParams struct {
+	UserID          pgtype.Text
+	NewWorkosUserID string
+}
+
+// Soft-delete leftover assignments that would unique-violate if remapped
+// onto a WorkOS id that already holds the same org+role.
+func (q *Queries) RetireCollidingOrganizationRoleAssignments(ctx context.Context, arg RetireCollidingOrganizationRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, retireCollidingOrganizationRoleAssignments, arg.UserID, arg.NewWorkosUserID)
+	return err
+}
+
+const retireDuplicateLeftoverOrganizationRoleAssignments = `-- name: RetireDuplicateLeftoverOrganizationRoleAssignments :exec
+UPDATE organization_role_assignments AS dest
+SET deleted_at = COALESCE(dest.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+FROM (
+  SELECT id
+  FROM (
+    SELECT leftover.id,
+           ROW_NUMBER() OVER (
+             PARTITION BY leftover.organization_id, leftover.role_urn
+             ORDER BY leftover.created_at DESC, leftover.id DESC
+           ) AS rn
+    FROM organization_role_assignments leftover
+    WHERE leftover.user_id = $1
+      AND leftover.workos_user_id <> $2
+      AND leftover.deleted_at IS NULL
+  ) ranked
+  WHERE rn > 1
+) extras
+WHERE dest.id = extras.id
+`
+
+type RetireDuplicateLeftoverOrganizationRoleAssignmentsParams struct {
+	UserID          pgtype.Text
+	NewWorkosUserID string
+}
+
+// Soft-delete extra leftover assignments that share org+role so remapping
+// them onto one WorkOS id cannot unique-violate. Keeps the newest leftover.
+func (q *Queries) RetireDuplicateLeftoverOrganizationRoleAssignments(ctx context.Context, arg RetireDuplicateLeftoverOrganizationRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, retireDuplicateLeftoverOrganizationRoleAssignments, arg.UserID, arg.NewWorkosUserID)
+	return err
+}
+
+const retireOnboardingStepsNotIn = `-- name: RetireOnboardingStepsNotIn :exec
+UPDATE onboarding_steps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE deleted_at IS NULL AND NOT (slug = ANY($1::text[]))
+`
+
+func (q *Queries) RetireOnboardingStepsNotIn(ctx context.Context, slugs []string) error {
+	_, err := q.db.Exec(ctx, retireOnboardingStepsNotIn, slugs)
 	return err
 }
 
@@ -1256,7 +2976,7 @@ SET gram_account_type = $1,
 WHERE id = $2
   AND gram_account_type = $3
   AND gram_account_type NOT IN ('payg', 'enterprise')
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 `
 
 type SetAccountTypeIfUnchangedParams struct {
@@ -1283,11 +3003,31 @@ func (q *Queries) SetAccountTypeIfUnchanged(ctx context.Context, arg SetAccountT
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const setOnboardingStepParent = `-- name: SetOnboardingStepParent :exec
+UPDATE onboarding_steps
+SET parent_step_id = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND parent_step_id IS DISTINCT FROM $1
+`
+
+type SetOnboardingStepParentParams struct {
+	ParentStepID uuid.NullUUID
+	ID           uuid.UUID
+}
+
+func (q *Queries) SetOnboardingStepParent(ctx context.Context, arg SetOnboardingStepParentParams) error {
+	_, err := q.db.Exec(ctx, setOnboardingStepParent, arg.ParentStepID, arg.ID)
+	return err
 }
 
 const setOrgWorkosID = `-- name: SetOrgWorkosID :one
@@ -1296,7 +3036,7 @@ SET workos_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $2 AND
     workos_id IS NULL
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 `
 
 type SetOrgWorkosIDParams struct {
@@ -1322,11 +3062,67 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const setOrganizationDefaultHostForTest = `-- name: SetOrganizationDefaultHostForTest :exec
+UPDATE organization_metadata
+SET default_host = $1
+WHERE id = $2
+`
+
+type SetOrganizationDefaultHostForTestParams struct {
+	DefaultHost pgtype.Text
+	ID          string
+}
+
+func (q *Queries) SetOrganizationDefaultHostForTest(ctx context.Context, arg SetOrganizationDefaultHostForTestParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationDefaultHostForTest, arg.DefaultHost, arg.ID)
+	return err
+}
+
+const setOrganizationOnboardingPlaybook = `-- name: SetOrganizationOnboardingPlaybook :exec
+INSERT INTO organization_onboarding (organization_id, playbook_id)
+VALUES ($1::text, $2::uuid)
+ON CONFLICT (organization_id) DO UPDATE SET
+    playbook_id = EXCLUDED.playbook_id,
+    updated_at = clock_timestamp()
+`
+
+type SetOrganizationOnboardingPlaybookParams struct {
+	OrganizationID string
+	PlaybookID     uuid.NullUUID
+}
+
+func (q *Queries) SetOrganizationOnboardingPlaybook(ctx context.Context, arg SetOrganizationOnboardingPlaybookParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationOnboardingPlaybook, arg.OrganizationID, arg.PlaybookID)
+	return err
+}
+
+const setOrganizationOnboardingPreset = `-- name: SetOrganizationOnboardingPreset :exec
+INSERT INTO organization_onboarding (organization_id, preset)
+VALUES ($1::text, $2)
+ON CONFLICT (organization_id) DO UPDATE SET
+    preset = EXCLUDED.preset,
+    updated_at = clock_timestamp()
+`
+
+type SetOrganizationOnboardingPresetParams struct {
+	OrganizationID string
+	Preset         pgtype.Text
+}
+
+func (q *Queries) SetOrganizationOnboardingPreset(ctx context.Context, arg SetOrganizationOnboardingPresetParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationOnboardingPreset, arg.OrganizationID, arg.Preset)
+	return err
 }
 
 const setOrganizationRelationshipWorkOSCursor = `-- name: SetOrganizationRelationshipWorkOSCursor :exec
@@ -1352,6 +3148,46 @@ func (q *Queries) SetOrganizationRelationshipWorkOSCursor(ctx context.Context, a
 		arg.OrganizationID,
 		arg.UserID,
 	)
+	return err
+}
+
+const setOrganizationSetupTaskVisibility = `-- name: SetOrganizationSetupTaskVisibility :exec
+INSERT INTO organization_setup_tasks (organization_id, task_key, status, hidden_at)
+VALUES ($1, $2, 'todo', CASE WHEN $3::boolean THEN clock_timestamp() ELSE NULL END)
+ON CONFLICT (organization_id, task_key) DO UPDATE SET
+    hidden_at = EXCLUDED.hidden_at,
+    updated_at = clock_timestamp()
+WHERE (organization_setup_tasks.hidden_at IS NOT NULL) IS DISTINCT FROM $3::boolean
+`
+
+type SetOrganizationSetupTaskVisibilityParams struct {
+	OrganizationID string
+	TaskKey        string
+	Hidden         bool
+}
+
+func (q *Queries) SetOrganizationSetupTaskVisibility(ctx context.Context, arg SetOrganizationSetupTaskVisibilityParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationSetupTaskVisibility, arg.OrganizationID, arg.TaskKey, arg.Hidden)
+	return err
+}
+
+const setOrganizationUserWorkOSID = `-- name: SetOrganizationUserWorkOSID :exec
+UPDATE organization_user_relationships
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND user_id = $3
+  AND deleted_at IS NULL
+`
+
+type SetOrganizationUserWorkOSIDParams struct {
+	WorkosUserID   pgtype.Text
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+func (q *Queries) SetOrganizationUserWorkOSID(ctx context.Context, arg SetOrganizationUserWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationUserWorkOSID, arg.WorkosUserID, arg.OrganizationID, arg.UserID)
 	return err
 }
 
@@ -1397,10 +3233,10 @@ func (q *Queries) SetSSOEnabled(ctx context.Context, arg SetSSOEnabledParams) er
 	return err
 }
 
-const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :exec
+const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :many
 WITH input_memberships AS (
-    SELECT unnest($2::text[]) AS workos_org_id,
-           unnest($3::text[]) AS workos_membership_id
+    SELECT unnest($3::text[]) AS workos_org_id,
+           unnest($4::text[]) AS workos_membership_id
 ),
 resolved AS (
     SELECT organization_metadata.id AS organization_id,
@@ -1440,32 +3276,83 @@ upserted AS (
         workos_membership_id = EXCLUDED.workos_membership_id,
         deleted_at = NULL,
         updated_at = clock_timestamp()
+    WHERE organization_user_relationships.deleted IS FALSE
+       OR organization_user_relationships.workos_membership_id IS DISTINCT FROM EXCLUDED.workos_membership_id
     RETURNING organization_id
 )
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.user_id = $1
-  AND organization_user_relationships.deleted_at IS NULL
+  AND NOT $2::boolean
+  AND organization_user_relationships.deleted IS FALSE
   AND organization_user_relationships.organization_id NOT IN (SELECT organization_id FROM resolved)
   AND organization_user_relationships.organization_id IN (
       SELECT id FROM organization_metadata WHERE workos_id IS NOT NULL
   )
+RETURNING organization_id, user_id
 `
 
 type SetUserWorkOSMembershipsParams struct {
 	UserID              pgtype.Text
+	PreserveExisting    bool
 	WorkosOrgIds        []string
 	WorkosMembershipIds []string
 }
 
+type SetUserWorkOSMembershipsRow struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
 // Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
 // (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts
-// the provided (workos_org_id, workos_membership_id) pairs and soft-deletes any
-// other relationships where the org has a non-NULL workos_id. Orgs without a
-// workos_id are unaffected. Other users' memberships are never modified.
-func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) error {
-	_, err := q.db.Exec(ctx, setUserWorkOSMemberships, arg.UserID, arg.WorkosOrgIds, arg.WorkosMembershipIds)
+// the provided (workos_org_id, workos_membership_id) pairs and, unless
+// preserve_existing is true, soft-deletes any other relationships where the org
+// has a non-NULL workos_id. Other users' memberships are never modified.
+func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) ([]SetUserWorkOSMembershipsRow, error) {
+	rows, err := q.db.Query(ctx, setUserWorkOSMemberships,
+		arg.UserID,
+		arg.PreserveExisting,
+		arg.WorkosOrgIds,
+		arg.WorkosMembershipIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SetUserWorkOSMembershipsRow
+	for rows.Next() {
+		var i SetUserWorkOSMembershipsRow
+		if err := rows.Scan(&i.OrganizationID, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setVerifiedDomains = `-- name: SetVerifiedDomains :exec
+UPDATE organization_metadata
+SET verified_domains = $1::text[],
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND cardinality(COALESCE(verified_domains, '{}'::text[])) = 0
+`
+
+type SetVerifiedDomainsParams struct {
+	VerifiedDomains []string
+	ID              string
+}
+
+// Fill an empty verified domains list with the result of a live WorkOS check.
+// A non-empty list is owned by the event sync and may be newer than the live
+// check, so it is never overwritten here.
+func (q *Queries) SetVerifiedDomains(ctx context.Context, arg SetVerifiedDomainsParams) error {
+	_, err := q.db.Exec(ctx, setVerifiedDomains, arg.VerifiedDomains, arg.ID)
 	return err
 }
 
@@ -1532,7 +3419,7 @@ upserted AS (
         $2
     FROM input_role_urns
     ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
-        -- COALESCE preserves a backfilled user_id if the sync fires before the Gram user exists.
+        -- COALESCE preserves a backfilled user_id if the sync fires before the Speakeasy user exists.
         user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
         workos_membership_id = EXCLUDED.workos_membership_id,
         workos_updated_at = EXCLUDED.workos_updated_at,
@@ -1562,7 +3449,7 @@ type SyncUserOrganizationRoleAssignmentsParams struct {
 	WorkosMembershipID pgtype.Text
 }
 
-// Declaratively set all WorkOS role assignments for a known Gram user in an
+// Declaratively set all WorkOS role assignments for a known Speakeasy user in an
 // org. Role slugs are resolved from role sync tables and stale assignments for
 // this WorkOS user are removed.
 func (q *Queries) SyncUserOrganizationRoleAssignments(ctx context.Context, arg SyncUserOrganizationRoleAssignmentsParams) error {
@@ -1615,15 +3502,92 @@ func (q *Queries) UpdateInvitationRole(ctx context.Context, arg UpdateInvitation
 	return i, err
 }
 
+const updateOnboardingPlaybook = `-- name: UpdateOnboardingPlaybook :one
+UPDATE onboarding_playbooks
+SET name = $1, description = $2, is_default = $3, updated_at = clock_timestamp()
+WHERE id = $4 AND deleted_at IS NULL
+RETURNING id, use_case_id, organization_id, name, description, is_default
+`
+
+type UpdateOnboardingPlaybookParams struct {
+	Name        string
+	Description string
+	IsDefault   bool
+	ID          uuid.UUID
+}
+
+type UpdateOnboardingPlaybookRow struct {
+	ID             uuid.UUID
+	UseCaseID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Name           string
+	Description    string
+	IsDefault      bool
+}
+
+func (q *Queries) UpdateOnboardingPlaybook(ctx context.Context, arg UpdateOnboardingPlaybookParams) (UpdateOnboardingPlaybookRow, error) {
+	row := q.db.QueryRow(ctx, updateOnboardingPlaybook,
+		arg.Name,
+		arg.Description,
+		arg.IsDefault,
+		arg.ID,
+	)
+	var i UpdateOnboardingPlaybookRow
+	err := row.Scan(
+		&i.ID,
+		&i.UseCaseID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Description,
+		&i.IsDefault,
+	)
+	return i, err
+}
+
+const updateOnboardingUseCase = `-- name: UpdateOnboardingUseCase :one
+UPDATE onboarding_use_cases
+SET name = $1, description = $2, updated_at = clock_timestamp()
+WHERE id = $3 AND deleted_at IS NULL
+RETURNING id, slug, name, description, sort_order
+`
+
+type UpdateOnboardingUseCaseParams struct {
+	Name        string
+	Description string
+	ID          uuid.UUID
+}
+
+type UpdateOnboardingUseCaseRow struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Description string
+	SortOrder   int32
+}
+
+func (q *Queries) UpdateOnboardingUseCase(ctx context.Context, arg UpdateOnboardingUseCaseParams) (UpdateOnboardingUseCaseRow, error) {
+	row := q.db.QueryRow(ctx, updateOnboardingUseCase, arg.Name, arg.Description, arg.ID)
+	var i UpdateOnboardingUseCaseRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
+		&i.SortOrder,
+	)
+	return i, err
+}
+
 const updateOrganizationMetadataFromWorkOS = `-- name: UpdateOrganizationMetadataFromWorkOS :one
 UPDATE organization_metadata
 SET name = $1,
     workos_id = $2,
     workos_updated_at = $3,
     workos_last_event_id = $4,
+    verified_domains = $5::text[],
     updated_at = clock_timestamp()
-WHERE id = $5
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+WHERE id = $6
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
 `
 
 type UpdateOrganizationMetadataFromWorkOSParams struct {
@@ -1631,12 +3595,13 @@ type UpdateOrganizationMetadataFromWorkOSParams struct {
 	WorkosID          pgtype.Text
 	WorkosUpdatedAt   pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
+	VerifiedDomains   []string
 	ID                string
 }
 
 // Update an existing organization row from a WorkOS organization event. Caller
-// must have already resolved the Gram organization and passed the row through
-// ShouldProcessEvent. WorkOS does not own Gram slugs, so this only updates
+// must have already resolved the Speakeasy organization and passed the row through
+// ShouldProcessEvent. WorkOS does not own Speakeasy slugs, so this only updates
 // WorkOS-owned metadata and cursor columns.
 func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg UpdateOrganizationMetadataFromWorkOSParams) (OrganizationMetadatum, error) {
 	row := q.db.QueryRow(ctx, updateOrganizationMetadataFromWorkOS,
@@ -1644,6 +3609,7 @@ func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		arg.WorkosID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
+		arg.VerifiedDomains,
 		arg.ID,
 	)
 	var i OrganizationMetadatum
@@ -1662,6 +3628,10 @@ func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -1669,19 +3639,190 @@ func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 	return i, err
 }
 
-const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one
+const upsertOnboardingStep = `-- name: UpsertOnboardingStep :one
+INSERT INTO onboarding_steps (slug, title, description, completion, hidden_by_default, sort_order)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (slug) DO UPDATE SET
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    completion = EXCLUDED.completion,
+    hidden_by_default = EXCLUDED.hidden_by_default,
+    sort_order = EXCLUDED.sort_order,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING id
+`
+
+type UpsertOnboardingStepParams struct {
+	Slug            string
+	Title           string
+	Description     string
+	Completion      string
+	HiddenByDefault bool
+	SortOrder       int32
+}
+
+func (q *Queries) UpsertOnboardingStep(ctx context.Context, arg UpsertOnboardingStepParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertOnboardingStep,
+		arg.Slug,
+		arg.Title,
+		arg.Description,
+		arg.Completion,
+		arg.HiddenByDefault,
+		arg.SortOrder,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertOrganizationMetadataFromWorkOSWithRequests = `-- name: UpsertOrganizationMetadataFromWorkOSWithRequests :one
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
     slug,
     workos_id,
-    whitelisted
+    workos_updated_at,
+    workos_last_event_id,
+    default_host
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
-    COALESCE($5::boolean, FALSE)
+    $5,
+    $6,
+    $7::text
+)
+ON CONFLICT (id) DO UPDATE SET
+    -- default_host is only written on insert, so an existing organization
+    -- keeps its host.
+    name = EXCLUDED.name,
+    workos_id = EXCLUDED.workos_id,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    updated_at = clock_timestamp()
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written
+`
+
+type UpsertOrganizationMetadataFromWorkOSWithRequestsParams struct {
+	ID                string
+	Name              string
+	Slug              string
+	WorkosID          pgtype.Text
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	DefaultHost       pgtype.Text
+}
+
+type UpsertOrganizationMetadataFromWorkOSWithRequestsRow struct {
+	Requests           []byte
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
+	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
+// Upsert a Speakeasy organization row from a WorkOS organization event.
+// The caller must only use this when WorkOS external_id is set and is the Speakeasy
+// org ID. Slug is a Speakeasy-owned initial value chosen by the caller and is never
+// updated by WorkOS sync after creation.
+func (q *Queries) UpsertOrganizationMetadataFromWorkOSWithRequests(ctx context.Context, arg UpsertOrganizationMetadataFromWorkOSWithRequestsParams) (UpsertOrganizationMetadataFromWorkOSWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationMetadataFromWorkOSWithRequests,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.WorkosID,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+		arg.DefaultHost,
+	)
+	var i UpsertOrganizationMetadataFromWorkOSWithRequestsRow
+	err := row.Scan(
+		&i.Requests,
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const upsertOrganizationMetadataWithRequests = `-- name: UpsertOrganizationMetadataWithRequests :one
+WITH written AS (
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    workos_id,
+    whitelisted,
+    creation_source,
+    default_host
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    COALESCE($5::boolean, FALSE),
+    $6::text,
+    $7::text
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -1692,28 +3833,90 @@ ON CONFLICT (id) DO UPDATE SET
         WHEN $5::boolean IS NOT NULL THEN $5::boolean
         ELSE organization_metadata.whitelisted
     END,
+    -- The conflict arm is reachable because WorkOS organization sync can insert
+    -- the row first, and it records no source. A caller that knows the flow
+    -- therefore has to be able to fill that gap. A caller that does not know it
+    -- passes null and leaves whatever is already recorded alone, so a later
+    -- upsert from an unrelated path cannot erase the flow that created the row.
+    creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
+    -- default_host is deliberately absent: it is chosen when the organization
+    -- is created, and a later upsert must not move an existing organization's
+    -- URLs to another host.
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written
 `
 
-type UpsertOrganizationMetadataParams struct {
-	ID          string
-	Name        string
-	Slug        string
-	WorkosID    pgtype.Text
-	Whitelisted pgtype.Bool
+type UpsertOrganizationMetadataWithRequestsParams struct {
+	ID             string
+	Name           string
+	Slug           string
+	WorkosID       pgtype.Text
+	Whitelisted    pgtype.Bool
+	CreationSource pgtype.Text
+	DefaultHost    pgtype.Text
 }
 
-func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrganizationMetadataParams) (OrganizationMetadatum, error) {
-	row := q.db.QueryRow(ctx, upsertOrganizationMetadata,
+type UpsertOrganizationMetadataWithRequestsRow struct {
+	Requests           []byte
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
+	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertOrganizationMetadataWithRequests(ctx context.Context, arg UpsertOrganizationMetadataWithRequestsParams) (UpsertOrganizationMetadataWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationMetadataWithRequests,
 		arg.ID,
 		arg.Name,
 		arg.Slug,
 		arg.WorkosID,
 		arg.Whitelisted,
+		arg.CreationSource,
+		arg.DefaultHost,
 	)
-	var i OrganizationMetadatum
+	var i UpsertOrganizationMetadataWithRequestsRow
 	err := row.Scan(
+		&i.Requests,
 		&i.ID,
 		&i.Name,
 		&i.Slug,
@@ -1728,6 +3931,9 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -1735,72 +3941,79 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 	return i, err
 }
 
-const upsertOrganizationMetadataFromWorkOS = `-- name: UpsertOrganizationMetadataFromWorkOS :one
-INSERT INTO organization_metadata (
-    id,
-    name,
-    slug,
-    workos_id,
-    workos_updated_at,
-    workos_last_event_id
+const upsertOrganizationOnboardingStack = `-- name: UpsertOrganizationOnboardingStack :exec
+INSERT INTO organization_onboarding (organization_id, mdm_vendor, mdm_vendor_name)
+VALUES ($1::text, $2, $3)
+ON CONFLICT (organization_id) DO UPDATE SET
+    mdm_vendor = EXCLUDED.mdm_vendor,
+    mdm_vendor_name = EXCLUDED.mdm_vendor_name,
+    updated_at = clock_timestamp()
+`
+
+type UpsertOrganizationOnboardingStackParams struct {
+	OrganizationID string
+	MdmVendor      pgtype.Text
+	MdmVendorName  pgtype.Text
+}
+
+func (q *Queries) UpsertOrganizationOnboardingStack(ctx context.Context, arg UpsertOrganizationOnboardingStackParams) error {
+	_, err := q.db.Exec(ctx, upsertOrganizationOnboardingStack, arg.OrganizationID, arg.MdmVendor, arg.MdmVendorName)
+	return err
+}
+
+const upsertOrganizationSetupTask = `-- name: UpsertOrganizationSetupTask :one
+INSERT INTO organization_setup_tasks (
+    organization_id,
+    task_key,
+    status,
+    assignee_user_id,
+    assignee_email,
+    hidden_at
 ) VALUES (
     $1,
     $2,
     $3,
-    $4,
-    $5,
-    $6
+    $4::text,
+    $5::text,
+    $6::timestamptz
 )
-ON CONFLICT (id) DO UPDATE SET
-    name = EXCLUDED.name,
-    workos_id = EXCLUDED.workos_id,
-    workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = EXCLUDED.workos_last_event_id,
+ON CONFLICT (organization_id, task_key) DO UPDATE SET
+    status = EXCLUDED.status,
+    assignee_user_id = EXCLUDED.assignee_user_id,
+    assignee_email = EXCLUDED.assignee_email,
+    hidden_at = EXCLUDED.hidden_at,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+RETURNING organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at, created_at, updated_at
 `
 
-type UpsertOrganizationMetadataFromWorkOSParams struct {
-	ID                string
-	Name              string
-	Slug              string
-	WorkosID          pgtype.Text
-	WorkosUpdatedAt   pgtype.Timestamptz
-	WorkosLastEventID pgtype.Text
+type UpsertOrganizationSetupTaskParams struct {
+	OrganizationID string
+	TaskKey        string
+	Status         string
+	AssigneeUserID pgtype.Text
+	AssigneeEmail  pgtype.Text
+	HiddenAt       pgtype.Timestamptz
 }
 
-// Upsert a Gram organization row from a WorkOS organization event.
-// The caller must only use this when WorkOS external_id is set and is the Gram
-// org ID. Slug is a Gram-owned initial value chosen by the caller and is never
-// updated by WorkOS sync after creation.
-func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg UpsertOrganizationMetadataFromWorkOSParams) (OrganizationMetadatum, error) {
-	row := q.db.QueryRow(ctx, upsertOrganizationMetadataFromWorkOS,
-		arg.ID,
-		arg.Name,
-		arg.Slug,
-		arg.WorkosID,
-		arg.WorkosUpdatedAt,
-		arg.WorkosLastEventID,
+func (q *Queries) UpsertOrganizationSetupTask(ctx context.Context, arg UpsertOrganizationSetupTaskParams) (OrganizationSetupTask, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationSetupTask,
+		arg.OrganizationID,
+		arg.TaskKey,
+		arg.Status,
+		arg.AssigneeUserID,
+		arg.AssigneeEmail,
+		arg.HiddenAt,
 	)
-	var i OrganizationMetadatum
+	var i OrganizationSetupTask
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Slug,
-		&i.GramAccountType,
-		&i.WorkosID,
-		&i.WorkosUpdatedAt,
-		&i.WorkosLastEventID,
-		&i.SvixAppID,
-		&i.WebhooksEnabled,
-		&i.Whitelisted,
-		&i.FreeTrialStartedAt,
-		&i.FreeTrialEndsAt,
-		&i.ScimEnabled,
-		&i.SsoEnabled,
+		&i.OrganizationID,
+		&i.TaskKey,
+		&i.Status,
+		&i.AssigneeUserID,
+		&i.AssigneeEmail,
+		&i.HiddenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DisabledAt,
 	)
 	return i, err
 }

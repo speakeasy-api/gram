@@ -295,15 +295,21 @@ func TestMigratePreflight_CanMigrate(t *testing.T) {
 	clean := migratePreflight{warnings: []issuerFieldMismatch{{field: "oidc", sourceValue: nil, targetValue: nil, sourceValues: nil, targetValues: nil}}}
 	require.True(t, clean.canMigrate(), "warnings alone must not block a migration")
 
+	bound := migratePreflight{emaBindingCount: 1}
+	require.False(t, bound.canMigrate(), "active identity-chaining bindings require explicit unlinking")
+
 	mismatched := migratePreflight{endpointMismatches: []issuerFieldMismatch{{field: "issuer", sourceValue: nil, targetValue: nil, sourceValues: nil, targetValues: nil}}}
 	require.False(t, mismatched.canMigrate())
 
 	conflicted := migratePreflight{conflictingMcpServerNames: []string{"Acme"}}
 	require.False(t, conflicted.canMigrate())
+
+	trustedClient := migratePreflight{trustedClientCount: 1}
+	require.False(t, trustedClient.canMigrate(), "a trusted sign-in client cannot change issuer")
 }
 
 // TestIssuerURLsCanonicallyEqual_CollapsesEquivalentSpellings covers the axes
-// parseCanonicalIssuerURL treats as one upstream. These are the duplicates
+// issuerurl.Parse treats as one upstream. These are the duplicates
 // consolidation exists to clean up, and discovery finds candidates by the same
 // equality, so a stricter comparison here would surface candidates that could
 // never be migrated.

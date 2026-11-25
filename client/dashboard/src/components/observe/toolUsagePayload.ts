@@ -1,0 +1,235 @@
+import type {
+  FilterChip,
+  ObserveTypeFilterValue,
+} from "@/components/observe/ObserveFilterBar";
+import {
+  parseTargetFilter,
+  scopedToolUsageDefaultTypes,
+  selectedHookSources,
+  selectedTargetValues,
+  selectedUserEmails,
+  splitHostedTargets,
+  toTargetTypes,
+} from "@/components/observe/observeTargetFilters";
+import { useSlugs } from "@/contexts/Sdk";
+import type { GetToolUsageSummaryPayload } from "@gram/client/models/components/gettoolusagesummarypayload.js";
+import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter.js";
+import { useMemo } from "react";
+
+type ToolUsagePayloadInputs = {
+  /** Applied filter chips, as `useObserveFilters` exposes them. */
+  activeFilters: FilterChip[];
+  /** Emails the selected roles resolve to; merged with the picked users. */
+  roleEmails: string[];
+  selectedHookTypes: ObserveTypeFilterValue[];
+  accountType: string;
+  /** Lowercased MCP client names; "unattributed" selects calls with none. */
+  clientKeys?: string[];
+  /**
+   * Agent identities. The server ANDs them with the user filters, so an agent
+   * and a person select the calls that agent made on that person's behalf.
+   */
+  agentIds?: string[];
+  /**
+   * Pins the query to these identities, as an embedded view scoped to one
+   * identity does. Replaces the picked users, roles and agents.
+   */
+  scopedUserFilters?: ToolUsageUserFilter[];
+  from: Date;
+  to: Date;
+};
+
+export type ToolUsagePayload = {
+  /** The payload every getToolUsage* endpoint takes. */
+  summaryPayload: GetToolUsageSummaryPayload;
+  /**
+   * The react-query key fragment those endpoints share. Insights and Logs must
+   * build it the same way: a byte-identical key is what lets a drill-down from
+   * one page paint from the cache the other already filled.
+   */
+  sharedQueryKey: unknown[];
+};
+
+/**
+ * Derives the shared tool-usage query inputs from the observe filter state.
+ *
+ * Both observe pages ask the same question of the same endpoints and differ
+ * only in how they render the answer, so the derivation lives here rather than
+ * being written out once per page — the two copies had already drifted in
+ * their types and their memo dependencies.
+ */
+export function useToolUsagePayload({
+  activeFilters,
+  roleEmails,
+  selectedHookTypes,
+  accountType,
+  clientKeys,
+  agentIds,
+  scopedUserFilters,
+  from,
+  to,
+}: ToolUsagePayloadInputs): ToolUsagePayload {
+  const scopedKey = scopedUserFilters
+    ? JSON.stringify(scopedUserFilters)
+    : null;
+  // Two organizations can both have a project called "default". Without the
+  // tenant in the key, navigating between them reads the previous org's
+  // telemetry out of the cache.
+  const { orgSlug, projectSlug } = useSlugs();
+  const serverFilters = useMemo(
+    () => selectedTargetValues(activeFilters).map(parseTargetFilter),
+    [activeFilters],
+  );
+  const { mcpServerIds, hostedToolsetSlugs } = useMemo(
+    () => splitHostedTargets(serverFilters),
+    [serverFilters],
+  );
+  const shadowServerNames = useMemo(
+    () =>
+      serverFilters
+        .filter((filter) => filter.type === "shadow")
+        .map((filter) => filter.id),
+    [serverFilters],
+  );
+  const metaMcpServerIds = useMemo(
+    () =>
+      serverFilters
+        .filter((filter) => filter.type === "gateway")
+        .map((filter) => filter.id),
+    [serverFilters],
+  );
+  const userFilters = useMemo<ToolUsageUserFilter[]>(() => {
+    if (scopedKey !== null) {
+      return JSON.parse(scopedKey) as ToolUsageUserFilter[];
+    }
+    const emails = [
+      ...new Set([...selectedUserEmails(activeFilters), ...roleEmails]),
+    ];
+    return emails.map((email) => ({ kind: "email", key: email }));
+  }, [activeFilters, roleEmails, scopedKey]);
+  const hookSourceFilters = useMemo(
+    () => selectedHookSources(activeFilters),
+    [activeFilters],
+  );
+
+  // One normalization for the payload and the key: "no client filter" has to
+  // be the same value in both, or Logs and Insights build different keys for
+  // the same request and neither can paint from the other's cache.
+  const normalizedClientKeys = useMemo(
+    () => (clientKeys && clientKeys.length > 0 ? clientKeys : undefined),
+    [clientKeys],
+  );
+  const normalizedAgentIds = useMemo(
+    () =>
+      scopedKey === null && agentIds && agentIds.length > 0
+        ? agentIds
+        : undefined,
+    [agentIds, scopedKey],
+  );
+
+  const summaryPayload = useMemo(
+    () => ({
+      from,
+      to,
+      mcpServerIds: mcpServerIds.length > 0 ? mcpServerIds : undefined,
+      hostedToolsetSlugs:
+        hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
+      shadowServerNames:
+        shadowServerNames.length > 0 ? shadowServerNames : undefined,
+      metaMcpServerIds:
+        metaMcpServerIds.length > 0 ? metaMcpServerIds : undefined,
+      targetTypes: toTargetTypes(selectedHookTypes),
+      userFilters: userFilters.length > 0 ? userFilters : undefined,
+      hookSources: hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
+      accountType: accountType || undefined,
+      clientKeys: normalizedClientKeys,
+      agentIds: normalizedAgentIds,
+    }),
+    [
+      from,
+      to,
+      mcpServerIds,
+      hostedToolsetSlugs,
+      shadowServerNames,
+      metaMcpServerIds,
+      selectedHookTypes,
+      userFilters,
+      hookSourceFilters,
+      accountType,
+      normalizedClientKeys,
+      normalizedAgentIds,
+    ],
+  );
+
+  const sharedQueryKey = useMemo(
+    () => [
+      orgSlug,
+      projectSlug,
+      from.toISOString(),
+      to.toISOString(),
+      mcpServerIds,
+      hostedToolsetSlugs,
+      shadowServerNames,
+      metaMcpServerIds,
+      userFilters,
+      hookSourceFilters,
+      selectedHookTypes,
+      accountType,
+      normalizedClientKeys,
+      normalizedAgentIds,
+    ],
+    [
+      orgSlug,
+      projectSlug,
+      from,
+      to,
+      mcpServerIds,
+      hostedToolsetSlugs,
+      shadowServerNames,
+      metaMcpServerIds,
+      userFilters,
+      hookSourceFilters,
+      selectedHookTypes,
+      accountType,
+      normalizedClientKeys,
+      normalizedAgentIds,
+    ],
+  );
+
+  return { summaryPayload, sharedQueryKey };
+}
+
+const NO_FILTERS: FilterChip[] = [];
+const NO_EMAILS: string[] = [];
+
+/**
+ * The tool usage query inputs of a view pinned to one identity, with none of
+ * the Tool logs filters applied.
+ *
+ * An identity's page shows its usage above its own embedded Tool logs, and
+ * both ask the same endpoints the same question when nothing is narrowed.
+ * Built here the way the logs build theirs, the two keys are byte-identical
+ * and the page sends one request for each instead of two.
+ */
+export function useScopedToolUsagePayload({
+  userFilters,
+  includeLocalTools,
+  from,
+  to,
+}: {
+  userFilters: ToolUsageUserFilter[];
+  /** The page's "Show local tools" choice. */
+  includeLocalTools: boolean;
+  from: Date;
+  to: Date;
+}): ToolUsagePayload {
+  return useToolUsagePayload({
+    activeFilters: NO_FILTERS,
+    roleEmails: NO_EMAILS,
+    selectedHookTypes: scopedToolUsageDefaultTypes(includeLocalTools),
+    accountType: "",
+    scopedUserFilters: userFilters,
+    from,
+    to,
+  });
+}

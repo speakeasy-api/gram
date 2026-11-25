@@ -11,6 +11,9 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
@@ -23,6 +26,11 @@ import (
 // connection — so the workflow logs it once at warn and moves on instead of
 // burning retries every tick.
 const ErrTypeGitHubRepoConflict = "PluginGitHubRepoConflict"
+
+// ErrTypePluginActorNotMember tags the non-retryable Temporal application
+// error returned when the organization has no member the publish could be
+// attributed to: a retry fails the same way.
+const ErrTypePluginActorNotMember = "PluginActorNotMember"
 
 type PluginPublishClient interface {
 	PublishProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error)
@@ -81,19 +89,46 @@ func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPu
 
 	candidates := make([]PluginPublishCandidate, 0, len(rows))
 	for _, row := range rows {
+		actor := row.CreatedByUserID
+		if !plugins.UsableAPIKeyCreatorID(actor) {
+			p.logger.WarnContext(ctx, "plugin publish candidate has no real actor",
+				attr.SlogProjectID(row.ProjectID.String()),
+				attr.SlogUserID(actor),
+			)
+		}
 		candidates = append(candidates, PluginPublishCandidate{
 			ProjectID:       row.ProjectID,
-			CreatedByUserID: row.CreatedByUserID,
+			CreatedByUserID: actor,
 		})
 	}
 
 	return &ListPluginPublishCandidatesResult{Candidates: candidates}, nil
 }
 
+func (p *PluginPublisher) RepairOrphanedAPIKeyCreators(ctx context.Context) error {
+	if p.db == nil {
+		return fmt.Errorf("database is not configured")
+	}
+
+	repaired, err := keysrepo.New(p.db).RepairOrphanedAPIKeyCreators(ctx)
+	if err != nil {
+		return fmt.Errorf("repair orphaned api key creators: %w", err)
+	}
+	if repaired > 0 {
+		p.logger.InfoContext(ctx, "repaired orphaned api key creators", attr.SlogDBUpdatedRowsCount(repaired))
+	}
+	return nil
+}
+
 func (p *PluginPublisher) PublishProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
 	if p.publisher == nil {
 		return nil, fmt.Errorf("plugin publisher is not configured")
 	}
+
+	// Publishing runs from a Temporal activity, so nothing in the context
+	// identifies a request. Say so, rather than letting the audit log record
+	// this as a surface we failed to classify.
+	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
 
 	result, err := p.publisher.PublishProject(ctx, input)
 	if err != nil {
@@ -107,6 +142,9 @@ func (p *PluginPublisher) PublishProject(ctx context.Context, input plugins.Publ
 				detail = se.String()
 			}
 			return nil, temporal.NewNonRetryableApplicationError(detail, ErrTypeGitHubRepoConflict, err)
+		}
+		if errors.Is(err, plugins.ErrPluginAPIKeyCreatorNotMember) {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), ErrTypePluginActorNotMember, err)
 		}
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}

@@ -1,0 +1,227 @@
+// Package roledistribution performs one-time, best-effort role distribution setup.
+package roledistribution
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
+	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	rdrepo "github.com/speakeasy-api/gram/server/internal/roledistribution/repo"
+	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+// ProcessRoleDistributionSetup handles an additive role distribution event.
+// Redelivery can re-add assignments removed by an administrator.
+// Errors are retried by the existing transport, not by an application sweep.
+func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publication plugins.PublicationRequests, guard *admission.Guard, roleURN string, organizationID string) (bool, error) {
+	// The selected project is revalidated inside the transaction.
+	projectID, err := rdrepo.New(db).GetRoleSetupProject(ctx, organizationID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return false, fmt.Errorf("select role setup project: %w", err)
+	}
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin role plugin setup: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	// Serialize role setups in an organization. Wait rather than
+	// acknowledging a busy setup without processing it.
+	if err := requests.LockOrganization(ctx, tx, organizationID); err != nil {
+		return false, fmt.Errorf("lock organization role setup: %w", err)
+	}
+	skip := func() (bool, error) {
+		if err := tx.Commit(ctx); err != nil {
+			return false, fmt.Errorf("commit skipped role setup attempt: %w", err)
+		}
+		return false, nil
+	}
+	distribution := rdrepo.New(tx)
+	_, err = distribution.LockActiveOrganization(ctx, organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return skip()
+	}
+	if err != nil {
+		return false, fmt.Errorf("lock active role setup organization: %w", err)
+	}
+	parts := strings.Split(roleURN, ":")
+	if len(parts) != 3 || parts[0] != "role" {
+		return skip()
+	}
+	roleID, err := uuid.Parse(parts[2])
+	if err != nil {
+		return skip()
+	}
+	var name string
+	switch parts[1] {
+	case "global":
+		name, err = distribution.LockLiveGlobalRoleName(ctx, rdrepo.LockLiveGlobalRoleNameParams{ID: roleID, RoleUrn: roleURN})
+	case "organization":
+		name, err = distribution.LockLiveOrganizationRoleName(ctx, rdrepo.LockLiveOrganizationRoleNameParams{ID: roleID, OrganizationID: organizationID, RoleUrn: roleURN})
+	default:
+		return skip()
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return skip()
+	}
+	if err != nil {
+		return false, fmt.Errorf("validate role setup liveness: %w", err)
+	}
+	// A projectless organization is valid. Creating its first project publishes
+	// an organization bootstrap, so skip rather than retry.
+	if projectID == uuid.Nil {
+		return skip()
+	}
+	// Match cross-project grant writers: acquire admission locks in UUID order
+	// before any project/plugin row locks, rather than locking the oldest
+	// project first and risking an inverted order during backfill.
+	admissionProjects, err := repo.New(tx).ListRoleDeliveryProjects(ctx, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("list role setup admission projects: %w", err)
+	}
+	for _, project := range admissionProjects {
+		if err := admission.LockProject(ctx, tx, project.ID); err != nil {
+			return false, fmt.Errorf("lock role setup distribution admission: %w", err)
+		}
+	}
+	currentProjectID, err := distribution.LockOldestLiveProject(ctx, organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return skip()
+	}
+	if err != nil {
+		return false, fmt.Errorf("revalidate role setup project: %w", err)
+	}
+	if currentProjectID != projectID {
+		return false, fmt.Errorf("role distribution default project changed during setup")
+	}
+	slug := conv.ToSlug(name)
+	created := false
+	// Assignment writers lock the parent plugin FOR UPDATE. Reuse that lock to
+	// preserve concurrent admin edits and prevent assigning a deleted plugin.
+	pluginID, err := distribution.LockLivePluginBySlug(ctx, rdrepo.LockLivePluginBySlugParams{OrganizationID: organizationID, ProjectID: projectID, Slug: slug})
+	if errors.Is(err, pgx.ErrNoRows) {
+		if err := plugins.RequirePluginSlugPackagesFree(ctx, repo.New(tx), organizationID, projectID, uuid.Nil, slug); err != nil {
+			return false, fmt.Errorf("choose role plugin slug: %w", err)
+		}
+		created = true
+		pluginID = uuid.New()
+		// The existing slug constraint rejects empty or overlong normalized names.
+		err = distribution.CreateRolePlugin(ctx, rdrepo.CreateRolePluginParams{ID: pluginID, OrganizationID: organizationID, ProjectID: projectID, Name: name, Slug: slug})
+	}
+	if err != nil {
+		return false, fmt.Errorf("find or create role plugin: %w", err)
+	}
+	plugin, err := repo.New(tx).GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: organizationID, ProjectID: projectID})
+	if err != nil {
+		return false, fmt.Errorf("read role plugin: %w", err)
+	}
+	existing, err := repo.New(tx).ListPluginAssignments(ctx, repo.ListPluginAssignmentsParams{PluginID: pluginID, OrganizationID: organizationID, ProjectID: projectID})
+	if err != nil {
+		return false, fmt.Errorf("list role plugin assignments: %w", err)
+	}
+	current := make([]string, 0, len(existing))
+	modes := make(map[string]string, len(existing)+1)
+	alreadyAssigned := false
+	for _, a := range existing {
+		current = append(current, a.PrincipalUrn)
+		modes[a.PrincipalUrn] = string(installmode.FromStored(a.InstallMode))
+		alreadyAssigned = alreadyAssigned || a.PrincipalUrn == roleURN
+	}
+	desired := append([]string{}, current...)
+	if !alreadyAssigned {
+		desired = append(desired, roleURN)
+		modes[roleURN] = string(installmode.Default)
+	}
+	if !assignments.IsSubset(desired, current) {
+		if err := guard.CheckPluginAudience(ctx, tx, organizationID, projectID, pluginID, desired); err != nil {
+			return false, fmt.Errorf("check role plugin audience: %w", err)
+		}
+	}
+	auditLogger := audit.NewLogger()
+	actor := urn.NewPrincipal(urn.PrincipalTypeSystem, "automatic-role-distribution")
+	actorDisplayName := "Speakeasy"
+	if created {
+		if err := auditLogger.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PluginSnapshotAfter: plugins.PluginAuditSnapshot(plugin)}); err != nil {
+			return false, fmt.Errorf("audit role plugin creation: %w", err)
+		}
+	}
+	if err := distribution.AddRolePluginAssignment(ctx, rdrepo.AddRolePluginAssignmentParams{PluginID: pluginID, OrganizationID: organizationID, PrincipalUrn: roleURN}); err != nil {
+		return false, fmt.Errorf("add role plugin assignment: %w", err)
+	}
+	if !alreadyAssigned {
+		if err := auditLogger.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PrincipalURNs: desired, InstallModes: modes}); err != nil {
+			return false, fmt.Errorf("audit role plugin assignment: %w", err)
+		}
+	}
+	// The bounded setup pass also populates existing role audiences, regardless
+	// of plugin provenance or which project contains the plugin. Setup replay
+	// uses the same deleted-content history as ordinary automatic additions.
+	targets, err := repo.New(tx).ListRoleDeliveryPlugins(ctx, repo.ListRoleDeliveryPluginsParams{OrganizationID: organizationID, PrincipalUrn: roleURN})
+	if err != nil {
+		return false, fmt.Errorf("list matching role plugins: %w", err)
+	}
+	changedProjects := make(map[uuid.UUID]bool)
+	for _, target := range targets {
+		if err := admission.LockProject(ctx, tx, target.ProjectID); err != nil {
+			return false, fmt.Errorf("lock role content admission: %w", err)
+		}
+		_, err := repo.New(tx).LockRoleDeliveryProject(ctx, repo.LockRoleDeliveryProjectParams{ProjectID: target.ProjectID, OrganizationID: organizationID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return false, fmt.Errorf("lock role content project: %w", err)
+		}
+		// Revalidate the audience after waiting for ordinary content writers.
+		_, err = repo.New(tx).LockRoleDeliveryPlugin(ctx, repo.LockRoleDeliveryPluginParams{PluginID: target.ID, OrganizationID: organizationID, ProjectID: target.ProjectID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return false, fmt.Errorf("lock role content plugin: %w", err)
+		}
+		audiences, err := repo.New(tx).ListPluginAssignments(ctx, repo.ListPluginAssignmentsParams{PluginID: target.ID, OrganizationID: organizationID, ProjectID: target.ProjectID})
+		if err != nil {
+			return false, fmt.Errorf("revalidate role content audience: %w", err)
+		}
+		assigned := false
+		for _, audience := range audiences {
+			assigned = assigned || audience.PrincipalUrn == roleURN
+		}
+		if !assigned {
+			continue
+		}
+		changed, err := roledelivery.Populate(ctx, tx, organizationID, target.ProjectID, target.ID, roleURN, guard)
+		if err != nil {
+			return false, fmt.Errorf("populate role plugin: %w", err)
+		}
+		changedProjects[target.ProjectID] = changedProjects[target.ProjectID] || changed
+	}
+	changedProjects[projectID] = true
+	for _, changedProject := range slices.SortedFunc(maps.Keys(changedProjects), func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) }) {
+		if !changedProjects[changedProject] {
+			continue
+		}
+		if err := publication.Project(ctx, tx, organizationID, changedProject, ""); err != nil {
+			return false, fmt.Errorf("request role content publication: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit role plugin setup: %w", err)
+	}
+	return true, nil
+}

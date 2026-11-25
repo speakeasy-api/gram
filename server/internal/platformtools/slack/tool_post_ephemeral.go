@@ -26,7 +26,7 @@ type postEphemeralInput struct {
 	Username    *string      `json:"username,omitempty" jsonschema:"Display name to show as the message sender."`
 }
 
-func NewChatPostEphemeralTool(httpClient *guardian.HTTPClient) core.PlatformToolExecutor {
+func NewChatPostEphemeralTool(httpClient *guardian.HTTPClient) *slackTool {
 	readOnly := false
 	destructive := false
 	idempotent := false

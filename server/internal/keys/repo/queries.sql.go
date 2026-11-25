@@ -12,6 +12,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countLiveAuthClientsInOrganization = `-- name: CountLiveAuthClientsInOrganization :one
+SELECT COUNT(*)
+FROM mcp_auth_clients
+WHERE organization_id = $1
+  AND id = ANY($2::uuid[])
+  AND deleted IS FALSE
+`
+
+type CountLiveAuthClientsInOrganizationParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+func (q *Queries) CountLiveAuthClientsInOrganization(ctx context.Context, arg CountLiveAuthClientsInOrganizationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveAuthClientsInOrganization, arg.OrganizationID, arg.Ids)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAPIKey = `-- name: CreateAPIKey :one
 INSERT INTO api_keys (
     organization_id
@@ -30,7 +50,7 @@ INSERT INTO api_keys (
   , $6
   , $7::text[]
 )
-RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted, last_accessed_at
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
 `
 
 type CreateAPIKeyParams struct {
@@ -63,6 +83,10 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		&i.KeyPrefix,
 		&i.KeyHash,
 		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -72,11 +96,101 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 	return i, err
 }
 
+const createAgentAPIKey = `-- name: CreateAgentAPIKey :one
+INSERT INTO api_keys (
+    organization_id
+  , project_id
+  , created_by_user_id
+  , name
+  , key_prefix
+  , key_hash
+  , scopes
+  , subject_urn
+  , delegated_grants
+  , delegated_grants_version
+  , expires_at
+) VALUES (
+    $1
+  , NULL
+  , $2
+  , $3
+  , $4
+  , $5
+  , ARRAY[]::text[]
+  , $6
+  , $7::jsonb
+  , $8
+  , $9
+)
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+`
+
+type CreateAgentAPIKeyParams struct {
+	OrganizationID         string
+	CreatedByUserID        string
+	Name                   string
+	KeyPrefix              string
+	KeyHash                string
+	SubjectUrn             pgtype.Text
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+	ExpiresAt              pgtype.Timestamptz
+}
+
+func (q *Queries) CreateAgentAPIKey(ctx context.Context, arg CreateAgentAPIKeyParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, createAgentAPIKey,
+		arg.OrganizationID,
+		arg.CreatedByUserID,
+		arg.Name,
+		arg.KeyPrefix,
+		arg.KeyHash,
+		arg.SubjectUrn,
+		arg.DelegatedGrants,
+		arg.DelegatedGrantsVersion,
+		arg.ExpiresAt,
+	)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
+const currentDatabaseTime = `-- name: CurrentDatabaseTime :one
+SELECT clock_timestamp()::timestamptz
+`
+
+// The database clock, used as the cutoff a credential rotation retires keys
+// against so the comparison shares a clock with api_keys.created_at.
+func (q *Queries) CurrentDatabaseTime(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, currentDatabaseTime)
+	var column_1 pgtype.Timestamptz
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteAPIKey = `-- name: DeleteAPIKey :one
 UPDATE api_keys
 SET deleted_at = NOW()
 WHERE id = $1
   AND organization_id = $2
+  AND subject_urn IS NULL
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, scopes
 `
@@ -146,31 +260,291 @@ func (q *Queries) DeleteAPIKeyByProject(ctx context.Context, arg DeleteAPIKeyByP
 	return i, err
 }
 
+const deleteAgentAPIKey = `-- name: DeleteAgentAPIKey :one
+UPDATE api_keys
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND subject_urn = $3
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+`
+
+type DeleteAgentAPIKeyParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	SubjectUrn     pgtype.Text
+}
+
+func (q *Queries) DeleteAgentAPIKey(ctx context.Context, arg DeleteAgentAPIKeyParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, deleteAgentAPIKey, arg.ID, arg.OrganizationID, arg.SubjectUrn)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
+const expirePluginHooksAPIKeysByProject = `-- name: ExpirePluginHooksAPIKeysByProject :many
+UPDATE api_keys
+SET expires_at = LEAST(COALESCE(expires_at, $1), $1)
+  , updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+  AND key_hash <> $4
+  AND created_at < $5
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+  AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
+RETURNING id, organization_id, project_id, name, key_prefix, scopes, expires_at
+`
+
+type ExpirePluginHooksAPIKeysByProjectParams struct {
+	ExpiresAt               pgtype.Timestamptz
+	OrganizationID          string
+	ProjectID               uuid.NullUUID
+	ReplacementKeyHash      string
+	RetireKeysCreatedBefore pgtype.Timestamptz
+}
+
+type ExpirePluginHooksAPIKeysByProjectRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	KeyPrefix      string
+	Scopes         []string
+	ExpiresAt      pgtype.Timestamptz
+}
+
+// LEAST keeps the earliest deadline: an already-expired key is excluded
+// outright, and a key already inside a grace window keeps that window rather
+// than having it extended, so repeated rotations cannot keep one credential
+// alive indefinitely.
+// The returned expires_at is the deadline LEAST settled on, which for a key
+// already inside a shorter window is earlier than the one this rotation asked
+// for. Callers must report these rather than their own requested deadline.
+func (q *Queries) ExpirePluginHooksAPIKeysByProject(ctx context.Context, arg ExpirePluginHooksAPIKeysByProjectParams) ([]ExpirePluginHooksAPIKeysByProjectRow, error) {
+	rows, err := q.db.Query(ctx, expirePluginHooksAPIKeysByProject,
+		arg.ExpiresAt,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ReplacementKeyHash,
+		arg.RetireKeysCreatedBefore,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ExpirePluginHooksAPIKeysByProjectRow
+	for rows.Next() {
+		var i ExpirePluginHooksAPIKeysByProjectRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.KeyPrefix,
+			&i.Scopes,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const extendAgentAPIKeyDelegatedGrants = `-- name: ExtendAgentAPIKeyDelegatedGrants :one
+UPDATE api_keys
+SET delegated_grants = $1::jsonb,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND subject_urn = $4
+  AND created_by_user_id = $5
+  AND delegated_grants = $6::jsonb
+  AND deleted IS FALSE
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+`
+
+type ExtendAgentAPIKeyDelegatedGrantsParams struct {
+	DelegatedGrants         []byte
+	ID                      uuid.UUID
+	OrganizationID          string
+	SubjectUrn              pgtype.Text
+	CreatedByUserID         string
+	PreviousDelegatedGrants []byte
+}
+
+// Matches the policy the caller read, so a concurrent change to the same key
+// is never overwritten with a policy built from the older one.
+func (q *Queries) ExtendAgentAPIKeyDelegatedGrants(ctx context.Context, arg ExtendAgentAPIKeyDelegatedGrantsParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, extendAgentAPIKeyDelegatedGrants,
+		arg.DelegatedGrants,
+		arg.ID,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.CreatedByUserID,
+		arg.PreviousDelegatedGrants,
+	)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
+const getAPIKeyByID = `-- name: GetAPIKeyByID :one
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+FROM api_keys
+WHERE id = $1
+  AND organization_id = $2
+`
+
+type GetAPIKeyByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetAPIKeyByID(ctx context.Context, arg GetAPIKeyByIDParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByID, arg.ID, arg.OrganizationID)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
+const getAPIKeyByIDForUpdate = `-- name: GetAPIKeyByIDForUpdate :one
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+FROM api_keys
+WHERE id = $1
+  AND organization_id = $2
+FOR UPDATE
+`
+
+type GetAPIKeyByIDForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetAPIKeyByIDForUpdate(ctx context.Context, arg GetAPIKeyByIDForUpdateParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByIDForUpdate, arg.ID, arg.OrganizationID)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
-SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email,
+       EXISTS (SELECT 1 FROM assistant_inference_credentials c
+               WHERE c.api_key_id = api_keys.id AND c.project_id = api_keys.project_id) AS superseded_kit_credential
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = $1
   AND deleted IS FALSE
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
 `
 
 type GetAPIKeyByKeyHashRow struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.NullUUID
-	CreatedByUserID string
-	Name            string
-	KeyPrefix       string
-	KeyHash         string
-	Scopes          []string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-	LastAccessedAt  pgtype.Timestamptz
-	Email           string
+	ID                      uuid.UUID
+	OrganizationID          string
+	ProjectID               uuid.NullUUID
+	CreatedByUserID         string
+	Name                    string
+	KeyPrefix               string
+	KeyHash                 string
+	Scopes                  []string
+	SubjectUrn              pgtype.Text
+	DelegatedGrants         []byte
+	DelegatedGrantsVersion  pgtype.Int4
+	ExpiresAt               pgtype.Timestamptz
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
+	LastAccessedAt          pgtype.Timestamptz
+	Email                   string
+	SupersededKitCredential bool
 }
 
+// expires_at is enforced here rather than in Go so every credential shape --
+// agent principal keys and scoped keys given a grace expiry by a rotation --
+// stops authenticating at the same moment.
 func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAPIKeyByKeyHashRow, error) {
 	row := q.db.QueryRow(ctx, getAPIKeyByKeyHash, keyHash)
 	var i GetAPIKeyByKeyHashRow
@@ -183,14 +557,88 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 		&i.KeyPrefix,
 		&i.KeyHash,
 		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
 		&i.LastAccessedAt,
 		&i.Email,
+		&i.SupersededKitCredential,
 	)
 	return i, err
+}
+
+const getActiveLegacyAPIKeyForAdmission = `-- name: GetActiveLegacyAPIKeyForAdmission :one
+SELECT id, project_id, scopes
+FROM api_keys
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+  AND subject_urn IS NULL
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+`
+
+type GetActiveLegacyAPIKeyForAdmissionParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetActiveLegacyAPIKeyForAdmissionRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+	Scopes    []string
+}
+
+// A legacy key is admitted as its own principal only while its live row is in
+// the tenant, unrevoked and unexpired; agent keys keep their own admission.
+func (q *Queries) GetActiveLegacyAPIKeyForAdmission(ctx context.Context, arg GetActiveLegacyAPIKeyForAdmissionParams) (GetActiveLegacyAPIKeyForAdmissionRow, error) {
+	row := q.db.QueryRow(ctx, getActiveLegacyAPIKeyForAdmission, arg.ID, arg.OrganizationID)
+	var i GetActiveLegacyAPIKeyForAdmissionRow
+	err := row.Scan(&i.ID, &i.ProjectID, &i.Scopes)
+	return i, err
+}
+
+const getActivePrincipalAPIKeyForAdmission = `-- name: GetActivePrincipalAPIKeyForAdmission :one
+SELECT id
+FROM api_keys
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+  AND cardinality(scopes) = 0
+  AND subject_urn = $3
+  AND created_by_user_id = $4
+  AND delegated_grants = $5::jsonb
+  AND delegated_grants_version = $6
+  AND expires_at > statement_timestamp()
+  AND expires_at > created_at
+  AND expires_at <= created_at + INTERVAL '365 days'
+`
+
+type GetActivePrincipalAPIKeyForAdmissionParams struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	SubjectUrn             pgtype.Text
+	AuthorizerUserID       string
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+}
+
+func (q *Queries) GetActivePrincipalAPIKeyForAdmission(ctx context.Context, arg GetActivePrincipalAPIKeyForAdmissionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getActivePrincipalAPIKeyForAdmission,
+		arg.ID,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.AuthorizerUserID,
+		arg.DelegatedGrants,
+		arg.DelegatedGrantsVersion,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const isAPIKeyManagedByActiveLiteLLMInstance = `-- name: IsAPIKeyManagedByActiveLiteLLMInstance :one
@@ -221,10 +669,11 @@ func (q *Queries) IsAPIKeyManagedByActiveLiteLLMInstance(ctx context.Context, ar
 }
 
 const listAPIKeysByOrganization = `-- name: ListAPIKeysByOrganization :many
-SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted, last_accessed_at
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at
 FROM api_keys
 WHERE api_keys.organization_id = $1
   AND api_keys.deleted IS FALSE
+  AND api_keys.subject_urn IS NULL
   AND NOT EXISTS (
     SELECT 1
     FROM litellm_instances li
@@ -233,9 +682,14 @@ WHERE api_keys.organization_id = $1
       AND li.api_key_id = api_keys.id
       AND li.deleted IS FALSE
   )
-ORDER BY created_at DESC
+ORDER BY api_keys.created_at DESC
 `
 
+// Deliberately does NOT join users the way GetAPIKeyByKeyHash does. A key
+// whose created_by_user_id is not a users.id is unusable (auth's join drops
+// it), but hiding it here would leave the owner with an invisible row they
+// cannot inspect or delete. RepairOrphanedAPIKeyCreators repoints those rows
+// instead; the durable guarantee belongs on a foreign key, not on this SELECT.
 func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID string) ([]ApiKey, error) {
 	rows, err := q.db.Query(ctx, listAPIKeysByOrganization, organizationID)
 	if err != nil {
@@ -254,6 +708,10 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 			&i.KeyPrefix,
 			&i.KeyHash,
 			&i.Scopes,
+			&i.SubjectUrn,
+			&i.DelegatedGrants,
+			&i.DelegatedGrantsVersion,
+			&i.ExpiresAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -268,6 +726,436 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 		return nil, err
 	}
 	return items, nil
+}
+
+const listAPIKeysByOrganizationPage = `-- name: ListAPIKeysByOrganizationPage :many
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at
+FROM api_keys
+WHERE api_keys.organization_id = $1
+  AND api_keys.deleted IS FALSE
+  AND api_keys.subject_urn IS NULL
+  AND (api_keys.created_at, api_keys.id) < ($2::timestamptz, $3::uuid)
+  AND ($4::text IS NULL OR api_keys.name ILIKE $4::text ESCAPE '\')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM litellm_instances li
+    WHERE li.organization_id = api_keys.organization_id
+      AND li.project_id = api_keys.project_id
+      AND li.api_key_id = api_keys.id
+      AND li.deleted IS FALSE
+  )
+ORDER BY api_keys.created_at DESC, api_keys.id DESC
+LIMIT $5::int
+`
+
+type ListAPIKeysByOrganizationPageParams struct {
+	OrganizationID  string
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.UUID
+	NamePattern     pgtype.Text
+	PageLimit       pgtype.Int4
+}
+
+// The keys.list page read: the same rows as ListAPIKeysByOrganization (and,
+// like it, deliberately not joined to users), walked newest first by keyset.
+// The page starts after (cursor_created_at, cursor_id). The first page passes
+// 'infinity' and the largest UUID, so the comparison is always present and
+// api_keys_organization_id_created_at_id_idx serves every page. A NULL
+// page_limit means LIMIT ALL; a NULL name_pattern matches every name.
+func (q *Queries) ListAPIKeysByOrganizationPage(ctx context.Context, arg ListAPIKeysByOrganizationPageParams) ([]ApiKey, error) {
+	rows, err := q.db.Query(ctx, listAPIKeysByOrganizationPage,
+		arg.OrganizationID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.NamePattern,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ApiKey
+	for rows.Next() {
+		var i ApiKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.CreatedByUserID,
+			&i.Name,
+			&i.KeyPrefix,
+			&i.KeyHash,
+			&i.Scopes,
+			&i.SubjectUrn,
+			&i.DelegatedGrants,
+			&i.DelegatedGrantsVersion,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.LastAccessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentAPIKeys = `-- name: ListAgentAPIKeys :many
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+FROM api_keys
+WHERE organization_id = $1
+  AND subject_urn = $2
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+`
+
+type ListAgentAPIKeysParams struct {
+	OrganizationID string
+	SubjectUrn     pgtype.Text
+}
+
+func (q *Queries) ListAgentAPIKeys(ctx context.Context, arg ListAgentAPIKeysParams) ([]ApiKey, error) {
+	rows, err := q.db.Query(ctx, listAgentAPIKeys, arg.OrganizationID, arg.SubjectUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ApiKey
+	for rows.Next() {
+		var i ApiKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.CreatedByUserID,
+			&i.Name,
+			&i.KeyPrefix,
+			&i.KeyHash,
+			&i.Scopes,
+			&i.SubjectUrn,
+			&i.DelegatedGrants,
+			&i.DelegatedGrantsVersion,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.LastAccessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockMemberClaudeWebHooksAPIKeys = `-- name: LockMemberClaudeWebHooksAPIKeys :exec
+SELECT pg_advisory_xact_lock(hashtextextended('claude-web-hooks:' || $1::text || ':' || $2::text, 0))
+`
+
+type LockMemberClaudeWebHooksAPIKeysParams struct {
+	OrganizationID  string
+	CreatedByUserID string
+}
+
+// First statement of the mint-and-revoke transaction: serializes a member's
+// Claude web key downloads so each revoke sees every earlier committed key,
+// and racing downloads cannot both stay live.
+func (q *Queries) LockMemberClaudeWebHooksAPIKeys(ctx context.Context, arg LockMemberClaudeWebHooksAPIKeysParams) error {
+	_, err := q.db.Exec(ctx, lockMemberClaudeWebHooksAPIKeys, arg.OrganizationID, arg.CreatedByUserID)
+	return err
+}
+
+const repairOrphanedAPIKeyCreators = `-- name: RepairOrphanedAPIKeyCreators :execrows
+UPDATE api_keys k
+SET
+  created_by_user_id = member.user_id,
+  updated_at = clock_timestamp()
+FROM (
+  SELECT DISTINCT ON (our.organization_id)
+    our.organization_id,
+    our.user_id
+  FROM organization_user_relationships our
+  JOIN users u ON u.id = our.user_id
+  WHERE our.deleted IS FALSE
+    AND our.user_id IS NOT NULL
+    AND u.deleted_at IS NULL
+  ORDER BY our.organization_id, our.created_at ASC, our.user_id ASC
+) member
+WHERE k.organization_id = member.organization_id
+  AND k.deleted IS FALSE
+  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = k.created_by_user_id)
+`
+
+// Points API keys whose created_by_user_id is not a users.id (including the
+// 'system' placeholder minted by the plugin rollout sweep) at the oldest
+// connected member of their organization. GetAPIKeyByKeyHash JOINs users on
+// that column, so these keys authenticate as 401 until this rewrite. This is
+// a deliberate cross-tenant repair — unlike tenant-scoped queries it is not
+// constrained to a project_id.
+func (q *Queries) RepairOrphanedAPIKeyCreators(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, repairOrphanedAPIKeyCreators)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeMemberClaudeWebHooksAPIKeys = `-- name: RevokeMemberClaudeWebHooksAPIKeys :many
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND created_by_user_id = $2
+  AND deleted IS FALSE
+  AND key_hash <> $3
+  AND created_at < $4
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name ~ '^plugins-claude-web-hooks-[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+  AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
+RETURNING id, project_id, name
+`
+
+type RevokeMemberClaudeWebHooksAPIKeysParams struct {
+	OrganizationID       string
+	CreatedByUserID      string
+	ReplacementKeyHash   string
+	ReplacementCreatedAt pgtype.Timestamptz
+}
+
+type RevokeMemberClaudeWebHooksAPIKeysRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+	Name      string
+}
+
+// Retires a member's earlier Claude web observability keys once a newer one is
+// minted, so repeated downloads leave one live key per member. Callers hold
+// LockMemberClaudeWebHooksAPIKeys, so downloads for one member run one at a
+// time. The key_prefix check proves a key was minted by this flow, as the
+// project rotation queries do, so a user-chosen name is never revoked.
+func (q *Queries) RevokeMemberClaudeWebHooksAPIKeys(ctx context.Context, arg RevokeMemberClaudeWebHooksAPIKeysParams) ([]RevokeMemberClaudeWebHooksAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, revokeMemberClaudeWebHooksAPIKeys,
+		arg.OrganizationID,
+		arg.CreatedByUserID,
+		arg.ReplacementKeyHash,
+		arg.ReplacementCreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokeMemberClaudeWebHooksAPIKeysRow
+	for rows.Next() {
+		var i RevokeMemberClaudeWebHooksAPIKeysRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokePluginHooksAPIKeysByProject = `-- name: RevokePluginHooksAPIKeysByProject :many
+
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+  AND key_hash <> $3
+  AND created_at < $4
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+  AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
+RETURNING id, organization_id, project_id, name, key_prefix, scopes, expires_at
+`
+
+type RevokePluginHooksAPIKeysByProjectParams struct {
+	OrganizationID          string
+	ProjectID               uuid.NullUUID
+	ReplacementKeyHash      string
+	RetireKeysCreatedBefore pgtype.Timestamptz
+}
+
+type RevokePluginHooksAPIKeysByProjectRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	KeyPrefix      string
+	Scopes         []string
+	ExpiresAt      pgtype.Timestamptz
+}
+
+// Plugin distribution mints hooks keys as plugins-hooks-<timestamp>-<token>
+// (publish) or plugins-hooks-download-<timestamp>-<token> (ZIP download). The
+// two retirement statements below select that set the same way:
+//
+//   - the name matches the generated shape auth.IsOrgWidePluginHooksAPIKey
+//     parses, and its six-character token marker agrees with the stored
+//     key_prefix, so provenance is proven from the minting material rather than
+//     from a name a user could once have typed;
+//   - the key was created before the rotation began, which retires every
+//     pre-rotation credential while leaving any replacement minted by an
+//     overlapping rotation alone -- two concurrent rotations can race for
+//     "newest key", but neither can revoke the other's replacement and neither
+//     can leave a pre-rotation credential valid;
+//   - the replacement of THIS rotation is excluded by hash as well, so the key
+//     just handed to the caller cannot be swept up by its own statement.
+func (q *Queries) RevokePluginHooksAPIKeysByProject(ctx context.Context, arg RevokePluginHooksAPIKeysByProjectParams) ([]RevokePluginHooksAPIKeysByProjectRow, error) {
+	rows, err := q.db.Query(ctx, revokePluginHooksAPIKeysByProject,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ReplacementKeyHash,
+		arg.RetireKeysCreatedBefore,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokePluginHooksAPIKeysByProjectRow
+	for rows.Next() {
+		var i RevokePluginHooksAPIKeysByProjectRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.KeyPrefix,
+			&i.Scopes,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeStalePluginAPIKeys = `-- name: RevokeStalePluginAPIKeys :many
+WITH plugin_keys AS (
+  SELECT id, project_id, name, created_at, last_accessed_at, deleted
+  FROM api_keys
+  WHERE name ~ '^plugins-(mcp|hooks|hooks-download)-[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+    AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
+),
+last_publish AS (
+  SELECT project_id, max(created_at) AS published_at
+  FROM plugin_keys
+  WHERE project_id IS NOT NULL
+    AND name ~ '^plugins-(mcp|hooks)-[0-9]{8}-'
+  GROUP BY project_id
+),
+stale AS (
+  SELECT k.id
+  FROM plugin_keys k
+  LEFT JOIN last_publish lp ON lp.project_id = k.project_id
+  WHERE k.deleted IS FALSE
+    AND k.created_at < clock_timestamp() - ($1::int * interval '1 day')
+    AND (
+      lp.published_at IS NULL
+      OR k.created_at < lp.published_at - ($1::int * interval '1 day')
+      OR k.created_at > lp.published_at
+    )
+    AND (k.last_accessed_at IS NULL OR k.last_accessed_at < clock_timestamp() - ($1::int * interval '1 day'))
+  ORDER BY k.created_at
+  LIMIT $2
+)
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id IN (SELECT id FROM stale)
+  AND deleted IS FALSE
+  -- Rechecked here so a use recorded while this statement waited on the row
+  -- still spares the key.
+  AND (last_accessed_at IS NULL OR last_accessed_at < clock_timestamp() - ($1::int * interval '1 day'))
+RETURNING id, organization_id, project_id, name, scopes
+`
+
+type RevokeStalePluginAPIKeysParams struct {
+	RetentionDays int32
+	BatchSize     int32
+}
+
+type RevokeStalePluginAPIKeysRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	Scopes         []string
+}
+
+// Revokes plugin-minted keys nobody needs any more: plugins-hooks-* and
+// plugins-mcp-* (publish) and plugins-hooks-download-* (ZIP download). Claude
+// web keys are left alone because each member already keeps only one. Provenance
+// is proven the same way as the rotation queries above. A key is kept while any
+// of these holds:
+//
+//   - it was created within the retention window;
+//   - it was created within the retention window up to and including the
+//     project's latest publish, so the current plugin generation keeps working
+//     however long ago it shipped. Revoked publish keys still count as
+//     publishes; a download minted after the latest publish gets no extra time;
+//   - it was used within the retention window.
+func (q *Queries) RevokeStalePluginAPIKeys(ctx context.Context, arg RevokeStalePluginAPIKeysParams) ([]RevokeStalePluginAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, revokeStalePluginAPIKeys, arg.RetentionDays, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokeStalePluginAPIKeysRow
+	for rows.Next() {
+		var i RevokeStalePluginAPIKeysRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Scopes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const touchAPIKeyUpdatedAt = `-- name: TouchAPIKeyUpdatedAt :one
+UPDATE api_keys
+SET updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+RETURNING updated_at
+`
+
+type TouchAPIKeyUpdatedAtParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) TouchAPIKeyUpdatedAt(ctx context.Context, arg TouchAPIKeyUpdatedAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, touchAPIKeyUpdatedAt, arg.ID, arg.OrganizationID)
+	var updated_at pgtype.Timestamptz
+	err := row.Scan(&updated_at)
+	return updated_at, err
 }
 
 const updateAPIKeyLastAccessedAt = `-- name: UpdateAPIKeyLastAccessedAt :exec

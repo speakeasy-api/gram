@@ -6,7 +6,7 @@ import { createContext, useContext } from "react";
  * https://github.com/Yonom/assistant-ui status/remoteId/externalId/title}), so
  * fields like the creation date are dropped at the runtime boundary.
  *
- * The Gram thread-list adapter populates this side channel from `chat.list`
+ * The Speakeasy thread-list adapter populates this side channel from `chat.list`
  * (keyed by chat id, which equals the item's remoteId/externalId) and
  * `ThreadListItem` reads it to render the date. React context crosses the
  * shadow-root boundary the thread list renders into, so the provider lives up

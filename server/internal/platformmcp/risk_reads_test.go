@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
@@ -57,11 +58,20 @@ func (s *stubRiskPolicies) ListPage(_ context.Context, _ string, _ uuid.UUID, cu
 	return s.policies, nil
 }
 
-func (s *stubRiskPolicies) loadDetail(_ context.Context, _, _ uuid.UUID) (policycore.Policy, string, error) {
-	if s.getErr != nil {
-		return policycore.Policy{}, "", fmt.Errorf("load test risk policy detail: %w", s.getErr)
+func (s *stubRiskPolicies) loadPage(_ context.Context, _ string, _ uuid.UUID, cursor *policycore.PageCursor, _ int32) ([]riskPolicySnapshot, error) {
+	s.cursor = cursor
+	result := make([]riskPolicySnapshot, 0, len(s.policies))
+	for _, policy := range s.policies {
+		result = append(result, riskPolicySnapshot{policy: policy, shadowDecisions: nil})
 	}
-	return s.policy, "opaque-version", nil
+	return result, nil
+}
+
+func (s *stubRiskPolicies) loadDetail(_ context.Context, _, _ uuid.UUID) (riskPolicySnapshot, string, error) {
+	if s.getErr != nil {
+		return riskPolicySnapshot{}, "", fmt.Errorf("load test risk policy detail: %w", s.getErr)
+	}
+	return riskPolicySnapshot{policy: s.policy, shadowDecisions: nil}, "opaque-version", nil
 }
 
 type stubRiskExclusions struct {
@@ -80,12 +90,11 @@ func testRiskReadService(t *testing.T, projects riskProjectResolver, policies *s
 	require.NoError(t, err)
 	fingerprint, err := policycatalog.Fingerprint(catalog)
 	require.NoError(t, err)
-	cursor, err := newRiskCursorCodec("test-key")
-	require.NoError(t, err)
+	cursor := newRiskCursorCodec("test-key")
 	versions, err := newRiskVersionCodec("test-key")
 	require.NoError(t, err)
 	return &RiskReadService{
-		projects: projects, policies: policies, exclusions: exclusions,
+		projects: projects, exclusions: exclusions, loadPolicyPage: policies.loadPage,
 		cursor: cursor, catalog: catalog, catalogFingerprint: fingerprint,
 		redactionKey:     []byte("0123456789abcdef0123456789abcdef"),
 		versions:         versions,
@@ -140,18 +149,48 @@ func TestRiskReadCursorBindingAndPagination(t *testing.T) {
 	require.ErrorIs(t, err, ErrRiskCursorInvalid)
 }
 
+func TestRiskReadProjectionsIncludeShadowPolicyDecisionsWithoutTargetDetails(t *testing.T) {
+	t.Parallel()
+	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
+	disposition := "block_all"
+	policy := policycore.Policy{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Name: "Shadow", PolicyType: "standard", Sources: []string{"shadow_mcp"}, Enabled: true, Action: "block", ShadowMCPDisposition: &disposition, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	targetURL := "https://mcp.example.test/sensitive-target"
+	principalURN := "user:sensitive-principal"
+	decisions, err := shadowPolicyDecisions(policy, []authz.Grant{{PrincipalUrn: principalURN, Selector: selectorWithURL(authz.ScopeRiskPolicyBypass, policy.ID.String(), targetURL)}}, nil)
+	require.NoError(t, err)
+	policies := &stubRiskPolicies{policies: []policycore.Policy{policy}, policy: policy}
+	service := testRiskReadService(t, &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>"}, {organizationID: "<ORG_ID>", projectSlug: "project"}}}, policies, &stubRiskExclusions{})
+	service.loadPolicyPage = func(_ context.Context, _ string, _ uuid.UUID, _ *policycore.PageCursor, _ int32) ([]riskPolicySnapshot, error) {
+		return []riskPolicySnapshot{{policy: policy, shadowDecisions: decisions}}, nil
+	}
+	service.loadPolicyDetail = func(_ context.Context, _, _ uuid.UUID) (riskPolicySnapshot, string, error) {
+		return riskPolicySnapshot{policy: policy, shadowDecisions: decisions}, "version", nil
+	}
+	principal := testRiskPrincipal("user")
+	list, err := service.ListPolicies(t.Context(), principal, ListRiskPoliciesInput{})
+	require.NoError(t, err)
+	require.Equal(t, decisions, list.Policies[0].ShadowDecisions)
+	get, err := service.GetPolicy(t.Context(), principal, GetRiskPolicyInput{ProjectSlug: "project", PolicyID: policy.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, decisions, get.Policy.ShadowDecisions)
+	encoded, err := json.Marshal(get)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), targetURL)
+	require.NotContains(t, string(encoded), principalURN)
+}
+
 func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	t.Parallel()
 
 	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
 	prompt := "authorized prompt content"
-	model := "private-model"
+	judgeTemperature := 0.42
 	scope := `kind == "user_message"`
 	policy := policycore.Policy{
 		ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Name: "legacy", PolicyType: "prompt_based",
 		Sources: []string{"gitleaks", "unknown"}, PresidioEntities: []string{"EMAIL_ADDRESS"}, DisabledRules: []string{"secret.aws_secret_access_key"}, CustomRuleIDs: []string{"custom.rule"},
-		MessageTypes: []string{"user_message"}, ScopeInclude: &scope, Enabled: true, Action: "quarantine", AudienceType: "targeted", AudiencePrincipalURNs: []string{"user:<USER_ID>"},
-		Prompt: &prompt, ModelConfig: &policycore.ModelConfig{Model: &model}, Score: 5, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		Enabled: true, Action: "quarantine", AudienceType: "targeted", AudiencePrincipalURNs: []string{"user:<USER_ID>"},
+		Prompt: &prompt, ModelConfig: &policycore.ModelConfig{Temperature: &judgeTemperature}, Score: 5, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	service := testRiskReadService(t, &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>", projectSlug: "project"}}}, &stubRiskPolicies{policy: policy}, &stubRiskExclusions{})
 	output, err := service.GetPolicy(t.Context(), testRiskPrincipal("user"), GetRiskPolicyInput{ProjectSlug: "project", PolicyID: policy.ID.String()})
@@ -161,15 +200,33 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	require.NotNil(t, output.Policy.ApprovedEmailDomains)
 	require.Equal(t, "opaque-version", output.Policy.Version)
 	require.Empty(t, output.Policy.Action)
-	require.ElementsMatch(t, []string{"custom_rules", "model_config", "raw_scope", "targeted_audience", "unknown_detector_value", "unsupported_action"}, output.Policy.Compatibility.UnsupportedFields)
+	require.ElementsMatch(t, []string{"custom_rules", "model_config", "unknown_detector_value", "unsupported_action"}, output.Policy.Compatibility.UnsupportedFields)
 
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
+	var document map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(encoded, &document))
+	var policyDocument map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(document["policy"], &policyDocument))
+	require.NotContains(t, policyDocument, "model_config")
 	text := string(encoded)
-	require.NotContains(t, text, model)
-	require.NotContains(t, text, "user:<USER_ID>")
+	require.NotContains(t, text, "temperature")
+	require.Equal(t, []string{"user:<USER_ID>"}, output.Policy.Audience.PrincipalURNs)
 	require.NotContains(t, text, scope)
 	require.NotContains(t, text, "custom.rule")
+
+	managed := testRiskPrincipal("user")
+	managed.Surface = SurfaceProjectAssistant
+	managed.ConnectionID = ""
+	managed.Generation = ""
+	managedService := testRiskReadService(t, &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>", projectSlug: "project"}}}, &stubRiskPolicies{policy: policy}, &stubRiskExclusions{})
+	managedOutput, err := managedService.GetPolicy(t.Context(), managed, GetRiskPolicyInput{ProjectSlug: "project", PolicyID: policy.ID.String()})
+	require.NoError(t, err)
+	require.Nil(t, managedOutput.Policy.Audience)
+	managedJSON, err := json.Marshal(managedOutput)
+	require.NoError(t, err)
+	require.NotContains(t, string(managedJSON), "user:<USER_ID>")
+	require.NotContains(t, string(managedJSON), `"audience"`)
 }
 
 func TestRiskExclusionFingerprintIsProjectScoped(t *testing.T) {
@@ -276,7 +333,13 @@ func TestUnavailableRiskToolRegistrationSurvivesCatalogFailure(t *testing.T) {
 		})
 	})
 	require.Equal(t, 1, buildCalls)
-	require.Len(t, reg.Descriptors(), 7)
+	require.Len(t, reg.Descriptors(), 11, "three reads, six policy/exclusion writes, two finding writes")
+	for _, name := range []string{operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {
+		_, err := descriptorByName(t, reg, name).Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","finding_ids":["`+uuid.NewString()+`"],"confirmed":true,"idempotency_key":"key"}`))
+		var refusal *ToolRefusalError
+		require.ErrorAs(t, err, &refusal, name)
+		require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`, name)
+	}
 
 	create := descriptorByName(t, reg, "create_risk_policy")
 	_, err := create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`))
@@ -316,13 +379,18 @@ func TestRiskToolRegistrationAndStableStubs(t *testing.T) {
 	registerUnavailableRiskTools(reg)
 
 	wanted := map[string]ProjectScope{
-		"list_risk_policies": ProjectScopeDefaultable, "get_risk_policy": ProjectScopeDefaultable, "list_risk_exclusions": ProjectScopeDefaultable,
-		"create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
+		"list_risk_policies": ProjectScopeDefaultable, "get_risk_policy": ProjectScopeDefaultable, "list_risk_exclusions": ProjectScopeDefaultable, "get_risk_analysis_status": ProjectScopeDefaultable,
+		"change_risk_policy_audience": ProjectScopeExplicit, "remove_self_from_risk_policy": ProjectScopeExplicit, "create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
+		"mark_risk_findings_false_positive": ProjectScopeExplicit, "unmark_risk_findings_false_positive": ProjectScopeExplicit,
 	}
 	require.Len(t, reg.Descriptors(), len(wanted))
 	for _, descriptor := range reg.Descriptors() {
 		require.Equal(t, wanted[descriptor.Name], descriptor.Meta.ProjectScope, descriptor.Name)
-		require.ElementsMatch(t, bothAudiences, descriptor.Meta.Audiences, descriptor.Name)
+		if descriptor.Name == operationRemoveSelfFromRiskPolicy || descriptor.Name == "change_risk_policy_audience" {
+			require.Equal(t, []Audience{AudienceExternal}, descriptor.Meta.Audiences)
+		} else {
+			require.ElementsMatch(t, bothAudiences, descriptor.Meta.Audiences, descriptor.Name)
+		}
 		require.NotEmpty(t, descriptor.InputSchema, descriptor.Name)
 		if strings.HasPrefix(descriptor.Name, "list_") || strings.HasPrefix(descriptor.Name, "get_") {
 			require.NotNil(t, descriptor.Annotations)
@@ -345,6 +413,9 @@ func TestRiskToolRegistrationAndStableStubs(t *testing.T) {
 	require.NoError(t, err)
 	_, err = createPolicy.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), payload)
 	require.ErrorContains(t, err, "arguments do not match the tool schema")
+	updatePolicy := descriptorByName(t, reg, "update_risk_policy")
+	require.Contains(t, updatePolicy.Description, "MCP-scoped policies support flag and block actions only.")
+	require.Contains(t, string(updatePolicy.InputSchema), "MCP-scoped policies support flag and block only.")
 
 	create := descriptorByName(t, reg, "create_risk_exclusion")
 	_, err = create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","match_type":"regex","match_value":"x","enabled":true,"idempotency_key":"key"}`))

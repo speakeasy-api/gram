@@ -8,8 +8,15 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
+	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+func TestRequireToolSearchIndex_EmptyToolsetNeedsNoIndex(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, requireToolSearchIndex(t.Context(), &types.Toolset{}, nil))
+}
 
 func TestBuildDynamicSearchToolsSchema(t *testing.T) {
 	t.Parallel()
@@ -91,23 +98,6 @@ func TestBuildDescribeToolsTool(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, entry)
 		require.Equal(t, describeToolsToolName, entry.Name)
-	})
-
-	t.Run("returns_error_for_proxy_tool", func(t *testing.T) {
-		t.Parallel()
-		proxyType := "proxy"
-		tools := []*types.Tool{
-			{
-				ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{
-					Name: "proxy-tool",
-					Type: &proxyType,
-				},
-			},
-		}
-
-		_, err := buildDescribeToolsTool(tools)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "external mcp proxy")
 	})
 
 	t.Run("schema_includes_tool_name_examples", func(t *testing.T) {
@@ -267,26 +257,6 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		require.Contains(t, string(response), `\"tools\":[]`)
 	})
 
-	t.Run("returns_error_for_proxy_tools", func(t *testing.T) {
-		t.Parallel()
-		ctx := t.Context()
-		logger := testenv.NewLogger(t)
-
-		proxyType := "proxy"
-		toolset := &types.Toolset{
-			Tools: []*types.Tool{
-				{ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{Name: "proxy-tool", Type: &proxyType}},
-			},
-		}
-
-		argsRaw := json.RawMessage(`{"tool_names": ["proxy-tool"]}`)
-		reqID := mcpjsonrpc.NumberID(1)
-
-		_, err := handleDescribeToolsCall(ctx, logger, reqID, argsRaw, toolset)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "external mcp proxy")
-	})
-
 	t.Run("handles_multiple_tool_names", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
@@ -329,4 +299,42 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		require.NotNil(t, response)
 		require.Contains(t, string(response), "my-tool")
 	})
+}
+
+func TestBuildToolSearchResultEntriesUsesStableURN(t *testing.T) {
+	t.Parallel()
+
+	const toolURN = "tools:http:billing:billing_customers_list"
+	runtimeName := "customers_list"
+	tools := []*types.Tool{
+		{
+			HTTPToolDefinition: &types.HTTPToolDefinition{
+				ToolUrn:       toolURN,
+				Name:          runtimeName,
+				CanonicalName: "billing_customers_list",
+				Description:   "List customers.",
+				Variation: &types.ToolVariation{
+					SrcToolUrn:  toolURN,
+					SrcToolName: "billing_customers_list",
+					Name:        &runtimeName,
+				},
+			},
+		},
+	}
+	searchResults := []*rag.ToolSearchResult{
+		{
+			ToolURN:         toolURN,
+			ToolName:        "billing_customers_list",
+			Tags:            []string{"billing/customers"},
+			SimilarityScore: 0.9,
+		},
+	}
+
+	entries, err := buildToolSearchResultEntries(tools, searchResults)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, runtimeName, entries[0].Name)
+	require.Equal(t, "List customers.", entries[0].Description)
+	require.InDelta(t, 0.9, entries[0].Meta["similarity_score"], 0)
+	require.Equal(t, []string{"billing/customers"}, entries[0].Meta["tags"])
 }

@@ -12,7 +12,7 @@ export type ResolveIdentitySecurity = {
 
 export type ResolveIdentityRequest = {
   /**
-   * The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Gram user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
+   * The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Speakeasy user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
    */
   urn: string;
   /**

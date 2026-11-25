@@ -90,6 +90,7 @@ func setupRefreshFixtureWithHandler(t *testing.T, slugSuffix string, audience pg
 		ti.conn,
 		enc,
 		policy,
+		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)
@@ -116,7 +117,7 @@ func setupRefreshFixtureWithHandler(t *testing.T, slugSuffix string, audience pg
 
 	secretCiphertext, err := enc.Encrypt([]byte("aud-secret"))
 	require.NoError(t, err)
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -148,7 +149,7 @@ func TestResolveAccessToken_RefreshIncludesAudience(t *testing.T) {
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject := setupRefreshFixtureWithAudience(t, conv.ToPGText("https://api.example.com"), &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -162,7 +163,7 @@ func TestResolveAccessToken_RefreshOmitsAudienceWhenUnset(t *testing.T) {
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject := setupRefreshFixtureWithAudience(t, pgtype.Text{String: "", Valid: false}, &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)

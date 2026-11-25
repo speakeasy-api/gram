@@ -245,7 +245,7 @@ export class ExternalKeys extends ClientSDK {
    * updateAwsKmsKey externalKeys
    *
    * @remarks
-   * Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.
+   * Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Speakeasy signs with.
    */
   async updateAwsKms(
     request: UpdateAwsKmsKeyRequest,
@@ -264,7 +264,7 @@ export class ExternalKeys extends ClientSDK {
    * updateGcpKmsKey externalKeys
    *
    * @remarks
-   * Update a GCP KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.
+   * Update a GCP KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Speakeasy signs with.
    */
   async updateGcpKms(
     request: UpdateGcpKmsKeyRequest,
@@ -283,7 +283,7 @@ export class ExternalKeys extends ClientSDK {
    * verifyGcpKmsKey externalKeys
    *
    * @remarks
-   * Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.
+   * Probe that Speakeasy can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.
    */
   async verifyGcpKms(
     request: VerifyGcpKmsKeyRequest,

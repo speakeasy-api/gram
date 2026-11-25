@@ -32,9 +32,74 @@ func DeleteRoleAccessPath() string {
 	return "/rpc/access.deleteRole"
 }
 
+// ListDirectoryRoleMappingsAccessPath returns the URL path to the access service listDirectoryRoleMappings HTTP endpoint.
+func ListDirectoryRoleMappingsAccessPath() string {
+	return "/rpc/access.listDirectoryRoleMappings"
+}
+
+// ListDirectoryPeopleAccessPath returns the URL path to the access service listDirectoryPeople HTTP endpoint.
+func ListDirectoryPeopleAccessPath() string {
+	return "/rpc/access.listDirectoryPeople"
+}
+
+// SyncDirectoryGroupsAccessPath returns the URL path to the access service syncDirectoryGroups HTTP endpoint.
+func SyncDirectoryGroupsAccessPath() string {
+	return "/rpc/access.syncDirectoryGroups"
+}
+
+// SetDirectoryRoleMappingAccessPath returns the URL path to the access service setDirectoryRoleMapping HTTP endpoint.
+func SetDirectoryRoleMappingAccessPath() string {
+	return "/rpc/access.setDirectoryRoleMapping"
+}
+
+// SetDirectoryRoleMappingsAccessPath returns the URL path to the access service setDirectoryRoleMappings HTTP endpoint.
+func SetDirectoryRoleMappingsAccessPath() string {
+	return "/rpc/access.setDirectoryRoleMappings"
+}
+
+// DeleteDirectoryRoleMappingAccessPath returns the URL path to the access service deleteDirectoryRoleMapping HTTP endpoint.
+func DeleteDirectoryRoleMappingAccessPath() string {
+	return "/rpc/access.deleteDirectoryRoleMapping"
+}
+
+// PreviewDirectoryRoleSetupAccessPath returns the URL path to the access service previewDirectoryRoleSetup HTTP endpoint.
+func PreviewDirectoryRoleSetupAccessPath() string {
+	return "/rpc/access.previewDirectoryRoleSetup"
+}
+
+// ApplyDirectoryRoleSetupAccessPath returns the URL path to the access service applyDirectoryRoleSetup HTTP endpoint.
+func ApplyDirectoryRoleSetupAccessPath() string {
+	return "/rpc/access.applyDirectoryRoleSetup"
+}
+
+// ListDirectoryReviewItemsAccessPath returns the URL path to the access service listDirectoryReviewItems HTTP endpoint.
+func ListDirectoryReviewItemsAccessPath() string {
+	return "/rpc/access.listDirectoryReviewItems"
+}
+
+// ResolveDirectoryReviewItemAccessPath returns the URL path to the access service resolveDirectoryReviewItem HTTP endpoint.
+func ResolveDirectoryReviewItemAccessPath() string {
+	return "/rpc/access.resolveDirectoryReviewItem"
+}
+
+// GetDirectoryReviewSettingsAccessPath returns the URL path to the access service getDirectoryReviewSettings HTTP endpoint.
+func GetDirectoryReviewSettingsAccessPath() string {
+	return "/rpc/access.getDirectoryReviewSettings"
+}
+
+// UpdateDirectoryReviewSettingsAccessPath returns the URL path to the access service updateDirectoryReviewSettings HTTP endpoint.
+func UpdateDirectoryReviewSettingsAccessPath() string {
+	return "/rpc/access.updateDirectoryReviewSettings"
+}
+
 // ListScopesAccessPath returns the URL path to the access service listScopes HTTP endpoint.
 func ListScopesAccessPath() string {
 	return "/rpc/access.listScopes"
+}
+
+// ListAgentPolicyScopesAccessPath returns the URL path to the access service listAgentPolicyScopes HTTP endpoint.
+func ListAgentPolicyScopesAccessPath() string {
+	return "/rpc/access.listAgentPolicyScopes"
 }
 
 // ListMembersAccessPath returns the URL path to the access service listMembers HTTP endpoint.
@@ -62,9 +127,19 @@ func GetShadowMCPInventoryServerAccessPath() string {
 	return "/rpc/access.getShadowMCPInventoryServer"
 }
 
+// FindShadowMCPInventoryServersAccessPath returns the URL path to the access service findShadowMCPInventoryServers HTTP endpoint.
+func FindShadowMCPInventoryServersAccessPath() string {
+	return "/rpc/access.findShadowMCPInventoryServers"
+}
+
 // UpdateShadowMCPInventoryServerNameAccessPath returns the URL path to the access service updateShadowMCPInventoryServerName HTTP endpoint.
 func UpdateShadowMCPInventoryServerNameAccessPath() string {
 	return "/rpc/access.updateShadowMCPInventoryServerName"
+}
+
+// SetShadowMCPOfficialServerAccessPath returns the URL path to the access service setShadowMCPOfficialServer HTTP endpoint.
+func SetShadowMCPOfficialServerAccessPath() string {
+	return "/rpc/access.setShadowMCPOfficialServer"
 }
 
 // ListShadowMCPInventoryUsersAccessPath returns the URL path to the access service listShadowMCPInventoryUsers HTTP endpoint.
@@ -80,6 +155,46 @@ func ListShadowMCPInventoryServersForUserAccessPath() string {
 // ResolveShadowMCPInventoryRequestAccessPath returns the URL path to the access service resolveShadowMCPInventoryRequest HTTP endpoint.
 func ResolveShadowMCPInventoryRequestAccessPath() string {
 	return "/rpc/access.resolveShadowMCPInventoryRequest"
+}
+
+// ListAIDetectionsAccessPath returns the URL path to the access service listAIDetections HTTP endpoint.
+func ListAIDetectionsAccessPath() string {
+	return "/rpc/access.listAIDetections"
+}
+
+// ListEmployeeAIDetectionsAccessPath returns the URL path to the access service listEmployeeAIDetections HTTP endpoint.
+func ListEmployeeAIDetectionsAccessPath() string {
+	return "/rpc/access.listEmployeeAIDetections"
+}
+
+// ListAIDetectionUsersAccessPath returns the URL path to the access service listAIDetectionUsers HTTP endpoint.
+func ListAIDetectionUsersAccessPath() string {
+	return "/rpc/access.listAIDetectionUsers"
+}
+
+// SetAIToolDecisionAccessPath returns the URL path to the access service setAIToolDecision HTTP endpoint.
+func SetAIToolDecisionAccessPath() string {
+	return "/rpc/access.setAIToolDecision"
+}
+
+// ListResourceAudienceAccessPath returns the URL path to the access service listResourceAudience HTTP endpoint.
+func ListResourceAudienceAccessPath() string {
+	return "/rpc/access.listResourceAudience"
+}
+
+// SetResourceAudienceAccessPath returns the URL path to the access service setResourceAudience HTTP endpoint.
+func SetResourceAudienceAccessPath() string {
+	return "/rpc/access.setResourceAudience"
+}
+
+// ListAudienceOptionsAccessPath returns the URL path to the access service listAudienceOptions HTTP endpoint.
+func ListAudienceOptionsAccessPath() string {
+	return "/rpc/access.listAudienceOptions"
+}
+
+// ExplainResourceAccessAccessPath returns the URL path to the access service explainResourceAccess HTTP endpoint.
+func ExplainResourceAccessAccessPath() string {
+	return "/rpc/access.explainResourceAccess"
 }
 
 // RequestAccessAccessPath returns the URL path to the access service requestAccess HTTP endpoint.
@@ -100,4 +215,44 @@ func ListChallengeBucketsAccessPath() string {
 // ResolveChallengeAccessPath returns the URL path to the access service resolveChallenge HTTP endpoint.
 func ResolveChallengeAccessPath() string {
 	return "/rpc/access.resolveChallenge"
+}
+
+// ListIdentityAccessAccessPath returns the URL path to the access service listIdentityAccess HTTP endpoint.
+func ListIdentityAccessAccessPath() string {
+	return "/rpc/access.listIdentityAccess"
+}
+
+// CreateTemporaryGrantAccessPath returns the URL path to the access service createTemporaryGrant HTTP endpoint.
+func CreateTemporaryGrantAccessPath() string {
+	return "/rpc/access.createTemporaryGrant"
+}
+
+// ListTemporaryGrantsAccessPath returns the URL path to the access service listTemporaryGrants HTTP endpoint.
+func ListTemporaryGrantsAccessPath() string {
+	return "/rpc/access.listTemporaryGrants"
+}
+
+// RenewTemporaryGrantAccessPath returns the URL path to the access service renewTemporaryGrant HTTP endpoint.
+func RenewTemporaryGrantAccessPath() string {
+	return "/rpc/access.renewTemporaryGrant"
+}
+
+// RevokeTemporaryGrantAccessPath returns the URL path to the access service revokeTemporaryGrant HTTP endpoint.
+func RevokeTemporaryGrantAccessPath() string {
+	return "/rpc/access.revokeTemporaryGrant"
+}
+
+// ListAccessRequestsAccessPath returns the URL path to the access service listAccessRequests HTTP endpoint.
+func ListAccessRequestsAccessPath() string {
+	return "/rpc/access.listAccessRequests"
+}
+
+// DecideAccessRequestAccessPath returns the URL path to the access service decideAccessRequest HTTP endpoint.
+func DecideAccessRequestAccessPath() string {
+	return "/rpc/access.decideAccessRequest"
+}
+
+// WithdrawAccessRequestAccessPath returns the URL path to the access service withdrawAccessRequest HTTP endpoint.
+func WithdrawAccessRequestAccessPath() string {
+	return "/rpc/access.withdrawAccessRequest"
 }

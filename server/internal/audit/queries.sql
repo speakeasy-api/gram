@@ -15,7 +15,8 @@ INSERT INTO audit_logs (
   after_snapshot,
   metadata,
   acting_surface,
-  acting_client_id
+  acting_client_id,
+  is_internal
 ) VALUES (
   @organization_id,
   @project_id,
@@ -32,7 +33,8 @@ INSERT INTO audit_logs (
   @after_snapshot,
   @metadata,
   @acting_surface,
-  @acting_client_id
+  @acting_client_id,
+  @is_internal
 )
 RETURNING id, organization_id;
 
@@ -69,9 +71,28 @@ LEFT JOIN LATERAL (
 -- When no subject_type filter is given, assistant activity events (one per
 -- assistant tool call) are excluded so they don't drown out the platform
 -- audit feed. The private admin caller can explicitly include all events.
-SELECT a.*, p.slug AS project_slug
+-- The actor name is resolved at read time rather than trusted from the row.
+-- Every writer stores the acting user's EMAIL in actor_display_name, so the
+-- stored value renders the feed as a column of addresses; joining the
+-- directory repairs the rows already written, and keeps names current when
+-- someone is renamed. The stored value remains the fallback for actors with
+-- no directory row: API keys and system actors. A soft-deleted user still
+-- resolves, deliberately — they really did perform the action, and their name
+-- is both more useful and less identifying than the email the row stored.
+-- The directory is global, so the lookup goes through this organization's
+-- memberships rather than straight at users.id: an actor id that never
+-- belonged here resolves to no name at all instead of naming a stranger from
+-- another tenant. Soft-deleted memberships count — a departed member is
+-- exactly the actor whose name this is meant to keep resolving — and the
+-- unique (organization_id, user_id) pair means the join cannot fan a row out.
+SELECT a.*, p.slug AS project_slug, u.display_name AS actor_user_display_name
 FROM audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id
+LEFT JOIN organization_user_relationships actor_membership
+  ON a.actor_type = 'user'
+  AND actor_membership.organization_id = a.organization_id
+  AND actor_membership.user_id = a.actor_id
+LEFT JOIN users u ON u.id = actor_membership.user_id
 WHERE a.organization_id = @organization_id
   AND (
     sqlc.narg(project_id)::uuid IS NULL
@@ -96,6 +117,8 @@ WHERE a.organization_id = @organization_id
     )
     OR a.subject_type = sqlc.narg(subject_type)::text
   )
+  -- Internal activity is visible only to the private staff caller.
+  AND (@include_internal_events::boolean OR NOT a.is_internal)
   AND (
     sqlc.narg(subject_id)::text IS NULL
     OR a.subject_id = sqlc.narg(subject_id)::text
@@ -113,20 +136,41 @@ WHERE a.organization_id = @organization_id
     sqlc.narg(acting_surface)::text IS NULL
     OR COALESCE(a.acting_surface, 'unknown') = sqlc.narg(acting_surface)::text
   )
+  -- Origin splits the log by who initiated a change: 'system' is Speakeasy
+  -- acting on its own (background jobs), 'user' is everything else.
+  AND (
+    sqlc.narg(origin)::text IS NULL
+    OR (sqlc.narg(origin)::text = 'system') = (a.acting_surface IS NOT DISTINCT FROM 'system')
+  )
+  -- Half-open window, so consecutive ranges neither double-count a row nor
+  -- drop one that lands exactly on a boundary.
+  AND (
+    sqlc.narg(created_from)::timestamptz IS NULL
+    OR a.created_at >= sqlc.narg(created_from)::timestamptz
+  )
+  AND (
+    sqlc.narg(created_to)::timestamptz IS NULL
+    OR a.created_at < sqlc.narg(created_to)::timestamptz
+  )
 ORDER BY a.seq DESC
 LIMIT 51;
 
 -- name: ListAuditActorFacets :many
--- Assistant activity events are excluded: facets power the platform audit
--- feed, which hides them (see ListAuditLogs).
+-- Assistant activity and internal events are excluded:
+-- facets power the platform audit feed, which hides them (see ListAuditLogs).
 WITH filtered_logs AS (
   SELECT actor_id, actor_type, actor_display_name, acting_surface, seq
   FROM audit_logs
   WHERE organization_id = @organization_id
     AND subject_type <> 'assistant'
+    AND NOT is_internal
     AND (
       sqlc.narg(project_id)::uuid IS NULL
       OR project_id = sqlc.narg(project_id)::uuid
+    )
+    AND (
+      sqlc.narg(origin)::text IS NULL
+      OR (sqlc.narg(origin)::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
     )
 ), actor_counts AS (
   SELECT
@@ -135,7 +179,7 @@ WITH filtered_logs AS (
     -- Flags actor ids that appear as user actors, so callers can restrict
     -- user-specific treatment (e.g. Speakeasy staff masking) to them.
     BOOL_OR(actor_type = 'user')::boolean AS is_user_actor,
-    BOOL_OR(COALESCE(acting_surface = 'admin', FALSE))::boolean AS is_admin_actor
+    BOOL_OR(COALESCE(acting_surface IN ('admin', 'admin_mcp'), FALSE))::boolean AS is_admin_actor
   FROM filtered_logs
   GROUP BY actor_id
 ), latest_actor_names AS (
@@ -149,17 +193,32 @@ WITH filtered_logs AS (
 )
 SELECT
   actor_counts.actor_id AS value,
-  COALESCE(latest_actor_names.actor_display_name, actor_counts.actor_id) AS display_name,
+  -- Directory name first, for the same reason ListAuditLogs joins it: the
+  -- stored value is the acting user's email, so the filter dropdown would
+  -- otherwise list addresses while the feed beside it lists names.
+  COALESCE(
+    NULLIF(u.display_name, ''),
+    latest_actor_names.actor_display_name,
+    actor_counts.actor_id
+  ) AS display_name,
   actor_counts.count,
   actor_counts.is_user_actor,
   actor_counts.is_admin_actor
 FROM actor_counts
 LEFT JOIN latest_actor_names ON latest_actor_names.actor_id = actor_counts.actor_id
+-- Scoped through this organization's memberships for the same reason
+-- ListAuditLogs is: the directory spans every tenant, and a facet label is
+-- read by whoever can read the feed.
+LEFT JOIN organization_user_relationships actor_membership
+  ON actor_counts.is_user_actor
+  AND actor_membership.organization_id = @organization_id
+  AND actor_membership.user_id = actor_counts.actor_id
+LEFT JOIN users u ON u.id = actor_membership.user_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC;
 
 -- name: ListAuditSurfaceFacets :many
--- Assistant activity events are excluded: facets power the platform audit
--- feed, which hides them (see ListAuditLogs).
+-- Assistant activity and internal events are excluded:
+-- facets power the platform audit feed, which hides them (see ListAuditLogs).
 -- Rows predating attribution have no surface and are counted as 'unknown',
 -- so the facet totals reconcile with the unfiltered feed rather than silently
 -- omitting an organization's older history.
@@ -170,9 +229,14 @@ SELECT
 FROM audit_logs
 WHERE organization_id = @organization_id
   AND subject_type <> 'assistant'
+  AND NOT is_internal
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid
+  )
+  AND (
+    sqlc.narg(origin)::text IS NULL
+    OR (sqlc.narg(origin)::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
   )
 -- Group on the coalesced value, not the column: an organization can hold both
 -- nulls from before attribution and rows the application wrote as 'unknown',
@@ -181,8 +245,8 @@ GROUP BY COALESCE(acting_surface, 'unknown')
 ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC;
 
 -- name: ListAuditActionFacets :many
--- Assistant activity events are excluded: facets power the platform audit
--- feed, which hides them (see ListAuditLogs).
+-- Assistant activity and internal events are excluded:
+-- facets power the platform audit feed, which hides them (see ListAuditLogs).
 SELECT
   action AS value,
   action AS display_name,
@@ -190,9 +254,14 @@ SELECT
 FROM audit_logs
 WHERE organization_id = @organization_id
   AND subject_type <> 'assistant'
+  AND NOT is_internal
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid
+  )
+  AND (
+    sqlc.narg(origin)::text IS NULL
+    OR (sqlc.narg(origin)::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
   )
 GROUP BY action
 ORDER BY count DESC, action ASC;
@@ -202,3 +271,15 @@ ORDER BY count DESC, action ASC;
 UPDATE audit_logs
 SET created_at = @created_at
 WHERE id = ANY(@ids::uuid[]);
+
+-- name: ListAuditActorsOnSubjects :many
+-- Who changed any of these subjects, or did any of these actions, in an organization within a time range.
+SELECT subject_id, action, actor_type, actor_id, is_internal, created_at
+FROM audit_logs
+WHERE organization_id = @organization_id
+  AND (
+    subject_id = ANY(@subject_ids::text[])
+    OR (subject_type = ANY(@subject_types::text[]) AND action = ANY(@actions::text[]))
+  )
+  AND created_at > @after
+  AND created_at < @before;

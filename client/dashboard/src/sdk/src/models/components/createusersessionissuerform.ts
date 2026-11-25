@@ -9,14 +9,30 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * How multi-remote authn challenges are presented: chain | interactive.
  */
-export const AuthnChallengeMode = {
+export const CreateUserSessionIssuerFormAuthnChallengeMode = {
   Chain: "chain",
   Interactive: "interactive",
 } as const;
 /**
  * How multi-remote authn challenges are presented: chain | interactive.
  */
-export type AuthnChallengeMode = ClosedEnum<typeof AuthnChallengeMode>;
+export type CreateUserSessionIssuerFormAuthnChallengeMode = ClosedEnum<
+  typeof CreateUserSessionIssuerFormAuthnChallengeMode
+>;
+
+/**
+ * Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+ */
+export const CreateUserSessionIssuerFormAuthorizationServerMode = {
+  Endpoint: "endpoint",
+  Shared: "shared",
+} as const;
+/**
+ * Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+ */
+export type CreateUserSessionIssuerFormAuthorizationServerMode = ClosedEnum<
+  typeof CreateUserSessionIssuerFormAuthorizationServerMode
+>;
 
 /**
  * Form for creating a user_session_issuer.
@@ -25,25 +41,38 @@ export type CreateUserSessionIssuerForm = {
   /**
    * How multi-remote authn challenges are presented: chain | interactive.
    */
-  authnChallengeMode: AuthnChallengeMode;
+  authnChallengeMode: CreateUserSessionIssuerFormAuthnChallengeMode;
+  /**
+   * Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+   */
+  authorizationServerMode?:
+    | CreateUserSessionIssuerFormAuthorizationServerMode
+    | undefined;
   /**
    * Maximum issued user session lifetime, in hours.
    */
   sessionDurationHours: number;
   /**
-   * Project-unique slug.
+   * Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
    */
   slug: string;
 };
 
 /** @internal */
-export const AuthnChallengeMode$outboundSchema: z.ZodMiniEnum<
-  typeof AuthnChallengeMode
-> = z.enum(AuthnChallengeMode);
+export const CreateUserSessionIssuerFormAuthnChallengeMode$outboundSchema:
+  z.ZodMiniEnum<typeof CreateUserSessionIssuerFormAuthnChallengeMode> = z.enum(
+    CreateUserSessionIssuerFormAuthnChallengeMode,
+  );
+
+/** @internal */
+export const CreateUserSessionIssuerFormAuthorizationServerMode$outboundSchema:
+  z.ZodMiniEnum<typeof CreateUserSessionIssuerFormAuthorizationServerMode> = z
+    .enum(CreateUserSessionIssuerFormAuthorizationServerMode);
 
 /** @internal */
 export type CreateUserSessionIssuerForm$Outbound = {
   authn_challenge_mode: string;
+  authorization_server_mode: string;
   session_duration_hours: number;
   slug: string;
 };
@@ -54,13 +83,19 @@ export const CreateUserSessionIssuerForm$outboundSchema: z.ZodMiniType<
   CreateUserSessionIssuerForm
 > = z.pipe(
   z.object({
-    authnChallengeMode: AuthnChallengeMode$outboundSchema,
+    authnChallengeMode:
+      CreateUserSessionIssuerFormAuthnChallengeMode$outboundSchema,
+    authorizationServerMode: z._default(
+      CreateUserSessionIssuerFormAuthorizationServerMode$outboundSchema,
+      "endpoint",
+    ),
     sessionDurationHours: z.int(),
     slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       authnChallengeMode: "authn_challenge_mode",
+      authorizationServerMode: "authorization_server_mode",
       sessionDurationHours: "session_duration_hours",
     });
   }),

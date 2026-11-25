@@ -36,7 +36,9 @@ interface WorkosCurrentUser extends WorkosUser {
 }
 
 async function fetchWorkos(suffix: string): Promise<unknown> {
-  const res = await fetch(`/devidp/workos/${suffix}`);
+  // _inspect is namespaced away from the real WorkOS API paths served under
+  // /workos, so these reads can never shadow a genuine endpoint.
+  const res = await fetch(`/devidp/workos/_inspect/${suffix}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }

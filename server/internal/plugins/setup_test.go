@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,8 +33,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -67,9 +71,55 @@ type testInstance struct {
 	service        *plugins.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	publisher      *capturePublishSignaler
+}
+
+// capturePublishSignaler records the republish enqueues a plugin mutation makes
+// in place of the real Temporal signal.
+type capturePublishSignaler struct {
+	mu      sync.Mutex
+	signals []capturedPublishSignal
+}
+
+type capturedPublishSignal struct {
+	projectID       uuid.UUID
+	createdByUserID string
+	// sync marks a manual sync, which also publishes the pending changes of
+	// plugins whose auto sync is off.
+	sync bool
+}
+
+func (c *capturePublishSignaler) SignalPluginPublish(ctx context.Context, projectID uuid.UUID, createdByUserID string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.signals = append(c.signals, capturedPublishSignal{projectID: projectID, createdByUserID: createdByUserID})
+	return nil
+}
+
+func (c *capturePublishSignaler) SignalPluginSync(ctx context.Context, projectID uuid.UUID, createdByUserID string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.signals = append(c.signals, capturedPublishSignal{projectID: projectID, createdByUserID: createdByUserID, sync: true})
+	return nil
+}
+
+func (c *capturePublishSignaler) captured() []capturedPublishSignal {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.signals)
 }
 
 func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestPluginsServiceWithLockTimeout(t, 0)
+}
+
+func newTestPluginsServiceWithLockTimeout(t *testing.T, lockTimeout time.Duration) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestPluginsServiceWithOptions(t, lockTimeout, nil)
+}
+
+func newTestPluginsServiceWithOptions(t *testing.T, lockTimeout time.Duration, features feature.Provider) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -79,6 +129,9 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
+	if lockTimeout > 0 {
+		conn = testenv.NewLockTimeoutPool(t, conn, lockTimeout)
+	}
 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
@@ -100,12 +153,13 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, conn))
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		publisher:      nil,
 	}
 }
 
@@ -175,6 +229,8 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 
 	auditLogger := audit.NewLogger()
 
+	publisher := &capturePublishSignaler{mu: sync.Mutex{}, signals: nil}
+
 	svc := plugins.NewService(
 		logger,
 		tracerProvider,
@@ -187,12 +243,16 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		"local",
 		"https://app.getgram.ai",
 		features,
+		publisher,
+		staff.Organization{},
+		marketplacetokenstest.Tokens(t, conn),
 	)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		publisher:      publisher,
 	}
 }
 
@@ -217,6 +277,8 @@ func newTestPluginPublisher(t *testing.T, ti *testInstance, ghClient plugins.Git
 		"local",
 		"https://app.getgram.ai",
 		features,
+		staff.Organization{},
+		marketplacetokenstest.Tokens(t, ti.conn),
 	)
 }
 
@@ -236,7 +298,6 @@ func rewindPublishedHooksVersion(t *testing.T, ctx context.Context, conn *pgxpoo
 		InstallationID:           current.InstallationID,
 		RepoOwner:                current.RepoOwner,
 		RepoName:                 current.RepoName,
-		MarketplaceToken:         current.MarketplaceToken,
 		PublishedMcpFingerprints: current.PublishedMcpFingerprints,
 		PublishedHooksVersion:    conv.ToPGText(version),
 		PublishedHooksConfig:     current.PublishedHooksConfig,
@@ -291,7 +352,40 @@ func orgObservabilitySlugs(t *testing.T, ctx context.Context, ti *testInstance) 
 	return plugins.ClaudeObservabilitySlug(cfg), plugins.CursorObservabilitySlug(cfg)
 }
 
+// createTestToolset creates a toolset with its canonical server and endpoint, as toolset creation does; its endpoint is at the toolset slug.
 func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
+	t.Helper()
+	ts := createEndpointlessTestToolset(t, ctx, conn, name)
+	testenv.SetHostedMCP(t, ctx, conn, ts.ProjectID, ts.ID, testenv.HostedMCP{Visibility: "", UserSessionIssuerID: nil, Slug: ts.Slug, CustomDomainID: uuid.NullUUID{}})
+	return ts
+}
+
+// createEndpointlessTestToolset creates a toolset whose private canonical server has no endpoint, so other servers over it stay deliverable.
+func createEndpointlessTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
+	t.Helper()
+	ts := createRawTestToolset(t, ctx, conn, name)
+	_, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: ts.ID, ProjectID: ts.ProjectID, Name: pgtype.Text{String: ts.Name, Valid: true}, Slug: pgtype.Text{String: ts.Slug, Valid: true},
+		ToolsetID: uuid.NullUUID{UUID: ts.ID, Valid: true}, ToolVariationsGroupID: ts.ToolVariationsGroupID, Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	return ts
+}
+
+// setTestToolsetVisibility sets the visibility of a toolset's canonical server.
+func setTestToolsetVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, toolset toolsetsrepo.Toolset, visibility string) {
+	t.Helper()
+	testenv.SetHostedMCP(t, ctx, conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: visibility, UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{}})
+}
+
+// createUnwrappedTestToolset creates a toolset with no MCP server.
+func createUnwrappedTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
+	t.Helper()
+	return createRawTestToolset(t, ctx, conn, name)
+}
+
+// createRawTestToolset creates a bare toolset row; callers address it at its slug.
+func createRawTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -303,8 +397,6 @@ func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 		Slug:                   slug,
 		Description:            pgtype.Text{Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{Valid: false},
-		McpSlug:                pgtype.Text{String: slug, Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 	return ts
@@ -340,10 +432,9 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 
 	// Back the mcp_server with a toolset to satisfy the backend-exclusivity
 	// check; the plugin path does not distinguish remote- vs toolset-backed.
-	backing := createTestToolset(t, ctx, conn, name+"-backing")
+	backing := createEndpointlessTestToolset(t, ctx, conn, name+"-backing")
 	if visibility == mcpservers.VisibilityPublic {
-		err := toolsetsrepo.New(conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: backing.ID, ProjectID: backing.ProjectID})
-		require.NoError(t, err)
+		setTestToolsetVisibility(t, ctx, conn, backing, mcpservers.VisibilityPublic)
 	}
 
 	slug := fmt.Sprintf("mcp-%s-%s", name, uuid.New().String()[:8])
@@ -378,7 +469,7 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 
 // createTestUnproxiedMcpServer creates an unproxied-backed mcp_server
 // with no mcp_endpoints row, mirroring how the real create flow leaves it
-// (there is no Gram-hosted endpoint to serve for a server Gram never
+// (there is no Speakeasy-hosted endpoint to serve for a server Speakeasy never
 // proxies). visibility controls publishability.
 func createTestUnproxiedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name, visibility string) mcpServerFixture {
 	t.Helper()

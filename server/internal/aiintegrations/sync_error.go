@@ -95,24 +95,57 @@ func (e *SyncError) Unwrap() []error {
 // ComplianceSyncProgress records how far an Anthropic compliance import run
 // got before it stopped.
 type ComplianceSyncProgress struct {
-	FirstSync           bool `json:"first_sync"`
-	ActivityPages       int  `json:"activity_pages"`
-	ChatActivities      int  `json:"chat_activities"`
-	ChatsImported       int  `json:"chats_imported"`
-	MessagePagesFetched int  `json:"message_pages_fetched"`
-	MessagePagesWritten int  `json:"message_pages_written"`
-	// CursorReached is the activities pagination token discovery got to; it
-	// shows how far the feed walk progressed regardless of durability.
+	// FirstSync is set when the run started with no chat-list cursor and
+	// bounded both feeds with the initial lookback.
+	FirstSync bool `json:"first_sync"`
+
+	// ActivityPages counts activity feed pages read from the created-chats
+	// window.
+	ActivityPages int `json:"activity_pages"`
+
+	// ChatActivities counts claude_chat_created activities with a user actor
+	// and a chat id, each of which became a chat import.
+	ChatActivities int `json:"chat_activities"`
+
+	// ChatListPages counts chat list pages read.
+	ChatListPages int `json:"chat_list_pages"`
+
+	// ChatsListed counts chats the list returned that were not deleted, each
+	// of which became a chat import.
+	ChatsListed int `json:"chats_listed"`
+
+	// ChatsUnavailable counts chat visits skipped because Anthropic no
+	// longer serves the chat's messages (the chats endpoint answered 404).
+	// Like ChatsImported it counts visits, so a chat both feeds yield in one
+	// run is counted twice.
+	ChatsUnavailable int `json:"chats_unavailable"`
+
+	// ChatsImported counts chat rows upserted across both feeds; a chat seen
+	// in both is counted twice.
+	ChatsImported int `json:"chats_imported"`
+
+	// MessagePagesFetched counts message pages fetched from the chats
+	// endpoint.
+	MessagePagesFetched int `json:"message_pages_fetched"`
+
+	// MessagePagesWritten counts message pages durably written.
+	MessagePagesWritten int `json:"message_pages_written"`
+
+	// CursorReached is the chat-list cursor discovery got to, in the stored
+	// form last_cursor_id holds; it shows how far the list walk progressed
+	// regardless of durability.
 	CursorReached string `json:"cursor_reached,omitempty"`
-	// CursorPersisted is the last activities pagination token durably
-	// written to the sync state during the run; retries resume from it.
+
+	// CursorPersisted is the last chat-list cursor durably written to the
+	// sync state during the run, in the stored form last_cursor_id holds;
+	// retries resume from it.
 	CursorPersisted string `json:"cursor_persisted,omitempty"`
 }
 
 func (p ComplianceSyncProgress) String() string {
 	return fmt.Sprintf(
-		"first_sync=%t activity_pages=%d chat_activities=%d chats_imported=%d message_pages_fetched=%d message_pages_written=%d cursor_reached=%q cursor_persisted=%q",
-		p.FirstSync, p.ActivityPages, p.ChatActivities, p.ChatsImported, p.MessagePagesFetched, p.MessagePagesWritten, p.CursorReached, p.CursorPersisted,
+		"first_sync=%t activity_pages=%d chat_activities=%d chat_list_pages=%d chats_listed=%d chats_unavailable=%d chats_imported=%d message_pages_fetched=%d message_pages_written=%d cursor_reached=%q cursor_persisted=%q",
+		p.FirstSync, p.ActivityPages, p.ChatActivities, p.ChatListPages, p.ChatsListed, p.ChatsUnavailable, p.ChatsImported, p.MessagePagesFetched, p.MessagePagesWritten, p.CursorReached, p.CursorPersisted,
 	)
 }
 

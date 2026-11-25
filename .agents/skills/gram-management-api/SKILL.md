@@ -1,6 +1,6 @@
 ---
 name: gram-management-api
-description: Concepts, external interfaces, and conventions for Gram's management API — the Goa-designed HTTP-RPC surface under `/rpc/<service>.<method>` that powers the dashboard, CLI, and public SDK. Activate whenever the task involves designing, implementing, or modifying a management endpoint (new service, new method, payload/result changes, OpenAPI/SDK surface changes, CLI changes, wiring a new service into the server).
+description: Concepts, external interfaces, and conventions for Speakeasy's management API — the Goa-designed HTTP-RPC surface under `/rpc/<service>.<method>` that powers the dashboard, CLI, and public SDK. Activate whenever the task involves designing, implementing, or modifying a management endpoint (new service, new method, payload/result changes, OpenAPI/SDK surface changes, CLI changes, wiring a new service into the server).
 metadata:
   relevant_files:
     - "server/design/**/*.go"
@@ -12,7 +12,7 @@ metadata:
     - ".changeset/**/*.md"
 ---
 
-Gram's management API is the internal HTTP-RPC surface that the dashboard, CLI, and SDK use to administer projects, toolsets, deployments, access, and related resources. Every endpoint lives at `/rpc/<service>.<method>`, is authored in Goa DSL under `server/design/`, implemented in a single `Service` struct per package under `server/internal/<service>/`, and exposed through generated server stubs, OpenAPI, CLI bindings, and a TypeScript SDK.
+Speakeasy's management API is the internal HTTP-RPC surface that the dashboard, CLI, and SDK use to administer projects, toolsets, deployments, access, and related resources. Every endpoint lives at `/rpc/<service>.<method>`, is authored in Goa DSL under `server/design/`, implemented in a single `Service` struct per package under `server/internal/<service>/`, and exposed through generated server stubs, OpenAPI, CLI bindings, and a TypeScript SDK.
 
 ## Concepts and terminology
 
@@ -22,9 +22,9 @@ Gram's management API is the internal HTTP-RPC surface that the dashboard, CLI, 
 
 **Payload / Result.** The input and output types for a method. Payloads are composed from shared security payloads plus method-specific form attributes.
 
-**Security scheme.** The authentication mechanism a method accepts. Gram's management endpoints use three schemes: **Session** (browser cookie), **ByKey** (API key header), and **ProjectSlug** (project-selector header). Additional schemes exist for non-management surfaces and are out of scope here.
+**Security scheme.** The authentication mechanism a method accepts. Speakeasy's management endpoints use three schemes: **Session** (browser cookie), **ByKey** (API key header), and **ProjectSlug** (project-selector header). Additional schemes exist for non-management surfaces and are out of scope here.
 
-**Model views (`mv`).** Stateless functions that convert database row types into API response types. Keep database types out of the API boundary — handlers always return a view, never a `repo` struct.
+**Model views (`mv`).** Functions that convert database row types into API response types. Most are stateless; `Describe<Subject>` functions also load the rows they convert, and `orgaccount.Describe` reconciles the organization's stored billing tier. Keep database types out of the API boundary — handlers always return a view, never a `repo` struct.
 
 **Handler.** One method implementation on the `Service` struct.
 
@@ -48,7 +48,7 @@ The design, implementation, tests, and per-service generated code for every mana
 
 **Security composition.** Most management endpoints advertise `Session` and `ByKey` side-by-side via repeated `Security(...)` calls on the service so the dashboard and API-key clients can both reach them. Project-scoped endpoints additionally layer `ProjectSlug` via `ProjectPayload()` / `ProjectHeader()` so the caller must name a project.
 
-**Shared errors.** Every service calls `shared.DeclareErrorResponses()` (from `server/design/shared/errors.go`) exactly once so the standard Gram error envelope applies to every method.
+**Shared errors.** Every service calls `shared.DeclareErrorResponses()` (from `server/design/shared/errors.go`) exactly once so the standard Speakeasy error envelope applies to every method.
 
 **Shared types.** When a payload or result type is reused across services, add `Meta("struct:pkg:path", "types")` so the generator emits it under `server/gen/types/` instead of the per-service package.
 
@@ -60,7 +60,7 @@ The design, implementation, tests, and per-service generated code for every mana
 
 **`impl.go` layout.** Lives at `server/internal/<svc>/impl.go`. Contains the `Service` struct (injected dependencies — tracer, logger, database pool, `*auth.Auth`, `*access.Manager`, plus feature-specific fields), compile-time assertions (`var _ gen.Service = (*Service)(nil)`, and `var _ gen.Auther = (*Service)(nil)` when `ByKey` is advertised), a `NewService(...)` constructor, an `Attach(mux, service)` wiring function, `APIKeyAuth` when `ByKey` is advertised, and one method per Goa `Method` declaration.
 
-**Model view files.** `server/internal/mv/<svc>.go` (singular or per-resource — e.g. `remotemcpserver.go`). Exported functions are named `Build<Subject>View` and `Build<Subject>ListView`. The package doc calls these "model views", which is where the package name comes from.
+**Model view files.** `server/internal/mv/<svc>.go` (singular or per-resource — e.g. `remotemcpserver.go`). Functions that convert rows into API response types are named `Build<Subject>View` and `Build<Subject>ListView`. Functions that load from the database are named `Describe<Subject>` (e.g. `DescribeDeployment`); inside a subpackage, drop the subject the package name already states (`orgaccount.Describe`). The package doc calls these "model views", which is where the package name comes from. Keep views flat in `mv` by default. Give a view its own subpackage under `mv/` (e.g. `mv/orgaccount`) only when a lightweight caller such as `auth/sessions` needs it without the rest of `mv`, whose dependency set is large. Such a subpackage must never import `mv`; add a `depguard` rule in `server/.golangci.yaml` to enforce that, as `mv-orgaccount-no-mv` does.
 
 **Wiring.** New services are attached in `server/cmd/gram/start.go` with `<svc>.Attach(mux, <svc>.NewService(...))` near the other service attachments.
 

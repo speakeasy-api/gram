@@ -31,7 +31,9 @@ func ResolveProgram(language string, workDir string) (string, []string, error) {
 
 	switch language {
 	case "javascript", "typescript":
-		return "node", []string{"--experimental-strip-types", entryPath}, nil
+		// The image filters the OpenSSL store for the eMudhra compromise. Pass
+		// the flag explicitly because function subprocesses have a fresh environment.
+		return "node", []string{"--use-openssl-ca", "--experimental-strip-types", entryPath}, nil
 	case "python":
 		return "python", []string{entryPath}, nil
 	default:
@@ -87,7 +89,7 @@ func unzipCode(ctx context.Context, logger *slog.Logger, zipPath string, dest st
 		}
 		return fmt.Errorf("%s: open zip file: %w", zipPath, err)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return zipFile.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close function zip file", func() error { return zipFile.Close() })
 
 	for _, file := range zipFile.File {
 		if err := handleZipFile(ctx, logger, file, dest); err != nil {
@@ -124,13 +126,13 @@ func handleZipFile(ctx context.Context, logger *slog.Logger, file *zip.File, des
 	if err != nil {
 		return fmt.Errorf("%s: open file in zip: %w", file.Name, err)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return fileReader.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close file in zip archive", func() error { return fileReader.Close() })
 
 	targetFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0444)
 	if err != nil {
 		return fmt.Errorf("%s: create target file: %w", path, err)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return targetFile.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close extracted target file", func() error { return targetFile.Close() })
 
 	// Limit extraction to 10MiB per file to prevent decompression bombs
 	const maxFileSize = 10 * 1024 * 1024
@@ -180,7 +182,7 @@ func prepareProgram(workDir string, language string) (string, []string, error) {
 			return "", nil, fmt.Errorf("stat %s: %w", functionsPath, err)
 		}
 
-		return "node", []string{"--experimental-strip-types", entryPath}, nil
+		return "node", []string{"--use-openssl-ca", "--experimental-strip-types", entryPath}, nil
 	case "python":
 		if err := os.WriteFile(entryPath, python.Entrypoint, 0444); err != nil {
 			return "", nil, fmt.Errorf("write %s entrypoint (%s): %w", language, entryPath, err)
@@ -265,7 +267,7 @@ func resolveLazyFile(ctx context.Context, logger *slog.Logger, ident auth.Runner
 	if err != nil {
 		return "", fmt.Errorf("download asset %s: %w", assetID, err)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error {
+	defer o11y.LogDefer(ctx, logger, "failed to close asset download response body", func() error {
 		if err := res.Body.Close(); err != nil {
 			return fmt.Errorf("close asset %s response body: %w", assetID, err)
 		}
@@ -282,7 +284,7 @@ func resolveLazyFile(ctx context.Context, logger *slog.Logger, ident auth.Runner
 	if err != nil {
 		return "", fmt.Errorf("create target file %s: %w", filename, err)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error {
+	defer o11y.LogDefer(ctx, logger, "failed to close downloaded asset file", func() error {
 		if err := outFile.Close(); err != nil {
 			return fmt.Errorf("close %s: %w", filename, err)
 		}

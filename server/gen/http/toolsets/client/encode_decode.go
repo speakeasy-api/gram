@@ -1243,7 +1243,7 @@ func EncodeGetToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("slug", string(p.Slug))
+		values.Add("slug", p.Slug)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1931,243 +1931,6 @@ func DecodeListToolSchemaStaticValuesResponse(decoder func(*http.Response) goaht
 	}
 }
 
-// BuildCheckMCPSlugAvailabilityRequest instantiates a HTTP request object with
-// method and path set to call the "toolsets" service
-// "checkMCPSlugAvailability" endpoint
-func (c *Client) BuildCheckMCPSlugAvailabilityRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CheckMCPSlugAvailabilityToolsetsPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("toolsets", "checkMCPSlugAvailability", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeCheckMCPSlugAvailabilityRequest returns an encoder for requests sent
-// to the toolsets checkMCPSlugAvailability server.
-func EncodeCheckMCPSlugAvailabilityRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*toolsets.CheckMCPSlugAvailabilityPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("toolsets", "checkMCPSlugAvailability", "*toolsets.CheckMCPSlugAvailabilityPayload", v)
-		}
-		if p.SessionToken != nil {
-			head := *p.SessionToken
-			req.Header.Set("Gram-Session", head)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
-		values := req.URL.Query()
-		values.Add("slug", string(p.Slug))
-		req.URL.RawQuery = values.Encode()
-		return nil
-	}
-}
-
-// DecodeCheckMCPSlugAvailabilityResponse returns a decoder for responses
-// returned by the toolsets checkMCPSlugAvailability endpoint. restoreBody
-// controls whether the response body should be restored after having been read.
-// DecodeCheckMCPSlugAvailabilityResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeCheckMCPSlugAvailabilityResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body bool
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			return body, nil
-		case http.StatusUnauthorized:
-			var (
-				body CheckMCPSlugAvailabilityUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			err = ValidateCheckMCPSlugAvailabilityUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			return nil, NewCheckMCPSlugAvailabilityUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body CheckMCPSlugAvailabilityForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			err = ValidateCheckMCPSlugAvailabilityForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			return nil, NewCheckMCPSlugAvailabilityForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body CheckMCPSlugAvailabilityBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			err = ValidateCheckMCPSlugAvailabilityBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			return nil, NewCheckMCPSlugAvailabilityBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body CheckMCPSlugAvailabilityNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			err = ValidateCheckMCPSlugAvailabilityNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			return nil, NewCheckMCPSlugAvailabilityNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body CheckMCPSlugAvailabilityConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			err = ValidateCheckMCPSlugAvailabilityConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			return nil, NewCheckMCPSlugAvailabilityConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body CheckMCPSlugAvailabilityUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			err = ValidateCheckMCPSlugAvailabilityUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			return nil, NewCheckMCPSlugAvailabilityUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body CheckMCPSlugAvailabilityInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			err = ValidateCheckMCPSlugAvailabilityInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			return nil, NewCheckMCPSlugAvailabilityInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body CheckMCPSlugAvailabilityInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
-				}
-				err = ValidateCheckMCPSlugAvailabilityInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
-				}
-				return nil, NewCheckMCPSlugAvailabilityInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body CheckMCPSlugAvailabilityUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
-				}
-				err = ValidateCheckMCPSlugAvailabilityUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
-				}
-				return nil, NewCheckMCPSlugAvailabilityUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("toolsets", "checkMCPSlugAvailability", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body CheckMCPSlugAvailabilityGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			err = ValidateCheckMCPSlugAvailabilityGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "checkMCPSlugAvailability", err)
-			}
-			return nil, NewCheckMCPSlugAvailabilityGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("toolsets", "checkMCPSlugAvailability", resp.StatusCode, string(body))
-		}
-	}
-}
-
 // BuildCloneToolsetRequest instantiates a HTTP request object with method and
 // path set to call the "toolsets" service "cloneToolset" endpoint
 func (c *Client) BuildCloneToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2655,6 +2418,252 @@ func DecodeAddExternalOAuthServerResponse(decoder func(*http.Response) goahttp.D
 	}
 }
 
+// BuildUpdateExternalOAuthServerRequest instantiates a HTTP request object
+// with method and path set to call the "toolsets" service
+// "updateExternalOAuthServer" endpoint
+func (c *Client) BuildUpdateExternalOAuthServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateExternalOAuthServerToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "updateExternalOAuthServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateExternalOAuthServerRequest returns an encoder for requests sent
+// to the toolsets updateExternalOAuthServer server.
+func EncodeUpdateExternalOAuthServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.UpdateExternalOAuthServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "updateExternalOAuthServer", "*toolsets.UpdateExternalOAuthServerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		body := NewUpdateExternalOAuthServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("toolsets", "updateExternalOAuthServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateExternalOAuthServerResponse returns a decoder for responses
+// returned by the toolsets updateExternalOAuthServer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeUpdateExternalOAuthServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateExternalOAuthServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateExternalOAuthServerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			res := NewUpdateExternalOAuthServerToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateExternalOAuthServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateExternalOAuthServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateExternalOAuthServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateExternalOAuthServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateExternalOAuthServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateExternalOAuthServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateExternalOAuthServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateExternalOAuthServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+				}
+				err = ValidateUpdateExternalOAuthServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+				}
+				return nil, NewUpdateExternalOAuthServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateExternalOAuthServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+				}
+				err = ValidateUpdateExternalOAuthServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+				}
+				return nil, NewUpdateExternalOAuthServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "updateExternalOAuthServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateExternalOAuthServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "updateExternalOAuthServer", err)
+			}
+			err = ValidateUpdateExternalOAuthServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "updateExternalOAuthServer", err)
+			}
+			return nil, NewUpdateExternalOAuthServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "updateExternalOAuthServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRemoveOAuthServerRequest instantiates a HTTP request object with method
 // and path set to call the "toolsets" service "removeOAuthServer" endpoint
 func (c *Client) BuildRemoveOAuthServerRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2892,252 +2901,6 @@ func DecodeRemoveOAuthServerResponse(decoder func(*http.Response) goahttp.Decode
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("toolsets", "removeOAuthServer", resp.StatusCode, string(body))
-		}
-	}
-}
-
-// BuildSetUserSessionIssuerRequest instantiates a HTTP request object with
-// method and path set to call the "toolsets" service "setUserSessionIssuer"
-// endpoint
-func (c *Client) BuildSetUserSessionIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetUserSessionIssuerToolsetsPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("toolsets", "setUserSessionIssuer", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeSetUserSessionIssuerRequest returns an encoder for requests sent to
-// the toolsets setUserSessionIssuer server.
-func EncodeSetUserSessionIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*toolsets.SetUserSessionIssuerPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("toolsets", "setUserSessionIssuer", "*toolsets.SetUserSessionIssuerPayload", v)
-		}
-		if p.SessionToken != nil {
-			head := *p.SessionToken
-			req.Header.Set("Gram-Session", head)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
-		values := req.URL.Query()
-		values.Add("slug", string(p.Slug))
-		req.URL.RawQuery = values.Encode()
-		body := NewSetUserSessionIssuerRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("toolsets", "setUserSessionIssuer", err)
-		}
-		return nil
-	}
-}
-
-// DecodeSetUserSessionIssuerResponse returns a decoder for responses returned
-// by the toolsets setUserSessionIssuer endpoint. restoreBody controls whether
-// the response body should be restored after having been read.
-// DecodeSetUserSessionIssuerResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeSetUserSessionIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body SetUserSessionIssuerResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
-			}
-			err = ValidateSetUserSessionIssuerResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
-			}
-			res := NewSetUserSessionIssuerToolsetOK(&body)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body SetUserSessionIssuerUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
-			}
-			err = ValidateSetUserSessionIssuerUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
-			}
-			return nil, NewSetUserSessionIssuerUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body SetUserSessionIssuerForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
-			}
-			err = ValidateSetUserSessionIssuerForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
-			}
-			return nil, NewSetUserSessionIssuerForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body SetUserSessionIssuerBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
-			}
-			err = ValidateSetUserSessionIssuerBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
-			}
-			return nil, NewSetUserSessionIssuerBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body SetUserSessionIssuerNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
-			}
-			err = ValidateSetUserSessionIssuerNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
-			}
-			return nil, NewSetUserSessionIssuerNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body SetUserSessionIssuerConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
-			}
-			err = ValidateSetUserSessionIssuerConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
-			}
-			return nil, NewSetUserSessionIssuerConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body SetUserSessionIssuerUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
-			}
-			err = ValidateSetUserSessionIssuerUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
-			}
-			return nil, NewSetUserSessionIssuerUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body SetUserSessionIssuerInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
-			}
-			err = ValidateSetUserSessionIssuerInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
-			}
-			return nil, NewSetUserSessionIssuerInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body SetUserSessionIssuerInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
-				}
-				err = ValidateSetUserSessionIssuerInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
-				}
-				return nil, NewSetUserSessionIssuerInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body SetUserSessionIssuerUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
-				}
-				err = ValidateSetUserSessionIssuerUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
-				}
-				return nil, NewSetUserSessionIssuerUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("toolsets", "setUserSessionIssuer", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body SetUserSessionIssuerGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
-			}
-			err = ValidateSetUserSessionIssuerGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
-			}
-			return nil, NewSetUserSessionIssuerGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("toolsets", "setUserSessionIssuer", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -3478,25 +3241,6 @@ func unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentV
 	return res
 }
 
-// unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition
-// builds a value of type *types.ExternalMCPHeaderDefinition from a value of
-// type *ExternalMCPHeaderDefinitionResponseBody.
-func unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(v *ExternalMCPHeaderDefinitionResponseBody) *types.ExternalMCPHeaderDefinition {
-	if v == nil {
-		return nil
-	}
-	res := &types.ExternalMCPHeaderDefinition{
-		Name:        *v.Name,
-		HeaderName:  *v.HeaderName,
-		Description: v.Description,
-		Placeholder: v.Placeholder,
-		Required:    *v.Required,
-		Secret:      *v.Secret,
-	}
-
-	return res
-}
-
 // unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata
 // builds a value of type *types.OAuthEnablementMetadata from a value of type
 // *OAuthEnablementMetadataResponseBody.
@@ -3523,9 +3267,6 @@ func unmarshalToolResponseBodyToTypesTool(v *ToolResponseBody) *types.Tool {
 	}
 	if v.PlatformToolDefinition != nil {
 		res.PlatformToolDefinition = unmarshalPlatformToolDefinitionResponseBodyToTypesPlatformToolDefinition(v.PlatformToolDefinition)
-	}
-	if v.ExternalMcpToolDefinition != nil {
-		res.ExternalMcpToolDefinition = unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinition(v.ExternalMcpToolDefinition)
 	}
 
 	return res
@@ -3814,61 +3555,6 @@ func unmarshalPlatformToolDefinitionResponseBodyToTypesPlatformToolDefinition(v 
 	return res
 }
 
-// unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinition
-// builds a value of type *types.ExternalMCPToolDefinition from a value of type
-// *ExternalMCPToolDefinitionResponseBody.
-func unmarshalExternalMCPToolDefinitionResponseBodyToTypesExternalMCPToolDefinition(v *ExternalMCPToolDefinitionResponseBody) *types.ExternalMCPToolDefinition {
-	if v == nil {
-		return nil
-	}
-	res := &types.ExternalMCPToolDefinition{
-		Type:                       v.Type,
-		DeploymentExternalMcpID:    *v.DeploymentExternalMcpID,
-		DeploymentID:               *v.DeploymentID,
-		RegistryID:                 *v.RegistryID,
-		RegistrySpecifier:          *v.RegistrySpecifier,
-		RegistryServerName:         *v.RegistryServerName,
-		Slug:                       *v.Slug,
-		RemoteURL:                  *v.RemoteURL,
-		TransportType:              *v.TransportType,
-		RequiresOauth:              *v.RequiresOauth,
-		OauthVersion:               *v.OauthVersion,
-		OauthAuthorizationEndpoint: v.OauthAuthorizationEndpoint,
-		OauthTokenEndpoint:         v.OauthTokenEndpoint,
-		OauthRegistrationEndpoint:  v.OauthRegistrationEndpoint,
-		CreatedAt:                  *v.CreatedAt,
-		UpdatedAt:                  *v.UpdatedAt,
-		ID:                         *v.ID,
-		ToolUrn:                    *v.ToolUrn,
-		ProjectID:                  *v.ProjectID,
-		Name:                       *v.Name,
-		CanonicalName:              *v.CanonicalName,
-		Description:                *v.Description,
-		SchemaVersion:              v.SchemaVersion,
-		Schema:                     *v.Schema,
-		Confirm:                    v.Confirm,
-		ConfirmPrompt:              v.ConfirmPrompt,
-		Summarizer:                 v.Summarizer,
-	}
-	if v.OauthScopesSupported != nil {
-		res.OauthScopesSupported = make([]string, len(v.OauthScopesSupported))
-		for i, val := range v.OauthScopesSupported {
-			res.OauthScopesSupported[i] = val
-		}
-	}
-	if v.Canonical != nil {
-		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
-	}
-	if v.Variation != nil {
-		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
-	}
-	if v.Annotations != nil {
-		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
-	}
-
-	return res
-}
-
 // unmarshalResourceResponseBodyToTypesResource builds a value of type
 // *types.Resource from a value of type *ResourceResponseBody.
 func unmarshalResourceResponseBodyToTypesResource(v *ResourceResponseBody) *types.Resource {
@@ -3936,12 +3622,13 @@ func unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(v *Exter
 		return nil
 	}
 	res := &types.ExternalOAuthServer{
-		ID:        *v.ID,
-		ProjectID: *v.ProjectID,
-		Slug:      types.Slug(*v.Slug),
-		Metadata:  v.Metadata,
-		CreatedAt: *v.CreatedAt,
-		UpdatedAt: *v.UpdatedAt,
+		ID:                        *v.ID,
+		ProjectID:                 *v.ProjectID,
+		Slug:                      types.Slug(*v.Slug),
+		Metadata:                  v.Metadata,
+		AuthorizationServerIssuer: v.AuthorizationServerIssuer,
+		CreatedAt:                 *v.CreatedAt,
+		UpdatedAt:                 *v.UpdatedAt,
 	}
 
 	return res
@@ -4000,16 +3687,6 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 				continue
 			}
 			res.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
-		}
-	}
-	if v.ExternalMcpHeaderDefinitions != nil {
-		res.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(v.ExternalMcpHeaderDefinitions))
-		for i, val := range v.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				res.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			res.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	res.Tools = make([]*types.ToolEntry, len(v.Tools))
@@ -4199,8 +3876,12 @@ func unmarshalToolSchemaStaticValueResponseBodyToToolsetsToolSchemaStaticValue(v
 // type *types.ExternalOAuthServerForm.
 func marshalTypesExternalOAuthServerFormToExternalOAuthServerFormRequestBody(v *types.ExternalOAuthServerForm) *ExternalOAuthServerFormRequestBody {
 	res := &ExternalOAuthServerFormRequestBody{
-		Slug:     string(v.Slug),
-		Metadata: v.Metadata,
+		Metadata:                  v.Metadata,
+		AuthorizationServerIssuer: v.AuthorizationServerIssuer,
+	}
+	if v.Slug != nil {
+		slug := string(*v.Slug)
+		res.Slug = &slug
 	}
 
 	return res
@@ -4211,8 +3892,12 @@ func marshalTypesExternalOAuthServerFormToExternalOAuthServerFormRequestBody(v *
 // *ExternalOAuthServerFormRequestBody.
 func marshalExternalOAuthServerFormRequestBodyToTypesExternalOAuthServerForm(v *ExternalOAuthServerFormRequestBody) *types.ExternalOAuthServerForm {
 	res := &types.ExternalOAuthServerForm{
-		Slug:     types.Slug(v.Slug),
-		Metadata: v.Metadata,
+		Metadata:                  v.Metadata,
+		AuthorizationServerIssuer: v.AuthorizationServerIssuer,
+	}
+	if v.Slug != nil {
+		slug := types.Slug(*v.Slug)
+		res.Slug = &slug
 	}
 
 	return res

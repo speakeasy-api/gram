@@ -1,0 +1,237 @@
+package gram
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel"
+	"go.temporal.io/sdk/client"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+)
+
+const (
+	networkIngressWorkerShutdownTimeout = 30 * time.Second
+	networkIngressWorkerStartupTimeout  = 30 * time.Second
+)
+
+func validateNetworkIngressWorkerTemporalTLS(environment, cert, key string) error {
+	if (cert == "") != (key == "") {
+		return errors.New("private ingress Temporal client certificate and key must be configured together")
+	}
+	if environment != "local" && cert == "" {
+		return errors.New("private ingress Temporal mTLS is required outside local development")
+	}
+	return nil
+}
+
+func validateNetworkIngressWorkerQueue(queue, sharedQueue string) error {
+	if queue == "" {
+		return errors.New("private ingress reconciliation task queue is required")
+	}
+	if queue == sharedQueue {
+		return errors.New("private ingress reconciliation task queue must differ from the shared worker queue")
+	}
+	return nil
+}
+
+func newNetworkIngressWorkerCommand() *cli.Command {
+	flags := append(workerRuntimeFlags(),
+		&cli.StringFlag{
+			Name:    "shared-worker-task-queue",
+			Usage:   "Shared worker queue reserved for ordinary application work",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+			Hidden:  true,
+		},
+		&cli.StringFlag{
+			Name:    "control-address",
+			Value:   ":8081",
+			Usage:   "Pod-local health address",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_WORKER_CONTROL_ADDRESS"},
+		},
+		&cli.StringFlag{
+			Name:    "encryption-key",
+			Usage:   "Application AES encryption key; required when provider mutations are enabled",
+			EnvVars: []string{"GRAM_ENCRYPTION_KEY"},
+		},
+		&cli.PathFlag{
+			Name:    "config-file",
+			Usage:   "Path to a JSON, TOML, or YAML config file",
+			EnvVars: []string{"GRAM_CONFIG_FILE"},
+		},
+	)
+	flags = append(flags, networkIngressQueueFlags()...)
+	flags = append(flags, networkIngressProviderFlags()...)
+	flags = append(flags, orgEncryptionFlags()...)
+	flags = append(flags, pluginPublicationEmitFlag())
+
+	return &cli.Command{
+		Name:  "network-ingress-worker",
+		Usage: "Start the dedicated private network ingress reconciler",
+		Flags: flags,
+		Before: func(c *cli.Context) error {
+			return loadConfigFromFile(c, flags)
+		},
+		Action: func(c *cli.Context) error {
+			queue := c.String(networkIngressQueueFlag)
+			if err := validateNetworkIngressWorkerQueue(queue, c.String("shared-worker-task-queue")); err != nil {
+				return err
+			}
+			if err := validateNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key")); err != nil {
+				return err
+			}
+
+			serviceName := "gram-network-ingress-worker"
+			serviceEnv := c.String("environment")
+			appinfo := o11y.PullAppInfo(c.Context)
+			appinfo.Command = "network-ingress-worker"
+			logger := PullLogger(c.Context).With(
+				attr.SlogComponent("network_ingress_worker"),
+				attr.SlogServiceName(serviceName),
+				attr.SlogServiceVersion(shortGitSHA()),
+				attr.SlogServiceEnv(serviceEnv),
+			)
+			slog.SetDefault(logger)
+
+			ctx, cancel := context.WithCancel(c.Context)
+			defer cancel()
+			shutdownOTel, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
+				ServiceName: serviceName, ServiceVersion: shortGitSHA(), GitSHA: GitSHA, Partition: PullPartition(ctx),
+				EnableTracing: c.Bool("with-otel-tracing"), EnableMetrics: c.Bool("with-otel-metrics"),
+			})
+			if err != nil {
+				return fmt.Errorf("setup opentelemetry sdk: %w", err)
+			}
+			defer func() {
+				shutdownCtx, shutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), networkIngressWorkerShutdownTimeout)
+				defer shutdownCancel()
+				_ = shutdownOTel(shutdownCtx)
+			}()
+
+			meterProvider := otel.GetMeterProvider()
+			temporalEnv, shutdownTemporal, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
+				address: c.String("temporal-address"), namespace: c.String("temporal-namespace"), taskQueue: queue,
+				certPEMBlock: []byte(c.String("temporal-client-cert")), keyPEMBlock: []byte(c.String("temporal-client-key")),
+			})
+			if err != nil {
+				return err
+			}
+			if temporalEnv == nil {
+				return errors.New("insufficient options to create Temporal client")
+			}
+			defer func() { _ = shutdownTemporal(context.WithoutCancel(ctx)) }()
+
+			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{enableUnsafeLogging: c.Bool("unsafe-db-log")})
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+
+			config, err := networkIngressConfigFromCLI(c)
+			if err != nil {
+				return err
+			}
+			// The reconciler defines and deletes services, so a local one must
+			// carry a development id rather than fall back to production names.
+			if _, err := localDevelopmentNamer(c.String("environment"), c.String(networkIngressDevIDFlag), c.String(networkIngressGatewayNameQualifierFlag)); err != nil {
+				return err
+			}
+			if config.ProviderMutationsEnabled && !config.MutationReady() {
+				return errors.New("private ingress provider mutation configuration is incomplete")
+			}
+			var encryptionClient *encryption.Client
+			if key := c.String("encryption-key"); key != "" {
+				encryptionClient, err = encryption.New(key)
+				if err != nil {
+					return fmt.Errorf("create encryption client: %w", err)
+				}
+			}
+			if config.ProviderMutationsEnabled && encryptionClient == nil {
+				return errors.New("private ingress encryption key is required when provider mutations are enabled")
+			}
+			publicationRequester := plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}
+			// Gateway auth keys and node state are sealed under each
+			// organization's key, which the reconciler mints on first use.
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, newGCPIdentity(ctx, logger, c), newAuditLogger())
+			if err != nil {
+				return err
+			}
+			lockDB, err := newNetworkIngressLockDB(ctx, logger, meterProvider, c)
+			if err != nil {
+				return err
+			}
+			defer lockDB.Close()
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, orgEncryption.NetworkIngressCredentials(logger, encryptionClient), orgEncryption.Service, orgEncryption.Provisioner, config, publicationRequester)
+			if err != nil {
+				return err
+			}
+			worker, err := background.NewNetworkIngressWorker(temporalEnv, db, executor)
+			if err != nil {
+				return fmt.Errorf("configure private ingress worker: %w", err)
+			}
+
+			healthListener, err := net.Listen("tcp", c.String("control-address"))
+			if err != nil {
+				return fmt.Errorf("listen for private ingress worker health checks: %w", err)
+			}
+			defer func() { _ = healthListener.Close() }()
+			healthHandler := o11y.NewHealthCheckHandler(nil,
+				[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}}, nil,
+				[]*o11y.NamedResource[client.Client]{{Name: "network-ingress", Resource: temporalEnv.Client()}},
+			)
+			healthMux := http.NewServeMux()
+			healthMux.Handle("GET /healthz", healthHandler)
+			healthMux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+			healthServer := &http.Server{
+				Handler: healthMux, ReadHeaderTimeout: 10 * time.Second,
+				BaseContext: func(net.Listener) context.Context { return ctx },
+			}
+
+			startupCtx, startupCancel := context.WithTimeout(ctx, networkIngressWorkerStartupTimeout)
+			defer startupCancel()
+			if err := worker.EnsureSchedule(startupCtx); err != nil {
+				return fmt.Errorf("register network ingress sweep: %w", err)
+			}
+			if err := worker.Start(); err != nil {
+				return fmt.Errorf("start private ingress worker: %w", err)
+			}
+			logger.InfoContext(ctx, "private network ingress worker started", attr.SlogServerAddress(healthListener.Addr().String()))
+
+			sigctx, stop := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			serveErrors := make(chan error, 1)
+			go func() { serveErrors <- healthServer.Serve(healthListener) }()
+			var serveErr error
+			select {
+			case <-sigctx.Done():
+			case err := <-serveErrors:
+				if !errors.Is(err, http.ErrServerClosed) {
+					serveErr = fmt.Errorf("serve private ingress worker health checks: %w", err)
+				}
+			}
+
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), networkIngressWorkerShutdownTimeout)
+			defer shutdownCancel()
+			healthErr := healthServer.Shutdown(shutdownCtx)
+			worker.Stop()
+			return errors.Join(serveErr, healthErr)
+		},
+	}
+}

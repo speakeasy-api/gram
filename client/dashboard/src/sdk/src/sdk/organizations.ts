@@ -7,24 +7,35 @@ import { organizationsDisableWebhooks } from "../funcs/organizationsDisableWebho
 import { organizationsEnableWebhooks } from "../funcs/organizationsEnableWebhooks.js";
 import { organizationsGenerateWorkOSAdminPortalLink } from "../funcs/organizationsGenerateWorkOSAdminPortalLink.js";
 import { organizationsGet } from "../funcs/organizationsGet.js";
+import { organizationsGetGateway } from "../funcs/organizationsGetGateway.js";
 import { organizationsGetOnboardingStatus } from "../funcs/organizationsGetOnboardingStatus.js";
+import { organizationsGetProjectGateway } from "../funcs/organizationsGetProjectGateway.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
+import { organizationsListSetupTasks } from "../funcs/organizationsListSetupTasks.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
+import { organizationsRevokeMemberSignIns } from "../funcs/organizationsRevokeMemberSignIns.js";
 import { organizationsSendEnterpriseAdminOnboardingEmail } from "../funcs/organizationsSendEnterpriseAdminOnboardingEmail.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
+import { organizationsSubmitOnboardingSurvey } from "../funcs/organizationsSubmitOnboardingSurvey.js";
 import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
+import { organizationsUpdateSetupTask } from "../funcs/organizationsUpdateSetupTask.js";
 import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CreatePortalSessionResult } from "../models/components/createportalsessionresult.js";
 import { GenerateWorkOSAdminPortalLinkResult } from "../models/components/generateworkosadminportallinkresult.js";
 import { ListInvitesResult } from "../models/components/listinvitesresult.js";
+import { ListSetupTasksResult } from "../models/components/listsetuptasksresult.js";
 import { ListUsersResult } from "../models/components/listusersresult.js";
 import { OnboardingStatusResult } from "../models/components/onboardingstatusresult.js";
 import { Organization } from "../models/components/organization.js";
+import { OrganizationGateway } from "../models/components/organizationgateway.js";
 import { OrganizationInvitation } from "../models/components/organizationinvitation.js";
+import { ProjectGateway } from "../models/components/projectgateway.js";
+import { RevokeSignInsResult } from "../models/components/revokesigninsresult.js";
 import { SendEnterpriseAdminOnboardingEmailResult } from "../models/components/sendenterpriseadminonboardingemailresult.js";
+import { SetupTask } from "../models/components/setuptask.js";
 import { VerifyOnboardingHooksSetupResult } from "../models/components/verifyonboardinghookssetupresult.js";
 import {
   CreatePortalSessionRequest,
@@ -51,6 +62,14 @@ import {
   GetOrganizationSecurity,
 } from "../models/operations/getorganization.js";
 import {
+  GetOrganizationGatewayRequest,
+  GetOrganizationGatewaySecurity,
+} from "../models/operations/getorganizationgateway.js";
+import {
+  GetProjectGatewayRequest,
+  GetProjectGatewaySecurity,
+} from "../models/operations/getprojectgateway.js";
+import {
   ListInvitesRequest,
   ListInvitesSecurity,
 } from "../models/operations/listinvites.js";
@@ -58,6 +77,10 @@ import {
   ListOrganizationUsersRequest,
   ListOrganizationUsersSecurity,
 } from "../models/operations/listorganizationusers.js";
+import {
+  ListSetupTasksRequest,
+  ListSetupTasksSecurity,
+} from "../models/operations/listsetuptasks.js";
 import {
   RemoveOrganizationUserRequest,
   RemoveOrganizationUserSecurity,
@@ -67,6 +90,10 @@ import {
   RevokeInviteSecurity,
 } from "../models/operations/revokeinvite.js";
 import {
+  RevokeOrganizationMemberSignInsRequest,
+  RevokeOrganizationMemberSignInsSecurity,
+} from "../models/operations/revokeorganizationmembersignins.js";
+import {
   SendEnterpriseAdminOnboardingEmailRequest,
   SendEnterpriseAdminOnboardingEmailSecurity,
 } from "../models/operations/sendenterpriseadminonboardingemail.js";
@@ -75,9 +102,17 @@ import {
   SendInviteSecurity,
 } from "../models/operations/sendinvite.js";
 import {
+  SubmitOnboardingSurveyRequest,
+  SubmitOnboardingSurveySecurity,
+} from "../models/operations/submitonboardingsurvey.js";
+import {
   UpdateInviteRoleRequest,
   UpdateInviteRoleSecurity,
 } from "../models/operations/updateinviterole.js";
+import {
+  UpdateSetupTaskRequest,
+  UpdateSetupTaskSecurity,
+} from "../models/operations/updatesetuptask.js";
 import {
   VerifyOnboardingHooksSetupRequest,
   VerifyOnboardingHooksSetupSecurity,
@@ -181,10 +216,29 @@ export class Organizations extends ClientSDK {
   }
 
   /**
+   * getGateway organizations
+   *
+   * @remarks
+   * Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.
+   */
+  async getGateway(
+    request?: GetOrganizationGatewayRequest | undefined,
+    security?: GetOrganizationGatewaySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationGateway> {
+    return unwrapAsync(organizationsGetGateway(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getOnboardingStatus organizations
    *
    * @remarks
-   * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+   * Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.
    */
   async getOnboardingStatus(
     request?: GetOnboardingStatusRequest | undefined,
@@ -192,6 +246,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<OnboardingStatusResult> {
     return unwrapAsync(organizationsGetOnboardingStatus(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getProjectGateway organizations
+   *
+   * @remarks
+   * Get the selected project's Project Gateway: the organization's gateway limited to that project's MCP servers. It is served under the same conditions as the organization's gateway. Requires project:read.
+   */
+  async getProjectGateway(
+    request?: GetProjectGatewayRequest | undefined,
+    security?: GetProjectGatewaySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ProjectGateway> {
+    return unwrapAsync(organizationsGetProjectGateway(
       this,
       request,
       security,
@@ -219,10 +292,29 @@ export class Organizations extends ClientSDK {
   }
 
   /**
+   * listSetupTasks organizations
+   *
+   * @remarks
+   * List the fixed setup task catalog projected with organization state and completion evidence.
+   */
+  async listSetupTasks(
+    request?: ListSetupTasksRequest | undefined,
+    security?: ListSetupTasksSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSetupTasksResult> {
+    return unwrapAsync(organizationsListSetupTasks(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listUsers organizations
    *
    * @remarks
-   * List users in the active organization from Gram organization_user_relationships.
+   * List users in the active organization from Speakeasy organization_user_relationships.
    */
   async listUsers(
     request?: ListOrganizationUsersRequest | undefined,
@@ -241,7 +333,7 @@ export class Organizations extends ClientSDK {
    * removeUser organizations
    *
    * @remarks
-   * Remove a user from the active organization in Gram and delete their WorkOS organization membership.
+   * Remove a user from the active organization in Speakeasy and delete their WorkOS organization membership.
    */
   async removeUser(
     request: RemoveOrganizationUserRequest,
@@ -268,6 +360,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsRevokeInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * revokeMemberSignIns organizations
+   *
+   * @remarks
+   * Revoke a member's sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
+   */
+  async revokeMemberSignIns(
+    request: RevokeOrganizationMemberSignInsRequest,
+    security?: RevokeOrganizationMemberSignInsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RevokeSignInsResult> {
+    return unwrapAsync(organizationsRevokeMemberSignIns(
       this,
       request,
       security,
@@ -314,6 +425,25 @@ export class Organizations extends ClientSDK {
   }
 
   /**
+   * submitOnboardingSurvey organizations
+   *
+   * @remarks
+   * Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.
+   */
+  async submitOnboardingSurvey(
+    request: SubmitOnboardingSurveyRequest,
+    security?: SubmitOnboardingSurveySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSetupTasksResult> {
+    return unwrapAsync(organizationsSubmitOnboardingSurvey(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * updateInviteRole organizations
    *
    * @remarks
@@ -333,10 +463,29 @@ export class Organizations extends ClientSDK {
   }
 
   /**
+   * updateSetupTask organizations
+   *
+   * @remarks
+   * Update one fixed setup task. The request must include at least one effective update: status, assignee, hidden, or clear_assignee=true. Assignee is mutually exclusive with clear_assignee=true.
+   */
+  async updateSetupTask(
+    request: UpdateSetupTaskRequest,
+    security?: UpdateSetupTaskSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SetupTask> {
+    return unwrapAsync(organizationsUpdateSetupTask(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * verifyOnboardingHooksSetup organizations
    *
    * @remarks
-   * Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+   * Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Speakeasy. Polled from the confirm-traffic step.
    */
   async verifyOnboardingHooksSetup(
     request?: VerifyOnboardingHooksSetupRequest | undefined,

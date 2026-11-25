@@ -12,7 +12,9 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	auth "github.com/speakeasy-api/gram/server/gen/auth"
 	goahttp "goa.design/goa/v3/http"
@@ -47,23 +49,24 @@ func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 	return func(r *http.Request) (*auth.CallbackPayload, error) {
 		var payload *auth.CallbackPayload
 		var (
-			code  string
-			state *string
-			err   error
+			code   *string
+			error_ *string
+			state  *string
 		)
 		qp := r.URL.Query()
-		code = qp.Get("code")
-		if code == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("code", "query string"))
+		codeRaw := qp.Get("code")
+		if codeRaw != "" {
+			code = &codeRaw
+		}
+		error_Raw := qp.Get("error")
+		if error_Raw != "" {
+			error_ = &error_Raw
 		}
 		stateRaw := qp.Get("state")
 		if stateRaw != "" {
 			state = &stateRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewCallbackPayload(code, state)
+		payload = NewCallbackPayload(code, error_, state)
 
 		return payload, nil
 	}
@@ -242,10 +245,18 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 	return func(r *http.Request) (*auth.LoginPayload, error) {
 		var payload *auth.LoginPayload
 		var (
-			redirect       *string
-			orgName        *string
-			email          *string
-			supportHandoff *string
+			redirect           *string
+			orgName            *string
+			partnerCode        *string
+			email              *string
+			supportHandoff     *string
+			utmSource          *string
+			utmMedium          *string
+			utmCampaign        *string
+			utmTerm            *string
+			utmContent         *string
+			analyticsSessionID *string
+			err                error
 		)
 		qp := r.URL.Query()
 		redirectRaw := qp.Get("redirect")
@@ -256,6 +267,15 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		if orgNameRaw != "" {
 			orgName = &orgNameRaw
 		}
+		partnerCodeRaw := qp.Get("partner_code")
+		if partnerCodeRaw != "" {
+			partnerCode = &partnerCodeRaw
+		}
+		if partnerCode != nil {
+			if utf8.RuneCountInString(*partnerCode) > 80 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("partner_code", *partnerCode, utf8.RuneCountInString(*partnerCode), 80, false))
+			}
+		}
 		emailRaw := qp.Get("email")
 		if emailRaw != "" {
 			email = &emailRaw
@@ -264,7 +284,34 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		if supportHandoffRaw != "" {
 			supportHandoff = &supportHandoffRaw
 		}
-		payload = NewLoginPayload(redirect, orgName, email, supportHandoff)
+		utmSourceRaw := qp.Get("utm_source")
+		if utmSourceRaw != "" {
+			utmSource = &utmSourceRaw
+		}
+		utmMediumRaw := qp.Get("utm_medium")
+		if utmMediumRaw != "" {
+			utmMedium = &utmMediumRaw
+		}
+		utmCampaignRaw := qp.Get("utm_campaign")
+		if utmCampaignRaw != "" {
+			utmCampaign = &utmCampaignRaw
+		}
+		utmTermRaw := qp.Get("utm_term")
+		if utmTermRaw != "" {
+			utmTerm = &utmTermRaw
+		}
+		utmContentRaw := qp.Get("utm_content")
+		if utmContentRaw != "" {
+			utmContent = &utmContentRaw
+		}
+		analyticsSessionIDRaw := qp.Get("analytics_session_id")
+		if analyticsSessionIDRaw != "" {
+			analyticsSessionID = &analyticsSessionIDRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewLoginPayload(redirect, orgName, partnerCode, email, supportHandoff, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, analyticsSessionID)
 
 		return payload, nil
 	}
@@ -1040,6 +1087,207 @@ func EncodeLogoutError(encoder func(context.Context, http.ResponseWriter) goahtt
 	}
 }
 
+// EncodeLogoutEverywhereResponse returns an encoder for responses returned by
+// the auth logoutEverywhere endpoint.
+func EncodeLogoutEverywhereResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*auth.LogoutEverywhereResult)
+		enc := encoder(ctx, w)
+		body := NewLogoutEverywhereResponseBody(res)
+		sessionCookie := res.SessionCookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "gram_session",
+			Value:    sessionCookie,
+			MaxAge:   -1,
+			Secure:   true,
+			HttpOnly: true,
+		})
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeLogoutEverywhereRequest returns a decoder for requests sent to the
+// auth logoutEverywhere endpoint.
+func DecodeLogoutEverywhereRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*auth.LogoutEverywherePayload, error) {
+	return func(r *http.Request) (*auth.LogoutEverywherePayload, error) {
+		var payload *auth.LogoutEverywherePayload
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewLogoutEverywherePayload(sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeLogoutEverywhereError returns an encoder for errors returned by the
+// logoutEverywhere auth endpoint.
+func EncodeLogoutEverywhereError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogoutEverywhereUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogoutEverywhereForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogoutEverywhereBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogoutEverywhereNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogoutEverywhereConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogoutEverywhereUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogoutEverywhereInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogoutEverywhereInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogoutEverywhereUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLogoutEverywhereGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeRegisterResponse returns an encoder for responses returned by the auth
 // register endpoint.
 func EncodeRegisterResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1444,6 +1692,433 @@ func EncodeInfoError(encoder func(context.Context, http.ResponseWriter) goahttp.
 				body = formatter(ctx, res)
 			} else {
 				body = NewInfoGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeTransferOutResponse returns an encoder for responses returned by the
+// auth transferOut endpoint.
+func EncodeTransferOutResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*auth.TransferOutResult)
+		w.Header().Set("Location", res.Location)
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		return nil
+	}
+}
+
+// DecodeTransferOutRequest returns a decoder for requests sent to the auth
+// transferOut endpoint.
+func DecodeTransferOutRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*auth.TransferOutPayload, error) {
+	return func(r *http.Request) (*auth.TransferOutPayload, error) {
+		var payload *auth.TransferOutPayload
+		var (
+			targetHost   *string
+			nonce        *string
+			redirect     *string
+			sessionToken *string
+		)
+		qp := r.URL.Query()
+		targetHostRaw := qp.Get("target_host")
+		if targetHostRaw != "" {
+			targetHost = &targetHostRaw
+		}
+		nonceRaw := qp.Get("nonce")
+		if nonceRaw != "" {
+			nonce = &nonceRaw
+		}
+		redirectRaw := qp.Get("redirect")
+		if redirectRaw != "" {
+			redirect = &redirectRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewTransferOutPayload(targetHost, nonce, redirect, sessionToken)
+
+		return payload, nil
+	}
+}
+
+// EncodeTransferOutError returns an encoder for errors returned by the
+// transferOut auth endpoint.
+func EncodeTransferOutError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferOutUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferOutForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferOutBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferOutNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferOutConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferOutUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferOutInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferOutInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferOutUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferOutGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeTransferInResponse returns an encoder for responses returned by the
+// auth transferIn endpoint.
+func EncodeTransferInResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*auth.TransferInResult)
+		w.Header().Set("Location", res.Location)
+		if res.SessionToken != nil {
+			w.Header().Set("Gram-Session", *res.SessionToken)
+		}
+		if res.SessionCookie != nil {
+			sessionCookie := *res.SessionCookie
+			http.SetCookie(w, &http.Cookie{
+				Name:     "gram_session",
+				Value:    sessionCookie,
+				MaxAge:   259200,
+				Path:     "/",
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			})
+		}
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		return nil
+	}
+}
+
+// DecodeTransferInRequest returns a decoder for requests sent to the auth
+// transferIn endpoint.
+func DecodeTransferInRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*auth.TransferInPayload, error) {
+	return func(r *http.Request) (*auth.TransferInPayload, error) {
+		var payload *auth.TransferInPayload
+		var (
+			sourceHost     *string
+			code           *string
+			redirect       *string
+			replaceSession *bool
+			err            error
+		)
+		qp := r.URL.Query()
+		sourceHostRaw := qp.Get("source_host")
+		if sourceHostRaw != "" {
+			sourceHost = &sourceHostRaw
+		}
+		codeRaw := qp.Get("code")
+		if codeRaw != "" {
+			code = &codeRaw
+		}
+		redirectRaw := qp.Get("redirect")
+		if redirectRaw != "" {
+			redirect = &redirectRaw
+		}
+		{
+			replaceSessionRaw := qp.Get("replace_session")
+			if replaceSessionRaw != "" {
+				v, err2 := strconv.ParseBool(replaceSessionRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("replace_session", replaceSessionRaw, "boolean"))
+				}
+				replaceSession = &v
+			}
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewTransferInPayload(sourceHost, code, redirect, replaceSession)
+
+		return payload, nil
+	}
+}
+
+// EncodeTransferInError returns an encoder for errors returned by the
+// transferIn auth endpoint.
+func EncodeTransferInError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferInUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferInForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferInBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferInNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferInConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferInUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferInInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferInInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferInUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewTransferInGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

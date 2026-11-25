@@ -12,6 +12,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveProjectEMABindings = `-- name: CountActiveProjectEMABindings :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = $1 AND organization_id = $2 AND state IS DISTINCT FROM 'unlinked'
+`
+
+type CountActiveProjectEMABindingsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CountActiveProjectEMABindings(ctx context.Context, arg CountActiveProjectEMABindingsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveProjectEMABindings, arg.ProjectID, arg.OrganizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (
     name
@@ -62,6 +78,20 @@ func (q *Queries) DeleteProject(ctx context.Context, id uuid.UUID) (uuid.UUID, e
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const deleteProjectEMATombstones = `-- name: DeleteProjectEMATombstones :exec
+DELETE FROM remote_session_ema_bindings WHERE project_id = $1 AND organization_id = $2 AND state = 'unlinked'
+`
+
+type DeleteProjectEMATombstonesParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteProjectEMATombstones(ctx context.Context, arg DeleteProjectEMATombstonesParams) error {
+	_, err := q.db.Exec(ctx, deleteProjectEMATombstones, arg.ProjectID, arg.OrganizationID)
+	return err
 }
 
 const getFirstProject = `-- name: GetFirstProject :one
@@ -149,6 +179,64 @@ func (q *Queries) GetProjectByIDAndOrganizationID(ctx context.Context, arg GetPr
 	return i, err
 }
 
+const getProjectByIDAndOrganizationIDForUpdate = `-- name: GetProjectByIDAndOrganizationIDForUpdate :one
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetProjectByIDAndOrganizationIDForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetProjectByIDAndOrganizationIDForUpdate(ctx context.Context, arg GetProjectByIDAndOrganizationIDForUpdateParams) (Project, error) {
+	row := q.db.QueryRow(ctx, getProjectByIDAndOrganizationIDForUpdate, arg.ID, arg.OrganizationID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getProjectByIDForUpdate = `-- name: GetProjectByIDForUpdate :one
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE id = $1
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+func (q *Queries) GetProjectByIDForUpdate(ctx context.Context, id uuid.UUID) (Project, error) {
+	row := q.db.QueryRow(ctx, getProjectByIDForUpdate, id)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getProjectBySlug = `-- name: GetProjectBySlug :one
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects
@@ -188,7 +276,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.created_at, om.updated_at, om.disabled_at
+    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.verified_domains, om.creation_source, om.default_host, om.adoption_dashboard_url, om.created_at, om.updated_at, om.disabled_at
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -197,26 +285,30 @@ WHERE p.deleted IS FALSE
 `
 
 type GetProjectWithOrganizationMetadataRow struct {
-	ProjectID          uuid.UUID
-	ProjectName        string
-	ProjectSlug        string
-	ID                 string
-	Name               string
-	Slug               string
-	GramAccountType    string
-	WorkosID           pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-	SvixAppID          pgtype.Text
-	WebhooksEnabled    pgtype.Bool
-	Whitelisted        bool
-	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	ScimEnabled        pgtype.Bool
-	SsoEnabled         pgtype.Bool
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DisabledAt         pgtype.Timestamptz
+	ProjectID            uuid.UUID
+	ProjectName          string
+	ProjectSlug          string
+	ID                   string
+	Name                 string
+	Slug                 string
+	GramAccountType      string
+	WorkosID             pgtype.Text
+	WorkosUpdatedAt      pgtype.Timestamptz
+	WorkosLastEventID    pgtype.Text
+	SvixAppID            pgtype.Text
+	WebhooksEnabled      pgtype.Bool
+	Whitelisted          bool
+	FreeTrialStartedAt   pgtype.Timestamptz
+	FreeTrialEndsAt      pgtype.Timestamptz
+	ScimEnabled          pgtype.Bool
+	SsoEnabled           pgtype.Bool
+	VerifiedDomains      []string
+	CreationSource       pgtype.Text
+	DefaultHost          pgtype.Text
+	AdoptionDashboardUrl pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DisabledAt           pgtype.Timestamptz
 }
 
 func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uuid.UUID) (GetProjectWithOrganizationMetadataRow, error) {
@@ -240,6 +332,10 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -306,6 +402,48 @@ func (q *Queries) ListApprovedOriginsByProjectID(ctx context.Context, projectID 
 			return nil, err
 		}
 		items = append(items, origin)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectNamesIncludingDeleted = `-- name: ListProjectNamesIncludingDeleted :many
+SELECT id, name, slug, deleted
+FROM projects
+WHERE organization_id = $1
+ORDER BY deleted ASC, created_at DESC
+`
+
+type ListProjectNamesIncludingDeletedRow struct {
+	ID      uuid.UUID
+	Name    string
+	Slug    string
+	Deleted bool
+}
+
+// Every project of an organization, deleted ones included, for labelling
+// records written while they existed. The deleted flag says whether the
+// project still has a page to link to.
+func (q *Queries) ListProjectNamesIncludingDeleted(ctx context.Context, organizationID string) ([]ListProjectNamesIncludingDeletedRow, error) {
+	rows, err := q.db.Query(ctx, listProjectNamesIncludingDeleted, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProjectNamesIncludingDeletedRow
+	for rows.Next() {
+		var i ListProjectNamesIncludingDeletedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -397,6 +535,93 @@ func (q *Queries) ListProjectsByOrganizationLimited(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listProjectsByOrganizationPage = `-- name: ListProjectsByOrganizationPage :many
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND id > $2
+ORDER BY id ASC
+LIMIT LEAST(GREATEST($3::integer, 1), 100)
+`
+
+type ListProjectsByOrganizationPageParams struct {
+	OrganizationID string
+	AfterID        uuid.UUID
+	LimitValue     int32
+}
+
+func (q *Queries) ListProjectsByOrganizationPage(ctx context.Context, arg ListProjectsByOrganizationPageParams) ([]Project, error) {
+	rows, err := q.db.Query(ctx, listProjectsByOrganizationPage, arg.OrganizationID, arg.AfterID, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Project
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.OrganizationID,
+			&i.LogoAssetID,
+			&i.FunctionsRunnerVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockOtherActiveProject = `-- name: LockOtherActiveProject :one
+SELECT id
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND id <> $2
+LIMIT 1
+FOR SHARE
+`
+
+type LockOtherActiveProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// FOR SHARE waits for an in-flight project delete, then rechecks the row, so a
+// concurrently deleted project is not reported as still active.
+func (q *Queries) LockOtherActiveProject(ctx context.Context, arg LockOtherActiveProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOtherActiveProject, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockProjectForEMADeletion = `-- name: LockProjectForEMADeletion :one
+SELECT id FROM projects WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE FOR UPDATE
+`
+
+type LockProjectForEMADeletionParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockProjectForEMADeletion(ctx context.Context, arg LockProjectForEMADeletionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockProjectForEMADeletion, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const setOrganizationWhitelist = `-- name: SetOrganizationWhitelist :exec
 UPDATE organization_metadata
 SET whitelisted = $1,
@@ -412,6 +637,38 @@ type SetOrganizationWhitelistParams struct {
 func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizationWhitelistParams) error {
 	_, err := q.db.Exec(ctx, setOrganizationWhitelist, arg.Whitelisted, arg.OrganizationID)
 	return err
+}
+
+const updateProject = `-- name: UpdateProject :one
+UPDATE projects
+SET name = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND deleted IS FALSE
+RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateProjectParams struct {
+	Name      string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
+	row := q.db.QueryRow(ctx, updateProject, arg.Name, arg.ProjectID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const uploadProjectLogo = `-- name: UploadProjectLogo :one

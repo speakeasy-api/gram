@@ -54,7 +54,7 @@ export type UpdateMetaMcpServerMutationError =
  * updateMetaMcpServer metaMcp
  *
  * @remarks
- * Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.
+ * Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility or network_access_mode preserves the respective stored value, so a caller that does not manage those policies cannot change them by saving an unrelated field.
  */
 export function useUpdateMetaMcpServerMutation(
   options?: MutationHookOptions<

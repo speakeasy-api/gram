@@ -13,9 +13,9 @@ import (
 	"github.com/workos/workos-go/v6/pkg/events"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -44,7 +44,7 @@ type workosMembershipEventPayload struct {
 // in the IdP) surfaces as organization_membership.updated with
 // status=inactive, not as a delete event. Anything else upserts, and a later
 // update with status=active restores access through that path.
-func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (postCommitEffects, error) {
+func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event) (postCommitEffects, error) {
 	var none postCommitEffects
 
 	payload, err := decodeWorkOSMembershipPayload(event)
@@ -80,6 +80,10 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 
 	deleted := workos.EventKind(event.Event) == workos.EventKindOrganizationMembershipDeleted
 	if deleted || payload.Status == string(usermanagement.Inactive) {
+		reason := agentownership.OwnerReassignmentReasonOwnerInactive
+		if deleted {
+			reason = agentownership.OwnerReassignmentReasonMembershipLost
+		}
 		return deprovisionOrganizationAccess(ctx, dbtx, deprovisionOrganizationAccessParams{
 			organizationID:     org.ID,
 			gramUserID:         gramUserID,
@@ -87,6 +91,7 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 			workosMembershipID: payload.ID,
 			eventID:            event.ID,
 			eventUpdatedAt:     payload.UpdatedAt,
+			ownerLossReason:    reason,
 		})
 	}
 
@@ -95,13 +100,17 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 	}
 	// Membership changes alter which emails resolve in the identity map.
 	none.refreshIdentityMap = true
+	// A cached organization list without this org would keep denying the
+	// member until the TTL ran out; drop it so the next access check sees the
+	// new row. Unknown users have nothing cached.
+	none.invalidateUserInfoCacheUserID = gramUserID
 	return none, nil
 }
 
 // upsertOrganizationMembership records an active membership and declaratively
 // syncs the member's WorkOS role assignments. Caller owns the
 // ShouldProcessEvent guard.
-func upsertOrganizationMembership(ctx context.Context, dbtx database.DBTX, organizationID string, gramUserID string, event events.Event, payload workosMembershipEventPayload) error {
+func upsertOrganizationMembership(ctx context.Context, dbtx pgx.Tx, organizationID string, gramUserID string, event events.Event, payload workosMembershipEventPayload) error {
 	if err := orgrepo.New(dbtx).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
 		OrganizationID:     organizationID,
 		UserID:             conv.ToPGTextEmpty(gramUserID),

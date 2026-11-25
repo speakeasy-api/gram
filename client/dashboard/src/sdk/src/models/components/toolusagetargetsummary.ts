@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const ToolUsageTargetSummaryTargetKind = {
 /**
  * Tool usage aggregation target kind
  */
-export type ToolUsageTargetSummaryTargetKind = ClosedEnum<
+export type ToolUsageTargetSummaryTargetKind = OpenEnum<
   typeof ToolUsageTargetSummaryTargetKind
 >;
 
@@ -30,6 +31,7 @@ export type ToolUsageTargetSummaryTargetKind = ClosedEnum<
 export const ToolUsageTargetSummaryTargetType = {
   HostedMcpServer: "hosted_mcp_server",
   TunneledMcpServer: "tunneled_mcp_server",
+  MetaMcpServer: "meta_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
   LocalTool: "local_tool",
   Skill: "skill",
@@ -37,7 +39,7 @@ export const ToolUsageTargetSummaryTargetType = {
 /**
  * Tool usage target type
  */
-export type ToolUsageTargetSummaryTargetType = ClosedEnum<
+export type ToolUsageTargetSummaryTargetType = OpenEnum<
   typeof ToolUsageTargetSummaryTargetType
 >;
 
@@ -57,6 +59,10 @@ export type ToolUsageTargetSummary = {
    * Fraction of completed tool usage events for the target that failed
    */
   failureRate: number;
+  /**
+   * MCP server id for hosted and tunneled targets; absent for other targets
+   */
+  mcpServerId?: string | undefined;
   /**
    * Number of successful tool usage events for the target
    */
@@ -84,14 +90,16 @@ export type ToolUsageTargetSummary = {
 };
 
 /** @internal */
-export const ToolUsageTargetSummaryTargetKind$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTargetSummaryTargetKind
-> = z.enum(ToolUsageTargetSummaryTargetKind);
+export const ToolUsageTargetSummaryTargetKind$inboundSchema: z.ZodMiniType<
+  ToolUsageTargetSummaryTargetKind,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTargetSummaryTargetKind);
 
 /** @internal */
-export const ToolUsageTargetSummaryTargetType$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTargetSummaryTargetType
-> = z.enum(ToolUsageTargetSummaryTargetType);
+export const ToolUsageTargetSummaryTargetType$inboundSchema: z.ZodMiniType<
+  ToolUsageTargetSummaryTargetType,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTargetSummaryTargetType);
 
 /** @internal */
 export const ToolUsageTargetSummary$inboundSchema: z.ZodMiniType<
@@ -102,6 +110,7 @@ export const ToolUsageTargetSummary$inboundSchema: z.ZodMiniType<
     event_count: z.int(),
     failure_count: z.int(),
     failure_rate: z.number(),
+    mcp_server_id: z.optional(z.string()),
     success_count: z.int(),
     target_id: z.string(),
     target_kind: ToolUsageTargetSummaryTargetKind$inboundSchema,
@@ -114,6 +123,7 @@ export const ToolUsageTargetSummary$inboundSchema: z.ZodMiniType<
       "event_count": "eventCount",
       "failure_count": "failureCount",
       "failure_rate": "failureRate",
+      "mcp_server_id": "mcpServerId",
       "success_count": "successCount",
       "target_id": "targetId",
       "target_kind": "targetKind",

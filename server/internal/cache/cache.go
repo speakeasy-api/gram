@@ -24,6 +24,20 @@ type LeaseCache interface {
 	ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error)
 }
 
+// RenewableLeaseCache extends ownership-aware leases with an atomic renewal.
+// Callers that can outlive their initial TTL use it to prove they still own a
+// lease before extending the exclusive-work window.
+type RenewableLeaseCache interface {
+	LeaseCache
+	RenewLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error)
+}
+
+// MarkingConsumeCache is implemented by caches that can consume a key and set a
+// marker in one step, so nothing can see the key gone before the marker exists.
+type MarkingConsumeCache interface {
+	GetAndDeleteMarking(ctx context.Context, key, marker string, markerTTL time.Duration, value any) error
+}
+
 // ConditionalCache is implemented by caches that can atomically preserve the
 // first value published for a key.
 type ConditionalCache interface {
@@ -155,6 +169,20 @@ func (d *TypedCacheObject[T]) GetAndDelete(ctx context.Context, key string) (T, 
 	err := d.cache.GetAndDelete(ctx, d.fullKey(key), &value)
 	if err != nil {
 		return *new(T), fmt.Errorf("%s: getdel: %w", d.fullKey(key), err)
+	}
+	return value, nil
+}
+
+// GetAndDeleteMarking is GetAndDelete that also sets marker, in one step, when the
+// key existed. A cache that can't do both only deletes. The marker is an unprefixed key.
+func (d *TypedCacheObject[T]) GetAndDeleteMarking(ctx context.Context, key, marker string, markerTTL time.Duration) (T, error) {
+	marking, ok := d.cache.(MarkingConsumeCache)
+	if !ok {
+		return d.GetAndDelete(ctx, key)
+	}
+	var value T
+	if err := marking.GetAndDeleteMarking(ctx, d.fullKey(key), marker, markerTTL, &value); err != nil {
+		return *new(T), fmt.Errorf("%s: getdel marking: %w", d.fullKey(key), err)
 	}
 	return value, nil
 }

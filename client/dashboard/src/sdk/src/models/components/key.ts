@@ -7,6 +7,14 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AgentDelegatedPolicy,
+  AgentDelegatedPolicy$inboundSchema,
+} from "./agentdelegatedpolicy.js";
+import {
+  APIKeyPolicyGrant,
+  APIKeyPolicyGrant$inboundSchema,
+} from "./apikeypolicygrant.js";
 
 export type Key = {
   /**
@@ -14,15 +22,24 @@ export type Key = {
    */
   createdAt: Date;
   /**
-   * The ID of the user who created this key
+   * The human creator; immutable authorizer for agent keys
    */
   createdByUserId: string;
+  delegatedGrants?: AgentDelegatedPolicy | undefined;
+  /**
+   * Delegated policy format version
+   */
+  delegatedGrantsVersion?: number | undefined;
+  /**
+   * Required expiry for an agent key; legacy keys may not expire.
+   */
+  expiresAt?: Date | undefined;
   /**
    * The ID of the key
    */
   id: string;
   /**
-   * The token of the api key (only returned on key creation)
+   * The token of the api key (only returned on key creation or rotation)
    */
   key?: string | undefined;
   /**
@@ -42,13 +59,21 @@ export type Key = {
    */
   organizationId: string;
   /**
+   * An ordinary key's own policy
+   */
+  policyGrants?: Array<APIKeyPolicyGrant> | undefined;
+  /**
    * The optional project ID this key is scoped to
    */
   projectId?: string | undefined;
   /**
-   * List of permission scopes for this key
+   * Legacy transport scopes; always empty for agent keys
    */
   scopes: Array<string>;
+  /**
+   * Principal authenticated by this key; agent keys use agent:<uuid>
+   */
+  subjectUrn?: string | undefined;
   /**
    * When the key was last updated.
    */
@@ -63,6 +88,11 @@ export const Key$inboundSchema: z.ZodMiniType<Key, unknown> = z.pipe(
       z.transform(v => new Date(v)),
     ),
     created_by_user_id: z.string(),
+    delegated_grants: z.optional(AgentDelegatedPolicy$inboundSchema),
+    delegated_grants_version: z.optional(z.int()),
+    expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     id: z.string(),
     key: z.optional(z.string()),
     key_prefix: z.string(),
@@ -71,8 +101,10 @@ export const Key$inboundSchema: z.ZodMiniType<Key, unknown> = z.pipe(
     ),
     name: z.string(),
     organization_id: z.string(),
+    policy_grants: z.optional(z.array(APIKeyPolicyGrant$inboundSchema)),
     project_id: z.optional(z.string()),
     scopes: z.array(z.string()),
+    subject_urn: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -82,10 +114,15 @@ export const Key$inboundSchema: z.ZodMiniType<Key, unknown> = z.pipe(
     return remap$(v, {
       "created_at": "createdAt",
       "created_by_user_id": "createdByUserId",
+      "delegated_grants": "delegatedGrants",
+      "delegated_grants_version": "delegatedGrantsVersion",
+      "expires_at": "expiresAt",
       "key_prefix": "keyPrefix",
       "last_accessed_at": "lastAccessedAt",
       "organization_id": "organizationId",
+      "policy_grants": "policyGrants",
       "project_id": "projectId",
+      "subject_urn": "subjectUrn",
       "updated_at": "updatedAt",
     });
   }),

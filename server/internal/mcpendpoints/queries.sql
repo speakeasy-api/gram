@@ -60,6 +60,35 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
+-- name: ListMCPEndpointsOnLiveDomainsByMCPServerID :many
+-- Endpoints on a deleted or another organization's domain are skipped; those
+-- on a domain still pending verification or activation are kept.
+SELECT sqlc.embed(e)
+FROM mcp_endpoints e
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = @organization_id
+  AND cd.deleted IS FALSE
+WHERE e.project_id = @project_id
+  AND e.mcp_server_id = @mcp_server_id::uuid
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL);
+
+-- name: ListServableMCPEndpointsByMCPServerID :many
+-- Endpoints that can serve: on the platform, or on a live, verified and activated domain of the organization.
+SELECT sqlc.embed(e)
+FROM mcp_endpoints e
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = @organization_id
+  AND cd.deleted IS FALSE
+  AND cd.verified
+  AND cd.activated
+WHERE e.project_id = @project_id
+  AND e.mcp_server_id = @mcp_server_id::uuid
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL);
+
 -- name: ListMCPEndpointsByMetaMCPServerID :many
 SELECT *
 FROM mcp_endpoints
@@ -94,6 +123,16 @@ WHERE e.custom_domain_id = @custom_domain_id::uuid
   AND e.deleted IS FALSE
 ORDER BY p.slug, e.slug;
 
+-- name: UpdateMCPEndpointAddress :one
+UPDATE mcp_endpoints
+SET
+    custom_domain_id = @custom_domain_id,
+    slug = @slug,
+    is_domain_root = @is_domain_root,
+    updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
 -- name: UpdateMCPEndpoint :one
 UPDATE mcp_endpoints
 SET
@@ -114,36 +153,45 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
--- name: CheckSlugAvailability :one
--- Returns true when the slug is available for an mcp_endpoint in the given
--- uniqueness namespace. Platform-domain endpoints (custom_domain_id IS NULL)
--- and custom-domain endpoints live in separate namespaces enforced by partial
--- unique indexes; this query mirrors that scoping by treating NULL as a valid
--- match value via IS NOT DISTINCT FROM. Soft-deleted rows are ignored. The
--- slug-existence check is intentionally not project-scoped because the
--- uniqueness indexes it mirrors span all projects within their namespace.
---
--- When custom_domain_id is supplied, the domain must also belong to the
--- caller's organization. Foreign or unknown domains short-circuit to
--- "unavailable" (returns false) so callers can't probe slug-existence under
--- domains they don't own. organization_id is ignored on the platform-domain
--- branch (custom_domain_id IS NULL).
+-- name: CheckEndpointSlugAvailability :one
+-- True when no live mcp_endpoints.slug holds the slug in the namespace
+-- (platform when custom_domain_id is NULL, else that domain).
+-- Not project-scoped, mirroring the partial unique index. Unless
+-- skip_domain_check, a supplied domain must be live and owned by
+-- organization_id or the result is false (blocks probing foreign domains).
 SELECT (
-  sqlc.narg('custom_domain_id')::uuid IS NULL
+  @skip_domain_check::boolean
+  OR sqlc.narg('custom_domain_id')::uuid IS NULL
   OR EXISTS (
     SELECT 1
-    FROM custom_domains
-    WHERE id = sqlc.narg('custom_domain_id')::uuid
-      AND organization_id = @organization_id
-      AND deleted IS FALSE
+    FROM custom_domains cd
+    WHERE cd.id = sqlc.narg('custom_domain_id')::uuid
+      AND cd.organization_id = @organization_id
+      AND cd.deleted IS FALSE
   )
 ) AND NOT EXISTS (
   SELECT 1
-  FROM mcp_endpoints
-  WHERE slug = @slug
-    AND custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
-    AND deleted IS FALSE
+  FROM mcp_endpoints e
+  WHERE e.slug = @slug
+    AND e.custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
+    AND e.deleted IS FALSE
 );
+
+-- name: LockSlugScope :exec
+-- Serializes competing claims on one (namespace, slug) address for the rest of
+-- the caller's transaction, since the availability check runs before the write.
+-- A custom-domain claim also takes the platform lock first: it no longer needs
+-- it, but keeping one lock order stays deadlock-free beside pods still running
+-- the earlier order.
+SELECT
+  pg_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || @slug::text, 0)),
+  pg_advisory_xact_lock(hashtextextended(
+    'mcp_slug:' || coalesce(sqlc.narg('custom_domain_id')::uuid::text, 'platform') || '/' || @slug::text, 0
+  ));
+
+-- name: TryLockPlatformSlugScope :one
+-- LockSlugScope's platform lock without waiting, for a write that already holds another slug's lock.
+SELECT pg_try_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || @slug::text, 0))::boolean AS locked;
 
 -- name: SoftDeleteMCPEndpointsByMCPServerID :many
 -- Soft-delete all endpoints that point at a given mcp server. Used when the
@@ -261,3 +309,71 @@ WHERE mcp_server_id = @mcp_server_id::uuid
   AND is_domain_root IS TRUE
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListAddressableMCPEndpointsByMCPServerIDs :many
+-- Custom-domain endpoints count only on a verified, activated domain, the
+-- same gate the custom-domain middleware applies before serving. Mirrored in
+-- assistants LoadAssistantMcpServers and ResolveMcpServersForWrite.
+SELECT sqlc.embed(e), cd.domain AS custom_domain
+FROM mcp_endpoints e
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.organization_id = @organization_id
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = @organization_id
+  AND cd.deleted IS FALSE
+  AND cd.verified IS TRUE
+  AND cd.activated IS TRUE
+WHERE e.project_id = ANY(@project_ids::uuid[])
+  AND e.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL);
+
+-- name: ListMCPEndpointsByProjectAndSlug :many
+-- Live endpoints with a slug in the project, platform addresses first.
+SELECT *
+FROM mcp_endpoints
+WHERE project_id = @project_id
+  AND slug = @slug
+  AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC, created_at, id;
+
+-- name: ListAddressableGatewayEndpointsByMemberMCPServerIDs :many
+-- The addressable endpoints of every live gateway that serves one of the
+-- given servers as a member. A member counts only when the gateway serves
+-- it, filtered exactly as ListServableMetaMCPMembers: its server is live,
+-- enabled and has a slug. Custom-domain endpoints count only on a verified,
+-- activated domain, the same gate as ListAddressableMCPEndpointsByMCPServerIDs.
+SELECT
+    sqlc.embed(e),
+    cd.domain AS custom_domain,
+    mm.mcp_server_id AS member_mcp_server_id,
+    g.name AS gateway_name
+FROM meta_mcp_server_members mm
+JOIN mcp_servers s
+  ON s.id = mm.mcp_server_id
+  AND s.project_id = mm.project_id
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+JOIN meta_mcp_servers g
+  ON g.id = mm.meta_mcp_server_id
+  AND g.project_id = mm.project_id
+  AND g.organization_id = @organization_id
+  AND g.deleted IS FALSE
+JOIN mcp_endpoints e
+  ON e.meta_mcp_server_id = g.id
+  AND e.project_id = g.project_id
+  AND e.deleted IS FALSE
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = @organization_id
+  AND cd.deleted IS FALSE
+  AND cd.verified IS TRUE
+  AND cd.activated IS TRUE
+WHERE mm.project_id = @project_id
+  AND mm.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND mm.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+ORDER BY g.created_at, g.id;

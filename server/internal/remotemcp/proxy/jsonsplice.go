@@ -38,19 +38,40 @@ import (
 // wire. Do not replace the map round-trip with raw byte assembly — that
 // validation would silently disappear.
 func spliceTopLevelKey(object json.RawMessage, key string, value json.RawMessage) (json.RawMessage, error) {
+	return spliceTopLevelKeys(object, map[string]json.RawMessage{key: value}, nil)
+}
+
+// spliceTopLevelKeys is spliceTopLevelKey for several members at once,
+// applying every replacement in a single decode and re-encode. Chaining
+// single-key splices instead costs one full round trip of the whole payload
+// per member — on a tools/list result that means re-decoding the entire tools
+// array once per key rewritten.
+//
+// Every rule spliceTopLevelKey documents applies unchanged to each entry.
+// defaults are written only where object lacks the member, keeping a present
+// member's bytes even when they are a literal null; replacements apply after
+// defaults, so a key in both is replaced.
+func spliceTopLevelKeys(object json.RawMessage, replacements, defaults map[string]json.RawMessage) (json.RawMessage, error) {
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(object, &members); err != nil {
 		return nil, fmt.Errorf("decode payload object: %w", err)
 	}
 	// A literal null decodes successfully into a nil map.
 	if members == nil {
-		members = make(map[string]json.RawMessage, 1)
+		members = make(map[string]json.RawMessage, len(replacements)+len(defaults))
 	}
 
-	if len(value) == 0 {
-		delete(members, key)
-	} else {
-		members[key] = value
+	for key, value := range defaults {
+		if _, ok := members[key]; !ok {
+			members[key] = value
+		}
+	}
+	for key, value := range replacements {
+		if len(value) == 0 {
+			delete(members, key)
+		} else {
+			members[key] = value
+		}
 	}
 
 	// json.Encoder rather than json.Marshal so preserved and replacement

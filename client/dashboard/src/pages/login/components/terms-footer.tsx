@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-// Legal footer shared by every auth surface (login/register shell and the
+// Legal footer shared by every auth surface (login/signup shell and the
 // demo-gate AuthLayout) so the links and copy stay in one place.
 export function TermsFooter({
   className,

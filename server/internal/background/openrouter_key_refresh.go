@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -77,6 +78,7 @@ func (w *OpenRouterKeyRefresher) setOpenRouterSpendCap(ctx context.Context, oper
 		Actor:            actor,
 		ActorDisplayName: actorDisplayName,
 		BypassPolicy:     bypassPolicy,
+		ActingSurface:    string(audit.SurfaceFromContext(ctx)),
 	})
 	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 	switch {
@@ -110,6 +112,11 @@ type OpenRouterSpendCapParams struct {
 	ActorDisplayName *string
 	// BypassPolicy is false for existing and customer-initiated workflows.
 	BypassPolicy bool
+	// ActingSurface is the surface the scheduling request was acting through,
+	// captured here because the activity runs in a worker that cannot see it.
+	// Empty on payloads created before this field existed; those keep deriving
+	// their surface in the worker, as they did.
+	ActingSurface string
 }
 
 func OpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSpendCapParams) error {
@@ -144,6 +151,7 @@ func executeOpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSp
 		Actor:            params.Actor,
 		ActorDisplayName: params.ActorDisplayName,
 		BypassPolicy:     params.BypassPolicy,
+		ActingSurface:    params.ActingSurface,
 	})
 	if !returnResult {
 		if err := future.Get(ctx, nil); err != nil {
@@ -156,15 +164,6 @@ func executeOpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSp
 		return 0, fmt.Errorf("set OpenRouter spend cap: %w", err)
 	}
 	return monthlyCredits, nil
-}
-
-func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) error {
-	_, err := ExecuteOpenrouterKeyRefreshWorkflow(ctx, w.TemporalEnv, OpenRouterKeyRefreshParams{
-		OrgID:   orgID,
-		Limit:   limit,
-		KeyType: string(keyType),
-	})
-	return err
 }
 
 // SchedulePaygOpenRouterChatKeyReconciliation uses the durable outbox event ID
@@ -227,25 +226,47 @@ func PaygOpenRouterChatKeyReconcileWorkflow(ctx workflow.Context, params Reconci
 	return nil
 }
 
-// Called by your service to start (or restart) the workflow
-func ExecuteOpenrouterKeyRefreshWorkflow(ctx context.Context, temporalEnv *tenv.Environment, params OpenRouterKeyRefreshParams) (client.WorkflowRun, error) {
-	// A typoed key type must fail here, before the terminate-if-running id
-	// below can clobber the real chat refresh workflow.
-	if err := openrouter.KeyType(params.KeyType).Validate(); err != nil {
-		return nil, fmt.Errorf("refresh openrouter key workflow: %w", err)
+type EnterpriseTrialConversionKeyReconcileParams struct {
+	OrganizationID string
+}
+
+func (w *OpenRouterKeyRefresher) ScheduleEnterpriseTrialConversionKeyReconciliation(ctx context.Context, eventID, orgID string) error {
+	if eventID == "" {
+		return errors.New("outbox event ID is required")
 	}
-	// The chat key keeps the historical id format: cancel semantics and the
-	// manual-trigger docs reference it. Only internal keys get a suffix.
-	id := fmt.Sprintf("v1:openrouter-key-refresh:%s", params.OrgID)
-	if openrouter.KeyType(params.KeyType) == openrouter.KeyTypeInternal {
-		id += ":internal"
+	if orgID == "" {
+		return errors.New("organization ID is required")
 	}
-	return temporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    id,
-		TaskQueue:             string(temporalEnv.Queue()),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
-		WorkflowRunTimeout:    3 * time.Minute, // slightly longer workflow timeout
-	}, OpenrouterKeyRefreshWorkflow, params)
+	_, err := w.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    fmt.Sprintf("v1:openrouter-key-reconcile:enterprise-trial-conversion:%s", eventID),
+		TaskQueue:             string(w.TemporalEnv.Queue()),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+	}, EnterpriseTrialConversionKeyReconcileWorkflow, EnterpriseTrialConversionKeyReconcileParams{OrganizationID: orgID})
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	switch {
+	case errors.As(err, &alreadyStarted):
+		return nil
+	case err != nil:
+		return fmt.Errorf("start enterprise trial conversion key reconciliation workflow: %w", err)
+	default:
+		return nil
+	}
+}
+
+func EnterpriseTrialConversionKeyReconcileWorkflow(ctx workflow.Context, params EnterpriseTrialConversionKeyReconcileParams) error {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Minute,
+			BackoffCoefficient: 2,
+			MaximumInterval:    time.Hour,
+		},
+	})
+	var a *Activities
+	if err := workflow.ExecuteActivity(ctx, a.ReconcileEnterpriseTrialConversionKeys, activities.ReconcileEnterpriseTrialConversionKeysArgs{OrganizationID: params.OrganizationID}).Get(ctx, nil); err != nil {
+		return fmt.Errorf("reconcile enterprise trial conversion keys: %w", err)
+	}
+	return nil
 }
 
 func OpenrouterKeyRefreshWorkflow(ctx workflow.Context, params OpenRouterKeyRefreshParams) error {

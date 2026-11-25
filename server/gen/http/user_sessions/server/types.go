@@ -15,19 +15,24 @@ import (
 // MintUserSessionRequestBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP request body.
 type MintUserSessionRequestBody struct {
-	// Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with
-	// the other targets; exactly one must be set. Must be issuer-gated and live in
-	// the caller's project.
+	// Bind the JWT to this toolset's audience. When the toolset has an mcp_servers
+	// wrapper the mint resolves to that server (identical to passing its
+	// mcp_server_id); otherwise the JWT is bound to the legacy toolset audience.
+	// Mutually exclusive with the other targets; exactly one must be set. Must be
+	// issuer-gated and live in the caller's project.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Bind the JWT to this remote MCP server's user_session_issuer audience (the
-	// /x/mcp convention, since remote servers have no toolset). Mutually exclusive
-	// with the other targets; exactly one must be set. Must be issuer-gated and
-	// live in the caller's project.
+	// Bind the JWT to this MCP server's user_session_issuer audience (any
+	// issuer-gated backend, hosted servers included). Mutually exclusive with the
+	// other targets; exactly one must be set. Must be issuer-gated and live in the
+	// caller's project.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Bind the JWT to this meta MCP server's user_session_issuer audience.
 	// Mutually exclusive with the other targets; exactly one must be set. Must be
 	// issuer-gated and live in the caller's project.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// An explicit discovery mode for a gateway Inspect connection. Valid only with
+	// meta_mcp_server_id. Omit to follow the gateway default.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
 }
 
 // ListUserSessionsResponseBody is the type of the "userSessions" service
@@ -53,7 +58,7 @@ type ListFacetsResponseBody struct {
 // "mintUserSession" endpoint HTTP response body.
 type MintUserSessionResponseBody struct {
 	// The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests
-	// to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.
+	// to the bound /mcp/{slug} surface.
 	AccessToken string `form:"access_token" json:"access_token" xml:"access_token"`
 	// Lifetime of the access token in seconds.
 	ExpiresIn int `form:"expires_in" json:"expires_in" xml:"expires_in"`
@@ -816,14 +821,17 @@ type UserSessionResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The issuing user_session_issuer id.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
-	// The session's subject URN (user:<id> | apikey:<uuid> |
-	// anonymous:<mcp-session-id>).
+	// The session's subject URN (user:<id> | apikey:<uuid> | agent:<uuid> |
+	// anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
 	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
 	// Current access-token JTI; used by the revocation path.
 	Jti string `form:"jti" json:"jti" xml:"jti"`
-	// Next refresh deadline.
+	// Inbound authorization deadline. Refresh is possible until this time only
+	// when the session has a refresh grant.
 	RefreshExpiresAt string `form:"refresh_expires_at" json:"refresh_expires_at" xml:"refresh_expires_at"`
-	// Terminal session expiry; ceiling on refresh_expires_at.
+	// Current access-token expiry. Sessions with a refresh grant may refresh
+	// before refresh_expires_at; workload and other sessions without a refresh
+	// grant cannot.
 	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -852,12 +860,12 @@ type UserSessionResponseBody struct {
 	// for a client registered before the value was recorded;
 	// client_credential_kind separates those cases and is what should be displayed.
 	ClientTokenEndpointAuthMethod *string `form:"client_token_endpoint_auth_method,omitempty" json:"client_token_endpoint_auth_method,omitempty" xml:"client_token_endpoint_auth_method,omitempty"`
-	// Subject kind: 'user', 'apikey', or 'anonymous'.
+	// Subject kind: 'user', 'apikey', 'agent', 'anonymous', or 'workload'.
 	SubjectType string `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
-	// Avatar URL for the subject when it resolves to a Gram user with one. Null
-	// for API key and anonymous subjects, and for users who have no photo.
+	// Avatar URL for the subject when it resolves to a Speakeasy user with one.
+	// Null for API key and anonymous subjects, and for users who have no photo.
 	SubjectPhotoURL *string `form:"subject_photo_url,omitempty" json:"subject_photo_url,omitempty" xml:"subject_photo_url,omitempty"`
 	// When the session was revoked, if it has been.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
@@ -866,11 +874,15 @@ type UserSessionResponseBody struct {
 	// that. Null means the session has not been used since the column was
 	// introduced — unknown, not never.
 	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
-	// The upstream providers Gram holds tokens for on this session's subject,
-	// through the same issuer. Empty when the session reaches only Gram-native
-	// tools. A session can have several: an issuer may have more than one
-	// remote_session_client attached.
+	// The upstream providers Speakeasy holds tokens for on this session's subject,
+	// through the same issuer. Empty when the session reaches only
+	// Speakeasy-native tools. A session can have several: an issuer may have more
+	// than one remote_session_client attached.
 	Upstreams []*UserSessionUpstreamResponseBody `form:"upstreams" json:"upstreams" xml:"upstreams"`
+	// Set only when subject_type is 'workload': the external issuer that vouched
+	// for the machine, the subject it asserted, and the agent the workload
+	// inherits its authority from.
+	Workload *UserSessionWorkloadResponseBody `form:"workload,omitempty" json:"workload,omitempty" xml:"workload,omitempty"`
 }
 
 // UserSessionUpstreamResponseBody is used to define fields on response body
@@ -903,6 +915,44 @@ type UserSessionUpstreamResponseBody struct {
 	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 	// Scopes held by this upstream session.
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+}
+
+// UserSessionWorkloadResponseBody is used to define fields on response body
+// types.
+type UserSessionWorkloadResponseBody struct {
+	// The workload_issuers row that vouched for the workload.
+	WorkloadIssuerID string `form:"workload_issuer_id" json:"workload_issuer_id" xml:"workload_issuer_id"`
+	// The sub claim the workload issuer asserted, exactly as minted. Together with
+	// workload_issuer_id this is the workload's identity.
+	ExternalSubject string `form:"external_subject" json:"external_subject" xml:"external_subject"`
+	// The operator-chosen name of the workload issuer. Null when the issuer has
+	// been deleted or belongs to another project.
+	WorkloadIssuerName *string `form:"workload_issuer_name,omitempty" json:"workload_issuer_name,omitempty" xml:"workload_issuer_name,omitempty"`
+	// The workload issuer's issuer identifier (its iss). Null under the same
+	// conditions as workload_issuer_name.
+	WorkloadIssuerURL *string `form:"workload_issuer_url,omitempty" json:"workload_issuer_url,omitempty" xml:"workload_issuer_url,omitempty"`
+	// The agent this workload is assigned to, whose policy it inherits. Null when
+	// the workload has no live assignment.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Name of the assigned agent.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
+	// Lifecycle state of the assigned agent.
+	AgentStatus *string `form:"agent_status,omitempty" json:"agent_status,omitempty" xml:"agent_status,omitempty"`
+	// Every admission currently letting this workload in, from this project and
+	// from the organization. Withdrawing one leaves the others admitting it. Empty
+	// when nothing admits the workload any more.
+	Admissions []*UserSessionWorkloadAdmissionResponseBody `form:"admissions" json:"admissions" xml:"admissions"`
+}
+
+// UserSessionWorkloadAdmissionResponseBody is used to define fields on
+// response body types.
+type UserSessionWorkloadAdmissionResponseBody struct {
+	// The workload_identity_admissions row.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Whether the admission belongs to this project or to the whole organization.
+	Tier string `form:"tier" json:"tier" xml:"tier"`
+	// The operator-chosen label for the admission.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
 // UserSessionFacetOptionResponseBody is used to define fields on response body
@@ -1599,6 +1649,7 @@ func NewMintUserSessionPayload(body *MintUserSessionRequestBody, sessionToken *s
 		ToolsetID:       body.ToolsetID,
 		McpServerID:     body.McpServerID,
 		MetaMcpServerID: body.MetaMcpServerID,
+		DiscoveryMode:   body.DiscoveryMode,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1629,6 +1680,11 @@ func ValidateMintUserSessionRequestBody(body *MintUserSessionRequestBody) (err e
 	}
 	if body.MetaMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	if body.DiscoveryMode != nil {
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
+		}
 	}
 	return
 }

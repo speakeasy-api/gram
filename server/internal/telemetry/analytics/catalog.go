@@ -1,0 +1,416 @@
+// Package analytics is the semantic query layer over agent session data. The
+// catalog declares datasets and typed fields; callers name those and never a
+// table, a column or a line of SQL. The catalog is Go code on purpose: it is
+// type-safe, refactors with the compiler, and every change is a reviewed code
+// change tied to a surface that needs it.
+package analytics
+
+import (
+	"fmt"
+	"slices"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
+)
+
+// Kind is the shape of a dataset: occurrences or measurements.
+type Kind string
+
+const (
+	// KindEvent rows are occurrences, which a query can count, aggregate or
+	// list one by one.
+	KindEvent Kind = "event"
+	// KindMetric rows are measurements, answered in aggregate only: a query
+	// that asks for the rows themselves is refused.
+	KindMetric Kind = "metric"
+)
+
+// Access is who may read a dataset, beyond reading the project it belongs to.
+type Access string
+
+const (
+	// AccessProject admits anyone who can read the project.
+	AccessProject Access = "project"
+	// AccessOrgAdmin admits organization administrators only, for a dataset
+	// over data the rest of the product shows to them alone.
+	AccessOrgAdmin Access = "org_admin"
+)
+
+// Role is what a field is for: grouping and filtering, or aggregating.
+type Role string
+
+const (
+	RoleDimension Role = "dimension"
+	RoleMeasure   Role = "measure"
+)
+
+// FieldType is the value type a field yields.
+type FieldType string
+
+const (
+	TypeString  FieldType = "string"
+	TypeInt64   FieldType = "int64"
+	TypeFloat64 FieldType = "float64"
+)
+
+// Operator is a filter operator a dimension admits.
+type Operator string
+
+const (
+	OperatorEquals Operator = "equals"
+	OperatorIn     Operator = "in"
+)
+
+// Aggregation is an op a field admits. Count is not listed here: it is an
+// op without a field and every dataset admits it at its grain.
+type Aggregation string
+
+const (
+	AggregationSum Aggregation = "sum"
+	AggregationAvg Aggregation = "avg"
+	AggregationMin Aggregation = "min"
+	AggregationMax Aggregation = "max"
+	AggregationP50 Aggregation = "p50"
+	AggregationP95 Aggregation = "p95"
+	AggregationP99 Aggregation = "p99"
+
+	// AggregationCountDistinct is the one aggregation a dimension declares:
+	// how many distinct values of it the matching rows carry, exact, over
+	// the dimension's own values. A measure may not declare it, since
+	// counting distinct durations is not a question anyone asks.
+	AggregationCountDistinct Aggregation = "count_distinct"
+)
+
+// AggregationCount is the one op that takes no field.
+const AggregationCount = "count"
+
+// TimeGrain is the width of a time bucket. None means no bucketing.
+type TimeGrain string
+
+const (
+	TimeGrainNone   TimeGrain = "none"
+	TimeGrainMinute TimeGrain = "minute"
+	TimeGrainHour   TimeGrain = "hour"
+	TimeGrainDay    TimeGrain = "day"
+	TimeGrainWeek   TimeGrain = "week"
+	TimeGrainMonth  TimeGrain = "month"
+)
+
+// timeGrains is every grain a grouped query may bucket by, narrowest first
+// after none.
+var timeGrains = []TimeGrain{TimeGrainNone, TimeGrainMinute, TimeGrainHour, TimeGrainDay, TimeGrainWeek, TimeGrainMonth}
+
+// TimeGrains lists the grains a grouped query may bucket by, as a copy the
+// caller may keep.
+func TimeGrains() []TimeGrain {
+	return slices.Clone(timeGrains)
+}
+
+// Guardrails are enforced in the compiler, not the transport, so a direct Go
+// caller is bound by them too.
+const (
+	MaxDimensions   = 3
+	MaxFilterValues = 100
+	DefaultLimit    = 100
+	// MaxLimit caps a grouped result, which is bounded by its groups and
+	// time buckets. MaxRowsLimit caps ungrouped rows at the dataset's grain,
+	// which go straight into a table or an agent's context.
+	MaxLimit     = 1000
+	MaxRowsLimit = 200
+
+	// How long the agent tables keep a row, from server/clickhouse/schema.sql:
+	// agent_events and the tables folded from it 90 days, agent_metrics 730
+	// so billing can read historical cycles. A dataset caps its window at
+	// what its source table still holds. These are the schema's numbers
+	// restated, and a test holds every source table to its TTL.
+	MaxEventTimeRangeDays  = 90
+	MaxMetricTimeRangeDays = 730
+
+	// MaxTimeRangeDays is the ceiling over every dataset: the longest any
+	// window can be. A dataset's own limit is MaxTimeRangeDays(), which is
+	// what the compiler enforces.
+	MaxTimeRangeDays = MaxMetricTimeRangeDays
+
+	nanosPerDay = int64(24 * 60 * 60 * 1e9)
+)
+
+// Field is one queryable thing on a dataset. Expr is the expression over the
+// dataset's source query that yields it, which is usually just a column of
+// that query's output.
+type Field struct {
+	Name string
+	Type FieldType
+	Role Role
+	// Default marks a field as part of the query a dataset opens on: a
+	// default dimension is in the opening group-by. Declared here rather
+	// than guessed by the client, so a new dataset opens sensibly with no
+	// client change. A dataset may flag several, or none.
+	Default      bool
+	Unit         string
+	Operators    []Operator
+	Aggregations []Aggregation
+	Expr         string
+	// Description says what the field is and, when it matters, which
+	// producers fill it: a field one producer family reports and the rest
+	// do not needs to say so, or a sparse breakdown reads as "none". It is
+	// shown by describe and the builder's pickers; most fields need none.
+	Description string
+	// Lookup names the lookup every read of this dimension folds Expr through;
+	// empty reads it as reported, as does a value the lookup has no entry for.
+	Lookup string
+	// Typeahead is the agent_events column a dimension's values are listed
+	// from, read off Source.Observations. Empty lists them from Source.Rows.
+	Typeahead string
+}
+
+// Dataset is a logical entity at a declared grain. It owns a source query,
+// which is where observations collapse to that grain and the only place a
+// de-duplicated sum can be expressed, plus a per-field expression over that
+// query's result.
+type Dataset struct {
+	Name string
+	Kind Kind
+	// Grain names what one row is, as a noun: "session", "tool call". The
+	// builder shows it beside the description, and rows mode is "rows at the
+	// dataset's grain".
+	Grain       string
+	Description string
+	// TimeExpr is the column of the source query's output that carries the
+	// row's event time, used for bucketing and for ordering row lists.
+	TimeExpr string
+	// Access is who may read the dataset. Describe, query and value listing
+	// all enforce it, and so does saving a widget over the dataset.
+	Access Access
+	Fields []Field
+	Source Source
+}
+
+// AccessCheck is the check a caller must pass to read the dataset, beyond
+// reading its project; ok is false when reading the project is enough.
+func (d *Dataset) AccessCheck(organizationID string) (check authz.Check, ok bool) {
+	if d.Access != AccessOrgAdmin {
+		var none authz.Check
+		return none, false
+	}
+	return authz.Org(authz.OrgIDFrom(organizationID)).Admin(), true
+}
+
+// MaxTimeRangeDays is the longest window this dataset can answer honestly:
+// the retention of the table its source reads.
+func (d *Dataset) MaxTimeRangeDays() int {
+	return d.Source.Table.retentionDays()
+}
+
+// MaxTimeRangeNanos is MaxTimeRangeDays as a span of nanoseconds, the unit a
+// request's window is expressed in.
+func (d *Dataset) MaxTimeRangeNanos() int64 {
+	return int64(d.MaxTimeRangeDays()) * nanosPerDay
+}
+
+// Field finds a field by name.
+func (d *Dataset) Field(name string) (*Field, bool) {
+	for i := range d.Fields {
+		if d.Fields[i].Name == name {
+			return &d.Fields[i], true
+		}
+	}
+	return nil, false
+}
+
+// AdmitsOperator says whether a filter may compare the field with op: a
+// dimension admits the operators it declares, a measure none.
+func (f *Field) AdmitsOperator(op string) bool {
+	return f.Role == RoleDimension && slices.Contains(f.Operators, Operator(op))
+}
+
+// AdmitsAggregation says whether a measure may aggregate the field with
+// agg: a measure admits the aggregations it declares, a dimension the one
+// over its own values when it declares it. A filter and a measure are
+// different questions, so they are asked separately: an aggregation
+// offered as a filter operator is refused, not silently dropped.
+func (f *Field) AdmitsAggregation(agg string) bool {
+	return slices.Contains(f.Aggregations, Aggregation(agg))
+}
+
+// Catalog is the declaration of every dataset and field: the contract the
+// builder is generated from, and the reason a new dataset needs no client
+// change.
+type Catalog struct {
+	datasets      []*Dataset
+	lookups       []*Lookup
+	signalMetrics bool
+}
+
+// NewCatalog validates the lookups and datasets and returns a catalog over
+// them. A declaration that could not be queried is a programming error, so
+// this fails loudly rather than serving a half-declared contract.
+func NewCatalog(lookups []*Lookup, datasets ...*Dataset) (*Catalog, error) {
+	lookupNames := make(map[string]struct{}, len(lookups))
+	for _, l := range lookups {
+		if l == nil || l.Name == "" {
+			return nil, fmt.Errorf("catalog: lookup with no name")
+		}
+		if _, dup := lookupNames[l.Name]; dup {
+			return nil, fmt.Errorf("catalog: lookup %q declared twice", l.Name)
+		}
+		lookupNames[l.Name] = struct{}{}
+	}
+	seen := make(map[string]struct{}, len(datasets))
+	for _, ds := range datasets {
+		if ds == nil {
+			return nil, fmt.Errorf("catalog: nil dataset")
+		}
+		if err := ds.validate(lookupNames); err != nil {
+			return nil, err
+		}
+		if _, dup := seen[ds.Name]; dup {
+			return nil, fmt.Errorf("catalog: dataset %q declared twice", ds.Name)
+		}
+		seen[ds.Name] = struct{}{}
+	}
+	return &Catalog{datasets: datasets, lookups: lookups, signalMetrics: false}, nil
+}
+
+// WithSignalMetrics adds the named signal-measurement contract to this catalog.
+func (c *Catalog) WithSignalMetrics() *Catalog {
+	cloned := *c
+	cloned.signalMetrics = true
+	return &cloned
+}
+
+// MustCatalog is NewCatalog for the package's own declarations.
+func MustCatalog(lookups []*Lookup, datasets ...*Dataset) *Catalog {
+	catalog, err := NewCatalog(lookups, datasets...)
+	if err != nil {
+		panic(err)
+	}
+	return catalog
+}
+
+// Dataset finds a dataset by name.
+func (c *Catalog) Dataset(name string) (*Dataset, bool) {
+	for _, ds := range c.datasets {
+		if ds.Name == name {
+			return ds, true
+		}
+	}
+	return nil, false
+}
+
+// Datasets lists every dataset in declaration order.
+func (c *Catalog) Datasets() []*Dataset {
+	return slices.Clone(c.datasets)
+}
+
+func (d *Dataset) validate(lookups map[string]struct{}) error {
+	if d.Name == "" {
+		return fmt.Errorf("catalog: dataset with empty name")
+	}
+	if d.Kind != KindEvent && d.Kind != KindMetric {
+		return fmt.Errorf("catalog: dataset %q has unknown kind %q", d.Name, d.Kind)
+	}
+	// The builder shows the grain beside the description unconditionally and
+	// describe requires it, so a dataset must say what one row is.
+	if d.Grain == "" {
+		return fmt.Errorf("catalog: dataset %q has no grain", d.Name)
+	}
+	if d.TimeExpr == "" {
+		return fmt.Errorf("catalog: dataset %q has no time expression", d.Name)
+	}
+	switch d.Access {
+	case AccessProject, AccessOrgAdmin:
+	default:
+		return fmt.Errorf("catalog: dataset %q has unknown access %q", d.Name, d.Access)
+	}
+	if d.Source.Key == "" || d.Source.Table == nil {
+		return fmt.Errorf("catalog: dataset %q has no source query", d.Name)
+	}
+	if len(d.Fields) == 0 {
+		return fmt.Errorf("catalog: dataset %q declares no fields", d.Name)
+	}
+	names := make(map[string]struct{}, len(d.Fields))
+	for _, f := range d.Fields {
+		if f.Name == "" || f.Expr == "" {
+			return fmt.Errorf("catalog: dataset %q has a field with an empty name or expression", d.Name)
+		}
+		if _, dup := names[f.Name]; dup {
+			return fmt.Errorf("catalog: dataset %q declares field %q twice", d.Name, f.Name)
+		}
+		names[f.Name] = struct{}{}
+		if f.Name == timeBucketColumn {
+			return fmt.Errorf("catalog: dataset %q field %q collides with the time bucket column", d.Name, f.Name)
+		}
+		// Every capability describe publishes must be one the compiler can
+		// honour, so the declared enums are the only values a field may carry.
+		switch f.Type {
+		case TypeString, TypeInt64, TypeFloat64:
+		default:
+			return fmt.Errorf("catalog: dataset %q field %q has unknown type %q", d.Name, f.Name, f.Type)
+		}
+		switch f.Role {
+		case RoleDimension:
+			if len(f.Operators) == 0 {
+				return fmt.Errorf("catalog: dataset %q dimension %q must declare operators", d.Name, f.Name)
+			}
+			// The one aggregation a dimension can carry is over its own
+			// values; a sum or a percentile of a string means nothing.
+			for _, agg := range f.Aggregations {
+				switch agg {
+				case AggregationCountDistinct:
+				case AggregationSum, AggregationAvg, AggregationMin, AggregationMax, AggregationP50, AggregationP95, AggregationP99:
+					return fmt.Errorf("catalog: dataset %q dimension %q may declare count_distinct and no other aggregation", d.Name, f.Name)
+				default:
+					return fmt.Errorf("catalog: dataset %q dimension %q has unknown aggregation %q", d.Name, f.Name, agg)
+				}
+			}
+			// Filters and value pickers compare a dimension as a string; a
+			// numeric one would need casting in both the compiler and the
+			// values query, so dimensions are held to strings until one is
+			// needed.
+			if f.Type != TypeString {
+				return fmt.Errorf("catalog: dataset %q dimension %q must be a string", d.Name, f.Name)
+			}
+			if f.Lookup != "" {
+				if _, declared := lookups[f.Lookup]; !declared {
+					return fmt.Errorf("catalog: dataset %q dimension %q reads through undeclared lookup %q", d.Name, f.Name, f.Lookup)
+				}
+			}
+			for _, op := range f.Operators {
+				switch op {
+				case OperatorEquals, OperatorIn:
+				default:
+					return fmt.Errorf("catalog: dataset %q dimension %q has unknown operator %q", d.Name, f.Name, op)
+				}
+			}
+		case RoleMeasure:
+			if len(f.Aggregations) == 0 || len(f.Operators) != 0 {
+				return fmt.Errorf("catalog: dataset %q measure %q must declare aggregations and no operators", d.Name, f.Name)
+			}
+			if f.Lookup != "" {
+				return fmt.Errorf("catalog: dataset %q measure %q cannot read through a lookup, which maps dimension values", d.Name, f.Name)
+			}
+			if f.Type == TypeString {
+				return fmt.Errorf("catalog: dataset %q measure %q cannot be a string", d.Name, f.Name)
+			}
+			for _, agg := range f.Aggregations {
+				switch agg {
+				case AggregationSum, AggregationAvg, AggregationMin, AggregationMax, AggregationP50, AggregationP95, AggregationP99:
+				case AggregationCountDistinct:
+					return fmt.Errorf("catalog: dataset %q measure %q cannot declare count_distinct, which counts a dimension", d.Name, f.Name)
+				default:
+					return fmt.Errorf("catalog: dataset %q measure %q has unknown aggregation %q", d.Name, f.Name, agg)
+				}
+			}
+		default:
+			return fmt.Errorf("catalog: dataset %q field %q has unknown role %q", d.Name, f.Name, f.Role)
+		}
+	}
+	return nil
+}
+
+// timeBucketColumn is the reserved result column for a bucketed query.
+const timeBucketColumn = "time_bucket"
+
+var (
+	equalsIn      = []Operator{OperatorEquals, OperatorIn}
+	countDistinct = []Aggregation{AggregationCountDistinct}
+)

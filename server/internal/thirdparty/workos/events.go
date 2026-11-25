@@ -10,6 +10,9 @@ const (
 	EventKindOrganizationDeleted EventKind = "organization.deleted"
 	EventKindOrganizationUpdated EventKind = "organization.updated"
 
+	EventKindOrganizationDomainVerified EventKind = "organization_domain.verified"
+	EventKindOrganizationDomainDeleted  EventKind = "organization_domain.deleted"
+
 	EventKindConnectionActivated   EventKind = "connection.activated"
 	EventKindConnectionDeactivated EventKind = "connection.deactivated"
 	EventKindConnectionDeleted     EventKind = "connection.deleted"

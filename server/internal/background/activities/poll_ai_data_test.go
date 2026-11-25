@@ -21,6 +21,7 @@ import (
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 )
 
 func TestPollAIDataInputRoundTripsThroughTemporal(t *testing.T) {
@@ -47,16 +48,23 @@ func TestPollAIDataInputRoundTripsThroughTemporal(t *testing.T) {
 func TestPollRejectedByProviderMatchesPermanentProviderFailures(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}))
-	require.False(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 404, Status: "404 Not Found"}))
-	require.False(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable"}))
+	require.True(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 400, Status: "400 Bad Request", Body: ""}))
+	require.True(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized", Body: ""}))
+	require.True(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 404, Status: "404 Not Found", Body: ""}))
+	require.True(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 422, Status: "422 Unprocessable Entity", Body: ""}))
+	require.False(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 429, Status: "429 Too Many Requests", Body: ""}))
+	require.False(t, pollRejectedByProvider(&cursorapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable", Body: ""}))
+	require.True(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 400, Status: "400 Bad Request"}))
 	require.True(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}))
 	require.True(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 403, Status: "403 Forbidden"}))
 	require.True(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 404, Status: "404 Not Found"}))
+	require.True(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 422, Status: "422 Unprocessable Entity"}))
 	require.False(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable"}))
+	require.True(t, pollRejectedByProvider(&codexapi.HTTPError{StatusCode: 400, Status: "400 Bad Request"}))
 	require.True(t, pollRejectedByProvider(&codexapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}))
 	require.True(t, pollRejectedByProvider(&codexapi.HTTPError{StatusCode: 403, Status: "403 Forbidden"}))
 	require.True(t, pollRejectedByProvider(&codexapi.HTTPError{StatusCode: 404, Status: "404 Not Found"}))
+	require.True(t, pollRejectedByProvider(&codexapi.HTTPError{StatusCode: 422, Status: "422 Unprocessable Entity"}))
 	require.False(t, pollRejectedByProvider(&codexapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable"}))
 	require.False(t, pollRejectedByProvider(errors.New("network timeout")))
 }
@@ -241,7 +249,7 @@ func TestPollRejectedByProviderSeesThroughWrappedSyncErrors(t *testing.T) {
 	syncErr := &aiintegrations.SyncError{
 		Op: "sync anthropic compliance",
 		Stages: []aiintegrations.SyncStageError{{
-			Stage: "discover_activities",
+			Stage: "discover_chats",
 			Err:   fmt.Errorf("list anthropic compliance activities: %w", httpErr),
 		}},
 		Progress: aiintegrations.ComplianceSyncProgress{
@@ -268,7 +276,7 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	syncErr := &aiintegrations.SyncError{
 		Op: "sync anthropic compliance",
 		Stages: []aiintegrations.SyncStageError{{
-			Stage: "discover_activities",
+			Stage: "discover_chats",
 			Err:   discoverErr,
 		}},
 		Progress: aiintegrations.ComplianceSyncProgress{
@@ -293,7 +301,7 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	require.Contains(t, appErr.Message(), "provider=anthropic_compliance")
 	require.Contains(t, appErr.Message(), fmt.Sprintf("attempt=5/%d", PollUsageMaxAttempts))
 
-	require.Contains(t, appErr.Message(), "[discover_activities] list anthropic compliance activities: 503 Service Unavailable")
+	require.Contains(t, appErr.Message(), "[discover_chats] list anthropic compliance activities: 503 Service Unavailable")
 	require.Contains(t, appErr.Message(), "(progress:")
 
 	require.True(t, appErr.HasDetails())
@@ -303,7 +311,7 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	require.Equal(t, aiintegrations.ProviderAnthropicCompliance, details.Provider)
 	require.Equal(t, int32(5), details.Attempt)
 	require.Len(t, details.Stages, 1)
-	require.Equal(t, "discover_activities", details.Stages[0].Stage)
+	require.Equal(t, "discover_chats", details.Stages[0].Stage)
 	require.Contains(t, details.Stages[0].Error, "503 Service Unavailable")
 
 	// The original causes stay reachable for errors.Is/errors.As callers.
@@ -393,6 +401,35 @@ func TestNewPollFailureErrorExpandsShareableCauses(t *testing.T) {
 	require.ErrorAs(t, err, &appErr)
 	require.Contains(t, appErr.Message(), "sync codex cost data: import cost logs")
 	require.Contains(t, appErr.Message(), "import cost logs: download failed")
+}
+
+// A provider rejection or outage on the schedule row is the provider's
+// failure, not Speakeasy's, so the activity succeeds and one misconfigured
+// integration cannot fill activity-failure alerting.
+func TestFinalizePollFailureKeepsProviderFailuresOffTheActivity(t *testing.T) {
+	t.Parallel()
+
+	configID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	rejection := fmt.Errorf("sync chatgpt conversation data: %w",
+		&codexapi.HTTPError{StatusCode: 403, Status: "403 Forbidden", Body: `{"detail":"API key not authorized for enterprise logs"}`})
+	outage := fmt.Errorf("sync codex cost data: %w",
+		&guardian.RetriesExhaustedError{Method: "GET", URL: "https://api.chatgpt.com", Attempts: 5, StatusCode: 500, Body: "", Err: nil})
+
+	require.NoError(t, finalizePollFailure(configID, aiintegrations.ProviderChatGPTCompliance, 1, true, false, true, rejection))
+	require.NoError(t, finalizePollFailure(configID, aiintegrations.ProviderCodexCompliance, 1, false, true, true, outage))
+
+	// Unrecorded failures still fail: Temporal is the only place they show.
+	var appErr *temporal.ApplicationError
+	err := finalizePollFailure(configID, aiintegrations.ProviderChatGPTCompliance, 1, true, false, false, rejection)
+	require.ErrorAs(t, err, &appErr)
+	require.True(t, appErr.NonRetryable())
+
+	// So do failures that are ours to explain, on every attempt.
+	ours := errors.New("decode codex compliance cost log")
+	require.Error(t, finalizePollFailure(configID, aiintegrations.ProviderCodexCompliance, 1, false, false, false, ours))
+	err = finalizePollFailure(configID, aiintegrations.ProviderCodexCompliance, PollUsageMaxAttempts, false, false, true, ours)
+	require.ErrorAs(t, err, &appErr)
+	require.False(t, appErr.NonRetryable())
 }
 
 func TestNewPollFailureErrorMarksAuthFailuresNonRetryable(t *testing.T) {
@@ -501,4 +538,41 @@ func TestAIUsagePollFailureDetailsMarshalToJSON(t *testing.T) {
 	stages, ok := decoded["stages"].([]any)
 	require.True(t, ok)
 	require.Len(t, stages, 1)
+}
+
+func TestGeminiPollProviderErrors(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		status int
+		code   oops.Code
+	}{
+		{400, oops.CodeInvalid}, {401, oops.CodeUnauthorized}, {403, oops.CodeForbidden}, {404, oops.CodeNotFound}, {422, oops.CodeInvalid},
+	} {
+		cause := fmt.Errorf("read Vault: %w", &geminivault.HTTPError{StatusCode: test.status})
+		require.True(t, pollRejectedByProvider(cause))
+		require.False(t, pollProviderUnavailable(cause))
+		err := shareablePollError(aiintegrations.ScheduleGeminiCompliance, cause)
+		var shareable *oops.ShareableError
+		require.ErrorAs(t, err, &shareable)
+		require.Equal(t, test.code, shareable.Code)
+		require.Contains(t, shareable.Error(), "Google Vault")
+	}
+	for _, status := range []int{429, 500, 503} {
+		cause := &geminivault.HTTPError{StatusCode: status}
+		require.False(t, pollRejectedByProvider(cause))
+		require.True(t, pollProviderUnavailable(cause))
+		require.Equal(t, status, pollUnavailableHTTPStatus(cause))
+	}
+	// A refused token exchange names the credential fix, not the export request.
+	for _, status := range []int{400, 401} {
+		cause := fmt.Errorf("read Vault: %w", &geminivault.HTTPError{StatusCode: status, TokenExchange: true})
+		require.True(t, pollRejectedByProvider(cause))
+		var shareable *oops.ShareableError
+		require.ErrorAs(t, shareablePollError(aiintegrations.ScheduleGeminiCompliance, cause), &shareable)
+		require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+		require.Contains(t, shareable.Error(), "domain-wide delegation")
+	}
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, shareablePollError(aiintegrations.ScheduleGeminiCompliance, errors.New("parse export")), &shareable)
+	require.Equal(t, "sync gemini conversation data", shareable.Error())
 }

@@ -1,4 +1,4 @@
-import { GetSessionFn } from "@/elements/types";
+import type { GetSessionFn } from "@/elements/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function getChatSessionQueryKey(
@@ -29,6 +29,9 @@ export const useSession = ({
     enabled: !hasData && getSession !== null,
     staleTime: Infinity, // Session tokens don't need to be refetched
     gcTime: Infinity, // Keep in cache indefinitely
+    // A host QueryClient may default to throwing; a missing token is handled
+    // inline (null), not by an error boundary.
+    throwOnError: false,
   });
 
   return fetchedSessionToken ?? null;

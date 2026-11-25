@@ -1,0 +1,606 @@
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import CreateRemoteMcp from "@/pages/sources/remote-mcp/CreateRemoteMcp";
+import CreateTunneledMcp from "@/pages/sources/tunneled-mcp/CreateTunneledMcp";
+import CreateFromSource from "./CreateFromSource";
+const state = vi.hoisted(() => ({
+  flow: {
+    gatewayId: "gateway" as string | null,
+    createdServerId: null as string | null,
+    isAttaching: false,
+    attachmentError: null as string | null,
+    complete: vi.fn(),
+    cancel: vi.fn(),
+    retry: vi.fn(),
+  },
+  create: vi.fn(),
+  createToolset: vi.fn(),
+  createServer: vi.fn(),
+  listServers: vi.fn(),
+  verifyResult: vi.fn(),
+}));
+const functionsAvailability = vi.hoisted(() => ({ available: true }));
+vi.mock("@/hooks/useFunctionsAvailability", () => ({
+  useFunctionsAvailability: () =>
+    functionsAvailability.available ? "available" : "unavailable",
+  useFunctionsAvailable: () => functionsAvailability.available,
+}));
+vi.mock("@/pages/mcp/gateway/useGatewayCreation", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/pages/mcp/gateway/useGatewayCreation")
+  >()),
+  useGatewayCreation: () => state.flow,
+}));
+vi.mock("@/components/page-templates", () => ({
+  FormPage: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => true, isLoading: false }),
+}));
+vi.mock("@/contexts/Auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/contexts/Auth")>()),
+  useIsSpeakeasyStaff: () => true,
+  useProject: () => ({ id: "project-1" }),
+  useIsPlatformAdmin: () => false,
+}));
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ isFeatureEnabled: () => true }),
+}));
+vi.mock("@/pages/security/server-guardrails/useNewServerGuardrail", () => ({
+  useNewServerGuardrail: () => ({
+    available: false,
+    enabled: false,
+    setEnabled: vi.fn(),
+    state: {},
+    updateState: vi.fn(),
+    validation: { ok: true },
+    createFor: () => Promise.resolve({ status: "skipped" }),
+  }),
+  guardrailFailureMessage: () => "",
+}));
+vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
+  useEffectiveUserSessionIssuers: () => ({
+    issuers: [],
+    organizationIssuers: [],
+    isLoading: false,
+    isError: false,
+  }),
+}));
+vi.mock("@/pages/sources/remote-mcp/hooks", () => ({
+  useCreateRemoteMcpSource: () => ({ mutateAsync: state.create }),
+}));
+vi.mock("@/pages/sources/unproxied-mcp/hooks", () => ({
+  useCreateUnproxiedMcpSource: () => ({ mutateAsync: state.create }),
+}));
+vi.mock("@/pages/sources/tunneled-mcp/hooks", () => ({
+  useCreateTunneledMcpSource: () => ({ mutateAsync: state.create }),
+}));
+vi.mock("@/pages/sources/remote-mcp/useVerifyRemoteMcpUrl", () => ({
+  useVerifyRemoteMcpUrl: () => ({
+    result: state.verifyResult(),
+    trigger: vi.fn(),
+  }),
+}));
+vi.mock("@/pages/sources/remote-mcp/VerifyRemoteMcpUrlButton", () => ({
+  VerifyRemoteMcpUrlAlert: () => null,
+}));
+vi.mock("@/pages/sources/tunneled-mcp/TunneledMcpSetupTabs", () => ({
+  TunneledMcpSetupTabs: () => null,
+}));
+vi.mock("@/components/code", () => ({
+  CodeBlock: ({ children }: { children: React.ReactNode }) => (
+    <pre>{children}</pre>
+  ),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    toolsets: { create: state.createToolset },
+    mcpServers: { create: state.createServer, list: state.listServers },
+  }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
+vi.mock("@/components/side-panel/side-panel-context", () => ({
+  useSidePanel: () => ({ openPanel: vi.fn() }),
+}));
+vi.mock("@/components/sources/source-list", () => ({
+  useProjectSources: () => ({
+    sources: [
+      {
+        key: "source",
+        name: "Source",
+        kind: "openapi",
+        document: { id: "document" },
+      },
+    ],
+  }),
+  sourceAssetId: () => "document",
+}));
+vi.mock("@/components/sources/source-grid", () => ({
+  SourceCard: ({ onSelect }: { onSelect: () => void }) => (
+    <button type="button" onClick={onSelect}>
+      Select source
+    </button>
+  ),
+}));
+vi.mock("@/hooks/toolTypes", () => ({
+  useListTools: () => ({ data: { tools: [] } }),
+}));
+beforeEach(() => {
+  vi.clearAllMocks();
+  state.verifyResult.mockReturnValue({ verified: true });
+  Object.assign(state.flow, {
+    gatewayId: "gateway",
+    createdServerId: null,
+    attachmentError: null,
+    isAttaching: false,
+  });
+  state.flow.cancel.mockReturnValue(true);
+  state.flow.complete.mockResolvedValue(undefined);
+  state.flow.retry.mockResolvedValue(undefined);
+  state.create.mockResolvedValue({
+    mcpServer: { id: "server", slug: "server" },
+    identityConfiguration: { status: "configured" },
+    tunneledMcpServer: { id: "tunnel", slug: "tunnel" },
+    tunnelKey: "test-key",
+  });
+  state.createToolset.mockResolvedValue({
+    id: "toolset",
+    slug: "toolset",
+    name: "Source",
+  });
+  state.createServer.mockResolvedValue({ id: "server" });
+  state.listServers.mockResolvedValue({ mcpServers: [] });
+});
+afterEach(cleanup);
+// Each flow starts on a neutral page, so leaving it means the flow navigated.
+const START = "/start";
+function LocationProbe() {
+  return <output data-testid="location">{useLocation().pathname}</output>;
+}
+function Router({ children }: { children: React.ReactNode }) {
+  return (
+    <MemoryRouter initialEntries={[START]}>
+      <LocationProbe />
+      {children}
+    </MemoryRouter>
+  );
+}
+const location = () => screen.getByTestId("location").textContent;
+const cases = [
+  {
+    name: "remote",
+    Component: CreateRemoteMcp,
+    fill: () =>
+      fireEvent.change(screen.getByLabelText("MCP server URL"), {
+        target: { value: "https://example.com/mcp" },
+      }),
+    button: "Save",
+  },
+  {
+    name: "tunneled",
+    Component: CreateTunneledMcp,
+    fill: () =>
+      fireEvent.change(screen.getByLabelText("Display name"), {
+        target: { value: "Server" },
+      }),
+    button: "Add server",
+  },
+  {
+    name: "source",
+    Component: CreateFromSource,
+    fill: () => fireEvent.click(screen.getByText("Select source")),
+    button: "Create",
+  },
+];
+for (const { name, Component, fill, button } of cases) {
+  describe(`${name} gateway creation`, () => {
+    it("attaches the created MCP server instead of navigating standalone", async () => {
+      render(<Component />, { wrapper: Router });
+      fill();
+      fireEvent.click(screen.getByRole("button", { name: button }));
+      if (name === "tunneled") {
+        expect(await screen.findByText("test-key")).toBeTruthy();
+        expect(state.flow.complete).not.toHaveBeenCalled();
+        expect(location()).toBe(START);
+        expect(
+          screen.queryByRole("button", { name: "View source" }),
+        ).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Add to gateway" }));
+      }
+      await waitFor(() =>
+        expect(state.flow.complete).toHaveBeenCalledWith("server"),
+      );
+      expect(location()).toBe(START);
+      if (name === "source")
+        expect(state.createServer).toHaveBeenCalledWith({
+          createMcpServerForm: {
+            name: "Source",
+            toolsetId: "toolset",
+            visibility: "private",
+          },
+        });
+    });
+    it("disables cancellation while attachment is in flight", () => {
+      state.flow.isAttaching = true;
+      render(<Component />, { wrapper: Router });
+      expect(
+        (screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+    });
+    it("returns to the gateway on cancel without creating anything", async () => {
+      render(<Component />, { wrapper: Router });
+      fill();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      });
+      expect(state.flow.cancel).toHaveBeenCalled();
+      expect(location()).toBe(START);
+      expect(state.create).not.toHaveBeenCalled();
+      expect(state.createToolset).not.toHaveBeenCalled();
+      expect(state.createServer).not.toHaveBeenCalled();
+      expect(state.flow.complete).not.toHaveBeenCalled();
+    });
+    it("locks creation and shows attachment recovery after failure", () => {
+      state.flow.createdServerId = "server";
+      state.flow.attachmentError = "Attachment failed";
+      render(<Component />, { wrapper: Router });
+      const action = screen.getByRole("button", {
+        name: button,
+      }) as HTMLButtonElement;
+      expect(action.disabled || action.closest("fieldset")?.disabled).toBe(
+        true,
+      );
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Attachment failed",
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Retry adding to gateway" }),
+      );
+      expect(state.flow.retry).toHaveBeenCalledOnce();
+      fireEvent.submit(action.closest("form")!);
+      expect(state.create).not.toHaveBeenCalled();
+      expect(state.createToolset).not.toHaveBeenCalled();
+    });
+    it("keeps standalone creation behavior", async () => {
+      state.flow.gatewayId = null;
+      render(<Component />, { wrapper: Router });
+      fill();
+      fireEvent.click(screen.getByRole("button", { name: button }));
+      if (name === "tunneled") {
+        await screen.findByText("Open MCP server");
+      } else {
+        await waitFor(() => expect(location()).not.toBe(START));
+      }
+      expect(state.flow.complete).not.toHaveBeenCalled();
+      expect(state.createServer).not.toHaveBeenCalled();
+    });
+    it("keeps standalone cancellation without creating anything", async () => {
+      state.flow.gatewayId = null;
+      state.flow.cancel.mockReturnValue(false);
+      render(<Component />, { wrapper: Router });
+      fill();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      });
+      expect(location()).not.toBe(START);
+      expect(state.create).not.toHaveBeenCalled();
+      expect(state.createToolset).not.toHaveBeenCalled();
+      expect(state.createServer).not.toHaveBeenCalled();
+      expect(state.flow.complete).not.toHaveBeenCalled();
+    });
+  });
+}
+it("disables direct connections only in gateway context", () => {
+  const view = render(<CreateRemoteMcp />, { wrapper: Router });
+  expect(
+    screen
+      .getByRole("radio", { name: /Clients connect directly/ })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  state.flow.gatewayId = null;
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    screen
+      .getByRole("radio", { name: /Clients connect directly/ })
+      .hasAttribute("disabled"),
+  ).toBe(false);
+});
+
+it("saves an unproxied server without verifying connectivity", async () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, { wrapper: Router });
+  fireEvent.change(screen.getByLabelText("MCP server URL"), {
+    target: { value: "https://example.com/mcp" },
+  });
+  expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  fireEvent.click(
+    screen.getByRole("radio", { name: /Clients connect directly/ }),
+  );
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(screen.queryByRole("button", { name: "Re-verify" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  // A checked URL fills an empty name in.
+  await waitFor(() =>
+    expect(state.create).toHaveBeenCalledWith({
+      name: "Example",
+      url: "https://example.com/mcp",
+    }),
+  );
+});
+
+it("prefers the name the server reports over one read from its address", () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, { wrapper: Router });
+  fireEvent.change(screen.getByLabelText("MCP server URL"), {
+    target: { value: "https://example.com/mcp" },
+  });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+    serverName: "Example Server",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+      .value,
+  ).toBe("Example Server");
+});
+
+it("keeps a name a setup link filled in when the URL checks out", () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, {
+    wrapper: ({ children }) => (
+      <MemoryRouter
+        initialEntries={[
+          "/?url=https%3A%2F%2Fexample.com%2Fmcp&name=Team%20tools",
+        ]}
+      >
+        {children}
+      </MemoryRouter>
+    ),
+  });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+    serverName: "Example Server",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+      .value,
+  ).toBe("Team tools");
+});
+
+it("keeps a name the person typed when the URL checks out", async () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, { wrapper: Router });
+  fireEvent.change(screen.getByLabelText("MCP server URL"), {
+    target: { value: "https://example.com/mcp" },
+  });
+  fireEvent.change(screen.getByLabelText("Display name (optional)"), {
+    target: { value: "Team tools" },
+  });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+    serverName: "Example Server",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+      .value,
+  ).toBe("Team tools");
+});
+
+it("preselects User Identity only when the challenge advertised OAuth", () => {
+  // A bare 401 from a Basic or API-key upstream reports the same outcome as an
+  // OAuth challenge. Only the advertised metadata URL tells them apart, and
+  // defaulting the wrong one to User walks the operator into a setup that
+  // cannot complete.
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    outcome: "authentication_required",
+  });
+  const view = render(<CreateRemoteMcp />, { wrapper: Router });
+  expect(
+    screen
+      .getByRole("radio", { name: "Manual", description: /static headers/ })
+      .getAttribute("data-state"),
+  ).toBe("checked");
+
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    outcome: "authentication_required",
+    protectedResourceMetadataUrl:
+      "https://example.com/.well-known/oauth-protected-resource",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    screen
+      .getByRole("radio", { name: /User identity/ })
+      .getAttribute("data-state"),
+  ).toBe("checked");
+});
+
+it("can cancel from the tunnel key screen without attaching", async () => {
+  render(<CreateTunneledMcp />, { wrapper: Router });
+  fireEvent.change(screen.getByLabelText("Display name"), {
+    target: { value: "Server" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Add server" }));
+  await screen.findByText("test-key");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(state.flow.cancel).toHaveBeenCalledOnce();
+  expect(state.flow.complete).not.toHaveBeenCalled();
+});
+it("keeps the tunnel key and retry available after attachment failure", async () => {
+  const view = render(<CreateTunneledMcp />, { wrapper: Router });
+  fireEvent.change(screen.getByLabelText("Display name"), {
+    target: { value: "Server" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Add server" }));
+  await screen.findByText("test-key");
+  state.flow.complete.mockRejectedValueOnce(new Error("Attachment failed"));
+  fireEvent.click(screen.getByRole("button", { name: "Add to gateway" }));
+  await waitFor(() =>
+    expect(state.flow.complete).toHaveBeenCalledWith("server"),
+  );
+  state.flow.attachmentError = "Attachment failed";
+  state.flow.createdServerId = "server";
+  state.flow.isAttaching = true;
+  view.rerender(<CreateTunneledMcp />);
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Add to gateway",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  state.flow.isAttaching = false;
+  view.rerender(<CreateTunneledMcp />);
+  expect(screen.getByText("test-key")).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Retry adding to gateway" }),
+  );
+  expect(state.flow.retry).toHaveBeenCalledOnce();
+  expect(state.create).toHaveBeenCalledOnce();
+});
+
+describe("source wrapper recovery", () => {
+  async function failWrapper() {
+    state.createServer.mockRejectedValueOnce(new Error("Wrapper failed"));
+    render(<CreateFromSource />, { wrapper: Router });
+    fireEvent.click(screen.getByText("Select source"));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await screen.findByText("Wrapper failed");
+  }
+  it("fails closed when the uncertain wrapper is absent from read results", async () => {
+    await failWrapper();
+    fireEvent.click(screen.getByRole("button", { name: /Create|Retry/ }));
+    await screen.findByText(/manually locate and attach/);
+    expect(state.createToolset).toHaveBeenCalledOnce();
+    expect(state.createServer).toHaveBeenCalledOnce();
+    expect(state.flow.complete).not.toHaveBeenCalled();
+    expect(state.listServers).toHaveBeenCalledWith({ toolsetId: "toolset" });
+  });
+  it("recovers a lost wrapper response by exact toolset before retrying writes", async () => {
+    await failWrapper();
+    state.listServers.mockResolvedValue({ mcpServers: [{ id: "recovered" }] });
+    fireEvent.click(screen.getByRole("button", { name: /Create|Retry/ }));
+    await waitFor(() =>
+      expect(state.flow.complete).toHaveBeenCalledWith("recovered"),
+    );
+    expect(state.createToolset).toHaveBeenCalledOnce();
+    expect(state.createServer).toHaveBeenCalledOnce();
+    expect(state.listServers).toHaveBeenCalledWith({ toolsetId: "toolset" });
+  });
+  it.each(["read failure", "ambiguous wrappers"])(
+    "prevents writes on %s and remains retryable",
+    async (failure) => {
+      await failWrapper();
+      if (failure === "read failure")
+        state.listServers.mockRejectedValueOnce(new Error("Read failed"));
+      else
+        state.listServers.mockResolvedValueOnce({
+          mcpServers: [{ id: "one" }, { id: "two" }],
+        });
+      fireEvent.click(screen.getByRole("button", { name: /Create|Retry/ }));
+      await screen.findByText(
+        failure === "read failure" ? "Read failed" : /Multiple servers/,
+      );
+      expect(state.createToolset).toHaveBeenCalledOnce();
+      expect(state.createServer).toHaveBeenCalledOnce();
+      expect(state.flow.complete).not.toHaveBeenCalled();
+      state.listServers.mockResolvedValue({ mcpServers: [{ id: "server" }] });
+      fireEvent.click(screen.getByRole("button", { name: /Create|Retry/ }));
+      await waitFor(() =>
+        expect(state.flow.complete).toHaveBeenCalledWith("server"),
+      );
+      expect(state.createToolset).toHaveBeenCalledOnce();
+    },
+  );
+});
+
+describe("remote creation from a Shadow MCP server", () => {
+  const SHADOW_START =
+    "/start?url=https%3A%2F%2Ftracker.example.com%2Fmcp&name=Tracker&shadow-mcp=tracker-slug";
+  function ShadowRouter({ children }: { children: React.ReactNode }) {
+    return (
+      <MemoryRouter initialEntries={[SHADOW_START]}>
+        <LocationProbe />
+        {children}
+      </MemoryRouter>
+    );
+  }
+  beforeEach(() => {
+    state.flow.gatewayId = null;
+    state.flow.cancel.mockReturnValue(false);
+  });
+
+  it("fills in the form and says where saving leads", () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    expect(
+      (screen.getByLabelText("MCP server URL") as HTMLInputElement).value,
+    ).toBe("https://tracker.example.com/mcp");
+    expect(
+      (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+        .value,
+    ).toBe("Tracker");
+    expect(
+      screen.getByText(/becomes the official version of Tracker/),
+    ).toBeTruthy();
+  });
+
+  it("goes back to the Shadow MCP server to link the new server", async () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(location()).toMatch(/\/shadow-ai\/mcps\/tracker-slug$/),
+    );
+    expect(state.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Tracker",
+        url: "https://tracker.example.com/mcp",
+      }),
+    );
+  });
+
+  it("keeps the official server behind the Speakeasy proxy", () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    const direct = screen
+      .getAllByRole("radio")
+      .find((radio) => radio.getAttribute("value") === "unproxied");
+    expect(direct?.hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByText(/An official server must proxy through Speakeasy/),
+    ).toBeTruthy();
+  });
+
+  it("goes back to the Shadow MCP server on cancel", async () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+    expect(location()).toMatch(/\/shadow-ai\/mcps\/tracker-slug$/);
+    expect(state.create).not.toHaveBeenCalled();
+  });
+});

@@ -42,7 +42,7 @@ func TestResolveTokenEndpointAuthMethod_NoneIgnoresSecret(t *testing.T) {
 	require.Equal(t, remotesessions.TokenEndpointAuthMethodNone, m, "an explicit none wins even when a secret exists")
 }
 
-func TestResolveTokenEndpointAuthMethod_UnknownDefaultsBySecret(t *testing.T) {
+func TestResolveTokenEndpointAuthMethod_AbsentDefaultsBySecret(t *testing.T) {
 	t.Parallel()
 
 	m, err := remotesessions.ResolveTokenEndpointAuthMethod("", "s3cret")
@@ -55,5 +55,30 @@ func TestResolveTokenEndpointAuthMethod_UnknownDefaultsBySecret(t *testing.T) {
 
 	m, err = remotesessions.ResolveTokenEndpointAuthMethod("private_key_jwt", "s3cret")
 	require.NoError(t, err)
-	require.Equal(t, remotesessions.TokenEndpointAuthMethodBasic, m, "unrecognized methods with a secret fall back to Basic")
+	require.Equal(t, remotesessions.TokenEndpointAuthMethodPrivateKeyJWT, m, "a retained secret does not override an explicitly configured signing method")
+
+	_, err = remotesessions.ResolveTokenEndpointAuthMethod("future_auth_method", "s3cret")
+	require.Error(t, err, "unknown non-empty methods must fail closed")
+}
+
+func TestResolveTokenEndpointAuthAudience(t *testing.T) {
+	t.Parallel()
+
+	issuer := "https://idp.example.com/"
+	endpoint := "https://idp.example.com/oauth/token"
+
+	got, err := remotesessions.ResolveTokenEndpointAuthAudience("", issuer, endpoint)
+	require.NoError(t, err)
+	require.Equal(t, issuer, got, "NULL storage defaults to the issuer identifier")
+
+	got, err = remotesessions.ResolveTokenEndpointAuthAudience("issuer", issuer, endpoint)
+	require.NoError(t, err)
+	require.Equal(t, issuer, got)
+
+	got, err = remotesessions.ResolveTokenEndpointAuthAudience("token_endpoint", issuer, endpoint)
+	require.NoError(t, err)
+	require.Equal(t, endpoint, got)
+
+	_, err = remotesessions.ResolveTokenEndpointAuthAudience("future_format", issuer, endpoint)
+	require.Error(t, err)
 }

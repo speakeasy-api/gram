@@ -83,6 +83,29 @@ type Service interface {
 	// organization-level issuer, and an organization-level issuer may migrate onto
 	// another organization-level issuer. Requires org:admin.
 	MigrateIssuer(context.Context, *MigrateIssuerPayload) (res *MigrateOrganizationRemoteSessionIssuerResult, err error)
+	// Replace the EMA providers the vendor authorization server this issuer names
+	// accepts, the providers that may issue ID-JAGs for it. They are stored as an
+	// ordered list, but each endpoint can use only the provider its sign-in goes
+	// through: the sign-in's trusted external issuer, or the organization's
+	// Speakeasy issuer for a sign-in that trusts none. So the list acts as the set
+	// of accepted providers, and its order does not change who vouches; a list
+	// that leaves out an endpoint's provider leaves that endpoint with nobody to
+	// vouch. An empty list restores the derived default, which accepts every
+	// provider: an endpoint whose sign-in trusts an external issuer uses that
+	// issuer alone, and one that trusts none uses the organization's Speakeasy
+	// issuer when it has one. The list applies organization-wide to every issuer
+	// with the same canonical issuer URL. With expected_providers, the write
+	// happens only while the saved list still matches it. Requires org:admin and
+	// the ema-providers rollout; restoring the default only needs org:admin. Not
+	// available from support or impersonated sessions.
+	SetEMAProviders(context.Context, *SetEMAProvidersPayload) (res *types.EMAProviderOrder, err error)
+	// List every service identity chaining reaches in the caller's organization:
+	// each vendor authorization server that any identity chaining binding or saved
+	// EMA provider order names, with the organization-wide provider order, when
+	// the vendor last accepted an assertion from each provider across every
+	// binding, and the MCP servers that chain through it: counts include every
+	// server, the list only those the caller has mcp:read on. Requires org:read.
+	ListEMAServices(context.Context, *ListEMAServicesPayload) (res *ListEMAServicesResult, err error)
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
 	// document and return a draft suitable for
 	// organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need
@@ -95,7 +118,7 @@ type Service interface {
 	// organizational and project-specific issuers in the caller's organization.
 	// Only RFC 8414-derived columns are written — endpoints, the *_supported
 	// arrays, client_id_metadata_document_supported, and the documentation URLs.
-	// Gram behavior and display fields (oidc, passthrough, name, slug, logo,
+	// Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo,
 	// client setup documentation) are left alone. Requires org:admin.
 	RefreshIssuerMetadata(context.Context, *RefreshIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
 }
@@ -120,7 +143,7 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "getIssuerDuplicatePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "fetchIssuerMetadata", "refreshIssuerMetadata"}
+var MethodNames = [14]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "getIssuerDuplicatePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "setEMAProviders", "listEMAServices", "fetchIssuerMetadata", "refreshIssuerMetadata"}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.
@@ -167,6 +190,9 @@ type CreateIssuerPayload struct {
 	ScopesSupported []string
 	// Grant types advertised by the issuer.
 	GrantTypesSupported []string
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string
 	// Response types advertised by the issuer.
 	ResponseTypesSupported []string
 	// Token endpoint auth methods advertised by the issuer.
@@ -185,6 +211,46 @@ type CreateIssuerPayload struct {
 	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
 	// pre-flight outbound CIMD. Default false.
 	ClientIDMetadataDocumentSupported *bool
+	// Route this issuer's OAuth endpoint calls through an MCP tunnel in the same
+	// project. Platform admins only.
+	TunneledMcpServerID *string
+	// OpenID Connect userinfo endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string
+	// RFC 7662 token introspection endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	IntrospectionEndpoint *string
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	IntrospectionEndpointAuthMethodsSupported []string
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field stores
+	// null ("not captured"), distinct from an empty array ("the issuer advertises
+	// none").
+	IDTokenSigningAlgValuesSupported []string
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	ClaimsSupported []string
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field stores null ("not captured").
+	BackchannelLogoutSupported *bool
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field stores null ("not captured").
+	AuthorizationResponseIssParameterSupported *bool
+	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
+	// authorize redirect in place of the resolved scope set. Omit or send an empty
+	// array to leave it unset.
+	ScopeOverride []string
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit to leave it unset: such a login requests the provider's whole
+	// scopes_supported.
+	OmitScopeFallback *bool
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
+	// unset: the parameter is then sent, and a login or refresh the issuer answers
+	// with invalid_target is retried once without it. Set false to never send it.
+	ResourceIndicatorSupported *bool
 }
 
 // DeleteIssuerPayload is the payload type of the
@@ -194,6 +260,69 @@ type DeleteIssuerPayload struct {
 	ID           string
 	SessionToken *string
 	ApikeyToken  *string
+}
+
+// One service identity chaining reaches in the organization: a vendor
+// authorization server, the identity providers that can vouch for people to it
+// with whether the vendor has accepted each, and the MCP servers that chain
+// through it.
+type EMAService struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer string
+	// The vendor's display name, from an issuer record that names it. Empty when
+	// none has one.
+	Name string
+	// An issuer record the organization can name for this vendor,
+	// organization-level first, to pass to setEMAProviders. Omitted only when no
+	// issuer record names the vendor any more.
+	RemoteSessionIssuerID *string
+	// The organization-wide provider order. Each provider's last_accepted_at is
+	// the newest acceptance across every binding in the organization.
+	EmaProviders *types.EMAProviderOrder
+	// Distinct live MCP servers whose identity chaining binding for this vendor
+	// has been turned on, in any state after setup, including servers the caller
+	// cannot read.
+	ServerCount int
+	// Of those, how many have a ready binding, including servers the caller cannot
+	// read.
+	ReadyServerCount int
+	// The counted servers the caller can read (mcp:read), ordered by project and
+	// name.
+	Servers []*EMAServiceServer
+	// Counted servers the caller cannot read; they are not named.
+	HiddenServerCount int
+}
+
+// One live MCP server whose identity chaining binding for the service has been
+// turned on.
+type EMAServiceServer struct {
+	// The MCP server id.
+	ID string
+	// The MCP server name. Empty when it has none.
+	Name string
+	// The MCP server slug. Empty when it has none.
+	Slug string
+	// The owning project.
+	ProjectID string
+	// The owning project's slug.
+	ProjectSlug string
+	// The owning project's name.
+	ProjectName string
+	// working: on, and the vendor accepted an assertion for this server from a
+	// provider that can vouch now. not_proven: on, with no such acceptance yet.
+	// needs_attention: on but blocked, or no provider can vouch for it right now.
+	Status string
+	// When the vendor last accepted an assertion for this server from a provider
+	// that can vouch now. Omitted when never.
+	LastAcceptedAt *string
+	// The remote session issuer the server's sign-in trusts, such as an Okta
+	// authorization server: only that issuer can vouch for people on the server.
+	// Omitted when the server uses Speakeasy's own sign-in, where only Speakeasy
+	// can vouch.
+	SignInIssuerID *string
+	// The display name of sign_in_issuer_id. Omitted with it, or when the issuer
+	// has no name.
+	SignInIssuerName *string
 }
 
 // FetchIssuerMetadataPayload is the payload type of the
@@ -244,13 +373,28 @@ type GetIssuerPayload struct {
 	ApikeyToken  *string
 }
 
+// ListEMAServicesPayload is the payload type of the
+// organizationRemoteSessionIssuers service listEMAServices method.
+type ListEMAServicesPayload struct {
+	SessionToken *string
+}
+
+// ListEMAServicesResult is the result type of the
+// organizationRemoteSessionIssuers service listEMAServices method.
+type ListEMAServicesResult struct {
+	Items []*EMAService
+}
+
 // ListIssuersPayload is the payload type of the
 // organizationRemoteSessionIssuers service listIssuers method.
 type ListIssuersPayload struct {
 	// Pagination cursor.
 	Cursor *string
 	// Page size (default 50, max 100).
-	Limit        *int
+	Limit *int
+	// Only issuers from one tier: organizational (organization), project-specific
+	// (project), or from the platform catalog (platform). Omitted lists all three.
+	Tier         *string
 	SessionToken *string
 	ApikeyToken  *string
 }
@@ -306,6 +450,12 @@ type OrganizationIssuerDeletePreflight struct {
 	ClientCount int
 	// Display names of MCP servers attached to this issuer's clients.
 	McpServerNames []string
+	// Organization-owned user_session_issuers that trust this issuer and block
+	// deletion.
+	TrustedUserSessionIssuers []*TrustedUserSessionIssuerReference
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount int64
 }
 
 // OrganizationIssuerMigratePreflight is the result type of the
@@ -328,8 +478,16 @@ type OrganizationIssuerMigratePreflight struct {
 	// sides' values. The target issuer's values become authoritative for the
 	// migrated clients.
 	Warnings []*types.IssuerFieldMismatch
-	// TRUE when the migration would succeed: no endpoint mismatches and no
-	// conflicting MCP-server bindings.
+	// User-session issuers that trust the source and block migration until
+	// explicitly unlinked or re-linked.
+	TrustedUserSessionIssuers []*TrustedUserSessionIssuerReference
+	// Number of active identity-chaining bindings on the source. Non-zero blocks
+	// migration; explicitly unlink these bindings before migration, then prepare
+	// new bindings for the target.
+	EmaBindingCount int64
+	// TRUE when the migration would succeed: no active identity-chaining bindings,
+	// endpoint mismatches, conflicting MCP-server bindings, or user-session
+	// issuers that trust the source.
 	CanMigrate bool
 }
 
@@ -353,6 +511,35 @@ type RefreshIssuerMetadataPayload struct {
 	ID           string
 	SessionToken *string
 	ApikeyToken  *string
+}
+
+// SetEMAProvidersPayload is the payload type of the
+// organizationRemoteSessionIssuers service setEMAProviders method.
+type SetEMAProvidersPayload struct {
+	// Any remote_session_issuer in the caller's organization that names the vendor
+	// authorization server.
+	RemoteSessionIssuerID string
+	// The accepted providers, at most 10; each at most once. Stored in the given
+	// order, though each endpoint uses only the one its sign-in goes through. An
+	// empty list restores the derived default.
+	Providers []*types.EMAProviderInput
+	// The saved list the caller started from, in its stored order, empty for the
+	// default. When given and the saved list no longer matches it, nothing is
+	// written and the request fails with conflict, so a stale editor never
+	// overwrites another administrator's change. Send the list you last read when
+	// updating; on conflict, re-read and reconcile the list before retrying. Omit
+	// only to replace the list unconditionally.
+	ExpectedProviders []*types.EMAProviderInput
+	SessionToken      *string
+}
+
+// An organization-owned user_session_issuer that uses a remote_session_issuer
+// as its trust anchor.
+type TrustedUserSessionIssuerReference struct {
+	// The user_session_issuer id.
+	ID string
+	// The user_session_issuer slug.
+	Slug string
 }
 
 // UpdateIssuerPayload is the payload type of the
@@ -393,11 +580,14 @@ type UpdateIssuerPayload struct {
 	OpPolicyURI *string
 	// Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any
 	// other value must be an absolute http(s) URL.
-	OpTosURI                          *string
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
+	OpTosURI            *string
+	ScopesSupported     []string
+	GrantTypesSupported []string
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string
+	ResponseTypesSupported              []string
+	TokenEndpointAuthMethodsSupported   []string
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Omitting the field leaves the stored
 	// value unchanged; an empty array records that the issuer advertises no
@@ -408,6 +598,46 @@ type UpdateIssuerPayload struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool
+	// Set or clear this issuer's MCP tunnel binding. Omission keeps the binding;
+	// an empty string clears it; any other value must be a tunneled MCP server in
+	// the same project. Platform admins only.
+	TunneledMcpServerID *string
+	// Set or clear the OpenID Connect userinfo endpoint. An empty string clears it
+	// to NULL; any other value must be an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string
+	// Set or clear the RFC 7662 token introspection endpoint. An empty string
+	// clears it to NULL; any other value must be an absolute https URL, or http on
+	// loopback.
+	IntrospectionEndpoint *string
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field leaves
+	// the stored value unchanged; an empty array records that the issuer
+	// advertises none.
+	IDTokenSigningAlgValuesSupported []string
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	ClaimsSupported []string
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field leaves the stored value unchanged.
+	BackchannelLogoutSupported *bool
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field leaves the stored value unchanged.
+	AuthorizationResponseIssParameterSupported *bool
+	// Set or clear the operator-pinned scope request. Omitting the field (or
+	// sending null) leaves the stored value unchanged; an empty array clears it.
+	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit or send null to keep the stored value; false restores the
+	// default.
+	OmitScopeFallback *bool
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
+	// field leaves the stored value unchanged.
+	ResourceIndicatorSupported *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

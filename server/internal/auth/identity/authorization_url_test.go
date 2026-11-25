@@ -28,6 +28,7 @@ func newURLResolver(t *testing.T, idpBaseURL, idpClientID string) *identity.Reso
 		nil, // userRepo
 		nil, // pylon
 		nil, // posthog
+		nil, // growth signals
 		"",  // cache suffix
 	)
 }
@@ -45,6 +46,8 @@ func TestBuildAuthorizationURL_WorkOS(t *testing.T) {
 		ScopesSupported: nil,
 		LoginHint:       "someone@example.com",
 		ScreenHint:      "sign-up",
+		Prompt:          "",
+		OrganizationID:  "",
 	})
 	require.NoError(t, err)
 
@@ -58,7 +61,7 @@ func TestBuildAuthorizationURL_WorkOS(t *testing.T) {
 	require.Equal(t, "client_test123", q.Get("client_id"))
 
 	// WorkOS's reference does not list `scope` for this endpoint, so it is
-	// likely inert here. Asserted anyway: it is what Gram has always sent, and
+	// likely inert here. Asserted anyway: it is what Speakeasy has always sent, and
 	// "not documented" is not "verified ignored".
 	require.Equal(t, "openid email profile", q.Get("scope"))
 }
@@ -76,11 +79,41 @@ func TestBuildAuthorizationURL_WorkOSOmitsEmptyHints(t *testing.T) {
 		ScopesSupported: nil,
 		LoginHint:       "",
 		ScreenHint:      "",
+		Prompt:          "",
+		OrganizationID:  "",
 	})
 	require.NoError(t, err)
 
 	q := u.Query()
 	require.False(t, q.Has("login_hint"))
+	require.False(t, q.Has("screen_hint"))
+	require.False(t, q.Has("prompt"))
+	require.False(t, q.Has("organization_id"))
+}
+
+func TestBuildAuthorizationURL_WorkOSSelectsOrganizationForAFreshLogin(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	r := newURLResolver(t, "https://unused.example.com", "client_test123")
+
+	u, err := r.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
+		CallbackURL:     "https://app.example.com/mcp/idp_callback",
+		Scope:           "",
+		State:           "state-value",
+		ScopesSupported: nil,
+		LoginHint:       "someone@example.com",
+		ScreenHint:      "",
+		Prompt:          "login",
+		OrganizationID:  "org_workos_1",
+	})
+	require.NoError(t, err)
+
+	q := u.Query()
+	require.Equal(t, "authkit", q.Get("provider"))
+	require.Equal(t, "login", q.Get("prompt"))
+	require.Equal(t, "org_workos_1", q.Get("organization_id"))
+	require.Equal(t, "someone@example.com", q.Get("login_hint"))
 	require.False(t, q.Has("screen_hint"))
 }
 
@@ -97,6 +130,8 @@ func TestBuildAuthorizationURL_DevIDP(t *testing.T) {
 		ScopesSupported: nil,
 		LoginHint:       "someone@example.com",
 		ScreenHint:      "sign-up",
+		Prompt:          "",
+		OrganizationID:  "",
 	})
 	require.NoError(t, err)
 

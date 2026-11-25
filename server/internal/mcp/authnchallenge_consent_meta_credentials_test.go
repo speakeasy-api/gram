@@ -46,7 +46,7 @@ type connectedMeta struct {
 // issuer and subject — the same map the serving path routes from.
 func (g connectedMeta) resolveTokens(t *testing.T, ctx context.Context) map[uuid.UUID]remotesessions.UpstreamToken {
 	t.Helper()
-	tokens, err := g.mgr.ResolveAccessTokens(ctx, g.fx.projectID, g.fx.orgID, g.fx.shared, g.fx.subject)
+	tokens, err := g.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, g.fx.projectID, g.fx.orgID, g.fx.shared, g.fx.subject)
 	require.NoError(t, err)
 	return tokens
 }
@@ -73,7 +73,7 @@ func tokenFor(t *testing.T, tokens map[uuid.UUID]remotesessions.UpstreamToken, c
 // persisted the way production writes it. Each member gets its own
 // authorization server and is stamped with it — the state the resync produces.
 // stamped=false leaves the column NULL, reproducing the pre-backfill fleet.
-func connectMeta(t *testing.T, prefix string, count int, stamped bool) (context.Context, connectedMeta) {
+func connectMeta(t *testing.T, prefix string, count int) (context.Context, connectedMeta) {
 	t.Helper()
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, prefix+"-gw")
@@ -86,17 +86,17 @@ func connectMeta(t *testing.T, prefix string, count int, stamped bool) (context.
 		as := newConsentExchangeAS(t, &captured[i], accessToken)
 
 		clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, name, as.URL, []uuid.UUID{fx.shared})
-		issuerID := uuid.NullUUID{}
-		if stamped {
-			issuerID = conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID))
-		}
+		issuerID := conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID))
 
 		upstream := fmt.Sprintf("https://%s.example.com/mcp", name)
+		seeded := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, name+"-member", upstream, issuerID, int32(i))
+		seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, seeded.mcpServerID, clientID, "remote_session")
+		seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, fx.orgID, seeded.mcpServerID)
 		members = append(members, connectedMetaMember{
 			upstreamURL: upstream,
 			accessToken: accessToken,
 			clientID:    clientID,
-			seeded:      createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, name+"-member", upstream, issuerID, int32(i)),
+			seeded:      seeded,
 			exchanged:   &captured[i],
 		})
 	}
@@ -129,7 +129,7 @@ func activeResource(t *testing.T, ctx context.Context, gw connectedMeta, clientI
 func TestMetaMCPCredentials_ConsentResolutionPersistsOnTheGrant(t *testing.T) {
 	t.Parallel()
 
-	ctx, gw := connectMeta(t, "aim87-persist", 2, true)
+	ctx, gw := connectMeta(t, "aim87-persist", 2)
 
 	for _, member := range gw.members {
 		require.Equal(t, consentExchangeCapture{HasResource: true, Resource: member.upstreamURL}, member.exchanged.Load(),
@@ -148,7 +148,7 @@ func TestMetaMCPCredentials_ConsentResolutionPersistsOnTheGrant(t *testing.T) {
 func TestMetaMCPCredentials_EachMemberSelectsItsOwnCredential(t *testing.T) {
 	t.Parallel()
 
-	ctx, gw := connectMeta(t, "aim87-select", 3, true)
+	ctx, gw := connectMeta(t, "aim87-select", 3)
 
 	tokens := gw.resolveTokens(t, ctx)
 	require.Len(t, tokens, 3)
@@ -166,46 +166,19 @@ func TestMetaMCPCredentials_EachMemberSelectsItsOwnCredential(t *testing.T) {
 	require.NotContains(t, resources, "https://aim87-select-unknown.example.com/mcp")
 }
 
-// The same meta MCP unstamped records unqualified grants, and routeUpstreamToken
-// — untouched by this change — then serves no member at all. The negative that
-// gives the positive above its meaning, and the pre-backfill state.
-func TestMetaMCPCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T) {
+// A member with no derived authorization server is associated with no
+// gateway client, so the gateway offers none for it and no grant is minted,
+// rather than an unqualified one no member can route.
+func TestMetaMCPCredentials_UnstampedMembersOfferNoClient(t *testing.T) {
 	t.Parallel()
 
-	ctx, gw := connectMeta(t, "aim87-unstamped", 3, false)
-
-	for _, member := range gw.members {
-		require.Equal(t, consentExchangeCapture{HasResource: false, Resource: ""}, member.exchanged.Load(), "no resource indicator is sent when no member matches")
-		require.Empty(t, activeResource(t, ctx, gw, member.clientID), "an unstamped member cannot qualify its grant")
+	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-unstamped-gw")
+	for i := range 2 {
+		name := fmt.Sprintf("aim87-unstamped-%d", i)
+		clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, name, "", []uuid.UUID{fx.shared})
+		createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, name+"-member", fmt.Sprintf("https://%s.example.com/mcp", name), uuid.NullUUID{}, int32(i))
+		requireConnectRefused(t, fx, clientID, "an unstamped member's client must not be offered")
 	}
-
-	tokens := gw.resolveTokens(t, ctx)
-	require.Len(t, tokens, 3)
-
-	// Several credentials, all unqualified: the selection rule (exact match,
-	// lone-token fallback only for a single credential) serves none of them.
-	for _, member := range gw.members {
-		require.Empty(t, tokenFor(t, tokens, member.clientID).Resource,
-			"member %s must not hold a qualified credential", member.upstreamURL)
-	}
-}
-
-// The complement, and pre-existing routeUpstreamToken behaviour this change
-// leaves alone: a lone credential is forwarded even to a member it was not
-// minted for. Why qualification matters once a meta MCP holds a second member.
-func TestMetaMCPCredentials_LoneUnqualifiedCredentialIsStillForwarded(t *testing.T) {
-	t.Parallel()
-
-	ctx, gw := connectMeta(t, "aim87-lone", 1, false)
-
-	tokens := gw.resolveTokens(t, ctx)
-	require.Len(t, tokens, 1)
-
-	// One credential, no resource: exactly the state the selection rule's
-	// deliberate lone-token pass-through forwards to any backend.
-	token := tokenFor(t, tokens, gw.members[0].clientID)
-	require.Equal(t, gw.members[0].accessToken, token.Token)
-	require.Empty(t, token.Resource)
 }
 
 // A grant qualified before a member was detached stays bound to the member it
@@ -214,7 +187,7 @@ func TestMetaMCPCredentials_LoneUnqualifiedCredentialIsStillForwarded(t *testing
 func TestMetaMCPCredentials_StaleGrantStaysBoundToItsOwnMember(t *testing.T) {
 	t.Parallel()
 
-	ctx, gw := connectMeta(t, "aim87-stale", 2, true)
+	ctx, gw := connectMeta(t, "aim87-stale", 2)
 
 	removed := gw.members[0]
 	_, err := metamcp_repo.New(gw.fx.ti.conn).DeleteMetaMCPMember(ctx, metamcp_repo.DeleteMetaMCPMemberParams{
@@ -224,10 +197,8 @@ func TestMetaMCPCredentials_StaleGrantStaysBoundToItsOwnMember(t *testing.T) {
 	require.NoError(t, err)
 
 	// The detach is only observable through a lookup that runs after it, and consent
-	// is where that runs. A detached member no longer claims its client's
-	// authorization server, so a new grant carries no resource.
-	_, hasResource := postConnectAction(t, gw.fx, removed.clientID).Query()["resource"]
-	require.False(t, hasResource, "a detached member must stop qualifying its client's credential")
+	// is where that runs. A detached member no longer offers its client.
+	requireConnectRefused(t, gw.fx, removed.clientID, "a detached member must stop offering its client")
 	survivor := gw.members[1]
 	require.Equal(t, survivor.upstreamURL, postConnectAction(t, gw.fx, survivor.clientID).Query().Get("resource"),
 		"and the surviving member must still qualify its own")

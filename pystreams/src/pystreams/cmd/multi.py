@@ -1,19 +1,36 @@
 import logging as stdlogging
 import os
 import signal
+from contextlib import AsyncExitStack
 from functools import partial
 
 import anyio
 import click
 import structlog
+from google.api_core.retry import Retry
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
+from google.cloud.pubsub_v1.types import (
+    LimitExceededBehavior,
+    PublisherOptions,
+    PublishFlowControl,
+)
+from gram.metering.v1 import meter_reading_pb2
 from gram.ping.v2 import ping_pb2, processor_pb2
-from gram.risk.v1 import finding_pb2, presidio_analysis_pb2, presidio_analyzer_pb2
+from gram.risk.v1 import (
+    finding_pb2,
+    presidio_analysis_pb2,
+    presidio_analyzer_pb2,
+    presidio_enforcement_pb2,
+    presidio_enforcer_pb2,
+)
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
     PubSubBroker,
     pubsub_publisher_for_message_async,
 )
+from redis import asyncio as redis_asyncio
+from redis.asyncio.retry import Retry as RedisRetry
+from redis.backoff import NoBackoff
 
 from pystreams import attr
 from pystreams.deps import logging, otel
@@ -22,19 +39,43 @@ from pystreams.deps.loop_lag import monitor_event_loop_lag
 from pystreams.deps.scanner import build_presidio_scanner
 from pystreams.health import HealthState, serve_control
 from pystreams.ping.handler import PingHandler
+from pystreams.risk.fingerprint import parse_pepper_keyring
 from pystreams.risk.handler import PresidioHandler
+from pystreams.risk.metering import METER_PUBLISH_TIMEOUT_SECONDS
+from pystreams.risk.presidio_enforce_handler import PresidioEnforceHandler
+from pystreams.risk.redisswitch import RedisSwitch
+from pystreams.risk.replywriter import ReplyWriter
 
-from . import flags_control, flags_gcp, flags_presidio, flags_service
+from . import (
+    flags_control,
+    flags_enforce,
+    flags_gcp,
+    flags_presidio,
+    flags_role,
+    flags_service,
+)
 from .receiver import ReceiverGroup
+
+METER_PUBLISHER_OPTIONS = PublisherOptions(
+    flow_control=PublishFlowControl(
+        message_limit=10_000,
+        byte_limit=128 * 1024 * 1024,
+        limit_exceeded_behavior=LimitExceededBehavior.ERROR,
+    ),
+    retry=Retry(timeout=METER_PUBLISH_TIMEOUT_SECONDS),
+    timeout=METER_PUBLISH_TIMEOUT_SECONDS,
+)
 
 
 @click.command(
     "multi",
     params=[
         *flags_service.service_options(),
+        *flags_role.role_options(),
         *flags_control.server_options(),
         *flags_gcp.pubsub_options(),
         *flags_presidio.presidio_options(),
+        *flags_enforce.enforce_options(),
     ],
 )
 def cli(**kwargs):
@@ -46,11 +87,14 @@ async def multi(
     # Service options
     service_version: str | None,
     environment: str | None,
+    partition: str,
     git_sha: str | None,
     log_level: str,
     pretty_log: bool,
     enable_tracing: bool,
     enable_metrics: bool,
+    # Receiver role
+    role: str,
     # GCP options
     gcp_project_id: str | None,
     pubsub_emulator_host: str | None,
@@ -64,6 +108,12 @@ async def multi(
     scan_timeout: float,
     scan_slot_timeout: float,
     max_inflight: int | None,
+    # Enforcement lane options
+    redis_addr: str | None,
+    redis_password: str | None,
+    redis_next_addr: str | None,
+    redis_next_password: str | None,
+    risk_fingerprint_pepper_keyring: str | None,
 ):
     logging.configure_logging(
         pretty_log=pretty_log,
@@ -72,15 +122,30 @@ async def multi(
             attr.SERVICE_NAME: "gram-pystreams",
             attr.SERVICE_VERSION: service_version,
             attr.SERVICE_ENVIRONMENT: environment,
+            attr.PARTITION: partition,
         },
     )
     logger: structlog.stdlib.BoundLogger = structlog.get_logger()
+
+    # A next instance equal to the current one means the move is over: the
+    # client is an ordinary one.
+    if redis_next_addr and redis_next_addr == redis_addr:
+        redis_next_addr = None
+
+    if role == "enforcement" and (
+        not redis_addr or not risk_fingerprint_pepper_keyring
+    ):
+        raise click.UsageError(
+            "--redis-addr and --risk-fingerprint-pepper-keyring are required "
+            "when --role=enforcement"
+        )
 
     otel_options = otel.OTelOptions(
         service_name="gram-pystreams",
         service_version=service_version,
         git_sha=git_sha,
         environment=environment,
+        partition=partition,
         enable_tracing=enable_tracing,
         enable_metrics=enable_metrics,
     )
@@ -107,11 +172,62 @@ async def multi(
     async with otel.otel_sdk(otel_options, logger=logger):
         # The broker owns the publisher/subscriber clients: entering it flushes
         # and closes them on exit (including a clean teardown on Ctrl-C).
-        with broker:
+        # The stack owns the Redis client from creation, so any later startup
+        # failure still closes its pool.
+        async with AsyncExitStack() as stack:
+            stack.enter_context(broker)
             health_state = HealthState()
-            findings_publisher = await pubsub_publisher_for_message_async(
-                broker, finding_pb2.Finding
+            findings_publisher = None
+            if role in ("all", "analysis"):
+                findings_publisher = await pubsub_publisher_for_message_async(
+                    broker, finding_pb2.Finding
+                )
+            # Isolate best-effort usage backlog from finding delivery.
+            meter_broker = stack.enter_context(
+                _build_broker(
+                    project_id=project_id,
+                    emulator_host=pubsub_emulator_host,
+                    logger=logger,
+                    publisher_options=METER_PUBLISHER_OPTIONS,
+                )
             )
+            meter_publisher = await pubsub_publisher_for_message_async(
+                meter_broker, meter_reading_pb2.MeterReading
+            )
+
+            # The enforcement lane registers only when both Redis and the
+            # pepper keyring are configured; validated before the scan pool
+            # exists so a startup failure cannot leak pool workers.
+            enforce_redis = None
+            enforce_switch = None
+            enforce_fingerprinter = None
+            if role in ("all", "enforcement") and (
+                redis_addr and risk_fingerprint_pepper_keyring
+            ):
+                armed = bool(redis_next_addr)
+                enforce_redis = _enforce_redis_client(
+                    redis_addr, redis_password, armed=armed
+                )
+                stack.push_async_callback(enforce_redis.aclose)
+                # Fail startup, not per-message: consuming without a reachable
+                # reply store would ACK requests while losing their replies.
+                await enforce_redis.ping()
+                if redis_next_addr:
+                    next_redis = _enforce_redis_client(
+                        redis_next_addr, redis_next_password, armed=True
+                    )
+                    stack.push_async_callback(next_redis.aclose)
+                    await next_redis.ping()
+                    enforce_switch = RedisSwitch(enforce_redis, next_redis, logger)
+                    await enforce_switch.start()
+                enforce_fingerprinter = parse_pepper_keyring(
+                    risk_fingerprint_pepper_keyring
+                )
+            elif role == "all":
+                logger.info(
+                    "presidio enforcement lane disabled",
+                    reason="redis address or fingerprint pepper keyring not configured",
+                )
 
             # Build the scan strategy: a pool of worker processes (the default,
             # with --scan-workers > 0) or the in-process thread scanner. The
@@ -136,13 +252,26 @@ async def multi(
             if os.environ.get("GRAM_PYSTREAMS_DETECT_BLOCKING"):
                 activate_blocking_detection(logger=logger)
 
-            presidio_handler = PresidioHandler(
-                logger, findings_publisher, presidio_scanner
-            )
+            presidio_handler = None
+            if findings_publisher is not None:
+                presidio_handler = PresidioHandler(
+                    logger, findings_publisher, meter_publisher, presidio_scanner
+                )
 
-            # The scanner is an async context manager: leaving the block releases
-            # it, draining in-flight scans and reaping the worker processes for
-            # the pool scanner (a no-op for the in-process one).
+            enforce_handler = None
+            if enforce_redis is not None and enforce_fingerprinter is not None:
+                enforce_handler = PresidioEnforceHandler(
+                    logger,
+                    ReplyWriter(enforce_redis, enforce_switch),
+                    meter_publisher,
+                    presidio_scanner,
+                    enforce_fingerprinter,
+                )
+
+            # The scanner is an async context manager: leaving the block
+            # releases it, draining in-flight scans and reaping the worker
+            # processes for the pool scanner (a no-op for the in-process one).
+            # Exits after the task group drains, before the stack closes Redis.
             async with presidio_scanner, anyio.create_task_group() as tg:
                 tg.start_soon(
                     _shutdown_on_signal, tg.cancel_scope, health_state, logger
@@ -163,31 +292,113 @@ async def multi(
 
                 receivers = ReceiverGroup(task_group=tg, broker=broker, logger=logger)
 
-                # Register subscription receivers here. Each call resolves a
-                # subscriber and starts consuming with per-message tracing.
-                await receivers.receive(
-                    ping_pb2.Message,
-                    processor_pb2.PyProcessor,
-                    PingHandler(logger, ping_log_level).handle,
-                )
-                # Admit only as many messages as the scan pool can plausibly
-                # serve: 2 handlers per scan slot keeps the pool fed while one
-                # message's findings publish, and everything past the cap waits
-                # at the broker — visible as subscription backlog and
-                # redeliverable — instead of in-process, where 50 handlers
-                # racing 2 workers spent whole slot budgets queued (the
-                # process_duration >> scan_duration gap).
-                if max_inflight is None:
-                    scan_slots = scan_workers if scan_workers > 0 else 2
-                    max_inflight = max(4, 2 * scan_slots)
-                await receivers.receive(
-                    presidio_analysis_pb2.PresidioAnalysis,
-                    presidio_analyzer_pb2.PresidioAnalyzer,
-                    presidio_handler.handle,
-                    max_concurrency=max_inflight,
+                await _register_receivers(
+                    role=role,
+                    receivers=receivers,
+                    logger=logger,
+                    ping_log_level=ping_log_level,
+                    presidio_handler=presidio_handler,
+                    enforce_handler=enforce_handler,
+                    scan_workers=scan_workers,
+                    max_scan_concurrency=max_scan_concurrency,
+                    max_inflight=max_inflight,
                 )
 
                 health_state.set_ready()
+
+
+def _enforce_redis_client(
+    addr: str, password: str | None, *, armed: bool
+) -> redis_asyncio.Redis:
+    """Build the reply-inbox client for a host:port address.
+
+    An armed client follows the Redis instance switch: it never retries, so a
+    write interrupted by the move is not replayed on the other instance. It
+    does not name its connections: an instance may reject the CLIENT command,
+    and a named client then cannot connect to it.
+    """
+    host, sep, port = addr.rpartition(":")
+    if not sep or "]" in port or (":" in host and "[" not in host):
+        # Bare hostname, or an IPv6 literal without a port.
+        host, port = addr, ""
+    # Accept bracketed IPv6 endpoints such as [::1]:6379.
+    host = host.strip("[]")
+    # Bounded timeouts: a Redis stall surfaces as an ACKed write failure
+    # instead of hanging past the ack deadline.
+    if not armed:
+        return redis_asyncio.Redis(
+            host=host or addr,
+            port=int(port) if port else 6379,
+            password=password or None,
+            socket_connect_timeout=1.0,
+            socket_timeout=2.0,
+        )
+    return redis_asyncio.Redis(
+        host=host or addr,
+        port=int(port) if port else 6379,
+        password=password or None,
+        socket_connect_timeout=1.0,
+        socket_timeout=2.0,
+        retry=RedisRetry(NoBackoff(), 0),
+    )
+
+
+async def _register_receivers(
+    *,
+    role: str,
+    receivers: ReceiverGroup,
+    logger: structlog.stdlib.BoundLogger,
+    ping_log_level: int,
+    presidio_handler: PresidioHandler | None,
+    enforce_handler: PresidioEnforceHandler | None,
+    scan_workers: int,
+    max_scan_concurrency: int | None,
+    max_inflight: int | None,
+) -> None:
+    """Register only the subscriptions assigned to this process role."""
+    if role in ("all", "analysis"):
+        assert presidio_handler is not None
+        await receivers.receive(
+            ping_pb2.Message,
+            processor_pb2.PyProcessor,
+            PingHandler(logger, ping_log_level).handle,
+        )
+        # Admit only as many messages as the scan pool can plausibly serve:
+        # 2 handlers per scan slot keeps the pool fed while one message's
+        # findings publish. Excess backlog waits at the broker instead of
+        # spending the scan slot budget queued in-process.
+        if max_inflight is None:
+            scan_slots = scan_workers if scan_workers > 0 else 2
+            max_inflight = max(4, 2 * scan_slots)
+        await receivers.receive(
+            presidio_analysis_pb2.PresidioAnalysis,
+            presidio_analyzer_pb2.PresidioAnalyzer,
+            presidio_handler.handle,
+            max_concurrency=max_inflight,
+        )
+
+    if role in ("all", "enforcement") and enforce_handler is not None:
+        if scan_workers > 0:
+            enforce_slots = scan_workers
+        else:
+            enforce_slots = max_scan_concurrency or 2
+        if role == "enforcement":
+            # Dedicated fleet: enforcement owns its scan pool, so mirror the
+            # analysis sizing at 2 handlers per slot. That overlaps a reply
+            # write with the next scan and keeps the pool fed; excess waits at
+            # the broker.
+            enforce_max = max(4, 2 * enforce_slots)
+        else:
+            # Shared pool (role=all): cap at roughly one handler per slot,
+            # floored at two so a reply write can overlap a scan, so
+            # enforcement does not starve batch analysis on the shared pool.
+            enforce_max = max(2, enforce_slots)
+        await receivers.receive(
+            presidio_enforcement_pb2.PresidioEnforcement,
+            presidio_enforcer_pb2.PresidioEnforcer,
+            enforce_handler.handle,
+            max_concurrency=enforce_max,
+        )
 
 
 def _build_broker(
@@ -195,6 +406,7 @@ def _build_broker(
     project_id: str,
     emulator_host: str | None,
     logger: structlog.stdlib.BoundLogger,
+    publisher_options: PublisherOptions | None = None,
 ) -> PubSubBroker:
     """Build a broker for the configured environment.
 
@@ -202,6 +414,8 @@ def _build_broker(
     ``EmulatedPubSubBroker`` reconciles the topic and subscription on demand. In
     production ``PubSubBroker`` assumes the resources already exist.
     """
+    if publisher_options is None:
+        publisher_options = PublisherOptions()
     if emulator_host:
         # The google clients auto-detect the emulator from this env var. The CLI
         # flag has already taken precedence over any pre-existing value (Click
@@ -210,11 +424,15 @@ def _build_broker(
         os.environ["PUBSUB_EMULATOR_HOST"] = emulator_host
         return EmulatedPubSubBroker(
             project_id,
-            PublisherClient(),
+            PublisherClient(publisher_options=publisher_options),
             SubscriberClient(),
             logger=logger,
         )
-    return PubSubBroker(project_id, logger=logger)
+    return PubSubBroker(
+        project_id,
+        publisher_client=PublisherClient(publisher_options=publisher_options),
+        logger=logger,
+    )
 
 
 async def _shutdown_on_signal(

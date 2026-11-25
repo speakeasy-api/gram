@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -26,7 +27,7 @@ import (
 // then locks the set, re-verifies the backing key is still the one the JWK was
 // minted from, and inserts.
 func (s *Service) PublishKey(ctx context.Context, payload *gensvc.PublishKeyPayload) (*gensvc.JSONWebKey, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -49,6 +50,10 @@ func (s *Service) PublishKey(ctx context.Context, payload *gensvc.PublishKeyPayl
 		return nil, oops.E(oops.CodeNotFound, err, "key set not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading key set").LogError(ctx, logger)
+	}
+
+	if err := idpmanagedresources.RequireUnmanaged(set.IdentityProviderConnectionID, "this key set"); err != nil {
+		return nil, err
 	}
 
 	minted, err := s.mintFromExternalKey(ctx, logger, authCtx.ActiveOrganizationID, set.ExternalKeyID)
@@ -272,7 +277,7 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gensvc.RevokeKeyPayloa
 func (s *Service) beginKeyTransition(ctx context.Context, rawID string) (*contextvalues.AuthContext, *slog.Logger, repo.JsonWebKey, pgx.Tx, error) {
 	var noKey repo.JsonWebKey
 
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, logger, noKey, nil, err
 	}
@@ -309,7 +314,12 @@ func (s *Service) beginKeyTransition(ctx context.Context, rawID string) (*contex
 		return nil, logger, noKey, nil, oops.E(oops.CodeUnexpected, err, "error loading key").LogError(ctx, logger)
 	}
 
-	if _, err := s.lockSetForKeyWrite(ctx, logger, q, authCtx.ActiveOrganizationID, key.JsonWebKeySetID, "key not found"); err != nil {
+	set, err := s.lockSetForKeyWrite(ctx, logger, q, authCtx.ActiveOrganizationID, key.JsonWebKeySetID, "key not found")
+	if err != nil {
+		return nil, logger, noKey, nil, err
+	}
+
+	if err := idpmanagedresources.RequireUnmanaged(set.IdentityProviderConnectionID, "this key set"); err != nil {
 		return nil, logger, noKey, nil, err
 	}
 
@@ -393,5 +403,7 @@ func keyEvent(authCtx *contextvalues.AuthContext, key repo.JsonWebKey, before, a
 		SetURN:            urn.NewJsonWebKeySet(key.JsonWebKeySetID),
 		KeySnapshotBefore: before,
 		KeySnapshotAfter:  after,
+
+		InternalSessionIssuer: false,
 	}
 }

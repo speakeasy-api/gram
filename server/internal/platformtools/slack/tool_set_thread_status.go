@@ -24,7 +24,7 @@ type setThreadStatusOutput struct {
 	Ok bool `json:"ok"`
 }
 
-func NewSetThreadStatusTool(httpClient *guardian.HTTPClient) core.PlatformToolExecutor {
+func NewSetThreadStatusTool(httpClient *guardian.HTTPClient) *slackTool {
 	readOnly := false
 	destructive := false
 	idempotent := true

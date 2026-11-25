@@ -1,5 +1,11 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
-import React, { Fragment, useEffect, useState, type ReactNode } from "react";
+import React, {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -69,7 +75,7 @@ import {
  */
 
 // Shared height for every control in the toolbar (40px).
-const CONTROL_HEIGHT = "h-10";
+export const CONTROL_HEIGHT = "h-10";
 
 // The toolbar's shell (the grey bar) — one definition whether the bar
 // lays out a single row or composes Toolbar.Row children.
@@ -100,7 +106,11 @@ function ToolbarClusters({ children }: { children: ReactNode }): JSX.Element {
   return (
     <>
       {hasLeft && (
-        <div className="flex flex-wrap items-center gap-3">
+        // grow, not flex-1: the cluster takes the bar's free space so a search
+        // told to be w-full can fill it, but keeps its content width as its
+        // basis, so a narrow bar still wraps the right cluster onto its own
+        // line instead of squeezing both onto one.
+        <div className="flex min-w-0 max-w-full grow flex-wrap items-center gap-3">
           {search}
           {search != null && filters != null && (
             <div className="bg-border h-6 w-px shrink-0" />
@@ -203,13 +213,27 @@ function ToolbarSearch({
   className,
 }: ToolbarSearchProps): JSX.Element {
   const [local, setLocal] = useState(value);
+  // Values sent this burst that the parent hasn't rendered; their echoes are stale.
+  const sent = useRef<string[]>([]);
 
   // Sync when value changes externally (back/forward, clear-all).
-  useEffect(() => setLocal(value), [value]);
+  useEffect(() => {
+    const i = sent.current.lastIndexOf(value);
+    if (i === -1) {
+      sent.current = [];
+      setLocal(value);
+    } else {
+      sent.current =
+        i === sent.current.length - 1 ? [] : sent.current.slice(i + 1);
+    }
+  }, [value]);
 
   useEffect(() => {
-    if (local === value) return;
-    const timer = setTimeout(() => onChange(local), debounceMs);
+    if (local === (sent.current.at(-1) ?? value)) return;
+    const timer = setTimeout(() => {
+      sent.current = local === value ? [] : [...sent.current, local];
+      onChange(local);
+    }, debounceMs);
     return () => clearTimeout(timer);
   }, [local, value, debounceMs, onChange]);
 
@@ -233,7 +257,9 @@ function ToolbarSearch({
           }
         }}
         placeholder={placeholder}
-        className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none"
+        // text-sm with the shared mono tracking, matching the toolbar buttons
+        // beside it; text-xs left the search visibly smaller than "More filters".
+        className="min-w-0 flex-1 bg-transparent font-mono text-sm tracking-[-0.01em] outline-none"
       />
       {local && (
         <button
@@ -268,6 +294,16 @@ interface ToolbarFiltersProps {
    */
   extraChips?: ReactNode;
   projectSlug?: string;
+  /** Off: no count on "More filters" (the set filters already show as chips). */
+  showSheetCount?: boolean;
+  /** Off: the page places its own reset control. */
+  showClearAll?: boolean;
+  /** Replaces the standard filter sheet. */
+  renderSheet?: (sheet: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    accents: Record<string, string>;
+  }) => ReactNode;
 }
 
 function ToolbarFilters({
@@ -283,6 +319,9 @@ function ToolbarFilters({
   customBuilder,
   extraChips,
   projectSlug,
+  showSheetCount = true,
+  showClearAll = true,
+  renderSheet,
 }: ToolbarFiltersProps): JSX.Element {
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -319,33 +358,48 @@ function ToolbarFilters({
     );
 
   // One brand hue per dimension, keyed on the dimension id so a filter keeps
-  // its color across pages, and de-duplicated within this bar.
+  // its color across pages, and de-duplicated within this bar. Every schema
+  // dimension gets a hue, not just the pilled ones, so the sheet can label
+  // each control with the same swatch its chip carries; pilled dims are asked
+  // for first so the visible bar keeps its colors when a sheet-only filter
+  // becomes active and joins the row.
   const accents = getFilterAccents([
     ...pillDims.map((d) => d.id),
+    ...schema.filter((d) => !pillDims.includes(d)).map((d) => d.id),
     ...customFilters.map((f) => f.path),
   ]);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {pillDims.map((dim) => (
-        <FilterChip
-          key={dim.id}
-          label={chipLabel(dim, values[dim.id]!, optionsById[dim.id])}
-          color={accents[dim.id]}
-          active={!isDimensionAtDefault(dim, values[dim.id]!)}
-          onClick={() => setSheetOpen(true)}
-          // A default pinned chip ("All …", default daterange) has nothing to
-          // clear, and a `required` dimension has nothing to clear *to* —
-          // clearing it just resolves back to a value, so the × would look
-          // broken. Omit onRemove in both cases so it is hidden rather than a
-          // no-op.
-          onRemove={
-            dim.required || isDimensionAtDefault(dim, values[dim.id]!)
-              ? undefined
-              : () => onClear(dim.id)
-          }
-        />
-      ))}
+      {pillDims.map((dim) => {
+        const label = chipLabel(dim, values[dim.id]!, optionsById[dim.id]);
+        const ariaLabel =
+          dim.kind === "select" ||
+          dim.kind === "multiselect" ||
+          dim.kind === "daterange"
+            ? `${dim.label} filter: ${label}`
+            : label;
+        return (
+          <FilterChip
+            key={dim.id}
+            label={label}
+            ariaLabel={ariaLabel}
+            color={accents[dim.id]}
+            active={!isDimensionAtDefault(dim, values[dim.id]!)}
+            onClick={() => setSheetOpen(true)}
+            // A default pinned chip ("All …", default daterange) has nothing to
+            // clear, and a `required` dimension has nothing to clear *to* —
+            // clearing it just resolves back to a value, so the × would look
+            // broken. Omit onRemove in both cases so it is hidden rather than a
+            // no-op.
+            onRemove={
+              dim.required || isDimensionAtDefault(dim, values[dim.id]!)
+                ? undefined
+                : () => onClear(dim.id)
+            }
+          />
+        );
+      })}
 
       {customFilters.map((filter) => (
         <CustomFilterChip
@@ -370,7 +424,7 @@ function ToolbarFilters({
         >
           <SlidersHorizontal className="size-4" />
           <span className="text-eyebrow">More filters</span>
-          {sheetCount > 0 && (
+          {showSheetCount && sheetCount > 0 && (
             <Badge variant="neutral" className="ml-1 px-1.5">
               {sheetCount}
             </Badge>
@@ -378,7 +432,7 @@ function ToolbarFilters({
         </Button>
       )}
 
-      {hasClearable && (
+      {showClearAll && hasClearable && (
         <Button
           variant="tertiary"
           onClick={onClearAll}
@@ -389,20 +443,25 @@ function ToolbarFilters({
         </Button>
       )}
 
-      <FilterSheet
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        schema={schema}
-        values={values}
-        optionsById={optionsById}
-        onChange={onChange}
-        onClearAll={onClearAll}
-        projectSlug={projectSlug}
-        customFilters={customFilters}
-        onEditCustomFilter={onEditCustomFilter}
-        onRemoveCustomFilter={onRemoveCustomFilter}
-        customBuilder={customBuilder}
-      />
+      {renderSheet ? (
+        renderSheet({ open: sheetOpen, onOpenChange: setSheetOpen, accents })
+      ) : (
+        <FilterSheet
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          schema={schema}
+          values={values}
+          optionsById={optionsById}
+          onChange={onChange}
+          onClearAll={onClearAll}
+          accents={accents}
+          projectSlug={projectSlug}
+          customFilters={customFilters}
+          onEditCustomFilter={onEditCustomFilter}
+          onRemoveCustomFilter={onRemoveCustomFilter}
+          customBuilder={customBuilder}
+        />
+      )}
     </div>
   );
 }

@@ -215,12 +215,13 @@ func (q *Queries) ListSkillEfficacyScoreSessions(ctx context.Context, arg ListSk
 }
 
 // InsertSkillEfficacyScores writes judged skill efficacy scores. The insert is
-// fully synchronous because publication marks the evaluation scored right
-// afterwards and a retry re-reads the row through the existence guard: a
-// server-side async buffer would acknowledge rows the guard cannot see yet.
-// Synchronous means passing no async option at all — clickhouse.WithAsync(false)
-// is NOT a synchronous insert, it sets async_insert=1 with
-// wait_for_async_insert=0 (fire and forget).
+// synchronous because publication marks the evaluation scored right afterwards
+// and a retry re-reads the row through the existence guard, and because a
+// constraint violation must fail only this insert: an async flush batches rows
+// from other writers into one block, so one bad row would fail them all. The
+// posture must be explicit — an insert with no async settings is
+// fire-and-forget on the server connection (see acknowledgedInsertContext), and
+// clickhouse.WithAsync(false) sets async_insert=1 with wait_for_async_insert=0.
 func (q *Queries) InsertSkillEfficacyScores(ctx context.Context, rows []SkillEfficacyScore) error {
 	if len(rows) == 0 {
 		return nil
@@ -280,7 +281,7 @@ func (q *Queries) InsertSkillEfficacyScores(ctx context.Context, rows []SkillEff
 	if err != nil {
 		return fmt.Errorf("building skill efficacy score insert: %w", err)
 	}
-	if err := q.conn.Exec(ctx, query, args...); err != nil {
+	if err := q.conn.Exec(synchronousInsertContext(ctx), query, args...); err != nil {
 		var exception *clickhouse.Exception
 		if errors.As(err, &exception) && exception.Code == int32(proto.ErrViolatedConstraint) {
 			return fmt.Errorf("%w: %w", ErrInvalidSkillEfficacyScore, err)

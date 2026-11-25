@@ -15,8 +15,8 @@ org_slug = ""  # Change this to your organization slug
 url = f"{server_url}/rpc/agents.response"
 headers = {
     "Content-Type": "application/json",
-    "Gram-Key": os.getenv("GRAM_API_KEY"),
-    "Gram-Project": "default",
+    "Speakeasy-AI-Key": os.getenv("SPEAKEASY_AI_API_KEY"),
+    "Speakeasy-AI-Project": "default",
 }
 
 payload = {

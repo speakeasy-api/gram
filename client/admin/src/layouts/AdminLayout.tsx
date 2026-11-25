@@ -37,7 +37,8 @@ export function AdminLayout(): JSX.Element {
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="@container/main flex min-h-0 flex-1 flex-col gap-2">
             <div className="flex min-h-0 flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
-              <div className="flex min-h-0 flex-1 flex-col overflow-auto px-4 lg:px-6">
+              {/* Keep end-of-content gestures from overscrolling the outer shell. */}
+              <div className="flex min-h-0 flex-1 flex-col overflow-auto overscroll-y-contain px-4 lg:px-6">
                 <Outlet />
               </div>
             </div>

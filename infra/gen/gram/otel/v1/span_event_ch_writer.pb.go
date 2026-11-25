@@ -68,11 +68,10 @@ var File_gram_otel_v1_span_event_ch_writer_proto protoreflect.FileDescriptor
 
 const file_gram_otel_v1_span_event_ch_writer_proto_rawDesc = "" +
 	"\n" +
-	"'gram/otel/v1/span_event_ch_writer.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"F\n" +
-	"\x11SpanEventCHWriter:1\x92\xb5\x18-\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\b\n" +
+	"'gram/otel/v1/span_event_ch_writer.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"B\n" +
+	"\x11SpanEventCHWriter:-\x92\xb5\x18)\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\b\n" +
 	"\x02\b\n" +
-	"\x12\x02\b<J\x02\x10\n" +
-	"R\x11gram.otel.v1.SpanB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"
+	"\x12\x02\b<R\x11gram.otel.v1.SpanB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"
 
 var file_gram_otel_v1_span_event_ch_writer_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_otel_v1_span_event_ch_writer_proto_goTypes = []any{

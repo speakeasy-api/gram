@@ -1,6 +1,6 @@
 #:schema https://mise.en.dev/schema/mise.json
 
-min_version = "2026.7.6"
+min_version = "2026.9.9"
 
 [settings]
 pin = true
@@ -12,41 +12,44 @@ pin = true
 # file, you can specify more tools or different version of listed ones below as
 # well as overriding environment variables.
 [tools]
-"aqua:ariga/atlas" = "1.0.0"
+"aqua:ariga/atlas" = "1.3.4"
 "github:speakeasy-api/openapi" = "1.24.0"
 # Keep in sync with speakeasyVersion in .speakeasy/workflow.yaml, otherwise the
 # installed version and the version generation runs on can mismatch.
-"github:speakeasy-api/speakeasy" = "1.796.1"
+# Installed as speakeasy-sdks, not speakeasy: the AI Control Plane CLI built
+# from cli/ is also called speakeasy, and the repo pin would otherwise shadow
+# it in every worktree. Tasks call speakeasy-sdks.
+"github:speakeasy-api/speakeasy" = { version = "1.808.1", rename_exe = "speakeasy-sdks" }
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"
 flyctl = "0.4.77"
-go = "1.27.0"
-golangci-lint = "2.13.2"
+gh = "2.100.0"
+go = "1.27.4"
+golangci-lint = "2.15.0"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
+stripe = "1.50.11"
 melange = "0.56.5"
 # Authoritative Node pin. `.node-version` mirrors it and must be kept in sync:
 # aube resolves its own runtime and cannot read this file, so without that
 # mirror it falls through to whatever `node` is first on PATH.
-nodejs = "24.16.0"
-aube = "1.38.1"
-# Kept for `changeset publish` only, which shells out to a package manager by
-# name and has no aube branch — it picks between pnpm, yarn and npm. Both
-# versions resolve to pnpm here, off different inputs: 2.31.0 (what we pin)
-# asks package-manager-detector, which answers pnpm because pnpm-lock.yaml is
-# on disk; 3.0.0 asks manypkg for the workspace tool, which answers pnpm
-# because pnpm-workspace.yaml is. aube keeps writing both files in place, so
-# releases need a real pnpm on PATH either way.
+nodejs = "24.22.2"
+aube = "2.8.0"
+# Kept for `changeset publish` only. Changesets v3 asks manypkg for the
+# workspace tool, which answers pnpm because pnpm-workspace.yaml is present.
+# Release versioning uses the custom aube command in the release workflow.
+# Changesets formatting is disabled because oxfmt ignores CHANGELOG.md files.
 #
 # Publishing via npm instead is not a drop-in: our public packages carry
 # `workspace:` and `catalog:` specifiers that pnpm rewrites at pack time and
 # npm would ship verbatim.
 "github:pnpm/pnpm" = "11.19.0"
 watchexec = "2.5.1"
-uv = "0.12.1"
+uv = "0.13.4"
 yq = "4.53.3"
 hk = "1.56.1"
+zizmor = "1.30.1"
 pkl = "0.32.1"
 "github:temporalio/cli" = "1.8.2"
 "github:pb33f/openapi-changes" = "0.2.10"
@@ -54,13 +57,20 @@ pkl = "0.32.1"
 "github:gotestyourself/gotestsum" = "1.13.0"
 buf = "1.72.0"
 ruff = "0.16.1"
+# Keep aligned with agents/code-runner/rust-toolchain.toml.
+rust = { version = "1.96.1", profile = "minimal", components = ["clippy", "rustfmt"] }
 "github:ast-grep/ast-grep" = "0.45.0"
-pitchfork = "2.22.0"
+pitchfork = "2.33.1"
 "npm:@playwright/cli" = "0.1.17"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
 [env]
+# Share Go compilation caches across worktrees, including nested tool builds.
+GOFLAGS = "-trimpath"
+# Unset an inherited SSL_CERT_FILE (e.g. from Claude Code) that breaks local login.
+SSL_CERT_FILE = false
+
 ###########################
 ## Runtime configuration ##
 ###########################
@@ -90,48 +100,62 @@ CLICKHOUSE_PASSWORD = "gram"
 CLICKHOUSE_HOST = "127.0.0.1"
 CLICKHOUSE_HTTP_PORT = "8123"
 CLICKHOUSE_NATIVE_PORT = "9440"
-CLICKHOUSE_DATABASE = "default"
+CLICKHOUSE_DATABASE = "gram"
 CLICKHOUSE_INSECURE = true
+CLICKHOUSE_READ_USERNAME = "{{env.CLICKHOUSE_USERNAME}}"
+CLICKHOUSE_READ_PASSWORD = "{{env.CLICKHOUSE_PASSWORD}}"
+CLICKHOUSE_READ_HOST = "{{env.CLICKHOUSE_HOST}}"
+CLICKHOUSE_READ_NATIVE_PORT = "{{env.CLICKHOUSE_NATIVE_PORT}}"
+CLICKHOUSE_READ_DATABASE = "{{env.CLICKHOUSE_DATABASE}}"
+CLICKHOUSE_READ_CA_FILE = "{{config_root}}/local/clickhouse/certs/ca-cert.pem"
 GRAM_CLICKHOUSE_URL = "clickhouse://{{env.CLICKHOUSE_USERNAME}}:{{env.CLICKHOUSE_PASSWORD}}@{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?secure=true&skip_verify=true"
-## golang-migrate requires username/password as query parameters instead of in the URL
-GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true&x-multi-statement=true"
+## golang-migrate requires database, username, and password as query parameters.
+GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}?database={{env.CLICKHOUSE_DATABASE}}&username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true&x-multi-statement=true"
 
 ############################
 ## Temporal configuration ##
 ############################
 TEMPORAL_HOST = "127.0.0.1"
-TEMPORAL_PORT = "7233"
+# Avoid the legacy shared server on 7233 during migration.
+TEMPORAL_PORT = "17233"
 TEMPORAL_NAMESPACE = "default"
 TEMPORAL_TASK_QUEUE = "main"
 ## When using Temporal Cloud, the following variable should like something like:
 ##     "<namespace>.<account>.tmprl.cloud:7233".
 TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 
-##############################
-## Presidio configuration   ##
-##############################
-PRESIDIO_PORT = "5050"
-PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
+## Fine-tuned risk LLM analyzer (OpenAI-compatible chat endpoint, URL includes
+## /v1). An empty URL disables it; real values belong in mise.local.toml.
+## Runbook: server/internal/scanners/llmanalyzer/README.md (Local development).
+GRAM_RISK_LLM_URL = ""
+GRAM_RISK_LLM_MODEL = "risk-judge-9b"
+GRAM_RISK_LLM_API_KEY = ""
 
-##########################################
-## Gram server, admin and worker config ##
-##########################################
+###############################################
+## Speakeasy server, admin and worker config ##
+###############################################
+## The following variable can be one of: local, test, prod
+GRAM_ENVIRONMENT = "local"
+## Partition the processes run in: us or eu. Required, with no default in the
+## server, pystreams or tunnel gateway, so local development sets it here.
+GRAM_PARTITION = "us"
+GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
+## Public listener hosts accept IPv4 or bracketed IPv6 literals (e.g. [::1]).
+## Empty uses wildcard public listeners; health/control listeners use loopback.
+GRAM_BIND_IP = "127.0.0.1" # Only needed for local development.
 ## Setting this to 1 will run the server and worker in a single process.
 ## This is useful when debugging during local development. It can also be used
 ## for simple production deployments although you are encouraged to run the gram
 ## server and worker as separate processes that can be scaled independently.
 GRAM_SINGLE_PROCESS = 0
 GRAM_SERVER_PORT = "8080"
-GRAM_SERVER_ADDRESS = ":{{env.GRAM_SERVER_PORT}}"
+GRAM_SERVER_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_SERVER_PORT}}"
 GRAM_CONTROL_PORT = "8081"
-GRAM_CONTROL_ADDRESS = ":{{env.GRAM_CONTROL_PORT}}"
+GRAM_CONTROL_ADDRESS = "127.0.0.1:{{env.GRAM_CONTROL_PORT}}"
 GRAM_WORKER_CONTROL_PORT = "8082"
-GRAM_WORKER_CONTROL_ADDRESS = ":{{env.GRAM_WORKER_CONTROL_PORT}}"
+GRAM_WORKER_CONTROL_ADDRESS = "127.0.0.1:{{env.GRAM_WORKER_CONTROL_PORT}}"
 GRAM_STREAMS_CONTROL_PORT = "8087"
-GRAM_STREAMS_CONTROL_ADDRESS = ":{{env.GRAM_STREAMS_CONTROL_PORT}}"
-## The following variable can be one of: local, test, prod
-GRAM_ENVIRONMENT = "local"
-GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
+GRAM_STREAMS_CONTROL_ADDRESS = "127.0.0.1:{{env.GRAM_STREAMS_CONTROL_PORT}}"
 GRAM_SITE_PORT = "5173"
 GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
 GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
@@ -139,6 +163,7 @@ GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
 GRAM_APP_URL = "{{env.GRAM_SERVER_URL}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
+GRAM_LAKE_DIRECTORY = "{{config_root}}/local/lake"
 ## The following variable is used to encrypt env vars stored in the database.
 GRAM_ENCRYPTION_KEY = "unset"
 GRAM_REDIS_CACHE_HOST = "127.0.0.1"
@@ -159,39 +184,73 @@ TUNNEL_GATEWAY_PUBLIC_PORT = "8090"
 TUNNEL_GATEWAY_PUBLIC_ADDR = ":{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
 TUNNEL_GATEWAY_FORWARD_PORT = "8091"
 TUNNEL_GATEWAY_FORWARD_ADDR = ":{{env.TUNNEL_GATEWAY_FORWARD_PORT}}"
+## Health and readiness port of the opt-in local tailnet gateway daemon.
+GRAM_TAILNET_GATEWAY_CONTROL_PORT = "8093"
+## Opt-in local private network (`pitchfork start --group private-network`): the private
+## listener, the reconciler and the tailnet gateway, without Kubernetes. The
+## gateway presents an HMAC-signed token in place of a projected
+## service-account token, and the listener verifies it with the key file; both
+## files are created on first start. The API server accepts new connections
+## only for organizations with the network_ingress entitlement. The start
+## scripts route reconciliation to that group's reconciler on the
+## `network-ingress` queue; a single-process `gram start` reconciles on its own
+## queue, so the setting is not here. Every
+## hostname, service and machine is named after GRAM_NETWORK_INGRESS_DEV_ID
+## in mise.local.toml (`mise run zero:network-ingress`), so a shared tailnet's
+## production artifacts are never touched.
+GRAM_NETWORK_INGRESS_ENABLED = "true"
+GRAM_NETINGRESS_PORT = "8094"
+GRAM_NETINGRESS_CONTROL_PORT = "8095"
+GRAM_NETWORK_INGRESS_WORKER_CONTROL_PORT = "8096"
+GRAM_NETINGRESS_GATEWAY_NAMESPACE = "gram-local"
+GRAM_NETINGRESS_GATEWAY_SERVICE_ACCOUNT = "gram-tailnet-gateway"
+GRAM_NETINGRESS_LOCAL_TOKEN_KEY_FILE = "{{config_root}}/local/netingress/token.key"
+GRAM_TAILNET_GATEWAY_TOKEN_PATH = "{{config_root}}/local/netingress/gateway.token"
+## Caller identity assertions. `mise run zero:tunnel-identity` writes the
+## signing key pair (GRAM_AUTHZ_PRIVATE_KEY, GRAM_AUTHZ_PUBLIC_KEYS) into
+## mise.local.toml; the local tunnel gateway is the issuer.
+GRAM_AUTHZ_ISSUER_URL = "http://localhost:{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
+## Remapped per worktree; provider and token are written by zero:code-mode.
+GRAM_CODE_RUNNER_PORT = "18081"
+GRAM_CODE_RUNTIME_URL = "http://127.0.0.1:{{env.GRAM_CODE_RUNNER_PORT}}"
 OPENROUTER_DEV_KEY = "unset"
+## Evaluate local sigint messages when the platform inference key is configured.
+GRAM_SIGINT_ACK_ONLY = "false"
 ## The dev-idp is a top-level project (dev-idp/) backed by SQLite.
 ## GRAM_DEVIDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
-GRAM_DEVIDP_HOST = "localhost"
+GRAM_DEVIDP_HOST = "{{env.GRAM_HOST}}"
 GRAM_DEVIDP_PORT = "35291"
 GRAM_DEVIDP_CONTROL_PORT = "35292"
 GRAM_DEVIDP_DASHBOARD_PORT = "35293"
-GRAM_DEVIDP_ADDRESS = ":{{env.GRAM_DEVIDP_PORT}}"
-GRAM_DEVIDP_CONTROL_ADDRESS = ":{{env.GRAM_DEVIDP_CONTROL_PORT}}"
-GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
+GRAM_DEVIDP_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_DEVIDP_PORT}}"
+GRAM_DEVIDP_CONTROL_ADDRESS = "127.0.0.1:{{env.GRAM_DEVIDP_CONTROL_PORT}}"
+GRAM_DEVIDP_EXTERNAL_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
-GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2"
+GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2-1"
 GRAM_IDP_CLIENT_ID = "gram-local-dev"
-## WorkOS API key. In mock-workos mode the mock endpoint accepts any value.
-## Override in mise.local.toml with a real sk_test_... key for workos mode.
+## Shared secret used by Speakeasy clients to authenticate to dev-idp. `./zero`
+## generates a per-checkout value in mise.local.toml.
 GRAM_IDP_CLIENT_SECRET = "unset"
-## IDP mode: "mock-workos" (default) or "workos".
-##
-## mock-workos — fully local, zero config. dev-idp emulates the WorkOS API.
-##               No overrides needed.
-##
-## workos      — real WorkOS via dev-idp proxy. Add these to mise.local.toml:
-##                 GRAM_IDP_MODE = "workos"
-##                 GRAM_IDP_CLIENT_SECRET = "sk_test_..."
-##                 WORKOS_API_URL = "https://api.workos.com"
-##                 GRAM_IDP_CLIENT_ID = "<your WorkOS client ID>"
-##
+## Upstream WorkOS API key, used only by dev-idp's workos backend.
+## Override in mise.local.toml with a real sk_test_... key for the workos backend.
+WORKOS_API_KEY = "unset"
+## Identity backend: "local" (default) or "workos". Login stays
+## non-interactive either way. For real WorkOS, set in mise.local.toml:
+##   GRAM_DEVIDP_BACKEND = "workos"
+##   WORKOS_API_KEY = "sk_test_..."
 ## See CONTRIBUTING.md "Local auth and identity" for details.
-GRAM_IDP_MODE = "mock-workos"
-## Points the Gram server and dev-idp at the WorkOS-compatible API.
-## In mock-workos mode this is the dev-idp emulator; override in
-## mise.local.toml for workos mode.
-WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/mock-workos"
+GRAM_DEVIDP_BACKEND = "local"
+## Points the Speakeasy server at the dev-idp's WorkOS surface. Constant across
+## backends — the backend flag decides what serves it.
+WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
+# Google hosted-domain lookups for sign-in evidence go to the dev-idp mock.
+GRAM_GOOGLE_USERINFO_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos/google/userinfo"
+## Sign-in tier knobs for the local WorkOS emulator (set in mise.local.toml):
+##   DEVIDP_AUTHENTICATION_METHOD = "SSO" (default) | "GoogleOAuth" | "MicrosoftOAuth" | "MagicAuth" | "Password" | "none"
+##   DEVIDP_IDP_HOSTED_DOMAIN     = managed domain (default: the user's email domain; "none" = personal account)
+##   DEVIDP_IDP_TENANT_ID         = Microsoft tenant (default: a fixed work tenant; "consumer" = personal account)
+## Real WorkOS API the workos backend proxies to.
+# GRAM_DEVIDP_WORKOS_UPSTREAM_URL = "https://api.workos.com"
 ## PEM-encoded RSA private key for stable JWKS across dev-idp restarts.
 # GRAM_DEVIDP_RSA_PRIVATE_KEY = ""
 ## The following variables are only needed if you want to do one of the following:
@@ -200,6 +259,16 @@ WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/mock-workos"
 GRAM_HTTP_SCHEME = "https"
 GRAM_SSL_CERT_FILE = "{{config_root}}/local/ssl/certs/local.pem"
 GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
+## Additional certificate DNS names and IPs, comma-separated; zero:tailscale sets this locally.
+# GRAM_SSL_EXTRA_HOSTS = ""
+## Local certificate source: "mkcert" (a CA local to this machine) or
+## "tailscale" (a publicly trusted certificate for this machine's Tailnet DNS
+## name, renewed by `mise run tls:tailscale`). zero:tailscale sets it locally
+## when the tailnet has HTTPS certificates enabled.
+GRAM_TLS_PROVIDER = { default = "mkcert" }
+## The local seed keeps the clients it registers with Linear and Notion here
+## (gitignored), so reseeding reuses them.
+GRAM_DEMOSEED_CACHE_DIR = "{{ config_root }}/local/cache"
 ## GitHub App for plugin publishing (leave unset to disable)
 # GRAM_PLUGINS_GITHUB_APP_ID = ""
 # GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""
@@ -210,6 +279,10 @@ GRAM_PYSTREAMS_CONTROL_HOST = "127.0.0.1"
 ## Raise on blocking code detected on the pystreams event loop (aiocop). On by
 ## default locally; unset in production. Set to "" in mise.local.toml to disable.
 GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
+## Skip pystreams locally: `gram streams` acknowledges its subscriptions and
+## answers Presidio enforcement with no findings. Set to "false" in
+## mise.local.toml to run the real Python consumers (pystreams-multi daemon).
+GRAM_PYSTREAMS_STUB = "true"
 
 ##########################
 ## Observability config ##
@@ -217,6 +290,7 @@ GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
 OTLP_GRPC_HOST = "localhost"
 OTLP_GRPC_PORT = "4317"
 OTLP_HTTP_PORT = "4318"
+## Shared otlp-sink ACKs and drops so exporters do not retry into a closed port.
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
 OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
 OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
@@ -227,16 +301,21 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 ## Local development settings ##
 ################################
-GRAFANA_PORT = "13000"
-TEMPO_HTTP_PORT = "13200"
-LOKI_HTTP_PORT = "13100"
-PROMETHEUS_PORT = "9099"
 LITELLM_PORT = "4001"
 GRAM_LOG_PRETTY = { default = "1" }
-## Default Gram API URL baked into the dashboard's inlined Elements code and
-## used by the CLI to point to the correct Gram API server
+## Default Speakeasy API URL baked into the dashboard's inlined Elements code and
+## used by the CLI to point to the correct Speakeasy API server
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
+## The speakeasy CLI reads SPEAKEASY_AI_* names before the deprecated GRAM_*
+## ones and warns when only GRAM_* is set. Mirror the values it uses so local
+## runs stay quiet while the server keeps its GRAM_* names.
+SPEAKEASY_AI_API_KEY = "{{env.GRAM_API_KEY}}"
+SPEAKEASY_AI_API_URL = "{{env.GRAM_API_URL}}"
+SPEAKEASY_AI_SITE_URL = "{{env.GRAM_SITE_URL}}"
+SPEAKEASY_AI_LOG_PRETTY = { default = "{{env.GRAM_LOG_PRETTY}}" }
 VITE_DEV_HOSTNAMES = "localhost"
+GRAM_AGENTATION_PORT = "4747"
+VITE_AGENTATION_URL = "http://localhost:{{env.GRAM_AGENTATION_PORT}}"
 ## Base URL of the CDN serving the dashboard's static assets (e.g.
 ## https://cdn.dev.getgram.ai). Not a build-time setting: the dashboard
 ## container's nginx reads it at runtime to rewrite /assets/ URLs in
@@ -244,7 +323,7 @@ VITE_DEV_HOSTNAMES = "localhost"
 ## renderBuiltUrl comment in client/dashboard/vite.config.ts). Unset locally
 ## and by default in production — assets are then served same-origin.
 # GRAM_CDN_URL = "https://cdn.dev.getgram.ai"
-TEMPORAL_WEB_PORT = "8233"
+TEMPORAL_WEB_PORT = "18233"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing
 ## flag settings. The server and worker run from the `server/` directory, and
@@ -258,10 +337,11 @@ PUBSUB_EMULATOR_PORT = "8088"
 PUBSUB_EMULATOR_HOST = "localhost:{{env.PUBSUB_EMULATOR_PORT}}"
 
 ####################################
-## Gram Functions runner settings ##
+## Speakeasy Functions runner settings ##
 ####################################
 ## Where to deploy functions.
-## Allowed values: local, flyio.
+## Allowed values: local, flyio, disabled. With disabled, Functions are turned
+## off and no Fly.io or Tigris settings are needed.
 GRAM_FUNCTIONS_PROVIDER = "local"
 GRAM_FUNCTIONS_RUNNER_OCI_IMAGE = "gram-runner"
 ## By default, the runner version is inferred from the version of the
@@ -278,10 +358,13 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 # GRAM_FUNCTIONS_FLYIO_REGION = "sjc"
 
 ########################################
-## Gram Assistant runtime settings ##
+## Speakeasy Assistant runtime settings ##
 ########################################
 ## Where assistant runtimes run.
-## Allowed values: local, flyio, gke.
+## Allowed values: local, gke, disabled. The server flag defaults to gke; local
+## setup writes local as described below. disabled turns assistants off: the
+## dashboard hides them; runtime-dependent assistant APIs answer that they are
+## unavailable.
 ## Left unset here so `./zero` / `mise run zero:assistants` can tell "not
 ## configured" from an intentional override in mise.local.toml or the
 ## environment. When unset, that task writes local defaults:
@@ -294,12 +377,6 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 # GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
 # GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
 
-##################
-## MCP Registry ##
-##################
-PULSE_REGISTRY_TENANT = { default = "unset" }
-PULSE_REGISTRY_KEY = { default = "unset" }
-
 ##########
 ## Risk ##
 ##########
@@ -309,11 +386,18 @@ GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6
 ## Stripe configuration ##
 ##########################
 ## PAYG self-serve billing. Run `mise run stripe:setup` to provision and
-## validate the sandbox TUM meter, product, and metered price. The task writes
-## the catalog values into mise.local.toml. Requires a Stripe sandbox API key.
+## validate the sandbox TUM meter, product, and metered price, and resolve
+## existing monthly metered prices by lookup keys payg-mcp-egress and
+## payg-risk-scans. The task writes catalog values into mise.local.toml.
+## Requires a Stripe sandbox API key.
 STRIPE_API_KEY = { default = "unset" }
+## Publishable key paired with STRIPE_API_KEY. Embedded Checkout cannot mount without it.
+## `mise run stripe:setup` saves the CLI test-mode publishable key when Stripe CLI config has one.
+STRIPE_PUBLISHABLE_KEY = { default = "unset" }
 STRIPE_WEBHOOK_SECRET = { default = "unset" }
 STRIPE_PRICE_ID_TUM = { default = "" }
+STRIPE_PRICE_ID_MCP_EGRESS = { default = "" }
+STRIPE_PRICE_ID_RISK_SCANS = { default = "" }
 STRIPE_METER_ID_TUM = { default = "" }
 STRIPE_METER_EVENT_NAME = { default = "tum" }
 STRIPE_PORTAL_CONFIGURATION_ID = { default = "" }
@@ -331,11 +415,11 @@ POLAR_METER_ID_CREDITS = "b96fda22-2147-4089-bedb-72c3304b17eb"
 #############################
 ## Admin API Configuration ##
 #############################
-GRAM_ADMIN_HOST = "localhost"
+GRAM_ADMIN_HOST = "{{env.GRAM_HOST}}"
 GRAM_ADMIN_PORT = "8083"
-GRAM_ADMIN_SERVER_ADDRESS = ":{{env.GRAM_ADMIN_PORT}}"
+GRAM_ADMIN_SERVER_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_ADMIN_PORT}}"
 GRAM_ADMIN_CONTROL_PORT = "8084"
-GRAM_ADMIN_CONTROL_ADDRESS = ":{{env.GRAM_ADMIN_CONTROL_PORT}}"
+GRAM_ADMIN_CONTROL_ADDRESS = "127.0.0.1:{{env.GRAM_ADMIN_CONTROL_PORT}}"
 GRAM_ADMIN_DASHBOARD_PORT = "5174"
 ## Where the admin API itself listens. Only the admin dashboard dev proxy
 ## dials this; browsers never do.
@@ -349,7 +433,7 @@ GRAM_ADMIN_SERVER_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_DASHBO
 ## the flag has no default, so local writes 403 without this.
 GRAM_ADMIN_ALLOWED_ORIGINS = "{{env.GRAM_ADMIN_SERVER_URL}}"
 GRAM_ADMIN_ENCRYPTION_KEY = "unset"
-GRAM_ADMIN_OIDC_EMULATOR_HOST = "localhost"
+GRAM_ADMIN_OIDC_EMULATOR_HOST = "{{env.GRAM_HOST}}"
 GRAM_ADMIN_OIDC_EMULATOR_PORT = "4000"
 GRAM_ADMIN_OIDC_EMULATOR_URL = "http://{{env.GRAM_ADMIN_OIDC_EMULATOR_HOST}}:{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}"
 GRAM_ADMIN_OIDC_CLIENT_ID = "gram-local.apps.googleusercontent.com"
@@ -358,8 +442,14 @@ GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"
 ## Used for admin local development as a fake Google IDP. Derived from the
 ## admin emulator vars (not a standalone *_PORT) so zero:remap-ports cannot
 ## randomize the listen port and issuer out of sync with the admin client.
-MOCK_OIDC_ADDRESS = ":{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}"
+MOCK_OIDC_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}"
 MOCK_OIDC_ISSUER = "{{env.GRAM_ADMIN_OIDC_EMULATOR_URL}}"
+## Local mock MCP server (server/cmd/mock-mcp), the offline upstream the local
+## seed registers as the "Acme Tasks (local mock)" remote MCP server. Loopback
+## only: the local server's remote MCP proxy is its only client.
+GRAM_MOCK_MCP_PORT = "4100"
+GRAM_MOCK_MCP_ADDRESS = "127.0.0.1:{{env.GRAM_MOCK_MCP_PORT}}"
+GRAM_MOCK_MCP_URL = "http://127.0.0.1:{{env.GRAM_MOCK_MCP_PORT}}/mcp"
 
 ########################
 ## Svix configuration ##

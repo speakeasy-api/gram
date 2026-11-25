@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
+import { getRuntimeConfig, type RuntimeConfig } from "./runtime-config";
 
 // The design system ships semantic font-size utilities (`text-body-md`,
 // `text-heading-lg`, …) that tailwind-merge does not know about, so without
@@ -32,8 +33,8 @@ export function cn(...inputs: ClassValue[]): string {
 // __GRAM_SERVER_URL__ is the server's authoritative URL (injected at build
 // time from GRAM_SERVER_URL). The viteprod profile leaves it unset, so fall
 // back to the current origin instead of degrading to `undefined/rpc/...`.
-// Use everywhere except the playground — MCP configs, callback URL
-// displays, anything operator-facing.
+// Use everywhere except in-browser MCP and chat clients — MCP configs,
+// callback URL displays, anything operator-facing.
 export function getServerURL(): string {
   return __GRAM_SERVER_URL__ ?? window.location.origin;
 }
@@ -50,25 +51,53 @@ export function getApiBaseURL(): string {
   return import.meta.env.DEV ? window.location.origin : getServerURL();
 }
 
-// tunnel.speakeasy.com in prod, tunnel-pr-N.<env> in previews (single label
-// keeps the wildcard cert valid), tunnel.<host> otherwise.
-export function tunnelGatewayURL(): string {
-  const server = new URL(getServerURL());
-  const host =
-    server.host === "app.getgram.ai"
-      ? "tunnel.speakeasy.com"
-      : /^pr-\d+\./.test(server.host)
-        ? `tunnel-${server.host}`
-        : `tunnel.${server.host}`;
+// Every first-party host that serves the same product as serverURL's host:
+// the deployment's configured hosts when serverURL's host is one of them,
+// otherwise just that host. A deployment can route extra hosts to the
+// dashboard (old API hosts, previews) that are not first-party.
+export function firstPartyHosts(
+  serverURL = getServerURL(),
+  config: RuntimeConfig = getRuntimeConfig(),
+): string[] {
+  const host = new URL(serverURL, window.location.origin).hostname;
+  const configured = config.firstPartyHosts ?? [];
+  return configured.includes(host) ? [...configured] : [host];
+}
+
+// Hosts an agent sandbox must allow to reach Speakeasy: the current host first,
+// then every other host of its environment. Published plugins and the device
+// daemon send to the server URL at publish time, which moves between these
+// hosts when the server URL changes, so an allowlist needs all of them to keep
+// working across a republish.
+export function agentEgressHosts(
+  serverURL = getServerURL(),
+  config: RuntimeConfig = getRuntimeConfig(),
+): string[] {
+  const host = new URL(serverURL, window.location.origin).hostname;
+  return [
+    host,
+    ...firstPartyHosts(serverURL, config).filter((h) => h !== host),
+  ];
+}
+
+// The deployment's tunnel gateway host when configured, otherwise
+// tunnel.<host> (local development).
+export function tunnelGatewayURL(
+  serverURL = getServerURL(),
+  config: RuntimeConfig = getRuntimeConfig(),
+): string {
+  const server = new URL(serverURL);
+  const host = config.tunnelHost ?? `tunnel.${server.host}`;
   return `${server.protocol === "http:" ? "ws" : "wss"}://${host}/connect`;
 }
 
-// __PLAYGROUND_PROXY_URL__ is the dashboard origin in dev (so browser-side MCP
+// __DEV_PROXY_URL__ is the dashboard origin in dev (so browser-side MCP
 // requests can ride the vite proxy and ferry cookies the Vercel AI SDK can't
-// forward across origins), and undefined in prod. Consumed by the playground
-// and the remote-MCP tools listing; everything else uses getServerURL().
-export function getPlaygroundMcpBaseURL(): string {
-  return __PLAYGROUND_PROXY_URL__ ?? getServerURL();
+// forward across origins), and undefined in prod. Consumed by the MCP Inspect
+// chat, in-browser MCP clients and dashboard completions; everything else
+// uses getServerURL().
+export function getChatMcpBaseURL(): string {
+  return __DEV_PROXY_URL__ ?? getServerURL();
 }
 
 // mcpConnectionUrl rebases a display MCP URL (built from getServerURL) onto the
@@ -81,7 +110,7 @@ export function mcpConnectionUrl(
   displayUrl: string | undefined,
 ): string | undefined {
   if (!displayUrl) return displayUrl;
-  const base = getPlaygroundMcpBaseURL();
+  const base = getChatMcpBaseURL();
   const server = getServerURL();
   if (base === server) return displayUrl;
   try {
@@ -96,31 +125,43 @@ export function mcpConnectionUrl(
   }
 }
 
+// Whether GET /mcp/<slug>/connect/first-party would resolve.
+// The handler 404s unless the server is issuer-gated, is not a public tunnel
+// (those serve anonymously and expose no OAuth surface), and the slug is a
+// platform-namespace endpoint. A custom-domain slug is a different address
+// and must not be passed as platformSlug.
+export function supportsFirstPartyConnect(server: {
+  userSessionIssuerId?: string;
+  tunneledMcpServerId?: string;
+  visibility?: string;
+  platformSlug?: string;
+}): boolean {
+  if (!server.userSessionIssuerId) return false;
+  if (server.tunneledMcpServerId && server.visibility === "public")
+    return false;
+  return !!server.platformSlug;
+}
+
 // firstPartyConnectUrl derives the runtime first-party connect entry point
-// (`/<runtimePath>/<slug>/connect/first-party`) for a display MCP URL. It's
-// always built on the Gram server origin (getServerURL), never the display
+// (`/mcp/<slug>/connect/first-party`) for a display MCP URL. It's
+// always built on the Speakeasy server origin (getServerURL), never the display
 // URL's origin: a custom-domain endpoint's display URL is
-// `https://<customer-domain>/mcp/<slug>`, but the connect page is a Gram auth
-// surface — the IDP callback, routes, and any session live on the Gram origin,
-// not the customer's MCP domain. Opened as a top-level new tab; the IDP flow is
-// state-based so no dev proxy is needed.
-//
-// `runtimePath` selects the surface the connect route is mounted on: the
-// experimental remote-MCP surface (`x/mcp`, the default) or the toolset surface
-// (`mcp`, used by the playground). Both display URLs are `/mcp/<slug>`, so the
-// surface can't be inferred from the URL and must be passed explicitly.
+// `https://<customer-domain>/mcp/<slug>`, but the connect page is a Speakeasy auth
+// surface — the IDP callback, routes, and any session live on the Speakeasy origin,
+// not the customer's MCP domain. Pass a platform-namespace URL
+// (`${getServerURL()}/mcp/<platform slug>`); a custom-domain display URL's
+// slug is not looked up on that host. Opened as a top-level new tab; the IDP
+// flow is state-based so no dev proxy is needed.
 // Returns undefined when the slug can't be derived.
 export function firstPartyConnectUrl(
   displayUrl: string | undefined,
-  options?: { runtimePath?: "mcp" | "x/mcp" },
 ): string | undefined {
   if (!displayUrl) return undefined;
-  const runtimePath = options?.runtimePath ?? "x/mcp";
   try {
     const slug = new URL(displayUrl).pathname.split("/").filter(Boolean).pop();
     if (!slug) return undefined;
     const url = new URL(getServerURL());
-    url.pathname = `/${runtimePath}/${slug}/connect/first-party`;
+    url.pathname = `/mcp/${slug}/connect/first-party`;
     return url.toString();
   } catch {
     return undefined;
@@ -131,6 +172,8 @@ export function buildLoginRedirectURL(
   redirectTo: string | null,
   orgName?: string,
   email?: string,
+  partnerCode?: string,
+  attribution?: Record<string, string>,
 ): string {
   // The base is only consulted when getServerURL() is relative (empty in
   // tests, per vitest.config.ts) — window.location.origin is always
@@ -147,7 +190,7 @@ export function buildLoginRedirectURL(
   // which is not a secret, and it goes no further than this request.
   if (orgName) url.searchParams.set("org_name", orgName);
   // Also sign-up only. The server turns this into WorkOS's `login_hint`, which
-  // pre-fills the email field on the hosted AuthKit screen. Gram never writes
+  // pre-fills the email field on the hosted AuthKit screen. Speakeasy never writes
   // it to Redis or the database.
   //
   // It does land in request logs, though: the logger records full URLs, so
@@ -155,6 +198,13 @@ export function buildLoginRedirectURL(
   // in AGE-3125, which covers both endpoints — the fixes differ, since this
   // hand-off is a top-level navigation and cannot use a header.
   if (email) url.searchParams.set("email", email);
+  if (partnerCode?.trim())
+    url.searchParams.set("partner_code", partnerCode.trim());
+  // Sign-up only: UTMs and the analytics session id, which the server
+  // attaches to the sign-up events (see lib/signup-attribution.ts).
+  for (const [key, value] of Object.entries(attribution ?? {})) {
+    url.searchParams.set(key, value);
+  }
   return url.toString();
 }
 
@@ -175,7 +225,7 @@ export function capitalize(str: string): string {
 
 /**
  * Turn a URL slug into a Title Case display string, e.g.
- * "custom-tools" -> "Custom Tools". Intended for the static (literal) segments
+ * "risk-policies" -> "Risk Policies". Intended for the static (literal) segments
  * of a route path — not for dynamic slug params like toolset or user
  * identifiers, which should keep their original casing.
  */
@@ -232,15 +282,30 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export function getCustomDomainCNAME(): string {
+// Fallback for the custom domain DNS target: the server's dnsConfig.cnameTarget
+// takes precedence wherever it is available. The deployment's configured target
+// when set, otherwise one derived from the server host (local development).
+export function getCustomDomainCNAME(
+  serverURL = getServerURL(),
+  config: RuntimeConfig = getRuntimeConfig(),
+): string {
+  if (config.customDomainCname) return config.customDomainCname;
   try {
-    const url = new URL(getServerURL());
-    const parts = url.hostname.split(".");
+    const parts = new URL(serverURL).hostname.split(".");
     if (parts.length > 2) {
       parts[0] = parts[0] === "app" ? "cname" : `cname.${parts[0]}`;
     }
     return `${parts.join(".")}.`;
   } catch {
-    return "cname.getgram.ai.";
+    return "";
   }
+}
+
+export function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  const step = Math.max(1, Math.floor(size));
+  for (let i = 0; i < items.length; i += step) {
+    out.push(items.slice(i, i + step));
+  }
+  return out;
 }

@@ -62,6 +62,7 @@ func TestFallbackReturnsJoinedErrorsWithoutAValue(t *testing.T) {
 }
 
 type stubSpanDialect struct {
+	NilSpan
 	sessionKey   string
 	sessionValue string
 	sessionErr   error

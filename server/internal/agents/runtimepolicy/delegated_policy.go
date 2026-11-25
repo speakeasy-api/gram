@@ -1,0 +1,537 @@
+package runtimepolicy
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"maps"
+	"slices"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
+)
+
+// DelegatedPolicyVersion identifies the persisted delegated-policy format and
+// the agent-runtime scope registry used to validate it.
+type DelegatedPolicyVersion int32
+
+const (
+	DelegatedPolicyVersion1 DelegatedPolicyVersion = 1
+	DelegatedPolicyVersion2 DelegatedPolicyVersion = 2
+	DelegatedPolicyVersion3 DelegatedPolicyVersion = 3
+	DelegatedPolicyVersion4 DelegatedPolicyVersion = 4
+	DelegatedPolicyVersion5 DelegatedPolicyVersion = 5
+
+	DelegatedPolicyVersion6 DelegatedPolicyVersion = 6
+	DelegatedPolicyVersion7 DelegatedPolicyVersion = 7
+
+	// DelegatedPolicyVersion8 records the implication closure in which
+	// mcp:read and mcp:write no longer imply mcp:connect. Versions 1 through 7
+	// keep recording that connect (see delegatedPolicyClosure). No issuer
+	// persists version 8 yet, so replicas that predate it never read one.
+	DelegatedPolicyVersion8 DelegatedPolicyVersion = 8
+
+	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion8
+
+	// IssuedDelegatedPolicyVersion preserves the general delegated/MCP issuance
+	// contract. Reader support (Current) does not advance existing issuers.
+	IssuedDelegatedPolicyVersion = DelegatedPolicyVersion4
+
+	// AssistantIssuedPolicyVersion preserves the pre-inference version used by
+	// assistant MCP credentials and internal assistant inference ceilings.
+	AssistantIssuedPolicyVersion = DelegatedPolicyVersion5
+
+	// InferenceIssuedPolicyVersion is an explicit opt-in for the new external
+	// inference audience only. Older replicas reject it; mixed deployments and
+	// rollback do not promise availability for these new credentials.
+	InferenceIssuedPolicyVersion = DelegatedPolicyVersion6
+)
+
+// IsIssuableScope reports whether the general delegated issuance contract can carry scope.
+func IsIssuableScope(scope authz.Scope) bool {
+	return IsRuntimeScopeSafe(RuntimeScopeRegistryVersion(IssuedDelegatedPolicyVersion), scope)
+}
+
+// ErrInvalidDelegatedPolicy marks a policy that must fail closed.
+var ErrInvalidDelegatedPolicy = errors.New("invalid delegated policy")
+
+// DelegatedPolicyGrant is one canonical allow grant. The absence of an effect
+// field is intentional: delegated policies cannot contain deny-effect rows.
+type DelegatedPolicyGrant struct {
+	Scope    authz.Scope    `json:"scope"`
+	Selector authz.Selector `json:"selector"`
+}
+
+// DelegatedPolicy is the versioned credential-policy envelope. Requested is
+// retained for display and audit; authorization uses only Effective.
+type DelegatedPolicy struct {
+	Requested []DelegatedPolicyGrant `json:"requested"`
+	Effective []DelegatedPolicyGrant `json:"effective"`
+
+	runtimeGrants []authz.Grant
+}
+
+// NewDelegatedPolicyV1 constructs the current canonical policy from requested
+// grants and records their explicit implication closure in Effective.
+func NewDelegatedPolicyV1(requested []authz.Grant) (DelegatedPolicy, error) {
+	return NewDelegatedPolicy(DelegatedPolicyVersion1, requested)
+}
+
+// NewDelegatedPolicy constructs a canonical policy suitable for persistence by
+// a future credential issuer. Issuers may only use active agent-runtime scopes.
+func NewDelegatedPolicy(version DelegatedPolicyVersion, requested []authz.Grant) (DelegatedPolicy, error) {
+	if err := validateDelegatedPolicyVersion(version); err != nil {
+		return DelegatedPolicy{}, err
+	}
+
+	wireRequested := make([]DelegatedPolicyGrant, 0, len(requested))
+	seen := make(map[string]struct{}, len(requested))
+	for _, grant := range requested {
+		if err := ValidateRuntimeScope(RuntimeScopeRegistryVersion(version), grant.Scope); err != nil {
+			return DelegatedPolicy{}, invalidDelegatedPolicy("validate requested scope %q: %v", grant.Scope, err)
+		}
+		if err := authz.ValidateSelector(grant.Scope, grant.Selector); err != nil {
+			return DelegatedPolicy{}, invalidDelegatedPolicy("validate requested selector for %q: %v", grant.Scope, err)
+		}
+
+		wireGrant := DelegatedPolicyGrant{Scope: grant.Scope, Selector: cloneSelector(grant.Selector)}
+		key, err := delegatedPolicyGrantKey(wireGrant)
+		if err != nil {
+			return DelegatedPolicy{}, err
+		}
+		if _, ok := seen[key]; ok {
+			return DelegatedPolicy{}, invalidDelegatedPolicy("duplicate requested grant")
+		}
+		seen[key] = struct{}{}
+		wireRequested = append(wireRequested, wireGrant)
+	}
+	sortDelegatedPolicyGrants(wireRequested)
+
+	effective, err := delegatedPolicyClosure(version, wireRequested)
+	if err != nil {
+		return DelegatedPolicy{}, err
+	}
+	policy := DelegatedPolicy{
+		Requested:     wireRequested,
+		Effective:     effective,
+		runtimeGrants: runtimeGrants(version, effective),
+	}
+	return policy, nil
+}
+
+// EncodeDelegatedPolicy returns canonical JSON for a policy produced by the
+// constructor. Mutated, stale, or otherwise noncanonical policies are rejected.
+func EncodeDelegatedPolicy(version DelegatedPolicyVersion, policy DelegatedPolicy) ([]byte, error) {
+	validated, err := validateDecodedDelegatedPolicy(version, policy)
+	if err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(struct {
+		Requested []DelegatedPolicyGrant `json:"requested"`
+		Effective []DelegatedPolicyGrant `json:"effective"`
+	}{Requested: validated.Requested, Effective: validated.Effective})
+	if err != nil {
+		return nil, invalidDelegatedPolicy("encode: %v", err)
+	}
+	return encoded, nil
+}
+
+// DecodeDelegatedPolicy strictly decodes policy JSON loaded with its credential
+// row. Unknown and retired scopes are retained for compatibility but omitted
+// from RuntimeGrants, so each such entry fails closed without disabling valid
+// entries. All other malformed or noncanonical profiles are rejected.
+func DecodeDelegatedPolicy(version DelegatedPolicyVersion, raw []byte) (DelegatedPolicy, error) {
+	return decodeDelegatedPolicyThroughVersion(version, raw, CurrentDelegatedPolicyVersion)
+}
+
+// The reader's version ceiling is checked before interpreting any policy bytes.
+// Keeping this boundary explicit lets compatibility tests exercise older readers.
+func decodeDelegatedPolicyThroughVersion(version DelegatedPolicyVersion, raw []byte, supportedVersion DelegatedPolicyVersion) (DelegatedPolicy, error) {
+	if version > supportedVersion {
+		return DelegatedPolicy{}, invalidDelegatedPolicy("unsupported version %d", version)
+	}
+	if err := validateDelegatedPolicyVersion(version); err != nil {
+		return DelegatedPolicy{}, err
+	}
+	if err := rejectDuplicateJSONKeys(raw); err != nil {
+		return DelegatedPolicy{}, invalidDelegatedPolicy("decode: %v", err)
+	}
+	if err := rejectNonCanonicalDelegatedPolicyFields(raw); err != nil {
+		return DelegatedPolicy{}, invalidDelegatedPolicy("decode: %v", err)
+	}
+
+	var wire struct {
+		Requested []DelegatedPolicyGrant `json:"requested"`
+		Effective []DelegatedPolicyGrant `json:"effective"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&wire); err != nil {
+		return DelegatedPolicy{}, invalidDelegatedPolicy("decode: %v", err)
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		return DelegatedPolicy{}, err
+	}
+	if wire.Requested == nil || wire.Effective == nil {
+		return DelegatedPolicy{}, invalidDelegatedPolicy("requested and effective must be arrays")
+	}
+
+	return validateDecodedDelegatedPolicy(version, DelegatedPolicy{
+		Requested:     wire.Requested,
+		Effective:     wire.Effective,
+		runtimeGrants: nil,
+	})
+}
+
+// RuntimeGrants returns a defensive copy of the stored effective policy entries
+// that are active and agent-runtime-safe for the policy version.
+func (p DelegatedPolicy) RuntimeGrants() []authz.Grant {
+	grants := make([]authz.Grant, len(p.runtimeGrants))
+	for i, grant := range p.runtimeGrants {
+		grants[i] = authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector), Inferred: false}
+	}
+	return grants
+}
+
+func validateDecodedDelegatedPolicy(version DelegatedPolicyVersion, policy DelegatedPolicy) (DelegatedPolicy, error) {
+	if err := validateDelegatedPolicyVersion(version); err != nil {
+		return DelegatedPolicy{}, err
+	}
+	if policy.Requested == nil || policy.Effective == nil {
+		return DelegatedPolicy{}, invalidDelegatedPolicy("requested and effective must be arrays")
+	}
+	if err := validateCanonicalDelegatedPolicyGrants(version, policy.Requested, "requested"); err != nil {
+		return DelegatedPolicy{}, err
+	}
+	if err := validateCanonicalDelegatedPolicyGrants(version, policy.Effective, "effective"); err != nil {
+		return DelegatedPolicy{}, err
+	}
+
+	expected, err := delegatedPolicyClosure(version, policy.Requested)
+	if err != nil {
+		return DelegatedPolicy{}, err
+	}
+	if !equalDelegatedPolicyGrants(expected, policy.Effective) {
+		return DelegatedPolicy{}, invalidDelegatedPolicy("effective grants are not the requested implication closure")
+	}
+
+	validated := DelegatedPolicy{
+		Requested:     cloneDelegatedPolicyGrants(policy.Requested),
+		Effective:     cloneDelegatedPolicyGrants(policy.Effective),
+		runtimeGrants: runtimeGrants(version, policy.Effective),
+	}
+	return validated, nil
+}
+
+func validateCanonicalDelegatedPolicyGrants(version DelegatedPolicyVersion, grants []DelegatedPolicyGrant, field string) error {
+	previous := ""
+	for i, grant := range grants {
+		if grant.Scope == "" {
+			return invalidDelegatedPolicy("%s grant %d has an empty scope", field, i)
+		}
+		if err := validateStoredDelegatedPolicyGrant(version, grant); err != nil {
+			return invalidDelegatedPolicy("validate %s grant %d: %v", field, i, err)
+		}
+		key, err := delegatedPolicyGrantKey(grant)
+		if err != nil {
+			return err
+		}
+		if i > 0 && key <= previous {
+			return invalidDelegatedPolicy("%s grants are unordered or duplicated", field)
+		}
+		previous = key
+	}
+	return nil
+}
+
+func validateStoredDelegatedPolicyGrant(version DelegatedPolicyVersion, grant DelegatedPolicyGrant) error {
+	if grant.Selector == nil {
+		return errors.New("selector must be an object")
+	}
+	if _, ok := grant.Selector[authz.SelectorKeyResourceKind]; !ok {
+		return errors.New("selector must include resource_kind")
+	}
+	if _, ok := grant.Selector[authz.SelectorKeyResourceID]; !ok {
+		return errors.New("selector must include resource_id")
+	}
+
+	definition, known := runtimeScopeDefinitions[grant.Scope]
+	if !known || definition.lifecycle == RuntimeScopeLifecycleRetired {
+		return nil
+	}
+	if definition.safeSince == 0 || definition.safeSince > RuntimeScopeRegistryVersion(version) {
+		return fmt.Errorf("scope %q is not agent-runtime-safe", grant.Scope)
+	}
+	if err := validateStoredDelegatedSelector(grant.Scope, grant.Selector); err != nil {
+		return fmt.Errorf("validate delegated policy selector: %w", err)
+	}
+	return nil
+}
+
+// storedOnlyLimitScopes are the scopes a stored delegated policy may still
+// carry a tool or disposition limit on, from before limits moved to connect.
+var storedOnlyLimitScopes = []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite, authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite}
+
+// validateStoredDelegatedSelector is authz.ValidateSelector for a policy read
+// back from a key or session. A stored policy must keep decoding at its
+// version, so it may still limit viewing or managing a server to some tools
+// or dispositions. A new policy cannot: NewDelegatedPolicy uses
+// authz.ValidateSelector.
+func validateStoredDelegatedSelector(scope authz.Scope, selector authz.Selector) error {
+	if !slices.Contains(storedOnlyLimitScopes, scope) {
+		if err := authz.ValidateSelector(scope, selector); err != nil {
+			return fmt.Errorf("validate selector: %w", err)
+		}
+		return nil
+	}
+	unlimited := maps.Clone(selector)
+	delete(unlimited, authz.SelectorKeyTool)
+	if disposition, ok := unlimited[authz.SelectorKeyDisposition]; ok {
+		if err := authz.ValidateSelector(authz.ScopeMCPConnect, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   authz.WildcardResource,
+			authz.SelectorKeyDisposition:  disposition,
+		}); err != nil {
+			return fmt.Errorf("validate stored disposition limit: %w", err)
+		}
+		delete(unlimited, authz.SelectorKeyDisposition)
+	}
+	if err := authz.ValidateSelector(scope, unlimited); err != nil {
+		return fmt.Errorf("validate selector without stored limits: %w", err)
+	}
+	return nil
+}
+
+func delegatedPolicyClosure(version DelegatedPolicyVersion, requested []DelegatedPolicyGrant) ([]DelegatedPolicyGrant, error) {
+	effective := make([]DelegatedPolicyGrant, 0, len(requested))
+	seen := make(map[string]struct{}, len(requested))
+	for _, grant := range requested {
+		for _, scope := range delegatedScopeClosure(version, grant.Scope) {
+			implied := DelegatedPolicyGrant{Scope: scope, Selector: cloneSelector(grant.Selector)}
+			key, err := delegatedPolicyGrantKey(implied)
+			if err != nil {
+				return nil, err
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			effective = append(effective, implied)
+		}
+	}
+	sortDelegatedPolicyGrants(effective)
+	return effective, nil
+}
+
+// delegatedScopeClosure is the implication closure a delegated policy of
+// version records in Effective. Versions 1 through 7 keep mcp:read and
+// mcp:write implying mcp:connect, as authz did when they were defined:
+// credentials store their policy and decoding recomputes this closure, so a
+// narrower one would reject every stored policy that requested read or write,
+// and replicas that predate version 8 recompute the wider closure for policies
+// issued at those versions. A stored policy is only a ceiling, so the connect
+// it records still needs a live mcp:connect grant from the agent and its owner
+// before it allows anything.
+//
+// Versions 1 through 8 also predate MCP blocks following Implies in reverse,
+// when mcp:blocked_read implied no other block, so they keep recording an MCP
+// block on its own. Evaluation still applies the wider rule: a stored
+// mcp:blocked_read takes mcp:write away whatever the policy records, because
+// checks expand blocks when they are evaluated, not when they are stored.
+func delegatedScopeClosure(version DelegatedPolicyVersion, scope authz.Scope) []authz.Scope {
+	if version <= DelegatedPolicyVersion8 && slices.Contains(legacyIndependentMCPBlocks, scope) {
+		return []authz.Scope{scope}
+	}
+	closure := authz.ScopeImplicationClosure(scope)
+	if version >= DelegatedPolicyVersion8 || slices.Contains(closure, authz.ScopeMCPConnect) {
+		return closure
+	}
+	if !slices.Contains(closure, authz.ScopeMCPRead) && !slices.Contains(closure, authz.ScopeMCPWrite) {
+		return closure
+	}
+	closure = append(closure, authz.ScopeMCPConnect)
+	slices.Sort(closure)
+	return closure
+}
+
+// legacyIndependentMCPBlocks are the MCP blocks whose closure stored policies
+// of versions 1 through 8 record as the block alone.
+var legacyIndependentMCPBlocks = []authz.Scope{
+	authz.ScopeMCPBlockedRead,
+	authz.ScopeMCPBlockedWrite,
+	authz.ScopeMCPBlockedConnect,
+}
+
+func runtimeGrants(version DelegatedPolicyVersion, effective []DelegatedPolicyGrant) []authz.Grant {
+	grants := make([]authz.Grant, 0, len(effective))
+	for _, grant := range effective {
+		definition, known := runtimeScopeDefinitions[grant.Scope]
+		if !known || definition.lifecycle != RuntimeScopeLifecycleActive || definition.safeSince == 0 || definition.safeSince > RuntimeScopeRegistryVersion(version) {
+			continue
+		}
+		grants = append(grants, authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector), Inferred: false})
+	}
+	return grants
+}
+
+func sortDelegatedPolicyGrants(grants []DelegatedPolicyGrant) {
+	slices.SortFunc(grants, func(a, b DelegatedPolicyGrant) int {
+		aKey, _ := delegatedPolicyGrantKey(a)
+		bKey, _ := delegatedPolicyGrantKey(b)
+		if aKey < bKey {
+			return -1
+		}
+		if aKey > bKey {
+			return 1
+		}
+		return 0
+	})
+}
+
+func delegatedPolicyGrantKey(grant DelegatedPolicyGrant) (string, error) {
+	selector, err := json.Marshal(grant.Selector)
+	if err != nil {
+		return "", invalidDelegatedPolicy("marshal selector: %v", err)
+	}
+	return string(grant.Scope) + "\x00" + string(selector), nil
+}
+
+func equalDelegatedPolicyGrants(a, b []DelegatedPolicyGrant) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		aKey, err := delegatedPolicyGrantKey(a[i])
+		if err != nil {
+			return false
+		}
+		bKey, err := delegatedPolicyGrantKey(b[i])
+		if err != nil || aKey != bKey {
+			return false
+		}
+	}
+	return true
+}
+
+func cloneDelegatedPolicyGrants(grants []DelegatedPolicyGrant) []DelegatedPolicyGrant {
+	cloned := make([]DelegatedPolicyGrant, len(grants))
+	for i, grant := range grants {
+		cloned[i] = DelegatedPolicyGrant{Scope: grant.Scope, Selector: cloneSelector(grant.Selector)}
+	}
+	return cloned
+}
+
+func cloneSelector(selector authz.Selector) authz.Selector {
+	if selector == nil {
+		return nil
+	}
+	cloned := make(authz.Selector, len(selector))
+	maps.Copy(cloned, selector)
+	return cloned
+}
+
+func rejectNonCanonicalDelegatedPolicyFields(raw []byte) error {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return fmt.Errorf("decode policy envelope: %w", err)
+	}
+	if len(envelope) != 2 || envelope["requested"] == nil || envelope["effective"] == nil {
+		return errors.New("policy envelope fields must be exactly requested and effective")
+	}
+	for _, field := range []string{"requested", "effective"} {
+		var grants []json.RawMessage
+		if err := json.Unmarshal(envelope[field], &grants); err != nil {
+			return fmt.Errorf("decode %s grants: %w", field, err)
+		}
+		for i, rawGrant := range grants {
+			var grant map[string]json.RawMessage
+			if err := json.Unmarshal(rawGrant, &grant); err != nil {
+				return fmt.Errorf("decode %s grant %d: %w", field, i, err)
+			}
+			if len(grant) != 2 || grant["scope"] == nil || grant["selector"] == nil {
+				return fmt.Errorf("%s grant %d fields must be exactly scope and selector", field, i)
+			}
+		}
+	}
+	return nil
+}
+
+func rejectDuplicateJSONKeys(raw []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	var visit func() error
+	visit = func() error {
+		token, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("read JSON token: %w", err)
+		}
+		delim, ok := token.(json.Delim)
+		if !ok {
+			return nil
+		}
+		switch delim {
+		case '{':
+			seen := map[string]struct{}{}
+			for decoder.More() {
+				keyToken, err := decoder.Token()
+				if err != nil {
+					return fmt.Errorf("read JSON object key: %w", err)
+				}
+				key, ok := keyToken.(string)
+				if !ok {
+					return errors.New("JSON object key is not a string")
+				}
+				if _, duplicate := seen[key]; duplicate {
+					return fmt.Errorf("duplicate JSON object key %q", key)
+				}
+				seen[key] = struct{}{}
+				if err := visit(); err != nil {
+					return err
+				}
+			}
+		case '[':
+			for decoder.More() {
+				if err := visit(); err != nil {
+					return err
+				}
+			}
+		default:
+			return fmt.Errorf("unexpected JSON delimiter %q", delim)
+		}
+		closing, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("read JSON closing delimiter: %w", err)
+		}
+		expected := json.Delim('}')
+		if delim == '[' {
+			expected = ']'
+		}
+		if closing != expected {
+			return fmt.Errorf("unexpected JSON closing delimiter %q", closing)
+		}
+		return nil
+	}
+	return visit()
+}
+
+func ensureJSONEOF(decoder *json.Decoder) error {
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return invalidDelegatedPolicy("decode: trailing JSON value")
+		}
+		return invalidDelegatedPolicy("decode trailing data: %v", err)
+	}
+	return nil
+}
+
+func validateDelegatedPolicyVersion(version DelegatedPolicyVersion) error {
+	if version < DelegatedPolicyVersion1 || version > CurrentDelegatedPolicyVersion {
+		return invalidDelegatedPolicy("unsupported version %d", version)
+	}
+	return nil
+}
+
+func invalidDelegatedPolicy(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", ErrInvalidDelegatedPolicy, fmt.Sprintf(format, args...))
+}

@@ -2,6 +2,7 @@ package mcpservers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -10,7 +11,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 )
 
 // MCPServerTransactionInput contains the server-owned values needed to create
@@ -23,12 +30,57 @@ type MCPServerTransactionInput struct {
 	ActorEmail            *string
 	Name                  string
 	Visibility            string
+	NetworkAccessMode     networkaccess.Mode
 	EnvironmentID         uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
 	RemoteMCPServerID     uuid.NullUUID
 	TunneledMCPServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	UnproxiedMCPServerID  uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
+}
+
+// ErrServerReferenceOutsideProject marks a create that named a backend,
+// environment or variation group belonging to another project. The foreign
+// keys only enforce existence, not tenancy, so this check is what keeps a
+// server and the toolset behind it in the same project.
+var ErrServerReferenceOutsideProject = errors.New("mcp server reference is not in this project")
+
+// CreateProjectMCPServerInTransaction is the project-checked entry point for
+// every caller that creates a server from caller-supplied references: the
+// management API's createMcpServer and the Platform MCP's server authoring. It
+// refuses a reference outside input.ProjectID before creating anything, so
+// neither caller can produce a server in one project fronting a toolset in
+// another.
+func CreateProjectMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input MCPServerTransactionInput) (repo.McpServer, error) {
+	return createProjectMCPServerInTransaction(ctx, tx, auditLogger, input, false)
+}
+
+func createProjectMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input MCPServerTransactionInput, scopeLocked bool) (repo.McpServer, error) {
+	// Checked before the ownership queries, which would otherwise dereference
+	// a nil transaction before the delegate's own guard runs.
+	if tx == nil || auditLogger == nil || input.ProjectID == uuid.Nil || input.Name == "" || input.Visibility == "" {
+		return repo.McpServer{}, fmt.Errorf("invalid MCP server transaction input")
+	}
+	ids := serverIDs{
+		EnvironmentID:         input.EnvironmentID,
+		UserSessionIssuerID:   input.UserSessionIssuerID,
+		RemoteMcpServerID:     input.RemoteMCPServerID,
+		TunneledMcpServerID:   input.TunneledMCPServerID,
+		ToolsetID:             input.ToolsetID,
+		UnproxiedMcpServerID:  input.UnproxiedMCPServerID,
+		ToolVariationsGroupID: input.ToolVariationsGroupID,
+	}
+	if err := validateServerBackendExclusivity(ids); err != nil {
+		return repo.McpServer{}, fmt.Errorf("validate MCP server backend: %w", err)
+	}
+	if err := verifyServerReferenceOwnership(ctx, tx, input.ProjectID, ids); err != nil {
+		return repo.McpServer{}, err
+	}
+	if scopeLocked {
+		return createMCPServerInLockedTransaction(ctx, tx, auditLogger, input)
+	}
+	return CreateMCPServerInTransaction(ctx, tx, auditLogger, input)
 }
 
 // CreateMCPServerInTransaction creates the MCP server, its required lifetime
@@ -40,6 +92,32 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		return repo.McpServer{}, fmt.Errorf("invalid MCP server transaction input")
 	}
 
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, input.OrganizationID, []uuid.UUID{input.ProjectID}); err != nil {
+		return repo.McpServer{}, fmt.Errorf("lock server creation scope: %w", err)
+	}
+	return createMCPServerInLockedTransaction(ctx, tx, auditLogger, input)
+}
+
+// createMCPServerInLockedTransaction requires the complete writer scope before any mutation.
+func createMCPServerInLockedTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input MCPServerTransactionInput) (repo.McpServer, error) {
+	// Before the server row exists, so the source's liveness and ownership are
+	// settled under its row lock and the auth client sync below has that lock
+	// ahead of any server lock.
+	sources := credentialSourcesOf([]uuid.NullUUID{input.RemoteMCPServerID}, []uuid.NullUUID{input.TunneledMCPServerID})
+	if err := verifyLiveCredentialSources(ctx, tx, input.ProjectID, sources); err != nil {
+		return repo.McpServer{}, err
+	}
+
+	if input.RemoteMCPServerID.Valid && input.Visibility != VisibilityDisabled {
+		source, err := remotemcprepo.New(tx).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: input.RemoteMCPServerID.UUID, ProjectID: input.ProjectID})
+		if err != nil {
+			return repo.McpServer{}, fmt.Errorf("load remote source before enabling: %w", err)
+		}
+		if isPendingProviderSetupURL(source.Url) {
+			return repo.McpServer{}, errProviderSetupPending
+		}
+	}
+
 	serverID, err := uuid.NewV7()
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("generate MCP server ID: %w", err)
@@ -49,12 +127,24 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		return repo.McpServer{}, fmt.Errorf("compute MCP server slug: %w", err)
 	}
 
-	issuerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if input.RemoteMCPServerID.Valid || input.TunneledMCPServerID.Valid {
-		issuerID, err = MintServerUserSessionIssuer(ctx, tx, input.OrganizationID, input.ProjectID, slug)
+	issuerID := input.UserSessionIssuerID
+	if issuerID.Valid {
+		if _, err := usersessionbindings.ValidateAndLock(ctx, tx, issuerID.UUID, input.ProjectID, input.OrganizationID); err != nil {
+			return repo.McpServer{}, fmt.Errorf("validate selected user session issuer: %w", err)
+		}
+	} else if input.RemoteMCPServerID.Valid || input.TunneledMCPServerID.Valid {
+		issuerID, err = serverissuer.Mint(ctx, tx, input.OrganizationID, input.ProjectID, slug)
 		if err != nil {
 			return repo.McpServer{}, fmt.Errorf("mint MCP server issuer: %w", err)
 		}
+	}
+
+	mode := input.NetworkAccessMode
+	if mode == "" {
+		mode = networkaccess.ModePublicOnly
+	}
+	if _, err := networkaccess.Parse(string(mode)); err != nil {
+		return repo.McpServer{}, fmt.Errorf("validate MCP server network access mode: %w", err)
 	}
 
 	server, err := repo.New(tx).CreateMCPServer(ctx, repo.CreateMCPServerParams{
@@ -70,11 +160,11 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		UnproxiedMcpServerID:  input.UnproxiedMCPServerID,
 		ToolVariationsGroupID: input.ToolVariationsGroupID,
 		Visibility:            input.Visibility,
+		NetworkAccessMode:     networkaccess.Storage(mode),
 	})
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("create MCP server: %w", err)
 	}
-
 	if err := auditLogger.LogMcpServerCreate(ctx, tx, audit.LogMcpServerCreateEvent{
 		OrganizationID:   input.OrganizationID,
 		ProjectID:        input.ProjectID,
@@ -86,6 +176,43 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		McpServerSlug:    slug,
 	}); err != nil {
 		return repo.McpServer{}, fmt.Errorf("audit MCP server creation: %w", err)
+	}
+
+	// Capture configured OAuth associations and typed state before commit, not
+	// in a best-effort post-commit resync.
+	if issuerID.Valid {
+		derive := repo.ResyncMCPServerRemoteSessionIssuersParams{
+			UserSessionIssuerIds: []uuid.UUID{issuerID.UUID}, OrganizationID: input.OrganizationID, ProjectID: input.ProjectID,
+		}
+		// Gateway capture reads the column, so derive it before reconcile, and
+		// again after, because reconcile changes the associations it derives from.
+		if _, err := repo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, derive); err != nil {
+			return repo.McpServer{}, fmt.Errorf("derive server upstream issuer: %w", err)
+		}
+		if err := upstreamclients.ReconcileInLockedTransaction(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}); err != nil {
+			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
+		}
+		// Choosing the issuer configures the server's sign-in, so a server that
+		// is the issuer's only consumer offers the clients bound there.
+		if err := upstreamclients.CaptureSoleConsumers(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}, nil); err != nil {
+			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
+		}
+		if _, err := repo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, derive); err != nil {
+			return repo.McpServer{}, fmt.Errorf("derive server upstream issuer: %w", err)
+		}
+		server, err = repo.New(tx).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{ID: server.ID, ProjectID: input.ProjectID})
+		if err != nil {
+			return repo.McpServer{}, fmt.Errorf("reload server upstream issuer: %w", err)
+		}
+	}
+
+	// A source's credential headers are usually set up before any server
+	// fronts them, so offer their auth clients from this server as it appears.
+	if err := authclientbackfill.SyncEMAServers(ctx, tx, input.OrganizationID, []uuid.UUID{server.ID}); err != nil {
+		return repo.McpServer{}, fmt.Errorf("sync server EMA clients: %w", err)
+	}
+	if err := syncCredentialSources(ctx, tx, input.OrganizationID, sources); err != nil {
+		return repo.McpServer{}, err
 	}
 
 	return server, nil

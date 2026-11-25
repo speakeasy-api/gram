@@ -59,10 +59,11 @@ func TestMissingReadinessNormalizesToAStableRepairProjection(t *testing.T) {
 	t.Parallel()
 
 	readiness := normalizedReadiness(Readiness{}, false)
-	output := readinessToolOutput("project", "registration", readiness, false)
+	output := readinessToolOutput("project", "mcp", readiness, false)
 
 	require.Equal(t, ReadinessDegraded, readiness.State)
 	require.Equal(t, "readiness_unavailable", readiness.EvidenceCode)
+	require.Equal(t, SetupCategoryTemporarilyUnavailable, output.SetupCategory)
 	require.Equal(t, "unavailable", output.Freshness)
 	require.Equal(t, []RepairAction{{Kind: "retry_readiness", Label: "Check again whether this MCP server is working"}}, output.Actions)
 }
@@ -70,7 +71,7 @@ func TestMissingReadinessNormalizesToAStableRepairProjection(t *testing.T) {
 func TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity(t *testing.T) {
 	t.Parallel()
 
-	output := readinessToolOutput("project", "registration", Readiness{
+	output := readinessToolOutput("project", "mcp", Readiness{
 		State:        ReadinessUnauthorized,
 		EvidenceCode: "provider_authorization_rejected",
 		CheckedAt:    time.Date(2026, time.August, 7, 0, 0, 0, 0, time.UTC),
@@ -79,11 +80,12 @@ func TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity(t *testin
 	}, true)
 
 	require.Equal(t, "project", output.ProjectSlug)
-	require.Equal(t, "registration", output.RegistrationID)
+	require.Equal(t, "mcp", output.MCPID)
 	require.Equal(t, ReadinessUnauthorized, output.State)
 	require.Equal(t, "fresh", output.Freshness)
 	require.NotEmpty(t, output.Actions)
 	require.Equal(t, "provider_authorization_rejected", output.EvidenceCode)
+	require.Equal(t, SetupCategoryProviderAuthorizationRejected, output.SetupCategory)
 
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
@@ -91,4 +93,40 @@ func TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity(t *testin
 	require.NotContains(t, string(encoded), "token")
 	require.NotContains(t, string(encoded), "connection_id")
 	require.NotContains(t, string(encoded), "connection_generation")
+}
+
+func TestReadinessToolOutputUsesCategorySpecificActions(t *testing.T) {
+	t.Parallel()
+
+	output := readinessToolOutput("project", "mcp", Readiness{
+		State:        ReadinessUnsupported,
+		EvidenceCode: "redirect_rejected",
+	}, true)
+
+	require.Equal(t, SetupCategoryUnsafeTargetOrRedirect, output.SetupCategory)
+	require.Equal(t, []RepairAction{{Kind: "review_remote_url", Label: "Review this MCP server's HTTPS URL in the dashboard"}}, output.Actions)
+}
+
+func TestReadyStateSuppressesStaleFailureEvidence(t *testing.T) {
+	t.Parallel()
+
+	output := readinessToolOutput("project", "mcp", Readiness{
+		State:        ReadinessReady,
+		EvidenceCode: "provider_authorization_rejected",
+	}, true)
+
+	require.Empty(t, output.SetupCategory)
+	require.Empty(t, output.Actions)
+}
+
+func TestGuideUnavailableKeepsContactSupportRepairAction(t *testing.T) {
+	t.Parallel()
+
+	output := readinessToolOutput("project", "mcp", Readiness{
+		State:        ReadinessGuideUnavailable,
+		EvidenceCode: "guide_missing",
+	}, true)
+
+	require.Empty(t, output.SetupCategory)
+	require.Equal(t, []RepairAction{{Kind: "contact_support", Label: "Ask an administrator to restore the setup guide for this MCP server"}}, output.Actions)
 }

@@ -1846,6 +1846,8 @@ type KillswitchMCPServerResponseBody struct {
 	ID        *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	Name      *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The project's display name
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
 }
 
 // KillswitchSummaryResponseBody is used to define fields on response body
@@ -6087,6 +6089,9 @@ func ValidateKillswitchMCPServerResponseBody(body *KillswitchMCPServerResponseBo
 	}
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

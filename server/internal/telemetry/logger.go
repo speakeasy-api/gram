@@ -145,6 +145,22 @@ func (l *Logger) checkToolIOLogsEnabled(ctx context.Context, organizationID stri
 // channel for bulky payloads past the tool IO scrub.
 const maxScrubbedSkillNameLen = 128
 
+// ScrubToolIO drops the tool IO content from a row's attributes, for an
+// organization without tool_io_logs. Skill rows keep only the skill name:
+// ClickHouse materializes skill_name from the arguments JSON, so a full
+// delete would erase the activation from skill analytics, while any extra
+// invocation args are still tool IO and get dropped. The writer applies it
+// to every row it stores, and the hooks tee applies the same scrub to the
+// copy of a row it republishes, so both copies hide the same content.
+func ScrubToolIO(attrs map[attr.Key]any) {
+	skillArgs := scrubbedSkillArguments(attrs)
+	delete(attrs, attr.GenAIToolCallArgumentsKey)
+	delete(attrs, attr.GenAIToolCallResultKey)
+	if skillArgs != "" {
+		attrs[attr.GenAIToolCallArgumentsKey] = skillArgs
+	}
+}
+
 // scrubbedSkillArguments returns the minimal arguments JSON a scrubbed Skill
 // row may keep ({"skill": <name>}), or "" for non-skill rows, unparsable
 // arguments, and implausibly long names.
@@ -282,18 +298,8 @@ func (l *Logger) buildBulkParams(ctx context.Context, operationCtx context.Conte
 			toolIOLogsEnabledByOrg[param.ToolInfo.OrganizationID] = toolIOEnabled
 		}
 
-		// Scrub tool IO content if the feature is disabled for this organization.
-		// Skill rows keep only the skill name: ClickHouse materializes
-		// skill_name from the arguments JSON, so a full delete would erase the
-		// activation from skill analytics — while any extra invocation args
-		// are still tool IO and get dropped.
 		if !toolIOEnabled {
-			skillArgs := scrubbedSkillArguments(param.Attributes)
-			delete(param.Attributes, attr.GenAIToolCallArgumentsKey)
-			delete(param.Attributes, attr.GenAIToolCallResultKey)
-			if skillArgs != "" {
-				param.Attributes[attr.GenAIToolCallArgumentsKey] = skillArgs
-			}
+			ScrubToolIO(param.Attributes)
 		}
 
 		param = l.hydrateUserInfo(operationCtx, param)
@@ -311,7 +317,7 @@ func (l *Logger) buildBulkParams(ctx context.Context, operationCtx context.Conte
 
 // hydrateUserInfo fills the directory-derived parts of the row's UserInfo
 // (allowlisted WorkOS predefined attributes, current group names, role
-// slugs) when the caller provided a Gram user ID. Telemetry rows are
+// slugs) when the caller provided a Speakeasy user ID. Telemetry rows are
 // append-only: the snapshot reflects state at write time and is never
 // rewritten. Empty snapshot parts (directory-deleted users, orgs without
 // Directory Sync, lingering API keys) are omitted rather than stamped as

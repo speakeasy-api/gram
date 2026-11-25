@@ -11,7 +11,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	risk_repo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -56,11 +58,14 @@ type Client struct {
 	repo         *risk_repo.Queries
 	cache        cache.TypedCacheObject[PolicyEnabledCache]
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
-	// serverURL is the deployment's own base URL, trusted as a Gram-hosted
+	// serverURL is the deployment's own base URL, trusted as a Speakeasy-hosted
 	// MCP host alongside the built-in ones. Nil in contexts that never
 	// classify URLs (the check then falls back to the built-ins plus the
 	// org's custom domain).
 	serverURL *url.URL
+	// flags gates automatic official-server links
+	// ([feature.FlagShadowMCPAutoLink]). Nil reads as off.
+	flags feature.Provider
 }
 
 func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, serverURL *url.URL) *Client {
@@ -70,6 +75,7 @@ func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, ser
 		db:        db,
 		repo:      risk_repo.New(db),
 		serverURL: serverURL,
+		flags:     nil,
 		cache: cache.NewTypedObjectCache[PolicyEnabledCache](
 			logger.With(attr.SlogCacheNamespace("shadow_mcp_policy_enabled")),
 			cacheImpl,
@@ -81,6 +87,24 @@ func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, ser
 			cache.SuffixNone,
 		),
 	}
+}
+
+// WithFeatureFlags sets the provider that gates automatic official-server
+// links. Without one, only links an administrator made apply.
+func (c *Client) WithFeatureFlags(flags feature.Provider) *Client {
+	c.flags = flags
+	return c
+}
+
+// AutoLinkEnabled reports whether automatic official-server links apply in a
+// project ([feature.FlagShadowMCPAutoLink]). A failed lookup reads as off.
+func (c *Client) AutoLinkEnabled(ctx context.Context, organizationID string, projectID uuid.UUID) bool {
+	return AutoLinkEnabled(ctx, c.logger, c.repo, c.flags, organizationID, projectID)
+}
+
+// AutoLinkEnabled is [Client.AutoLinkEnabled] for callers without a client.
+func AutoLinkEnabled(ctx context.Context, logger *slog.Logger, queries *risk_repo.Queries, flags feature.Provider, organizationID string, projectID uuid.UUID) bool {
+	return policyflags.ProjectFlagEnabled(ctx, logger, queries, flags, organizationID, projectID, feature.FlagShadowMCPAutoLink)
 }
 
 // IsEnabledForProject reports whether the project has at least one enabled

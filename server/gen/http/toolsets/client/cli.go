@@ -146,7 +146,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"abc123\",\n      \"default_environment_slug\": \"aaa\",\n      \"description\": \"abc123\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"aaa\",\n      \"name\": \"abc123\",\n      \"prompt_template_names\": [\n         \"abc123\"\n      ],\n      \"resource_urns\": [\n         \"abc123\"\n      ],\n      \"tool_selection_mode\": \"abc123\",\n      \"tool_urns\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"abc123\",\n      \"default_environment_slug\": \"aaa\",\n      \"description\": \"abc123\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"aaa\",\n      \"name\": \"abc123\",\n      \"network_access_mode\": \"dual\",\n      \"prompt_template_names\": [\n         \"abc123\"\n      ],\n      \"resource_urns\": [\n         \"abc123\"\n      ],\n      \"tool_selection_mode\": \"abc123\",\n      \"tool_urns\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -162,6 +162,11 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 		if body.McpSlug != nil {
 			if utf8.RuneCountInString(*body.McpSlug) > 40 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+			}
+		}
+		if body.NetworkAccessMode != nil {
+			if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 			}
 		}
 		if err != nil {
@@ -212,6 +217,10 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	if body.McpSlug != nil {
 		mcpSlug := types.Slug(*body.McpSlug)
 		v.McpSlug = &mcpSlug
+	}
+	if body.NetworkAccessMode != nil {
+		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
+		v.NetworkAccessMode = &networkAccessMode
 	}
 	if body.PromptTemplateNames != nil {
 		v.PromptTemplateNames = make([]string, len(body.PromptTemplateNames))
@@ -289,8 +298,8 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 	{
 		slug = toolsetsGetToolsetSlug
 		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		if utf8.RuneCountInString(slug) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 60, false))
 		}
 		if err != nil {
 			return nil, err
@@ -315,7 +324,7 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 		}
 	}
 	v := &toolsets.GetToolsetPayload{}
-	v.Slug = types.Slug(slug)
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -407,48 +416,6 @@ func BuildListToolSchemaStaticValuesPayload(toolsetsListToolSchemaStaticValuesSl
 	return v, nil
 }
 
-// BuildCheckMCPSlugAvailabilityPayload builds the payload for the toolsets
-// checkMCPSlugAvailability endpoint from CLI flags.
-func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug string, toolsetsCheckMCPSlugAvailabilitySessionToken string, toolsetsCheckMCPSlugAvailabilityApikeyToken string, toolsetsCheckMCPSlugAvailabilityProjectSlugInput string) (*toolsets.CheckMCPSlugAvailabilityPayload, error) {
-	var err error
-	var slug string
-	{
-		slug = toolsetsCheckMCPSlugAvailabilitySlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if toolsetsCheckMCPSlugAvailabilitySessionToken != "" {
-			sessionToken = &toolsetsCheckMCPSlugAvailabilitySessionToken
-		}
-	}
-	var apikeyToken *string
-	{
-		if toolsetsCheckMCPSlugAvailabilityApikeyToken != "" {
-			apikeyToken = &toolsetsCheckMCPSlugAvailabilityApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if toolsetsCheckMCPSlugAvailabilityProjectSlugInput != "" {
-			projectSlugInput = &toolsetsCheckMCPSlugAvailabilityProjectSlugInput
-		}
-	}
-	v := &toolsets.CheckMCPSlugAvailabilityPayload{}
-	v.Slug = types.Slug(slug)
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
 // BuildCloneToolsetPayload builds the payload for the toolsets cloneToolset
 // endpoint from CLI flags.
 func BuildCloneToolsetPayload(toolsetsCloneToolsetSlug string, toolsetsCloneToolsetSessionToken string, toolsetsCloneToolsetProjectSlugInput string, toolsetsCloneToolsetApikeyToken string) (*toolsets.CloneToolsetPayload, error) {
@@ -499,7 +466,7 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 	{
 		err = json.Unmarshal([]byte(toolsetsAddExternalOAuthServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"abc123\",\n         \"slug\": \"aaa\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"authorization_server_issuer\": \"aaa\",\n         \"metadata\": \"abc123\",\n         \"slug\": \"aaa\"\n      }\n   }'")
 		}
 		if body.ExternalOauthServer == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("external_oauth_server", "body"))
@@ -554,6 +521,72 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 	return v, nil
 }
 
+// BuildUpdateExternalOAuthServerPayload builds the payload for the toolsets
+// updateExternalOAuthServer endpoint from CLI flags.
+func BuildUpdateExternalOAuthServerPayload(toolsetsUpdateExternalOAuthServerBody string, toolsetsUpdateExternalOAuthServerSlug string, toolsetsUpdateExternalOAuthServerSessionToken string, toolsetsUpdateExternalOAuthServerApikeyToken string, toolsetsUpdateExternalOAuthServerProjectSlugInput string) (*toolsets.UpdateExternalOAuthServerPayload, error) {
+	var err error
+	var body UpdateExternalOAuthServerRequestBody
+	{
+		err = json.Unmarshal([]byte(toolsetsUpdateExternalOAuthServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_server_issuer\": \"aaa\",\n      \"metadata\": \"abc123\"\n   }'")
+		}
+		if body.AuthorizationServerIssuer != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.authorization_server_issuer", *body.AuthorizationServerIssuer, goa.FormatURI))
+		}
+		if body.AuthorizationServerIssuer != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.authorization_server_issuer", *body.AuthorizationServerIssuer, "^https://"))
+		}
+		if body.AuthorizationServerIssuer != nil {
+			if utf8.RuneCountInString(*body.AuthorizationServerIssuer) > 500 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.authorization_server_issuer", *body.AuthorizationServerIssuer, utf8.RuneCountInString(*body.AuthorizationServerIssuer), 500, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var slug string
+	{
+		slug = toolsetsUpdateExternalOAuthServerSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsUpdateExternalOAuthServerSessionToken != "" {
+			sessionToken = &toolsetsUpdateExternalOAuthServerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsUpdateExternalOAuthServerApikeyToken != "" {
+			apikeyToken = &toolsetsUpdateExternalOAuthServerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsUpdateExternalOAuthServerProjectSlugInput != "" {
+			projectSlugInput = &toolsetsUpdateExternalOAuthServerProjectSlugInput
+		}
+	}
+	v := &toolsets.UpdateExternalOAuthServerPayload{
+		Metadata:                  body.Metadata,
+		AuthorizationServerIssuer: body.AuthorizationServerIssuer,
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildRemoveOAuthServerPayload builds the payload for the toolsets
 // removeOAuthServer endpoint from CLI flags.
 func BuildRemoveOAuthServerPayload(toolsetsRemoveOAuthServerSlug string, toolsetsRemoveOAuthServerSessionToken string, toolsetsRemoveOAuthServerApikeyToken string, toolsetsRemoveOAuthServerProjectSlugInput string) (*toolsets.RemoveOAuthServerPayload, error) {
@@ -588,63 +621,6 @@ func BuildRemoveOAuthServerPayload(toolsetsRemoveOAuthServerSlug string, toolset
 		}
 	}
 	v := &toolsets.RemoveOAuthServerPayload{}
-	v.Slug = types.Slug(slug)
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildSetUserSessionIssuerPayload builds the payload for the toolsets
-// setUserSessionIssuer endpoint from CLI flags.
-func BuildSetUserSessionIssuerPayload(toolsetsSetUserSessionIssuerBody string, toolsetsSetUserSessionIssuerSlug string, toolsetsSetUserSessionIssuerSessionToken string, toolsetsSetUserSessionIssuerApikeyToken string, toolsetsSetUserSessionIssuerProjectSlugInput string) (*toolsets.SetUserSessionIssuerPayload, error) {
-	var err error
-	var body SetUserSessionIssuerRequestBody
-	{
-		err = json.Unmarshal([]byte(toolsetsSetUserSessionIssuerBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
-		}
-		if body.UserSessionIssuerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var slug string
-	{
-		slug = toolsetsSetUserSessionIssuerSlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if toolsetsSetUserSessionIssuerSessionToken != "" {
-			sessionToken = &toolsetsSetUserSessionIssuerSessionToken
-		}
-	}
-	var apikeyToken *string
-	{
-		if toolsetsSetUserSessionIssuerApikeyToken != "" {
-			apikeyToken = &toolsetsSetUserSessionIssuerApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if toolsetsSetUserSessionIssuerProjectSlugInput != "" {
-			projectSlugInput = &toolsetsSetUserSessionIssuerProjectSlugInput
-		}
-	}
-	v := &toolsets.SetUserSessionIssuerPayload{
-		UserSessionIssuerID: body.UserSessionIssuerID,
-	}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

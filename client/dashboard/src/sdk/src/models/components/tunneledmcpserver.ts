@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const ConnectionStatus = {
 /**
  * Derived live connection status for a tunneled MCP server source
  */
-export type ConnectionStatus = ClosedEnum<typeof ConnectionStatus>;
+export type ConnectionStatus = OpenEnum<typeof ConnectionStatus>;
 
 /**
  * Stored lifecycle status for a tunneled MCP server source
@@ -33,9 +34,7 @@ export const TunneledMcpServerStatus = {
 /**
  * Stored lifecycle status for a tunneled MCP server source
  */
-export type TunneledMcpServerStatus = ClosedEnum<
-  typeof TunneledMcpServerStatus
->;
+export type TunneledMcpServerStatus = OpenEnum<typeof TunneledMcpServerStatus>;
 
 /**
  * A customer-hosted MCP server connected through a tunnel
@@ -66,6 +65,14 @@ export type TunneledMcpServer = {
    */
   createdAt: Date;
   /**
+   * The token-bucket capacity actually applied to this tunnel: the stored burst when a rate is stored alongside it, twice the stored rate when only a rate is stored, or the deployment default when no rate is stored (a burst stored without a rate is ignored).
+   */
+  effectivePublicRequestBurst: number;
+  /**
+   * The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when no rate is stored.
+   */
+  effectivePublicRequestRatePerSecond: number;
+  /**
    * The ID of the tunneled MCP server
    */
   id: string;
@@ -86,6 +93,18 @@ export type TunneledMcpServer = {
    */
   projectId: string;
   /**
+   * Token-bucket capacity for public_request_rate_per_second: how many requests are admitted back-to-back from an idle tunnel before admission drops to the sustained rate. Unset means twice the sustained rate.
+   */
+  publicRequestBurst?: number | undefined;
+  /**
+   * Sustained anonymous MCP requests per second admitted for this tunnel when it is served through a public MCP endpoint. Applies to every MCP interaction. Unset means the deployment-wide default applies.
+   */
+  publicRequestRatePerSecond?: number | undefined;
+  /**
+   * RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Speakeasy. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>
+   */
+  resourceIdentifier?: string | undefined;
+  /**
    * Stored lifecycle status for a tunneled MCP server source
    */
   status: TunneledMcpServerStatus;
@@ -96,14 +115,16 @@ export type TunneledMcpServer = {
 };
 
 /** @internal */
-export const ConnectionStatus$inboundSchema: z.ZodMiniEnum<
-  typeof ConnectionStatus
-> = z.enum(ConnectionStatus);
+export const ConnectionStatus$inboundSchema: z.ZodMiniType<
+  ConnectionStatus,
+  unknown
+> = openEnums.inboundSchema(ConnectionStatus);
 
 /** @internal */
-export const TunneledMcpServerStatus$inboundSchema: z.ZodMiniEnum<
-  typeof TunneledMcpServerStatus
-> = z.enum(TunneledMcpServerStatus);
+export const TunneledMcpServerStatus$inboundSchema: z.ZodMiniType<
+  TunneledMcpServerStatus,
+  unknown
+> = openEnums.inboundSchema(TunneledMcpServerStatus);
 
 /** @internal */
 export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
@@ -120,6 +141,8 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    effective_public_request_burst: z.int(),
+    effective_public_request_rate_per_second: z.int(),
     id: z.string(),
     key_prefix: z.string(),
     last_seen_at: z.optional(
@@ -127,6 +150,9 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
     ),
     name: z.string(),
     project_id: z.string(),
+    public_request_burst: z.optional(z.int()),
+    public_request_rate_per_second: z.optional(z.int()),
+    resource_identifier: z.optional(z.string()),
     status: TunneledMcpServerStatus$inboundSchema,
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -141,9 +167,15 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
       "allow_public": "allowPublic",
       "connection_status": "connectionStatus",
       "created_at": "createdAt",
+      "effective_public_request_burst": "effectivePublicRequestBurst",
+      "effective_public_request_rate_per_second":
+        "effectivePublicRequestRatePerSecond",
       "key_prefix": "keyPrefix",
       "last_seen_at": "lastSeenAt",
       "project_id": "projectId",
+      "public_request_burst": "publicRequestBurst",
+      "public_request_rate_per_second": "publicRequestRatePerSecond",
+      "resource_identifier": "resourceIdentifier",
       "updated_at": "updatedAt",
     });
   }),

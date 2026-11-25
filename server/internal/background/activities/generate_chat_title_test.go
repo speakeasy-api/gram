@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/stretchr/testify/require"
 )
@@ -31,6 +32,22 @@ func TestBuildTitleContextStripsLeadingEnvelopeFraming(t *testing.T) {
 	require.Contains(t, got, "travel-planner agent")
 }
 
+// Cowork stacks enough <system-reminder> blocks in front of a prompt to fill
+// a turn's whole budget in the title prompt; the human text must survive.
+func TestBuildTitleContextKeepsPromptAfterLongSystemReminderStack(t *testing.T) {
+	t.Parallel()
+
+	reminder := "<system-reminder>This session can reach the connected device, but no folder is connected yet. You can request access to a folder with device_request_folder_access.</system-reminder>\n"
+	messages := []repo.ChatMessage{{
+		Role:    "user",
+		Content: strings.Repeat(reminder, maxTitleMessageRunes/len(reminder)+1) + "find when the customer went live",
+	}}
+
+	got := buildTitleContext(messages)
+
+	require.Equal(t, "user: find when the customer went live", got)
+}
+
 func TestBuildTitleContextSkipsPureEnvelopeMessages(t *testing.T) {
 	t.Parallel()
 
@@ -44,4 +61,17 @@ func TestBuildTitleContextSkipsPureEnvelopeMessages(t *testing.T) {
 	}
 
 	require.Empty(t, strings.TrimSpace(buildTitleContext(messages)))
+}
+
+func TestTitleIsUpForGrabsLeavesCronJobTitles(t *testing.T) {
+	t.Parallel()
+
+	messages := []repo.ChatMessage{{
+		Role:    "user",
+		Content: "[cron:0f0e0d0c-0b0a-4908-8706-050403020100 weekly-skill-review] Review the skill collection.",
+	}}
+
+	require.False(t, titleIsUpForGrabs("Cron: weekly-skill-review", messages))
+	// A cron chat captured before cron titles stored the envelope itself.
+	require.False(t, titleIsUpForGrabs(chat.DerivedTitle(messages[0].Content), messages))
 }

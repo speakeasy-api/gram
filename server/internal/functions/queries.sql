@@ -6,7 +6,9 @@ SELECT
   , fa.app_url
   , fa.runner_version
   , access.id AS access_id
+  , access.organization_id
   , access.encryption_key
+  , access.encryption_key_org_encrypted
   , access.bearer_format
 FROM fly_apps fa
 LEFT JOIN functions_access access

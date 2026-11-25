@@ -2,18 +2,22 @@ package chat_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -114,6 +118,87 @@ func listAllMessages(t *testing.T, ctx context.Context, conn *pgxpool.Pool, chat
 	return rows
 }
 
+func assistantStorageReading(t *testing.T, ti *chatTestInstance, chatID, projectID uuid.UUID) *meteringv1.MeterReading {
+	t.Helper()
+
+	messages := listAllMessages(t, t.Context(), ti.conn, chatID, projectID)
+	assistantID := uuid.Nil
+	for _, message := range slices.Backward(messages) {
+		if message.Role == "assistant" {
+			assistantID = message.ID
+			break
+		}
+	}
+	require.NotEqual(t, uuid.Nil, assistantID)
+
+	operationID := "chat_message:" + assistantID.String()
+	for _, reading := range meterMessages(t, ti) {
+		if reading.GetOperationId() == operationID {
+			return reading
+		}
+	}
+	require.FailNow(t, "assistant storage reading not found", operationID)
+	return nil
+}
+
+func TestCaptureMessage_PropagatesReportedProviderToStorageReading(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestChatService(t)
+	s := newCaptureStrategy(t, ti.conn)
+	chatID := uuid.New()
+	response := makeResponse("provider attributed")
+	response.Model = "anthropic/claude-opus-5"
+	response.Provider = "Amazon Bedrock"
+
+	runTurn(
+		t,
+		t.Context(),
+		s,
+		makeRequest(chatID, ti.projectID, ti.orgID, openrouter.CreateMessageUser("Hello")),
+		response,
+	)
+
+	reading := assistantStorageReading(t, ti, chatID, ti.projectID)
+	require.Equal(t, "Amazon Bedrock", reading.GetAttributes()[metering.AttributeProvider])
+	var assistantEvent *conversationv1.MessageEvent
+	for _, event := range conversationMessages(t, ti) {
+		if event.GetRole() == conversationv1.MessageEvent_ROLE_ASSISTANT {
+			assistantEvent = event
+		}
+	}
+	require.NotNil(t, assistantEvent)
+	require.Equal(t, "anthropic", assistantEvent.GetIngestion().GetAttributes()["model_family"])
+	require.Equal(t, "bedrock", assistantEvent.GetIngestion().GetAttributes()["inference_provider"])
+}
+
+func TestCaptureMessage_OmitsUnknownProviderFromStorageReading(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestChatService(t)
+	s := newCaptureStrategy(t, ti.conn)
+	chatID := uuid.New()
+	response := makeResponse("provider unknown")
+	response.Model = "anthropic/claude-haiku-4.5"
+	response.Provider = ""
+
+	runTurn(
+		t,
+		t.Context(),
+		s,
+		makeRequest(chatID, ti.projectID, ti.orgID, openrouter.CreateMessageUser("Hello")),
+		response,
+	)
+
+	reading := assistantStorageReading(t, ti, chatID, ti.projectID)
+	require.NotContains(t, reading.GetAttributes(), metering.AttributeProvider)
+	events := conversationMessages(t, ti)
+	require.NotEmpty(t, events)
+	for _, event := range events {
+		require.NotContains(t, event.GetIngestion().GetAttributes(), "inference_provider")
+	}
+}
+
 // Clean append: reload with full history + new message should insert only the
 // new message and stay on generation 0.
 func TestMatcher_CleanAppend(t *testing.T) {
@@ -184,6 +269,11 @@ func TestMatcher_CompactionBumpsGeneration(t *testing.T) {
 	}
 	require.Equal(t, 4, gens[0], "pre-compaction rows stay at gen 0")
 	require.Equal(t, 3, gens[1], "compacted chain starts at gen 1")
+	for _, event := range conversationMessages(t, ti) {
+		if event.GetGeneration() == 1 && event.GetRole() == conversationv1.MessageEvent_ROLE_USER {
+			require.Equal(t, chat.CaptureUnknown, event.GetCaptureKind(), "rewritten history has no trustworthy original-utterance identity")
+		}
+	}
 }
 
 // Edit: same number of messages but content at index 0 differs. Treated as a
@@ -209,6 +299,8 @@ func TestMatcher_EditBumpsGeneration(t *testing.T) {
 	require.Equal(t, int32(0), rows[1].Generation)
 	require.Equal(t, int32(1), rows[2].Generation)
 	require.Equal(t, int32(1), rows[3].Generation)
+	require.Equal(t, chat.CaptureUnknown, rows[2].CaptureKind.String)
+	require.Equal(t, chat.CaptureOriginal, rows[3].CaptureKind.String)
 }
 
 func TestMatcher_ToolCallsMatchAcrossIndexAndOrderVariations(t *testing.T) {

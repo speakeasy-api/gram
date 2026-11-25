@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Button, ButtonProps } from "./";
+import type { ButtonProps } from "./";
+import { Button } from "./";
 import { PlusIcon as LucidePlusIcon, ChevronRight } from "lucide-react";
 import { Heading } from "../Heading";
 import { Text } from "../Text";
@@ -17,6 +18,7 @@ const meta: Meta<typeof Button> = {
         "primary",
         "secondary",
         "tertiary",
+        "success",
         "destructive-primary",
         "destructive-secondary",
         // Deprecated variants
@@ -85,6 +87,14 @@ export const Tertiary: Story = {
     ...baseProps,
     children: "Tertiary Button",
     variant: "tertiary",
+  },
+};
+
+export const Success: Story = {
+  args: {
+    ...baseProps,
+    children: "Add server",
+    variant: "success",
   },
 };
 

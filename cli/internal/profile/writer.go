@@ -2,17 +2,24 @@ package profile
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
 	"github.com/speakeasy-api/gram/server/gen/keys"
 )
 
-// Save writes the profile configuration to disk.
+// Save writes the profile configuration to disk. It writes a temporary file
+// and renames it over path, so a failed write never leaves a truncated file.
 func Save(config *Config, path string) error {
+	// Write through a symlinked profile, such as one managed by a dotfiles
+	// tool, instead of replacing the link with a regular file.
+	path = resolveLink(path)
+	dir := filepath.Dir(path)
 	// #nosec G301 - directory permissions are appropriate for config directory
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create profile directory: %w", err)
 	}
 
@@ -21,7 +28,20 @@ func Save(config *Config, path string) error {
 		return fmt.Errorf("failed to marshal profile config: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	tmp, err := os.CreateTemp(dir, ".profile-*.json")
+	if err != nil {
+		return fmt.Errorf("failed to write profile file: %w", err)
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("failed to write profile file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to write profile file: %w", err)
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
 		return fmt.Errorf("failed to write profile file: %w", err)
 	}
 
@@ -124,12 +144,9 @@ func UpdateOrCreate(
 }
 
 func loadConfig(path string) (*Config, error) {
-	data, err := os.ReadFile(filepath.Clean(path))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to read profile file: %w", err)
+	data, err := readProfileFile(path)
+	if err != nil || data == nil {
+		return nil, err
 	}
 
 	var config Config
@@ -169,8 +186,40 @@ func UpdateProjectSlug(path string, projectSlug string) error {
 	return Save(config, path)
 }
 
-// Clear removes all profiles from the configuration file.
+// Clear removes all profiles from the configuration file. When path is the
+// default profile path, it also empties the legacy profile file if one
+// exists, so cleared credentials are not read back from it.
 func Clear(path string) error {
-	config := EmptyConfig()
-	return Save(config, path)
+	if err := Save(EmptyConfig(), path); err != nil {
+		return err
+	}
+
+	legacyPath, ok := legacyPathFor(path)
+	if !ok {
+		return nil
+	}
+	switch _, err := os.Stat(legacyPath); {
+	case err == nil:
+		return Save(EmptyConfig(), legacyPath)
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	default:
+		return fmt.Errorf("check legacy profile file: %w", err)
+	}
+}
+
+// resolveLink returns the file path refers to when path is a symlink, even
+// one whose target does not exist yet, and path otherwise.
+func resolveLink(path string) string {
+	if target, err := filepath.EvalSymlinks(path); err == nil {
+		return target
+	}
+	target, err := os.Readlink(path)
+	if err != nil {
+		return path
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(path), target)
+	}
+	return resolveLink(target)
 }

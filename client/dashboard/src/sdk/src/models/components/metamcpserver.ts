@@ -5,9 +5,38 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * The effective default discovery mode. Unconfigured connections follow this value.
+ */
+export const DiscoveryMode = {
+  Progressive: "progressive",
+  Direct: "direct",
+  CodeMode: "code_mode",
+} as const;
+/**
+ * The effective default discovery mode. Unconfigured connections follow this value.
+ */
+export type DiscoveryMode = OpenEnum<typeof DiscoveryMode>;
+
+/**
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
+ */
+export const MetaMcpServerNetworkAccessMode = {
+  PublicOnly: "public_only",
+  Dual: "dual",
+  PrivateOnly: "private_only",
+} as const;
+/**
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
+ */
+export type MetaMcpServerNetworkAccessMode = OpenEnum<
+  typeof MetaMcpServerNetworkAccessMode
+>;
 
 /**
  * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
@@ -19,22 +48,32 @@ export const MetaMcpServerVisibility = {
 /**
  * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
  */
-export type MetaMcpServerVisibility = ClosedEnum<
-  typeof MetaMcpServerVisibility
->;
+export type MetaMcpServerVisibility = OpenEnum<typeof MetaMcpServerVisibility>;
 
 /**
  * A meta MCP server: an aggregate server fronting an explicitly managed set of MCP servers. URL addressability lives on its MCP endpoints.
  */
 export type MetaMcpServer = {
   /**
+   * Whether this gateway can select Code Mode. True only when the code runtime is available, the organization has Code Mode, and the gateway requires sign-in through a user session issuer.
+   */
+  codeModeEnabled?: boolean | undefined;
+  /**
    * When the meta MCP server was created
    */
   createdAt: Date;
   /**
+   * The effective default discovery mode. Unconfigured connections follow this value.
+   */
+  discoveryMode: DiscoveryMode;
+  /**
    * The ID of the meta MCP server
    */
   id: string;
+  /**
+   * Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Speakeasy's built-in instructions.
+   */
+  instructions?: string | undefined;
   /**
    * The number of live members. Only populated by listMetaMcpServers.
    */
@@ -43,6 +82,10 @@ export type MetaMcpServer = {
    * The display name of the meta MCP server
    */
   name: string;
+  /**
+   * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
+   */
+  networkAccessMode: MetaMcpServerNetworkAccessMode;
   /**
    * The organization this meta MCP server belongs to
    */
@@ -66,9 +109,22 @@ export type MetaMcpServer = {
 };
 
 /** @internal */
-export const MetaMcpServerVisibility$inboundSchema: z.ZodMiniEnum<
-  typeof MetaMcpServerVisibility
-> = z.enum(MetaMcpServerVisibility);
+export const DiscoveryMode$inboundSchema: z.ZodMiniType<
+  DiscoveryMode,
+  unknown
+> = openEnums.inboundSchema(DiscoveryMode);
+
+/** @internal */
+export const MetaMcpServerNetworkAccessMode$inboundSchema: z.ZodMiniType<
+  MetaMcpServerNetworkAccessMode,
+  unknown
+> = openEnums.inboundSchema(MetaMcpServerNetworkAccessMode);
+
+/** @internal */
+export const MetaMcpServerVisibility$inboundSchema: z.ZodMiniType<
+  MetaMcpServerVisibility,
+  unknown
+> = openEnums.inboundSchema(MetaMcpServerVisibility);
 
 /** @internal */
 export const MetaMcpServer$inboundSchema: z.ZodMiniType<
@@ -76,13 +132,17 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    code_mode_enabled: z.optional(z.boolean()),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    discovery_mode: DiscoveryMode$inboundSchema,
     id: z.string(),
+    instructions: z.optional(z.string()),
     member_count: z.optional(z.int()),
     name: z.string(),
+    network_access_mode: MetaMcpServerNetworkAccessMode$inboundSchema,
     organization_id: z.string(),
     project_id: z.string(),
     updated_at: z.pipe(
@@ -94,8 +154,11 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "code_mode_enabled": "codeModeEnabled",
       "created_at": "createdAt",
+      "discovery_mode": "discoveryMode",
       "member_count": "memberCount",
+      "network_access_mode": "networkAccessMode",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",

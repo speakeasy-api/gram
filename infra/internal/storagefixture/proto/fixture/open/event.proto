@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package fixture.open;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/internal/storagefixture/pb/fixture/open;fixtureopen";
+
+message Event {
+  option (gcp.pubsub.v1.topic) = {};
+
+  message Child {
+    optional string value = 1;
+  }
+  optional uint64 optional_value = 1;
+  int32 implicit = 2;
+  Child child = 3;
+  oneof choice {
+    string text = 4;
+    Child chosen_child = 5;
+  }
+}

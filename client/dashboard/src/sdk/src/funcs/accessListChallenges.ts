@@ -107,6 +107,8 @@ async function $do(
   const path = pathToFunc("/rpc/access.listChallenges")();
 
   const query = encodeFormQuery({
+    "exclude_scopes": payload?.exclude_scopes,
+    "from": payload?.from,
     "ids": payload?.ids,
     "limit": payload?.limit,
     "offset": payload?.offset,
@@ -115,6 +117,7 @@ async function $do(
     "project_id": payload?.project_id,
     "resolved": payload?.resolved,
     "scope": payload?.scope,
+    "to": payload?.to,
   });
 
   const headers = new Headers(compactMap({

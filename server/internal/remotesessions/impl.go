@@ -1,16 +1,20 @@
 // Package remotesessions implements the management API services that surface
 // remote_session_issuer / remote_session_client / remote_session resources —
-// Gram-as-OAuth-Client configuration and the upstream sessions Gram is
+// Speakeasy-as-OAuth-Client configuration and the upstream sessions Speakeasy is
 // holding on a principal's behalf. A single Go package owns three Goa
 // services' shared implementation, dependencies, and lifecycle.
 package remotesessions
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -39,26 +43,66 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	auth         *auth.Auth
-	sessions     *sessions.Manager
-	authz        *authz.Engine
-	enc          *encryption.Client
-	environments *environments.EnvironmentEntries
-	policy       *guardian.Policy
-	auditLogger  *audit.Logger
-	serverURL    *url.URL
-	refresher    *RefreshService
-	revoker      *UpstreamRevoker
+	connectionTester ServerConnectionTester
+	tracer           trace.Tracer
+	logger           *slog.Logger
+	db               *pgxpool.Pool
+	auth             *auth.Auth
+	sessions         *sessions.Manager
+	authz            *authz.Engine
+	enc              *encryption.Client
+	secrets          *clientsecrets.Secrets
+	environments     *environments.EnvironmentEntries
+	policy           *guardian.Policy
+	tunnels          *tunnelrouting.HTTPClient
+	auditLogger      *audit.Logger
+	identity         *IdentityCommitter
+	refresher        *RefreshService
+	revoker          *UpstreamRevoker
+	jwksResolver     *jwks.Resolver
+	// rotator backs the administrator's rotate action with the same
+	// re-registration the authorize path runs automatically.
+	rotator *ClientRotator
+
+	// resources reads a server's protected resource live at registration, as
+	// the first login will; the replica's shared prober, nil without one.
+	resources *protectedresource.Prober
+
+	registrationTelemetry registration.Recorder
+
+	// origins decides the callback origin each client registers and records.
+	origins CallbackOrigins
+
+	// Only the JSON Web Key Set attach and detach paths consult this. The rest
+	// of remote_session_client management is not entitlement-gated, and must
+	// not become so: a set is always backed by a customer-provisioned KMS key,
+	// which is what ties this one link to customer_managed_encryption_keys.
+	productFeatures   *productfeatures.Client
+	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID, bool) error
+	bindingRefresh    *BindingRefreshAttempts
+
+	// featureFlags gates rollouts; nil reads every flag as off.
+	featureFlags feature.Provider
+
+	// speakeasySigningAvailable matches the runtime deployment capability.
+	speakeasySigningAvailable bool
+	speakeasyReadiness        EMAProviderReadiness
+
+	createDiscoveryBudget time.Duration
 }
 
 var (
@@ -78,24 +122,58 @@ var (
 	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, secrets *clientsecrets.Secrets, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, identity *IdentityCommitter, refresher *RefreshService, productFeatures *productfeatures.Client, protectedResources *protectedresource.Prober) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
+	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, secrets, refresher.tokens, policy, tunnels, refresher.assertions)
+	registrationTelemetry := registration.NewMetrics(logger, meterProvider)
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
-		logger:       logger,
-		db:           db,
-		auth:         auth.New(logger, db, sessionManager, authzEngine),
-		sessions:     sessionManager,
-		authz:        authzEngine,
-		enc:          enc,
-		environments: env,
-		policy:       policy,
-		auditLogger:  auditLogger,
-		serverURL:    serverURL,
-		refresher:    refresher,
-		revoker:      NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+		connectionTester:  nil,
+		bindingAuthorizer: nil,
+		bindingRefresh:    nil,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
+		logger:            logger,
+		db:                db,
+		auth:              auth.New(logger, db, sessionManager, authzEngine),
+		sessions:          sessionManager,
+		authz:             authzEngine,
+		enc:               enc,
+		secrets:           secrets,
+		environments:      env,
+		policy:            policy,
+		tunnels:           tunnels,
+		auditLogger:       auditLogger,
+		identity:          identity,
+		refresher:         refresher,
+		jwksResolver:      jwks.NewResolver(policy, meterProvider, logger),
+		revoker:           revoker,
+		// The refresher's lease cache single-flights rotations the same way it
+		// single-flights refreshes, so the two never race on one client.
+		rotator:   NewClientRotator(logger, db, enc, secrets, policy, tunnels, refresher.locks, serverURL, revoker, auditLogger, registrationTelemetry),
+		resources: protectedResources,
+
+		registrationTelemetry: registrationTelemetry,
+		origins:               DefaultCallbackOrigins(serverURL),
+
+		productFeatures:           productFeatures,
+		featureFlags:              nil,
+		speakeasySigningAvailable: false,
+		speakeasyReadiness:        nil,
+		createDiscoveryBudget:     defaultCreateDiscoveryBudget,
 	}
+}
+
+// SetFeatureFlags sets the rollout flag provider. Call it during wiring,
+// before the service handles requests.
+func (s *Service) SetFeatureFlags(flags feature.Provider) {
+	s.featureFlags = flags
+}
+
+// SetCallbackOrigins replaces the default origins, which pin every client to
+// the server URL. Call it during wiring, before the service handles requests.
+func (s *Service) SetCallbackOrigins(origins CallbackOrigins) {
+	s.origins = origins
+	s.rotator.origins = origins
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -159,5 +237,26 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	// These handlers enforce either project-read or human agent-owner access.
+	switch ctx.Value(goa.MethodKey) {
+	case "listRemoteSessions", "listBindings", "attachBinding", "detachBinding":
+		authorizedCtx, err := s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
+		if err != nil {
+			return authorizedCtx, fmt.Errorf("authorize remote-session handler access: %w", err)
+		}
+		return authorizedCtx, nil
+	}
+
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+// SetSpeakeasySigningAvailable configures the deployment capability used by
+// provider views. Organization lifecycle and eligibility remain live checks.
+func (s *Service) SetSpeakeasySigningAvailable(available bool) {
+	s.speakeasySigningAvailable = available
+}
+
+// SetSpeakeasyReadiness installs the runtime's live issuer eligibility check.
+func (s *Service) SetSpeakeasyReadiness(check EMAProviderReadiness) {
+	s.speakeasyReadiness = check
 }

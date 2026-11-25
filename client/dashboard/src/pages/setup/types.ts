@@ -15,20 +15,24 @@ export type PlatformSetupStatus =
   | "complete"
   | "blocked";
 
-interface PlatformSetupStep {
+export interface PlatformSetupStep {
   title: string;
-  description?: string;
+  /** Inline code values use the same placeholders as snippets, with a safe fallback. */
+  description?: string | Array<string | { code: string; fallback: string }>;
   code?: string;
   language?: string;
+  /** Independently copyable values; API key placeholders are masked in the UI. */
+  fields?: Array<{ label: string; value: string; requiresApiKey?: boolean }>;
+  afterFields?: string;
   /** Optional screenshot rendered above the step title, used to point users at
    * a specific UI region (e.g. "the Managed Settings panel in claude.ai").
    * `caption` is rendered as a legend inside the bordered container, below the
    * image — use it to call out what the user should look for or click. */
   screenshot?: { src: string; alt: string; caption?: string };
   /**
-   * When true, the instrument-agents component generates a Gram API key with
+   * When true, the instrument-agents component generates a Speakeasy API key with
    * the "hooks" scope on demand and substitutes the literal "{{GRAM_API_KEY}}"
-   * marker in `code` with the issued key token.
+   * marker in `code` or `fields` with the issued key token.
    */
   requiresApiKey?: boolean;
   /**
@@ -43,15 +47,20 @@ interface PlatformSetupStep {
   };
   /**
    * When set, the step renders a yes/no eligibility question instead of the
-   * standard instructional content. Answering "no" marks the platform as
-   * blocked and shows the supplied explanation.
+   * standard instructional content. "Yes" continues with the org rollout (the
+   * rest of `setupSteps`); "no" swaps in `personalSteps`, the per-user path for
+   * people on personal plans. Only valid on a platform's first step.
    */
   eligibility?: {
     question: string;
     yesLabel?: string;
     noLabel?: string;
-    blockedTitle: string;
-    blockedDescription: string;
+    personalSteps: PlatformSetupStep[];
+  };
+  /** Renders a button that downloads this platform's observability plugin ZIP. */
+  download?: {
+    platform: "claude" | "cursor" | "copilot" | "opencode";
+    label: string;
   };
 }
 

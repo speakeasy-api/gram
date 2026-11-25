@@ -1,7 +1,8 @@
 import type { ComponentType } from "react";
 import type { DateRangePreset } from "@/elements";
-import { Operator } from "@gram/client/models/components/logfilter";
+import type { Operator } from "@gram/client/models/components/logfilter";
 import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
+import { pluralizeNoun } from "@/lib/format";
 
 /**
  * Shared, strongly-typed filter system.
@@ -19,10 +20,35 @@ import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
  */
 
 export type DateRangeValue = {
+  /** Exclusive instant computed in the timezone where the calendar was selected. */
+  calendarEnd?: Date;
   preset: DateRangePreset | null;
   customRange: { from: Date; to: Date } | null;
   customLabel: string | null;
 };
+
+/** Preserve the selected final day's boundary when a link crosses timezones. */
+export function calendarDateRangeValue(from: Date, to: Date): DateRangeValue {
+  const calendarEnd = new Date(to);
+  calendarEnd.setDate(calendarEnd.getDate() + 1);
+  return {
+    preset: null,
+    customRange: { from, to },
+    customLabel: null,
+    calendarEnd,
+  };
+}
+
+/** Bounds for querying or saving a custom range, separate from calendar display dates. */
+export function customDateRangeBounds(
+  value: DateRangeValue | undefined,
+): { from: Date; to: Date } | null {
+  if (!value?.customRange) return null;
+  return {
+    from: value.customRange.from,
+    to: value.calendarEnd ?? value.customRange.to,
+  };
+}
 
 export interface FilterOption {
   label: string;
@@ -93,28 +119,42 @@ interface BaseDimension<K extends FilterKind> {
   placeholder?: string;
   /**
    * Overrides the empty-state "All …" label for select/multiselect dimensions
-   * (the chip and the sheet's "all" option). Defaults to `All <pluralized
-   * label>`; set this when the pluralized noun reads oddly (e.g. `allLabel:
-   * "All"` for a Risk filter instead of "All risks").
+   * (the chip and the sheet's "all" option), and a date range's "All time".
+   * Defaults to `All <pluralized label>`; set this when the pluralized noun
+   * reads oddly (e.g. `allLabel: "All"` for a Risk filter instead of "All
+   * risks").
    */
   allLabel?: string;
   /**
-   * The dimension always holds a value — there is no "all" for it, so its chip
-   * hides the × rather than offering a clear that resolves straight back to a
-   * value. Use for a scope the query cannot run without (e.g. the project a
-   * list is read within), never merely for a filter that happens to be
-   * important.
+   * Clearing the dimension never leaves it empty: the page resolves a missing
+   * value straight back to one, so its chip hides the × rather than offering a
+   * clear that looks like a no-op. Select controls also drop their "All …" row,
+   * unless `allLabel` names the empty state as a selection in its own right
+   * (e.g. "Anonymous excluded"), in which case the row is the way back to it.
+   * Use for a scope the query cannot run without (e.g. the project a list is
+   * read within), never merely for a filter that happens to be important.
    */
   required?: boolean;
+  /** Once set, the chip names the dimension too: "Service: Linear". */
+  chipPrefix?: boolean;
 }
 
-type MultiselectDimension = BaseDimension<"multiselect">;
+interface MultiselectDimension extends BaseDimension<"multiselect"> {
+  /** Once set, the chip counts its values: "Message: 3". */
+  chipCount?: boolean;
+  /** Most values that can be picked; picking stops there, removing still works. */
+  maxSelected?: number;
+}
 type SelectDimension = BaseDimension<"select">;
 interface TextDimension extends BaseDimension<"text"> {
+  /** Zero for builders that submit explicitly; otherwise debounce live filtering. */
+  debounceMs?: number;
   /** Operator applied server-side; defaults to `contains`. */
   operator?: Operator;
 }
 interface NumberDimension extends BaseDimension<"number"> {
+  /** Zero for builders that submit explicitly; otherwise debounce live filtering. */
+  debounceMs?: number;
   /** Optional bounds / granularity forwarded to the numeric input. */
   min?: number;
   max?: number;
@@ -154,6 +194,17 @@ export function defineFilters<const T extends readonly FilterDimension[]>(
 export type FilterValues<T extends readonly FilterDimension[]> = {
   [D in T[number] as D["id"]]: FilterValueByKind[D["kind"]];
 };
+
+/** Whether a multiselect change stays within its cap; removing values always does. */
+export function withinMaxSelected(
+  max: number | undefined,
+  current: string[],
+  next: string[],
+): boolean {
+  return (
+    max === undefined || next.length <= max || next.length <= current.length
+  );
+}
 
 /** Per-dimension default ("empty") value, used for clearing. */
 export function defaultValueForDimension(
@@ -248,19 +299,14 @@ const PRESET_LABELS: Record<string, string> = {
   "90d": "Last 90 days",
 };
 
-function dateRangeLabel(value: DateRangeValue): string {
+/**
+ * A date range as its chip reads. With nothing picked it reads "All time",
+ * or the dimension's `allLabel` where nothing picked means something else.
+ */
+function dateRangeLabel(value: DateRangeValue, dim: FilterDimension): string {
   if (value.customRange) return value.customLabel ?? "Custom range";
   if (value.preset) return PRESET_LABELS[value.preset] ?? value.preset;
-  return "All time";
-}
-
-// Naive English pluralizer for the "All …" empty-state label (e.g. "All servers",
-// "All policies"). Covers the dimension labels we use (server/user/policy/role).
-// Shared by the chip label and the sheet's select control.
-function pluralize(word: string): string {
-  if (/[^aeiou]y$/.test(word)) return `${word.slice(0, -1)}ies`;
-  if (/(s|x|z|ch|sh)$/.test(word)) return `${word}es`;
-  return `${word}s`;
+  return dim.allLabel ?? "All time";
 }
 
 /**
@@ -269,7 +315,17 @@ function pluralize(word: string): string {
  * otherwise pluralizes the label ("All servers", "All policies").
  */
 export function allLabelFor(dim: FilterDimension): string {
-  return dim.allLabel ?? `All ${pluralize(dim.label.toLowerCase())}`;
+  return dim.allLabel ?? `All ${pluralizeNoun(dim.label.toLowerCase())}`;
+}
+
+/**
+ * A required dimension with no named empty state always resolves to a real
+ * option, so an "All" row would only ever snap back to the first one. When
+ * `allLabel` is set the empty state is itself a selection (e.g. "Anonymous
+ * excluded") and the row is the only way back to it.
+ */
+export function hidesAllOption(dim: FilterDimension): boolean {
+  return !!dim.required && !dim.allLabel;
 }
 
 /**
@@ -285,14 +341,20 @@ export function chipLabel(
 ): string {
   switch (dim.kind) {
     case "daterange":
-      return dateRangeLabel(value as DateRangeValue);
+      return dateRangeLabel(value as DateRangeValue, dim);
     case "select": {
       const v = value as string | null;
-      return v ? optionLabel(v, options) : allLabelFor(dim);
+      if (!v) return allLabelFor(dim);
+      const label = optionLabel(v, options);
+      return dim.chipPrefix ? `${dim.label}: ${label}` : label;
     }
     case "multiselect": {
       const arr = value as string[];
-      return arr.length > 0 ? collapseValues(arr, options) : allLabelFor(dim);
+      if (arr.length === 0) return allLabelFor(dim);
+      if ("chipCount" in dim && dim.chipCount)
+        return `${dim.label}: ${arr.length}`;
+      const label = collapseValues(arr, options);
+      return dim.chipPrefix ? `${dim.label}: ${label}` : label;
     }
     case "text":
       return `${dim.label}: ${value as string}`;

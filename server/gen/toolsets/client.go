@@ -24,16 +24,15 @@ type Client struct {
 	GetToolsetEndpoint                 goa.Endpoint
 	ListToolFiltersEndpoint            goa.Endpoint
 	ListToolSchemaStaticValuesEndpoint goa.Endpoint
-	CheckMCPSlugAvailabilityEndpoint   goa.Endpoint
 	CloneToolsetEndpoint               goa.Endpoint
 	AddExternalOAuthServerEndpoint     goa.Endpoint
+	UpdateExternalOAuthServerEndpoint  goa.Endpoint
 	RemoveOAuthServerEndpoint          goa.Endpoint
-	SetUserSessionIssuerEndpoint       goa.Endpoint
 	SetToolVariationsGroupEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "toolsets" service client given the endpoints.
-func NewClient(createToolset, listToolsets, listToolsetsForOrg, updateToolset, deleteToolset, getToolset, listToolFilters, listToolSchemaStaticValues, checkMCPSlugAvailability, cloneToolset, addExternalOAuthServer, removeOAuthServer, setUserSessionIssuer, setToolVariationsGroup goa.Endpoint) *Client {
+func NewClient(createToolset, listToolsets, listToolsetsForOrg, updateToolset, deleteToolset, getToolset, listToolFilters, listToolSchemaStaticValues, cloneToolset, addExternalOAuthServer, updateExternalOAuthServer, removeOAuthServer, setToolVariationsGroup goa.Endpoint) *Client {
 	return &Client{
 		CreateToolsetEndpoint:              createToolset,
 		ListToolsetsEndpoint:               listToolsets,
@@ -43,11 +42,10 @@ func NewClient(createToolset, listToolsets, listToolsetsForOrg, updateToolset, d
 		GetToolsetEndpoint:                 getToolset,
 		ListToolFiltersEndpoint:            listToolFilters,
 		ListToolSchemaStaticValuesEndpoint: listToolSchemaStaticValues,
-		CheckMCPSlugAvailabilityEndpoint:   checkMCPSlugAvailability,
 		CloneToolsetEndpoint:               cloneToolset,
 		AddExternalOAuthServerEndpoint:     addExternalOAuthServer,
+		UpdateExternalOAuthServerEndpoint:  updateExternalOAuthServer,
 		RemoveOAuthServerEndpoint:          removeOAuthServer,
-		SetUserSessionIssuerEndpoint:       setUserSessionIssuer,
 		SetToolVariationsGroupEndpoint:     setToolVariationsGroup,
 	}
 }
@@ -227,29 +225,6 @@ func (c *Client) ListToolSchemaStaticValues(ctx context.Context, p *ListToolSche
 	return ires.(*ListToolSchemaStaticValuesResult), nil
 }
 
-// CheckMCPSlugAvailability calls the "checkMCPSlugAvailability" endpoint of
-// the "toolsets" service.
-// CheckMCPSlugAvailability may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) CheckMCPSlugAvailability(ctx context.Context, p *CheckMCPSlugAvailabilityPayload) (res bool, err error) {
-	var ires any
-	ires, err = c.CheckMCPSlugAvailabilityEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(bool), nil
-}
-
 // CloneToolset calls the "cloneToolset" endpoint of the "toolsets" service.
 // CloneToolset may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -295,6 +270,29 @@ func (c *Client) AddExternalOAuthServer(ctx context.Context, p *AddExternalOAuth
 	return ires.(*types.Toolset), nil
 }
 
+// UpdateExternalOAuthServer calls the "updateExternalOAuthServer" endpoint of
+// the "toolsets" service.
+// UpdateExternalOAuthServer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateExternalOAuthServer(ctx context.Context, p *UpdateExternalOAuthServerPayload) (res *types.Toolset, err error) {
+	var ires any
+	ires, err = c.UpdateExternalOAuthServerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Toolset), nil
+}
+
 // RemoveOAuthServer calls the "removeOAuthServer" endpoint of the "toolsets"
 // service.
 // RemoveOAuthServer may return the following errors:
@@ -312,29 +310,6 @@ func (c *Client) AddExternalOAuthServer(ctx context.Context, p *AddExternalOAuth
 func (c *Client) RemoveOAuthServer(ctx context.Context, p *RemoveOAuthServerPayload) (res *types.Toolset, err error) {
 	var ires any
 	ires, err = c.RemoveOAuthServerEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*types.Toolset), nil
-}
-
-// SetUserSessionIssuer calls the "setUserSessionIssuer" endpoint of the
-// "toolsets" service.
-// SetUserSessionIssuer may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) SetUserSessionIssuer(ctx context.Context, p *SetUserSessionIssuerPayload) (res *types.Toolset, err error) {
-	var ires any
-	ires, err = c.SetUserSessionIssuerEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateAwsIamCredentialForm = {
   /**
-   * The customer IAM role ARN Gram assumes. Omit for a KMS key-policy grant.
+   * The customer IAM role ARN Speakeasy assumes. Omit for a KMS key-policy grant.
    */
   assumeRoleArn?: string | undefined;
   /**

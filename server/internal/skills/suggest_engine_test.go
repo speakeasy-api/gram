@@ -462,7 +462,7 @@ func TestSuggestionEngineRateLimitFailureConsumesNothing(t *testing.T) {
 	completion := &suggestionCompletionStub{responses: []string{`{"decision":"decline","proposed_skill_md":"","rationale":"unused"}`}}
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	limiter := ratelimit.New(ratelimit.NewRedisStore(redisClient), t.Name(), ratelimit.Rate{Tokens: 1, Interval: time.Hour, Burst: 1})
+	limiter := ratelimit.New(ratelimit.NewRedisStore(redisClient), t.Name()+":"+uuid.NewString(), ratelimit.Rate{Tokens: 1, Interval: time.Hour, Burst: 1})
 	key := openrouter.JudgeRateLimitKey(openrouter.PlatformKey(), suggest.Model)
 	allowed, err := limiter.Allow(ctx, key)
 	require.NoError(t, err)

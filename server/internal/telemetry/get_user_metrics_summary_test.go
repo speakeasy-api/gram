@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,64 +131,57 @@ func TestGetUserMetricsSummary_WithUserID(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
-			From:   from,
-			To:     to,
-			UserID: &userID,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
-			return
-		}
+	res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+		From:   from,
+		To:     to,
+		UserID: &userID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.NotNil(t, res.Metrics)
 
-		m := res.Metrics
+	m := res.Metrics
 
-		// Token metrics (sum of chat completions for target user only)
-		assert.Equal(c, int64(300), m.TotalInputTokens)  // 100 + 200
-		assert.Equal(c, int64(150), m.TotalOutputTokens) // 50 + 100
-		assert.Equal(c, int64(450), m.TotalTokens)       // 150 + 300
+	// Token metrics (sum of chat completions for target user only)
+	require.Equal(t, int64(300), m.TotalInputTokens)  // 100 + 200
+	require.Equal(t, int64(150), m.TotalOutputTokens) // 50 + 100
+	require.Equal(t, int64(450), m.TotalTokens)       // 150 + 300
 
-		// Chat request metrics
-		assert.Equal(c, int64(2), m.TotalChatRequests)
-		assert.Greater(c, m.AvgChatDurationMs, float64(0))
+	// Chat request metrics
+	require.Equal(t, int64(2), m.TotalChatRequests)
+	require.Greater(t, m.AvgChatDurationMs, float64(0))
 
-		// Resolution status
-		assert.Equal(c, int64(1), m.FinishReasonStop)      // 1 "stop"
-		assert.Equal(c, int64(1), m.FinishReasonToolCalls) // 1 "tool_calls"
+	// Resolution status
+	require.Equal(t, int64(1), m.FinishReasonStop)      // 1 "stop"
+	require.Equal(t, int64(1), m.FinishReasonToolCalls) // 1 "tool_calls"
 
-		// Tool call metrics (only target user's tools)
-		assert.Equal(c, int64(2), m.TotalToolCalls)
-		assert.Equal(c, int64(1), m.ToolCallSuccess) // 1 with status 200
-		assert.Equal(c, int64(1), m.ToolCallFailure) // 1 with status 500
+	// Tool call metrics (only target user's tools)
+	require.Equal(t, int64(2), m.TotalToolCalls)
+	require.Equal(t, int64(1), m.ToolCallSuccess) // 1 with status 200
+	require.Equal(t, int64(1), m.ToolCallFailure) // 1 with status 500
 
-		// Cardinality
-		assert.Equal(c, int64(1), m.TotalChats)        // 1 distinct chat ID for target user
-		assert.Equal(c, int64(1), m.DistinctModels)    // gpt-4 only
-		assert.Equal(c, int64(1), m.DistinctProviders) // openai only
+	// Cardinality
+	require.Equal(t, int64(1), m.TotalChats)        // 1 distinct chat ID for target user
+	require.Equal(t, int64(1), m.DistinctModels)    // gpt-4 only
+	require.Equal(t, int64(1), m.DistinctProviders) // openai only
 
-		// Model breakdown
-		if assert.Len(c, m.Models, 1) {
-			assert.Equal(c, "gpt-4", m.Models[0].Name)
-			assert.Equal(c, int64(2), m.Models[0].Count)
-		}
+	// Model breakdown
+	require.Len(t, m.Models, 1)
+	require.Equal(t, "gpt-4", m.Models[0].Name)
+	require.Equal(t, int64(2), m.Models[0].Count)
 
-		// Tool breakdown
-		if assert.Len(c, m.Tools, 2) {
-			toolStats := make(map[string]*gen.ToolUsage)
-			for _, tool := range m.Tools {
-				toolStats[tool.Urn] = tool
-			}
-			assert.Equal(c, int64(1), toolStats["tools:http:petstore:listPets"].Count)
-			assert.Equal(c, int64(1), toolStats["tools:http:petstore:listPets"].SuccessCount)
-			assert.Equal(c, int64(0), toolStats["tools:http:petstore:listPets"].FailureCount)
-			assert.Equal(c, int64(1), toolStats["tools:http:petstore:getPet"].Count)
-			assert.Equal(c, int64(0), toolStats["tools:http:petstore:getPet"].SuccessCount)
-			assert.Equal(c, int64(1), toolStats["tools:http:petstore:getPet"].FailureCount)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	// Tool breakdown
+	require.Len(t, m.Tools, 2)
+	toolStats := make(map[string]*gen.ToolUsage)
+	for _, tool := range m.Tools {
+		toolStats[tool.Urn] = tool
+	}
+	require.Equal(t, int64(1), toolStats["tools:http:petstore:listPets"].Count)
+	require.Equal(t, int64(1), toolStats["tools:http:petstore:listPets"].SuccessCount)
+	require.Equal(t, int64(0), toolStats["tools:http:petstore:listPets"].FailureCount)
+	require.Equal(t, int64(1), toolStats["tools:http:petstore:getPet"].Count)
+	require.Equal(t, int64(0), toolStats["tools:http:petstore:getPet"].SuccessCount)
+	require.Equal(t, int64(1), toolStats["tools:http:petstore:getPet"].FailureCount)
 }
 
 func TestGetUserMetricsSummary_FallsBackToUserEmail(t *testing.T) {
@@ -209,21 +200,16 @@ func TestGetUserMetricsSummary_FallsBackToUserEmail(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
-			From:   from,
-			To:     to,
-			UserID: &email,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
-			return
-		}
-		assert.Equal(c, int64(100), res.Metrics.TotalInputTokens)
-		assert.Equal(c, int64(50), res.Metrics.TotalOutputTokens)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+		From:   from,
+		To:     to,
+		UserID: &email,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.NotNil(t, res.Metrics)
+	require.Equal(t, int64(100), res.Metrics.TotalInputTokens)
+	require.Equal(t, int64(50), res.Metrics.TotalOutputTokens)
 }
 
 func TestGetUserMetricsSummary_WithExternalUserID(t *testing.T) {
@@ -252,44 +238,38 @@ func TestGetUserMetricsSummary_WithExternalUserID(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
-			From:           from,
-			To:             to,
-			ExternalUserID: &externalUserID,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
-			return
-		}
+	res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+		From:           from,
+		To:             to,
+		ExternalUserID: &externalUserID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.NotNil(t, res.Metrics)
 
-		m := res.Metrics
+	m := res.Metrics
 
-		// Token metrics (only for target external user)
-		assert.Equal(c, int64(100), m.TotalInputTokens)
-		assert.Equal(c, int64(50), m.TotalOutputTokens)
-		assert.Equal(c, int64(150), m.TotalTokens)
+	// Token metrics (only for target external user)
+	require.Equal(t, int64(100), m.TotalInputTokens)
+	require.Equal(t, int64(50), m.TotalOutputTokens)
+	require.Equal(t, int64(150), m.TotalTokens)
 
-		// Chat request metrics
-		assert.Equal(c, int64(1), m.TotalChatRequests)
+	// Chat request metrics
+	require.Equal(t, int64(1), m.TotalChatRequests)
 
-		// Tool call metrics
-		assert.Equal(c, int64(1), m.TotalToolCalls)
-		assert.Equal(c, int64(1), m.ToolCallSuccess)
-		assert.Equal(c, int64(0), m.ToolCallFailure)
+	// Tool call metrics
+	require.Equal(t, int64(1), m.TotalToolCalls)
+	require.Equal(t, int64(1), m.ToolCallSuccess)
+	require.Equal(t, int64(0), m.ToolCallFailure)
 
-		// Cardinality
-		assert.Equal(c, int64(1), m.TotalChats)
-		assert.Equal(c, int64(1), m.DistinctModels)
-		assert.Equal(c, int64(1), m.DistinctProviders)
+	// Cardinality
+	require.Equal(t, int64(1), m.TotalChats)
+	require.Equal(t, int64(1), m.DistinctModels)
+	require.Equal(t, int64(1), m.DistinctProviders)
 
-		// Model breakdown
-		if assert.Len(c, m.Models, 1) {
-			assert.Equal(c, "claude-3", m.Models[0].Name)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	// Model breakdown
+	require.Len(t, m.Models, 1)
+	require.Equal(t, "claude-3", m.Models[0].Name)
 }
 
 func TestGetUserMetricsSummary_OnlyToolCalls(t *testing.T) {
@@ -311,35 +291,30 @@ func TestGetUserMetricsSummary_OnlyToolCalls(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
-			From:   from,
-			To:     to,
-			UserID: &userID,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
-			return
-		}
+	res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+		From:   from,
+		To:     to,
+		UserID: &userID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.NotNil(t, res.Metrics)
 
-		m := res.Metrics
-		assert.Equal(c, int64(2), m.TotalToolCalls)
-		assert.Equal(c, int64(2), m.ToolCallSuccess)
-		assert.Equal(c, int64(0), m.ToolCallFailure)
+	m := res.Metrics
+	require.Equal(t, int64(2), m.TotalToolCalls)
+	require.Equal(t, int64(2), m.ToolCallSuccess)
+	require.Equal(t, int64(0), m.ToolCallFailure)
 
-		// Chat-related metrics should be zero
-		assert.Equal(c, int64(0), m.TotalChatRequests)
-		assert.Equal(c, int64(0), m.TotalChats)
-		assert.Equal(c, int64(0), m.TotalInputTokens)
-		assert.Equal(c, int64(0), m.TotalOutputTokens)
-		assert.Equal(c, int64(0), m.TotalTokens)
-		assert.Empty(c, m.Models)
+	// Chat-related metrics should be zero
+	require.Equal(t, int64(0), m.TotalChatRequests)
+	require.Equal(t, int64(0), m.TotalChats)
+	require.Equal(t, int64(0), m.TotalInputTokens)
+	require.Equal(t, int64(0), m.TotalOutputTokens)
+	require.Equal(t, int64(0), m.TotalTokens)
+	require.Empty(t, m.Models)
 
-		// But tools should be present
-		assert.Len(c, m.Tools, 2)
-	}, 10*time.Second, 200*time.Millisecond)
+	// But tools should be present
+	require.Len(t, m.Tools, 2)
 }
 
 func TestGetUserMetricsSummary_OnlyChatCompletions(t *testing.T) {
@@ -362,38 +337,32 @@ func TestGetUserMetricsSummary_OnlyChatCompletions(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
-			From:   from,
-			To:     to,
-			UserID: &userID,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
-			return
-		}
+	res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+		From:   from,
+		To:     to,
+		UserID: &userID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.NotNil(t, res.Metrics)
 
-		m := res.Metrics
-		assert.Equal(c, int64(2), m.TotalChatRequests)
-		assert.Equal(c, int64(1), m.TotalChats) // 1 unique chat ID
-		assert.Equal(c, int64(300), m.TotalInputTokens)
-		assert.Equal(c, int64(150), m.TotalOutputTokens)
-		assert.Equal(c, int64(450), m.TotalTokens)
+	m := res.Metrics
+	require.Equal(t, int64(2), m.TotalChatRequests)
+	require.Equal(t, int64(1), m.TotalChats) // 1 unique chat ID
+	require.Equal(t, int64(300), m.TotalInputTokens)
+	require.Equal(t, int64(150), m.TotalOutputTokens)
+	require.Equal(t, int64(450), m.TotalTokens)
 
-		// Tool metrics should be zero
-		assert.Equal(c, int64(0), m.TotalToolCalls)
-		assert.Equal(c, int64(0), m.ToolCallSuccess)
-		assert.Equal(c, int64(0), m.ToolCallFailure)
-		assert.Empty(c, m.Tools)
+	// Tool metrics should be zero
+	require.Equal(t, int64(0), m.TotalToolCalls)
+	require.Equal(t, int64(0), m.ToolCallSuccess)
+	require.Equal(t, int64(0), m.ToolCallFailure)
+	require.Empty(t, m.Tools)
 
-		// Models should be present
-		if assert.Len(c, m.Models, 1) {
-			assert.Equal(c, "gpt-4", m.Models[0].Name)
-			assert.Equal(c, int64(2), m.Models[0].Count)
-		}
-	}, 10*time.Second, 200*time.Millisecond)
+	// Models should be present
+	require.Len(t, m.Models, 1)
+	require.Equal(t, "gpt-4", m.Models[0].Name)
+	require.Equal(t, int64(2), m.Models[0].Count)
 }
 
 // insertChatCompletionLogWithUser inserts a chat completion log with user identification attributes.
@@ -515,7 +484,7 @@ func insertHookToolLogWithAccount(t *testing.T, ctx context.Context, projectID s
 }
 
 // Scoping the employee page to one account must not zero the tool-call tile:
-// hook tool events carry the account discriminator while Gram MCP tool spans
+// hook tool events carry the account discriminator while Speakeasy MCP tool spans
 // do not, so the default predicate counts both arms — the same shape as the
 // data-flow graph rendered beside the tile.
 func TestGetUserMetricsSummary_AccountScopeCountsHookToolCalls(t *testing.T) {
@@ -532,10 +501,8 @@ func TestGetUserMetricsSummary_AccountScopeCountsHookToolCalls(t *testing.T) {
 	now := time.Now().UTC()
 	insertHookToolLogWithAccount(t, ctx, projectID, now.Add(-10*time.Minute), userID, "Bash", "PostToolUse", externalOrgID)
 	insertHookToolLogWithAccount(t, ctx, projectID, now.Add(-9*time.Minute), userID, "Edit", "PostToolUseFailure", externalOrgID)
-	// A Gram MCP tool span carries no account attribution.
+	// A Speakeasy MCP tool span carries no account attribution.
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, userID, "")
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)

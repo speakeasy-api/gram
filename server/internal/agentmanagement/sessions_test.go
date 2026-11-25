@@ -1,0 +1,364 @@
+package agentmanagement
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/agents"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+)
+
+type testAgentSessionRevoker struct {
+	events           []string
+	pushErr          error
+	cascadeErr       error
+	afterCommit      func()
+	checkPushContext func(context.Context)
+	credentials      int
+	lastCredentials  []remotesessions.RevokedCredentials
+	revokedJTIs      []string
+}
+
+func (r *testAgentSessionRevoker) RevokeToken(ctx context.Context, jti string) error {
+	r.events = append(r.events, "token")
+	r.revokedJTIs = append(r.revokedJTIs, jti)
+	if r.afterCommit != nil {
+		r.afterCommit()
+	}
+	if r.checkPushContext != nil {
+		r.checkPushContext(ctx)
+	}
+	return r.pushErr
+}
+func (r *testAgentSessionRevoker) SoftDeleteAgentSubjectSessions(ctx context.Context, tx remoterepo.DBTX, subject urn.SessionSubject, issuerID, projectID uuid.UUID, orgID string, sessionID uuid.UUID, revokedAt pgtype.Timestamptz, alreadyRevoked bool) ([]remotesessions.RevokedCredentials, error) {
+	r.events = append(r.events, "cascade")
+	if r.cascadeErr != nil {
+		return nil, r.cascadeErr
+	}
+	credentials, err := (&remotesessions.UpstreamRevoker{}).SoftDeleteAgentSubjectSessions(ctx, tx, subject, issuerID, projectID, orgID, sessionID, revokedAt, alreadyRevoked)
+	if err != nil {
+		return nil, fmt.Errorf("delete test subject sessions: %w", err)
+	}
+	return credentials, nil
+}
+func (r *testAgentSessionRevoker) RevokeAllDetached(_ context.Context, creds []remotesessions.RevokedCredentials) {
+	r.events = append(r.events, "upstream")
+	r.credentials += len(creds)
+	r.lastCredentials = creds
+}
+
+func seedManagedSession(t *testing.T, db *pgxpool.Pool, orgID, subject string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	issuer, err := usersessionsrepo.New(db).CreateOrganizationUserSessionIssuer(t.Context(), usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(orgID),
+		Slug:                         "issuer-" + uuid.NewString(),
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TrustedRemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	session := createManagedUserSession(t, db, issuer.ID, subject, "jti-"+uuid.NewString(), "hash-"+uuid.NewString())
+	return session, issuer.ID
+}
+
+// createManagedUserSession mints an agent-bound session on an existing issuer.
+// It carries no real credential material.
+func createManagedUserSession(t *testing.T, db *pgxpool.Pool, issuerID uuid.UUID, subject, jti, refreshHash string) uuid.UUID {
+	t.Helper()
+	sessionSubject, err := urn.ParseSessionSubject(subject)
+	require.NoError(t, err)
+	now := time.Now()
+	session, err := usersessionsrepo.New(db).CreateUserSession(t.Context(), usersessionsrepo.CreateUserSessionParams{
+		UserSessionIssuerID: issuerID,
+		SubjectUrn:          sessionSubject,
+		AuthorizerUserID:    conv.ToPGText("owner"),
+		Jti:                 jti,
+		RefreshTokenHash:    conv.ToPGText(refreshHash),
+		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: 0, Valid: true},
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), InfinityModifier: 0, Valid: true},
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	return session.ID
+}
+
+// liveUserSession reads a session through the tenancy-scoped production query,
+// which only returns live rows.
+func liveUserSession(ctx context.Context, db *pgxpool.Pool, orgID string, sessionID uuid.UUID) (usersessionsrepo.UserSession, error) {
+	session, err := usersessionsrepo.New(db).GetUserSessionByID(ctx, usersessionsrepo.GetUserSessionByIDParams{ID: sessionID, ProjectID: uuid.Nil, OrganizationID: orgID})
+	if err != nil {
+		return usersessionsrepo.UserSession{}, fmt.Errorf("get user session: %w", err)
+	}
+	return session, nil
+}
+
+// seedManagedUpstreamWith seeds a minimal upstream cascade fixture. The
+// ciphertext is never decrypted by the cascade tests.
+func seedManagedUpstreamWith(t *testing.T, db *pgxpool.Pool, orgID string, issuerID uuid.UUID, subject string, customize func(*remoterepo.UpsertRemoteSessionFixtureParams)) remoterepo.RemoteSession {
+	t.Helper()
+	q := remoterepo.New(db)
+	slug := "remote-" + uuid.NewString()
+	remoteIssuer, err := q.CreateRemoteSessionIssuer(t.Context(), remoterepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                    conv.ToPGText(orgID),
+		Slug:                              slug,
+		Issuer:                            "https://idp.example.test",
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{},
+		ResponseTypesSupported:            []string{},
+		TokenEndpointAuthMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(t.Context(), remoterepo.CreateRemoteSessionClientParams{
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:        conv.ToPGText(orgID),
+		RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID:              "fixture",
+	})
+	require.NoError(t, err)
+	sessionSubject, err := urn.ParseSessionSubject(subject)
+	require.NoError(t, err)
+	params := remoterepo.UpsertRemoteSessionFixtureParams{
+		SubjectUrn:            sessionSubject,
+		UserSessionIssuerID:   issuerID,
+		RemoteSessionClientID: client.ID,
+		AccessTokenEncrypted:  "fixture-not-a-token",
+		RefreshTokenEncrypted: conv.ToPGText("fixture-refresh"),
+		Scopes:                []string{},
+	}
+	if customize != nil {
+		customize(&params)
+	}
+	session, err := q.UpsertRemoteSessionFixture(t.Context(), params)
+	require.NoError(t, err)
+	return session
+}
+
+// A workload signs in under its own subject, so its sessions belong to the
+// agent only through its assignment. A workload pinned to another agent, or
+// assigned to none, stays off this agent's list.
+func TestAgentSessionsIncludeAssignedWorkloads(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	seedOrganization(t, db, "org-a")
+	seedOrganizationUser(t, db, "org-a", "owner")
+	agent := createAgent(t, db, "org-a", "owner", "Workload agent")
+	other := createAgent(t, db, "org-a", "owner", "Other agent")
+	fixtures := testrepo.New(db)
+	issuerID, err := fixtures.CreateWorkloadIssuerFixture(t.Context(), testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: "org-a",
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "Runners",
+		Issuer:         "https://runners.example.test",
+		JwksUri:        "https://runners.example.test/jwks",
+	})
+	require.NoError(t, err)
+	for subject, agentID := range map[string]uuid.UUID{"runner-1": agent.ID, "runner-2": other.ID} {
+		require.NoError(t, fixtures.CreateWorkloadAgentAssignmentFixture(t.Context(), testrepo.CreateWorkloadAgentAssignmentFixtureParams{
+			OrganizationID: "org-a", WorkloadIssuerID: issuerID, Subject: subject, MatchKind: "exact", AgentID: agentID,
+		}))
+	}
+	workload := func(subject string) string { return urn.NewWorkloadSubject(issuerID, subject).String() }
+	own, _ := seedManagedSession(t, db, "org-a", "agent:"+agent.ID.String())
+	assigned, _ := seedManagedSession(t, db, "org-a", workload("runner-1"))
+	seedManagedSession(t, db, "org-a", workload("runner-2"))
+	seedManagedSession(t, db, "org-a", workload("unassigned"))
+
+	service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	listed, err := service.ListSessions(validatedHumanContext(t, "org-a", "owner"), &gen.ListSessionsPayload{AgentID: agent.ID.String()})
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 2)
+	byID := map[string]*gen.AgentSession{}
+	for _, item := range listed.Items {
+		byID[item.ID] = item
+	}
+	require.Equal(t, "agent", byID[own.String()].SubjectKind)
+	require.Nil(t, byID[own.String()].WorkloadSubject)
+	require.Equal(t, "workload", byID[assigned.String()].SubjectKind)
+	require.Equal(t, "runner-1", *byID[assigned.String()].WorkloadSubject)
+}
+
+func TestAgentSessionsScopeAndRevocationCascade(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	for _, org := range []string{"org-a", "org-b"} {
+		seedOrganization(t, db, org)
+		seedOrganizationUser(t, db, org, "owner")
+	}
+	seedOrganizationUser(t, db, "org-a", "other")
+	agent := createAgent(t, db, "org-a", "owner", "Session agent")
+	other := createAgent(t, db, "org-a", "owner", "Other agent")
+	subject := "agent:" + agent.ID.String()
+	session, issuer := seedManagedSession(t, db, "org-a", subject)
+	second, _ := seedManagedSession(t, db, "org-a", subject)
+	human, _ := seedManagedSession(t, db, "org-a", "user:owner")
+	otherSession, _ := seedManagedSession(t, db, "org-a", "agent:"+other.ID.String())
+	crossTenant, _ := seedManagedSession(t, db, "org-b", subject)
+	upstream := seedManagedUpstreamWith(t, db, "org-a", issuer, subject, nil).ID
+	humanUpstream := seedManagedUpstreamWith(t, db, "org-a", issuer, "user:owner", nil).ID
+	service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-a", "owner")
+	listed, err := service.ListSessions(ctx, &gen.ListSessionsPayload{AgentID: agent.ID.String(), Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 1)
+	require.NotNil(t, listed.NextCursor)
+	next, err := service.ListSessions(ctx, &gen.ListSessionsPayload{AgentID: agent.ID.String(), Limit: 1, Cursor: listed.NextCursor})
+	require.NoError(t, err)
+	require.Len(t, next.Items, 1)
+	require.Nil(t, next.NextCursor)
+	require.ElementsMatch(t, []string{session.String(), second.String()}, []string{listed.Items[0].ID, next.Items[0].ID})
+	revoker := &testAgentSessionRevoker{}
+	service.sessionTokens, service.sessionRevoker = revoker, revoker
+	for _, id := range []uuid.UUID{human, otherSession, crossTenant, uuid.New()} {
+		err := service.RevokeSession(ctx, &gen.RevokeSessionPayload{AgentID: agent.ID.String(), SessionID: id.String()})
+		requireOopsCode(t, err, oops.CodeNotFound)
+	}
+	require.Empty(t, revoker.events)
+	for _, denied := range []context.Context{validatedHumanContext(t, "org-a", "other"), validatedHumanContext(t, "org-a", "absent"), contextvalues.WithValidatedGramSession(ctx, mustAuthContext(t, ctx), true)} {
+		_, err := service.ListSessions(denied, &gen.ListSessionsPayload{AgentID: agent.ID.String()})
+		requireOopsCode(t, err, oops.CodeForbidden)
+		requireOopsCode(t, service.RevokeSession(denied, &gen.RevokeSessionPayload{AgentID: agent.ID.String(), SessionID: session.String()}), oops.CodeForbidden)
+	}
+	revoker.afterCommit = func() {
+		_, err := liveUserSession(ctx, db, "org-a", session)
+		require.ErrorIs(t, err, pgx.ErrNoRows, "revocation must commit before token invalidation")
+	}
+	require.NoError(t, service.RevokeSession(ctx, &gen.RevokeSessionPayload{AgentID: agent.ID.String(), SessionID: session.String()}))
+	require.Equal(t, []string{"cascade", "token", "upstream"}, revoker.events)
+	require.Equal(t, 1, revoker.credentials)
+	revoked, err := testrepo.New(db).GetRemoteSessionDeletedFixture(ctx, upstream)
+	require.NoError(t, err)
+	preserved, err := testrepo.New(db).GetRemoteSessionDeletedFixture(ctx, humanUpstream)
+	require.NoError(t, err)
+	require.True(t, revoked, "the upstream session cascades")
+	require.False(t, preserved, "the owner's credential does not cascade")
+	listed, err = service.ListSessions(ctx, &gen.ListSessionsPayload{AgentID: agent.ID.String()})
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 1)
+}
+
+func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	seedOrganization(t, db, "org-a")
+	seedOrganizationUser(t, db, "org-a", "owner")
+	agent := createAgent(t, db, "org-a", "owner", "Agent")
+	session, issuer := seedManagedSession(t, db, "org-a", "agent:"+agent.ID.String())
+	seededSession, err := liveUserSession(t.Context(), db, "org-a", session)
+	require.NoError(t, err)
+	// Identity fields exercise identity cleanup on retryable tombstones.
+	seededUpstream := seedManagedUpstreamWith(t, db, "org-a", issuer, "agent:"+agent.ID.String(), func(params *remoterepo.UpsertRemoteSessionFixtureParams) {
+		params.UpstreamSubject = conv.ToPGText("fixture-subject")
+		params.UpstreamEmail = conv.ToPGText("fixture@example.test")
+		params.UpstreamDisplayName = conv.ToPGText("Fixture")
+		params.IdentitySource = conv.ToPGText("id_token")
+		params.Enrichment = []byte(`{"team":"fixture"}`)
+	})
+	upstream := seededUpstream.ID
+	service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-a", "owner")
+	revoker := &testAgentSessionRevoker{cascadeErr: errors.New("cascade unavailable")}
+	service.sessionTokens, service.sessionRevoker = revoker, revoker
+	payload := &gen.RevokeSessionPayload{AgentID: agent.ID.String(), SessionID: session.String()}
+	require.Error(t, service.RevokeSession(ctx, payload))
+	require.Equal(t, []string{"cascade"}, revoker.events)
+	_, err = liveUserSession(ctx, db, "org-a", session)
+	require.NoError(t, err, "rollback must preserve refresh credentials")
+	revoker.cascadeErr = nil
+	revoker.pushErr = errors.New("cache unavailable")
+	revoker.events = nil
+	requireOopsCode(t, service.RevokeSession(ctx, payload), oops.CodeUnexpected)
+	require.Equal(t, []string{"cascade", "token", "upstream"}, revoker.events)
+	// Reconnect on the same issuer and remote client after the committed revoke.
+	// The reconnect must retain its distinct session and tokens.
+	freshSession := createManagedUserSession(t, db, issuer, "agent:"+agent.ID.String(), "fresh-jti", "fresh-hash")
+	// Same subject and client, but fresh live credentials. The original row is
+	// a committed tombstone, so this inserts a new live row beside it.
+	fresh, err := remoterepo.New(db).UpsertRemoteSessionFixture(ctx, remoterepo.UpsertRemoteSessionFixtureParams{
+		SubjectUrn:            seededUpstream.SubjectUrn,
+		UserSessionIssuerID:   seededUpstream.UserSessionIssuerID,
+		RemoteSessionClientID: seededUpstream.RemoteSessionClientID,
+		AccessTokenEncrypted:  "fresh-access",
+		RefreshTokenEncrypted: conv.ToPGText("fresh-refresh"),
+		Scopes:                []string{},
+		UpstreamSubject:       conv.ToPGText("fresh-identity"),
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, upstream, fresh.ID)
+	freshUpstream := fresh.ID
+	// An older unrelated tombstone must not match the retry boundary.
+	err = testrepo.New(db).InsertOlderRemoteSessionTombstoneFixture(ctx, upstream)
+	require.NoError(t, err)
+	sameBoundary, err := testrepo.New(db).RemoteSessionSharesUserSessionBoundaryFixture(ctx, testrepo.RemoteSessionSharesUserSessionBoundaryFixtureParams{UserSessionID: session, RemoteSessionID: upstream})
+	require.NoError(t, err)
+	require.True(t, sameBoundary, "original tombstones share the exact persisted boundary")
+	revoker.pushErr = nil
+	revoker.events = nil
+	require.NoError(t, service.RevokeSession(ctx, payload))
+	require.Len(t, revoker.lastCredentials, 1)
+	require.Equal(t, "fixture-not-a-token", revoker.lastCredentials[0].AccessToken.Platform.String)
+	require.Equal(t, "fixture-refresh", revoker.lastCredentials[0].RefreshToken.Platform.String)
+	require.Equal(t, []string{seededSession.Jti, seededSession.Jti}, revoker.revokedJTIs)
+	freshPreserved, err := testrepo.New(db).RemoteSessionHasLiveCredentialsFixture(ctx, testrepo.RemoteSessionHasLiveCredentialsFixtureParams{
+		AccessTokenEncrypted: "fresh-access", RefreshTokenEncrypted: "fresh-refresh", UpstreamSubject: "fresh-identity", ID: freshUpstream,
+	})
+	require.NoError(t, err)
+	require.True(t, freshPreserved, "retry cannot alter the reconnect's credentials or identity")
+	// The reconnect's JWT and refresh session remain live.
+	freshStored, err := liveUserSession(ctx, db, "org-a", freshSession)
+	require.NoError(t, err)
+	require.Equal(t, "fresh-jti", freshStored.Jti)
+	require.Equal(t, conv.ToPGText("fresh-hash"), freshStored.RefreshTokenHash)
+	require.Equal(t, []string{"cascade", "token", "upstream"}, revoker.events)
+	require.Equal(t, 2, revoker.credentials, "retry must repeat upstream revocation with retained credentials")
+	require.Len(t, auditLogs(t, db, "org-a", session.String()), 1, "audit idempotency across a committed retry")
+	identityCleared, err := testrepo.New(db).DeletedRemoteSessionIdentityClearedFixture(ctx, upstream)
+	require.NoError(t, err)
+	require.True(t, identityCleared, "retries retain credentials but must remove identity")
+	tombstone, err := testrepo.New(db).GetDeletedRemoteSessionCredentialsFixture(ctx, upstream)
+	require.NoError(t, err)
+	// Runtime tombstones retain linkage and encrypted credentials for retries.
+	require.Equal(t, "agent:"+agent.ID.String(), tombstone.SubjectUrn.String())
+	require.Equal(t, conv.ToPGText("fixture-not-a-token"), tombstone.AccessTokenEncrypted)
+	require.Equal(t, conv.ToPGText("fixture-refresh"), tombstone.RefreshTokenEncrypted)
+}
+
+func TestAgentSessionRevocationDetachedCachePush(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	seedOrganization(t, db, "org-a")
+	seedOrganizationUser(t, db, "org-a", "owner")
+	agent := createAgent(t, db, "org-a", "owner", "Agent")
+	session, _ := seedManagedSession(t, db, "org-a", "agent:"+agent.ID.String())
+	service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx, cancel := context.WithCancel(validatedHumanContext(t, "org-a", "owner"))
+	defer cancel()
+	revoker := &testAgentSessionRevoker{afterCommit: cancel}
+	revoker.checkPushContext = func(pushCtx context.Context) {
+		require.ErrorIs(t, ctx.Err(), context.Canceled)
+		require.NoError(t, pushCtx.Err())
+		deadline, ok := pushCtx.Deadline()
+		require.True(t, ok)
+		require.WithinDuration(t, time.Now().Add(5*time.Second), deadline, time.Second)
+	}
+	service.sessionTokens, service.sessionRevoker = revoker, revoker
+	require.NoError(t, service.RevokeSession(ctx, &gen.RevokeSessionPayload{AgentID: agent.ID.String(), SessionID: session.String()}))
+	require.Equal(t, []string{"cascade", "token", "upstream"}, revoker.events)
+}

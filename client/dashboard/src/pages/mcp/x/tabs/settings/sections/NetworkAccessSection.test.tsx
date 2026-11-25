@@ -1,0 +1,1259 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import { NetworkAccessSection } from "./NetworkAccessSection";
+import type { Toolset } from "@/lib/toolTypes";
+
+const followRenamedServer = vi.hoisted(() => vi.fn());
+vi.mock("@/pages/mcp/x/useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => followRenamedServer,
+}));
+
+const testState = vi.hoisted(() => ({
+  entitled: true,
+  productTier: "enterprise" as "enterprise" | "payg" | "base",
+  featureStatus: "success" as "pending" | "success" | "error",
+  rolloutStatus: undefined as
+    | "loading"
+    | "enabled"
+    | "disabled"
+    | "error"
+    | undefined,
+  featureFetching: false,
+  orgAdmin: true,
+  ingressEnabled: true,
+  ingressStatus: "online",
+  endpointNamespaceKind: "platform" as "platform" | "custom_domain",
+  ingressCustomDomainId: undefined as string | undefined,
+  ingressQueryStatus: "success" as "pending" | "success" | "error",
+  ingressFetching: false,
+  domainsStatus: "success" as "pending" | "success" | "error",
+  domainsFetching: false,
+  domains: [{ id: "domain-1", domain: "mcp.example.com" }],
+  ingressQuery: vi.fn(),
+  requireScopeProps: undefined as
+    | { scope: string; resourceId?: string; level: string }
+    | undefined,
+  mutate: vi.fn(),
+  mutateGateway: vi.fn(),
+  getServer: vi.fn(),
+  invalidateGetGateway: vi.fn().mockResolvedValue(undefined),
+  invalidateListGateway: vi.fn().mockResolvedValue(undefined),
+  invalidateGetServer: vi.fn().mockResolvedValue(undefined),
+  invalidateListServers: vi.fn().mockResolvedValue(undefined),
+  invalidateToolset: vi.fn().mockResolvedValue(undefined),
+  invalidateListToolsets: vi.fn().mockResolvedValue(undefined),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+  mutationOptions: undefined as
+    | {
+        onError?: (error: Error) => void;
+        onSuccess?: () => Promise<void>;
+      }
+    | undefined,
+  gatewayMutationOptions: undefined as
+    | {
+        onError?: (error: Error) => void;
+        onSuccess?: () => Promise<void>;
+      }
+    | undefined,
+}));
+
+vi.mock("./NetworkTrafficPanel", () => ({
+  NetworkTrafficPanel: (props: {
+    mcpServerId?: string;
+    metaMcpServerId?: string;
+  }) => (
+    <div
+      data-testid="network-traffic-panel"
+      data-mcp-server-id={props.mcpServerId ?? ""}
+      data-meta-mcp-server-id={props.metaMcpServerId ?? ""}
+    />
+  ),
+}));
+
+vi.mock("@/components/ui/CopyButton", () => ({
+  CopyButton: ({ text }: { text: string }) => (
+    <button type="button" aria-label={`Copy ${text}`} />
+  ),
+}));
+
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({
+    children,
+    ...props
+  }: {
+    children: React.ReactNode;
+    scope: string;
+    resourceId?: string;
+    level: string;
+  }) => {
+    testState.requireScopeProps = props;
+    return <>{children}</>;
+  },
+}));
+
+vi.mock("@/hooks/useProductTier", () => ({
+  useProductTier: () => testState.productTier,
+}));
+
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-1" }),
+}));
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => testState.orgAdmin }),
+}));
+
+vi.mock("@/hooks/useNetworkIngressRollout", () => ({
+  useNetworkIngressRollout: () => {
+    const status =
+      testState.rolloutStatus ??
+      (testState.featureStatus === "pending"
+        ? "loading"
+        : testState.featureStatus === "error"
+          ? "error"
+          : testState.entitled
+            ? "enabled"
+            : "disabled");
+
+    return {
+      status,
+      rolloutEnabled: status === "enabled",
+      canManageIngress: testState.orgAdmin,
+    };
+  },
+}));
+
+vi.mock("@/hooks/useToolsetUrl", () => ({
+  customDomainMcpEndpointUrl: (domain: string, slug: string) =>
+    `https://${domain}/mcp/${slug}`,
+}));
+
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => "https://platform.example.com",
+}));
+
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => ({
+    data: { networkIngressEnabled: testState.entitled },
+    isPending: testState.featureStatus === "pending",
+    isError: testState.featureStatus === "error",
+    isSuccess: testState.featureStatus === "success",
+    isFetching: testState.featureFetching,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/networkIngress.js", () => ({
+  useNetworkIngress: (...args: unknown[]) => {
+    testState.ingressQuery(...args);
+    const options = args[2] as { enabled?: boolean } | undefined;
+    const enabled = options?.enabled !== false;
+    return {
+      data:
+        enabled && testState.ingressQueryStatus !== "pending"
+          ? {
+              ingress: {
+                enabled: testState.ingressEnabled,
+                status: testState.ingressStatus,
+                dnsName: "private.example.ts.net",
+                endpointNamespaceKind: testState.endpointNamespaceKind,
+                customDomainId: testState.ingressCustomDomainId,
+              },
+            }
+          : undefined,
+      isPending: enabled && testState.ingressQueryStatus === "pending",
+      isError: enabled && testState.ingressQueryStatus === "error",
+      isSuccess: enabled && testState.ingressQueryStatus === "success",
+      isFetching: enabled && testState.ingressFetching,
+    };
+  },
+}));
+
+vi.mock("@gram/client/react-query/listDomains.js", () => ({
+  useListDomains: () => ({
+    data:
+      testState.domainsStatus === "pending"
+        ? undefined
+        : { domains: testState.domains },
+    isPending: testState.domainsStatus === "pending",
+    isLoading: testState.domainsStatus === "pending",
+    isFetching: testState.domainsFetching,
+    isError: testState.domainsStatus === "error",
+    isSuccess: testState.domainsStatus === "success",
+  }),
+}));
+
+vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
+  invalidateAllGetMcpServer: testState.invalidateGetServer,
+}));
+vi.mock("@gram/client/react-query/getMetaMcpServer.js", () => ({
+  invalidateAllGetMetaMcpServer: testState.invalidateGetGateway,
+}));
+vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
+  invalidateAllMetaMcpServers: testState.invalidateListGateway,
+}));
+vi.mock("@gram/client/react-query/updateMetaMcpServer.js", () => ({
+  useUpdateMetaMcpServerMutation: (options: {
+    onError?: (error: Error) => void;
+    onSuccess?: () => Promise<void>;
+  }) => {
+    testState.gatewayMutationOptions = options;
+    return {
+      isPending: false,
+      mutate: testState.mutateGateway,
+    };
+  },
+}));
+
+vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  invalidateAllMcpServers: testState.invalidateListServers,
+}));
+vi.mock("@gram/client/react-query/listToolsets.js", () => ({
+  invalidateAllListToolsets: testState.invalidateListToolsets,
+}));
+vi.mock("@gram/client/react-query/toolset.js", () => ({
+  invalidateAllToolset: testState.invalidateToolset,
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({ mcpServers: { get: testState.getServer } }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
+
+vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
+  useUpdateMcpServerMutation: (options: {
+    onError?: (error: Error) => void;
+    onSuccess?: () => Promise<void>;
+  }) => {
+    testState.mutationOptions = options;
+    return {
+      isPending: false,
+      mutate: testState.mutate,
+    };
+  },
+}));
+
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({}),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: testState.toastError, success: testState.toastSuccess },
+}));
+
+const baseServer: McpServer = {
+  id: "server-1",
+  projectId: "project-1",
+  name: "Hosted MCP",
+  networkAccessMode: "public_only",
+  remoteMcpServerId: "remote-1",
+  environmentId: "environment-1",
+  toolVariationsGroupId: "variation-group-1",
+  visibility: "private",
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+};
+
+const hostedToolset = {
+  id: "toolset-1",
+  projectId: "project-1",
+  slug: "hosted-toolset",
+  mcpSlug: "hosted-toolset",
+  networkAccessMode: "public_only",
+} as Toolset;
+
+const hostedEndpoints: McpEndpoint[] = [
+  {
+    id: "endpoint-1",
+    projectId: "project-1",
+    slug: "hosted-toolset",
+    mcpServerId: "toolset-1",
+    isDomainRoot: false,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+];
+
+const hostedServer: McpServer = {
+  id: "toolset-1",
+  projectId: "project-1",
+  name: "Hosted Toolset",
+  networkAccessMode: "public_only",
+  toolsetId: "toolset-1",
+  environmentId: "environment-1",
+  toolVariationsGroupId: "variation-group-1",
+  visibility: "public",
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+};
+
+const gateway: MetaMcpServer = {
+  discoveryMode: "progressive",
+  id: "gateway-1",
+  name: "My Gateway",
+  organizationId: "org-1",
+  projectId: "project-1",
+  networkAccessMode: "public_only",
+  visibility: "private",
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+};
+
+const endpoints: [McpEndpoint, McpEndpoint] = [
+  {
+    id: "endpoint-platform",
+    projectId: "project-1",
+    mcpServerId: "server-1",
+    slug: "hosted-mcp",
+    isDomainRoot: false,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+  {
+    id: "endpoint-custom",
+    projectId: "project-1",
+    customDomainId: "domain-1",
+    mcpServerId: "server-1",
+    slug: "custom-mcp",
+    isDomainRoot: true,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+];
+
+beforeEach(() => {
+  testState.entitled = true;
+  testState.productTier = "enterprise";
+  testState.featureStatus = "success";
+  testState.rolloutStatus = undefined;
+  testState.featureFetching = false;
+  testState.orgAdmin = true;
+  testState.ingressEnabled = true;
+  testState.ingressStatus = "online";
+  testState.endpointNamespaceKind = "platform";
+  testState.ingressCustomDomainId = undefined;
+  testState.ingressQueryStatus = "success";
+  testState.ingressFetching = false;
+  testState.domainsStatus = "success";
+  testState.domainsFetching = false;
+  testState.domains = [{ id: "domain-1", domain: "mcp.example.com" }];
+  testState.ingressQuery.mockReset();
+  testState.requireScopeProps = undefined;
+  testState.mutate.mockReset();
+  testState.mutateGateway.mockReset();
+  testState.getServer.mockReset().mockResolvedValue(hostedServer);
+  testState.invalidateGetGateway.mockClear();
+  testState.invalidateListGateway.mockClear();
+  testState.invalidateGetServer.mockClear();
+  testState.invalidateListServers.mockClear();
+  testState.invalidateToolset.mockClear();
+  testState.invalidateListToolsets.mockClear();
+  testState.toastSuccess.mockClear();
+  testState.toastError.mockClear();
+  testState.mutationOptions = undefined;
+  testState.gatewayMutationOptions = undefined;
+});
+
+afterEach(cleanup);
+
+describe("NetworkAccessSection", () => {
+  it.each([
+    { networkAccessMode: unrecognized("future_mode") },
+    { visibility: unrecognized("future_visibility") },
+  ])(
+    "disables network edits when stored settings are unsupported: %j",
+    (unknown) => {
+      render(
+        <NetworkAccessSection
+          mcpServer={{ ...baseServer, ...unknown }}
+          endpoints={endpoints}
+        />,
+        { wrapper: MemoryRouter },
+      );
+      expect(
+        (
+          screen.getByRole("combobox", {
+            name: "Network access mode",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      expect(
+        screen.getByText(/unsupported network configuration/),
+      ).toBeTruthy();
+    },
+  );
+
+  it("blocks a dirty save when visibility becomes unsupported", () => {
+    const { rerender } = render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      { wrapper: MemoryRouter },
+    );
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
+    expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+      "disabled",
+      false,
+    );
+    rerender(
+      <NetworkAccessSection
+        mcpServer={{
+          ...baseServer,
+          visibility: unrecognized("future_visibility"),
+        }}
+        endpoints={endpoints}
+      />,
+    );
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toHaveProperty("disabled", true);
+    fireEvent.click(save);
+    expect(testState.mutate).not.toHaveBeenCalled();
+  });
+
+  it("updates a hosted server through mcpServers.update and invalidates all affected caches", async () => {
+    render(
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(testState.mutate).toHaveBeenCalledWith({
+        request: {
+          updateMcpServerForm: {
+            id: "toolset-1",
+            networkAccessMode: "dual",
+            toolsetId: "toolset-1",
+            environmentId: "environment-1",
+            toolVariationsGroupId: "variation-group-1",
+            visibility: "public",
+          },
+        },
+      }),
+    );
+    expect(testState.getServer).toHaveBeenCalledWith({ id: "toolset-1" });
+
+    await testState.mutationOptions?.onSuccess?.();
+    await waitFor(() =>
+      expect(testState.toastSuccess).toHaveBeenCalledWith(
+        "Network access updated",
+      ),
+    );
+
+    for (const invalidate of [
+      testState.invalidateToolset,
+      testState.invalidateListToolsets,
+      testState.invalidateGetServer,
+      testState.invalidateListServers,
+    ]) {
+      expect(invalidate).toHaveBeenCalledWith(expect.anything(), {
+        refetchType: "all",
+      });
+    }
+  });
+
+  it("saves over a concurrent change using the latest server", async () => {
+    testState.getServer.mockResolvedValue({
+      ...hostedServer,
+      toolVariationsGroupId: "variation-group-2",
+      visibility: "private",
+    });
+    render(
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(testState.mutate).toHaveBeenCalledWith({
+        request: {
+          updateMcpServerForm: expect.objectContaining({
+            toolVariationsGroupId: "variation-group-2",
+            visibility: "private",
+          }),
+        },
+      }),
+    );
+  });
+
+  it("shows an error toast when the latest hosted server cannot be loaded", async () => {
+    testState.getServer.mockRejectedValue(new Error("Server lookup failed"));
+    render(
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(testState.toastError).toHaveBeenCalledWith("Server lookup failed"),
+    );
+    expect(testState.mutate).not.toHaveBeenCalled();
+  });
+
+  it("shows an error toast when a hosted server update fails", async () => {
+    render(
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(testState.mutate).toHaveBeenCalled());
+
+    testState.mutationOptions?.onError?.(new Error("Server update failed"));
+
+    expect(testState.toastError).toHaveBeenCalledWith("Server update failed");
+    expect(testState.toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("requires confirmation before making a hosted server private only", async () => {
+    render(
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Private only/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.getByRole("dialog").textContent).toContain(
+      "https://platform.example.com/mcp/hosted-toolset",
+    );
+    expect(testState.mutate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Make private only" }));
+    await waitFor(() =>
+      expect(testState.mutate).toHaveBeenCalledWith({
+        request: {
+          updateMcpServerForm: expect.objectContaining({
+            id: "toolset-1",
+            networkAccessMode: "private_only",
+          }),
+        },
+      }),
+    );
+  });
+
+  it("shows the traffic graph for a private hosted toolset", () => {
+    render(
+      <NetworkAccessSection
+        mcpServer={{ ...hostedServer, networkAccessMode: "dual" }}
+        endpoints={hostedEndpoints}
+        toolset={{ ...hostedToolset, networkAccessMode: "dual" }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    const panel = screen.getByTestId("network-traffic-panel");
+    expect(panel.getAttribute("data-mcp-server-id")).toBe(hostedToolset.id);
+  });
+
+  it("hides the traffic graph while a hosted toolset is public only", () => {
+    render(
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    expect(screen.queryByTestId("network-traffic-panel")).toBeNull();
+  });
+
+  it("hides the traffic graph while the server is public only", () => {
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      { wrapper: MemoryRouter },
+    );
+    expect(screen.queryByTestId("network-traffic-panel")).toBeNull();
+  });
+
+  it("shows the traffic graph for a dual mode server", () => {
+    render(
+      <NetworkAccessSection
+        mcpServer={{ ...baseServer, networkAccessMode: "dual" }}
+        endpoints={endpoints}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    const panel = screen.getByTestId("network-traffic-panel");
+    expect(panel.getAttribute("data-mcp-server-id")).toBe(baseServer.id);
+    expect(panel.getAttribute("data-meta-mcp-server-id")).toBe("");
+  });
+
+  it("shows the traffic graph for a private only gateway", () => {
+    render(
+      <NetworkAccessSection
+        metaMcpServer={{ ...gateway, networkAccessMode: "private_only" }}
+        endpoints={[{ ...endpoints[0], metaMcpServerId: gateway.id }]}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    const panel = screen.getByTestId("network-traffic-panel");
+    expect(panel.getAttribute("data-meta-mcp-server-id")).toBe(gateway.id);
+  });
+
+  it.each(["base", "payg"] as const)(
+    "shows the Enterprise upsell to %s without staff entitlement",
+    (tier) => {
+      testState.productTier = tier;
+      testState.entitled = false;
+      render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+        { wrapper: MemoryRouter },
+      );
+      expect(screen.getByText(/available on the Enterprise plan/)).toBeTruthy();
+      expect(
+        screen
+          .getByRole("link", { name: "Talk to our team about upgrading" })
+          .getAttribute("href"),
+      ).toBe("https://www.speakeasy.com/book-demo");
+      // Public is the only choice, so the picker is locked and the upsell
+      // is the one next step: no organization settings link beside it.
+      expect(
+        screen
+          .getByRole("combobox", { name: "Network access mode" })
+          .hasAttribute("disabled"),
+      ).toBe(true);
+      expect(
+        screen.queryByRole("link", {
+          name: "Configure organization network access",
+        }),
+      ).toBeNull();
+    },
+  );
+
+  it.each(["base", "payg"] as const)(
+    "allows private choices for %s when staff enabled Tailscale",
+    (tier) => {
+      testState.productTier = tier;
+      const { unmount } = render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+        { wrapper: MemoryRouter },
+      );
+      expect(screen.queryByText(/available on the Enterprise plan/)).toBeNull();
+      expect(screen.queryByText(/not enabled/)).toBeNull();
+      expect(
+        screen.getByText("Changes apply to new connections."),
+      ).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      expect(
+        screen
+          .getByRole("option", { name: /Public and private/ })
+          .hasAttribute("data-disabled"),
+      ).toBe(false);
+      unmount();
+
+      render(
+        <NetworkAccessSection
+          mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
+          endpoints={endpoints}
+        />,
+        { wrapper: MemoryRouter },
+      );
+      expect(screen.queryByText(/no longer enabled/)).toBeNull();
+      expect(
+        screen.getByText("Changes apply to new connections."),
+      ).toBeTruthy();
+    },
+  );
+
+  it("points Enterprise without staff entitlement to support", () => {
+    testState.entitled = false;
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      { wrapper: MemoryRouter },
+    );
+    expect(screen.getByText(/Contact support to enable it/)).toBeTruthy();
+  });
+
+  it("hides public-only network access for a non-admin without rollout", () => {
+    testState.orgAdmin = false;
+    testState.entitled = false;
+    const { container } = render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      { wrapper: MemoryRouter },
+    );
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("links organization admins to network configuration", () => {
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      { wrapper: MemoryRouter },
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "Configure organization network access" })
+        .getAttribute("href"),
+    ).toBe("/org/domains");
+  });
+
+  it("shows network access before staff enables Tailscale", () => {
+    testState.entitled = false;
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      { wrapper: MemoryRouter },
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    ).toBeTruthy();
+  });
+
+  it.each(["loading", "error"] as const)(
+    "keeps the section visible while entitlement lookup is %s",
+    (status) => {
+      testState.rolloutStatus = status;
+      testState.featureStatus = status === "loading" ? "pending" : "error";
+
+      render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+        { wrapper: MemoryRouter },
+      );
+
+      expect(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(
+          status === "loading"
+            ? /Checking private network availability/
+            : /Private network availability could not be checked/,
+        ),
+      ).toBeTruthy();
+    },
+  );
+
+  it("keeps a stored private mode visible when the staff entitlement is disabled", () => {
+    testState.entitled = false;
+    render(
+      <NetworkAccessSection
+        mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
+        endpoints={endpoints}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Network access mode" }).textContent,
+    ).toContain("Private only");
+    expect(
+      screen.getByText("https://private.example.ts.net/mcp/hosted-mcp"),
+    ).toBeTruthy();
+  });
+
+  it("does not query ingress for a non-admin and reports unavailable state", () => {
+    testState.orgAdmin = false;
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(testState.ingressQuery).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      expect.objectContaining({ enabled: false }),
+    );
+    expect(
+      screen.getByText(/Private network availability could not be checked/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("link", {
+        name: "Configure organization network access",
+      }),
+    ).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    expect(
+      screen
+        .getByRole("option", { name: /Private only/ })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
+  });
+
+  it("hides cached private URLs after admin access is revoked", () => {
+    testState.orgAdmin = false;
+    render(
+      <NetworkAccessSection
+        mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
+        endpoints={endpoints}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(
+      screen.queryByText("https://private.example.ts.net/mcp/hosted-mcp"),
+    ).toBeNull();
+  });
+
+  it("reports unavailable state when the ingress query fails", () => {
+    testState.ingressQueryStatus = "error";
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(
+      screen.getByText(/Private network availability could not be checked/),
+    ).toBeTruthy();
+  });
+
+  it.each(["pending", "error"] as const)(
+    "blocks private choices when the product-feature query is %s, even with cached entitlement data",
+    (status) => {
+      testState.featureStatus = status;
+      render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+        { wrapper: MemoryRouter },
+      );
+
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      expect(
+        screen
+          .getByRole("option", { name: /Private only/ })
+          .getAttribute("aria-disabled"),
+      ).toBe("true");
+    },
+  );
+
+  it.each(["pending", "error"] as const)(
+    "blocks private choices when the ingress query is %s, even with cached ingress data",
+    (status) => {
+      testState.ingressQueryStatus = status;
+      render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+        { wrapper: MemoryRouter },
+      );
+
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      expect(
+        screen
+          .getByRole("option", { name: /Private only/ })
+          .getAttribute("aria-disabled"),
+      ).toBe("true");
+    },
+  );
+
+  it("hides cached private URLs while ingress data refetches", () => {
+    testState.ingressFetching = true;
+    render(
+      <NetworkAccessSection
+        mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
+        endpoints={endpoints}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(
+      screen.queryByText("https://private.example.ts.net/mcp/hosted-mcp"),
+    ).toBeNull();
+  });
+
+  it.each(["features", "ingress"] as const)(
+    "keeps private choices available while successful %s data refetches",
+    (query) => {
+      if (query === "features") {
+        testState.featureFetching = true;
+      } else {
+        testState.ingressFetching = true;
+      }
+      render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+        { wrapper: MemoryRouter },
+      );
+
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      expect(
+        screen
+          .getByRole("option", { name: /Private only/ })
+          .getAttribute("aria-disabled"),
+      ).not.toBe("true");
+      expect(
+        screen.queryByText(/Private network availability could not be checked/),
+      ).toBeNull();
+    },
+  );
+
+  it("checks mcp:write against the current project", () => {
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(testState.requireScopeProps).toEqual({
+      scope: "mcp:write",
+      resourceId: "project-1",
+      level: "component",
+    });
+  });
+
+  it("shows a stored private mode and allows recovery without entitlement", () => {
+    testState.entitled = false;
+    render(
+      <NetworkAccessSection
+        mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
+        endpoints={endpoints}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Network access mode" }).textContent,
+    ).toContain("Private only");
+    expect(
+      screen.getByText(/You can still switch to public only/),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public only/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateMcpServerForm: {
+          id: "server-1",
+          networkAccessMode: "public_only",
+          remoteMcpServerId: "remote-1",
+          tunneledMcpServerId: undefined,
+          toolsetId: undefined,
+          unproxiedMcpServerId: undefined,
+          environmentId: "environment-1",
+          toolVariationsGroupId: "variation-group-1",
+          visibility: "private",
+        },
+      },
+    });
+  });
+
+  it("blocks private modes when no endpoint exists in the pinned namespace", () => {
+    render(
+      <NetworkAccessSection
+        mcpServer={baseServer}
+        endpoints={endpoints.filter((endpoint) => endpoint.customDomainId)}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(
+      screen.getByText(
+        "In Server URL, add a hosted address so clients can reach this server through your private network.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    expect(
+      screen
+        .getByRole("option", { name: /Private only/ })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
+  });
+
+  it("points to the configured custom domain when it has no matching address", () => {
+    testState.endpointNamespaceKind = "custom_domain";
+    testState.ingressCustomDomainId = "domain-2";
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(
+      screen.getByText(
+        "In Server URL, add a custom address on the domain configured for your private network so clients can reach this server through your private network.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it.each(["pending", "refetching", "error", "missing"] as const)(
+    "fails closed when custom domains become %s before private-only confirmation",
+    (status) => {
+      const { rerender } = render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+        { wrapper: MemoryRouter },
+      );
+
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      fireEvent.click(screen.getByRole("option", { name: /Private only/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(screen.getByRole("dialog")).toBeTruthy();
+
+      if (status === "missing") {
+        testState.domains = [];
+      } else if (status === "refetching") {
+        testState.domainsFetching = true;
+      } else {
+        testState.domainsStatus = status;
+      }
+      rerender(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      );
+
+      const confirm = screen.getByRole("button", {
+        name: "Make private only",
+      });
+      expect(confirm.getAttribute("disabled")).not.toBeNull();
+      fireEvent.click(confirm);
+      expect(testState.mutate).not.toHaveBeenCalled();
+    },
+  );
+
+  it("requires confirmation for private only and lists affected endpoint URLs", () => {
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      { wrapper: MemoryRouter },
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Private only/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialogText = screen.getByRole("dialog").textContent;
+    expect(dialogText).toContain(
+      "Public routes stop serving this MCP server. There is no public fallback.",
+    );
+    expect(dialogText).toContain(
+      "If the tailnet or private ingress loses connectivity",
+    );
+    expect(dialogText).toContain(
+      "Marketplace and device-agent URLs are not rewritten",
+    );
+    expect(dialogText).toContain("https://platform.example.com/mcp/hosted-mcp");
+    expect(dialogText).toContain("https://mcp.example.com/");
+    expect(dialogText).toContain("https://mcp.example.com/mcp/custom-mcp");
+    expect(dialogText).toContain(
+      "https://private.example.ts.net/mcp/hosted-mcp",
+    );
+    expect(dialogText).not.toContain(
+      "https://private.example.ts.net/mcp/custom-mcp",
+    );
+    expect(testState.mutate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make private only" }));
+    expect(testState.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateMcpServerForm: expect.objectContaining({
+            networkAccessMode: "private_only",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("lets an eligible gateway use dual access and its private endpoint", async () => {
+    const gatewayEndpoints = [{ ...endpoints[0], metaMcpServerId: gateway.id }];
+    const { rerender } = render(
+      <NetworkAccessSection
+        metaMcpServer={gateway}
+        endpoints={gatewayEndpoints}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(testState.mutateGateway).toHaveBeenCalledWith({
+      request: {
+        updateMetaMcpServerForm: {
+          id: gateway.id,
+          name: gateway.name,
+          networkAccessMode: "dual",
+        },
+      },
+    });
+    expect(testState.mutate).not.toHaveBeenCalled();
+
+    await testState.gatewayMutationOptions?.onSuccess?.();
+    expect(testState.invalidateGetGateway).toHaveBeenCalledWith(
+      expect.anything(),
+      { refetchType: "all" },
+    );
+    expect(testState.invalidateListGateway).toHaveBeenCalledWith(
+      expect.anything(),
+      { refetchType: "all" },
+    );
+    expect(testState.toastSuccess).toHaveBeenCalledWith(
+      "Network access updated",
+    );
+
+    rerender(
+      <NetworkAccessSection
+        metaMcpServer={{ ...gateway, networkAccessMode: "dual" }}
+        endpoints={gatewayEndpoints}
+      />,
+    );
+    expect(
+      screen.getByText("https://private.example.ts.net/mcp/hosted-mcp"),
+    ).toBeTruthy();
+
+    testState.gatewayMutationOptions?.onError?.(
+      new Error("Gateway update failed"),
+    );
+    expect(testState.toastError).toHaveBeenCalledWith("Gateway update failed");
+  });
+
+  it("confirms private-only gateway access and lists affected URLs", () => {
+    render(
+      <NetworkAccessSection
+        metaMcpServer={gateway}
+        endpoints={[{ ...endpoints[0], metaMcpServerId: gateway.id }]}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Private only/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain(
+      "Public routes stop serving this gateway",
+    );
+    expect(dialog.textContent).toContain(
+      "https://platform.example.com/mcp/hosted-mcp",
+    );
+    expect(dialog.textContent).toContain(
+      "https://private.example.ts.net/mcp/hosted-mcp",
+    );
+    expect(testState.mutateGateway).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make private only" }));
+    expect(testState.mutateGateway).toHaveBeenCalledWith({
+      request: {
+        updateMetaMcpServerForm: {
+          id: gateway.id,
+          name: gateway.name,
+          networkAccessMode: "private_only",
+        },
+      },
+    });
+  });
+
+  it("blocks gateway private access without an endpoint in the pinned namespace", () => {
+    render(
+      <NetworkAccessSection
+        metaMcpServer={gateway}
+        endpoints={[{ ...endpoints[1], metaMcpServerId: gateway.id }]}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    expect(
+      screen.getByText(
+        "In Gateway URL, add a hosted address so clients can reach this gateway through your private network.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    expect(
+      screen
+        .getByRole("option", { name: /Private only/ })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
+  });
+
+  it("allows an existing private gateway to return to public-only access", () => {
+    testState.entitled = false;
+    render(
+      <NetworkAccessSection
+        metaMcpServer={{ ...gateway, networkAccessMode: "private_only" }}
+        endpoints={[{ ...endpoints[0], metaMcpServerId: gateway.id }]}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    expect(
+      screen.getByText(/You can still switch to public only/),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public only/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(testState.mutateGateway).toHaveBeenCalledWith({
+      request: {
+        updateMetaMcpServerForm: {
+          id: gateway.id,
+          name: gateway.name,
+          networkAccessMode: "public_only",
+        },
+      },
+    });
+  });
+});

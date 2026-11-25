@@ -22,11 +22,12 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // platformCIMDAdmissionMode is the admission policy this authorization
@@ -178,7 +179,8 @@ func (s *OAuthHTTP) resolveClient(ctx context.Context, clientID string, mode cli
 // URL-shaped client_id, before any document is fetched. Returns nil when the
 // client is admitted and a *admission.DenialError when policy denies it.
 func (s *OAuthHTTP) admitCIMDClient(ctx context.Context, clientID string) error {
-	decision := admission.Evaluate(platformCIMDAdmissionMode, clientID)
+	catalog := s.aiCatalog.SnapshotFor(ctx)
+	decision := admission.Evaluate(catalog, platformCIMDAdmissionMode, clientID)
 	if len(clientID) > admission.MaxClientIDLength {
 		// Evaluate applies this bound itself in the modes that consult the
 		// catalog, but not in the open mode this server runs, where every
@@ -203,7 +205,7 @@ func (s *OAuthHTTP) admitCIMDClient(ctx context.Context, clientID string) error 
 			// verdict in that value. The shadow supplies one: the client is
 			// let through either way, and what a catalog-enforcing policy
 			// would have said about it is what lands on the counter.
-			reason = s.shadowCIMDAdmitReason(ctx, clientID)
+			reason = s.shadowCIMDAdmitReason(ctx, catalog, clientID)
 		}
 		s.cimdAdmission.RecordAdmitted(ctx, platformCIMDAdmissionMode, reason)
 		return nil
@@ -236,8 +238,8 @@ func (s *OAuthHTTP) admitCIMDClient(ctx context.Context, clientID string) error 
 // It is catalog-only, unlike the hosted authorization server's shadow. There
 // is no per-issuer custom URL table here to consult, so a catalog miss is
 // already the whole verdict.
-func (s *OAuthHTTP) shadowCIMDAdmitReason(ctx context.Context, clientID string) admission.AdmitReason {
-	shadow := admission.EvaluateShadow(clientID)
+func (s *OAuthHTTP) shadowCIMDAdmitReason(ctx context.Context, catalog *aivendors.Snapshot, clientID string) admission.AdmitReason {
+	shadow := admission.EvaluateShadow(catalog, clientID)
 
 	switch shadow.Outcome {
 	case admission.OutcomeAdmit:

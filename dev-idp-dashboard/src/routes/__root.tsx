@@ -41,6 +41,9 @@ function RootComponent() {
               <TopNavLink to="/providers" matchPrefix>
                 Providers
               </TopNavLink>
+              <TopNavLink to="/ema" matchPrefix>
+                Enterprise-managed auth
+              </TopNavLink>
             </nav>
           </div>
         </header>

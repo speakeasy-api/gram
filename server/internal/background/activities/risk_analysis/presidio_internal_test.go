@@ -18,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/risk/presidiofp"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -354,8 +355,9 @@ func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
 	results, err := (&StubPIIScanner{}).AnalyzeBatch(t.Context(), []string{"one", "two"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
-	for _, findings := range results {
-		assert.Empty(t, findings)
+	for _, result := range results {
+		assert.Empty(t, result.Findings)
+		assert.False(t, result.Completed)
 	}
 }
 
@@ -377,8 +379,9 @@ func TestPresidioClientShortCircuitsOnAllEmptyTexts(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"", "", ""}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
-	for _, r := range results {
-		assert.Empty(t, r)
+	for _, result := range results {
+		assert.Empty(t, result.Findings)
+		assert.False(t, result.Completed)
 	}
 	assert.Equal(t, int64(0), calls.Load(), "presidio /analyze must not be called when every input is empty")
 }
@@ -472,7 +475,7 @@ func TestPresidioClientThrottleFiresHeartbeatWhileBlocked(t *testing.T) {
 }
 
 type callOutcome struct {
-	results [][]scanners.Finding
+	results []scanners.Result
 	err     error
 }
 
@@ -509,9 +512,11 @@ func TestPresidioClientRetriesThenSucceeds(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@globex.com"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.Len(t, results[0], 1)
-	assert.Equal(t, "alice@globex.com", results[0][0].Match)
-	assert.Empty(t, results[0][0].DeadLetterReason)
+	require.Len(t, results[0].Findings, 1)
+	assert.Equal(t, "alice@globex.com", results[0].Findings[0].Match)
+	assert.Empty(t, results[0].Findings[0].DeadLetterReason)
+	assert.True(t, results[0].Completed)
+	assert.Positive(t, results[0].STokens)
 	assert.GreaterOrEqual(t, hits.Load(), int64(2), "expected at least one retry before success")
 }
 
@@ -533,9 +538,10 @@ func TestPresidioClientDeadLettersAfterExhausting(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"will be dead-lettered"}, nil, 0, nil)
 	require.NoError(t, err, "per-text failures must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
-	require.Len(t, results[0], 1)
+	require.Len(t, results[0].Findings, 1)
+	require.False(t, results[0].Completed)
 
-	dl := results[0][0]
+	dl := results[0].Findings[0]
 	assert.Equal(t, SourcePresidio, dl.Source)
 	assert.Equal(t, DeadLetterRuleID, dl.RuleID)
 	assert.NotEmpty(t, dl.DeadLetterReason)
@@ -569,13 +575,18 @@ func TestPresidioClientIsolatesPoisonedMessages(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
-	assert.Empty(t, results[0])
-	assert.Empty(t, results[2])
+	assert.Empty(t, results[0].Findings)
+	assert.True(t, results[0].Completed)
+	assert.Positive(t, results[0].STokens)
+	assert.Empty(t, results[2].Findings)
+	assert.True(t, results[2].Completed)
+	assert.Positive(t, results[2].STokens)
 
-	require.Len(t, results[1], 1)
-	assert.Equal(t, SourcePresidio, results[1][0].Source)
-	assert.Equal(t, DeadLetterRuleID, results[1][0].RuleID)
-	assert.NotEmpty(t, results[1][0].DeadLetterReason)
+	require.Len(t, results[1].Findings, 1)
+	assert.False(t, results[1].Completed)
+	assert.Equal(t, SourcePresidio, results[1].Findings[0].Source)
+	assert.Equal(t, DeadLetterRuleID, results[1].Findings[0].RuleID)
+	assert.NotEmpty(t, results[1].Findings[0].DeadLetterReason)
 }
 
 // TestPresidioClientSurfacesOuterContextCancellation asserts that an
@@ -630,9 +641,10 @@ func TestPresidioClientDeadLettersOnPerRequestTimeout(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"hang"}, nil, 0, nil)
 	require.NoError(t, err, "inner per-request timeouts must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
-	require.Len(t, results[0], 1)
+	require.Len(t, results[0].Findings, 1)
+	require.False(t, results[0].Completed)
 
-	dl := results[0][0]
+	dl := results[0].Findings[0]
 	assert.Equal(t, SourcePresidio, dl.Source)
 	assert.Equal(t, DeadLetterRuleID, dl.RuleID)
 	assert.NotEmpty(t, dl.DeadLetterReason)
@@ -686,9 +698,15 @@ func TestPresidioClientTruncatesOversizedMessages(t *testing.T) {
 	client := newTestPresidioClient(t, srv.URL)
 	// Build an input that is double the limit and contains a multibyte rune
 	// straddling the truncation point so we exercise the UTF-8 walk-back.
-	body := strings.Repeat("a", presidioMaxMessageBytes-1) + "€" + strings.Repeat("b", presidioMaxMessageBytes)
-	_, err := client.AnalyzeBatch(t.Context(), []string{body}, nil, 0, nil)
+	// Spaced words keep the token count fast: BPE is quadratic on one unbroken
+	// run of a repeated character.
+	prefix := strings.Repeat("a ", presidioMaxMessageBytes/2)[:presidioMaxMessageBytes-1]
+	body := prefix + "€" + strings.Repeat("b ", presidioMaxMessageBytes/2)
+	results, err := client.AnalyzeBatch(t.Context(), []string{body}, nil, 0, nil)
 	require.NoError(t, err)
+
+	require.Len(t, results, 1)
+	assert.False(t, results[0].Completed, "unscanned tails must not establish clean checkpoints")
 
 	// Truncation walks back to a rune start, so we land strictly inside the
 	// cap (the "€" occupies 3 bytes starting at presidioMaxMessageBytes-1).
@@ -813,9 +831,9 @@ func TestReformatJSONAsYAML_PreservesTrailingBytes(t *testing.T) {
 	assert.Contains(t, out, "sarah@example.com", "trailing bytes must survive into the Presidio payload")
 }
 
-// TestReformatJSONAsYAML_SortsMapKeys makes the output deterministic so
-// repeated scans of the same payload produce stable Presidio offsets.
-func TestReformatJSONAsYAML_SortsMapKeys(t *testing.T) {
+// TestReformatJSONAsYAML_KeepsSourceKeyOrder keeps values in source order so
+// finding offsets can be mapped back to the same occurrence in the source.
+func TestReformatJSONAsYAML_KeepsSourceKeyOrder(t *testing.T) {
 	t.Parallel()
 
 	in := `{"zebra":"z","apple":"a","mango":"m"}`
@@ -827,8 +845,8 @@ func TestReformatJSONAsYAML_SortsMapKeys(t *testing.T) {
 	require.GreaterOrEqual(t, appleIdx, 0)
 	require.GreaterOrEqual(t, mangoIdx, 0)
 	require.GreaterOrEqual(t, zebraIdx, 0)
+	assert.Less(t, zebraIdx, appleIdx)
 	assert.Less(t, appleIdx, mangoIdx)
-	assert.Less(t, mangoIdx, zebraIdx)
 }
 
 // TestAnalyzeOncePayloadIsYAMLForJSONInput is the end-to-end assertion
@@ -848,7 +866,7 @@ func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
 
 	client := newTestPresidioClient(t, srv.URL)
 	in := `{"body":"line one\nline two"}`
-	_, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, 0, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, 0, nil)
 	require.NoError(t, err)
 
 	require.Len(t, got.Text, 1)
@@ -857,6 +875,11 @@ func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
 	assert.Contains(t, wire, "body: |", "object key should be followed by a literal-block scalar marker")
 	assert.Contains(t, wire, "line one")
 	assert.Contains(t, wire, "line two")
+	expectedSTokens, err := stokens.NewCodec().Count(t.Context(), wire)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.True(t, results[0].Completed)
+	require.Equal(t, int64(expectedSTokens), results[0].STokens)
 }
 
 func TestResolvePresidioScoreThreshold(t *testing.T) {
@@ -916,4 +939,50 @@ func newTestPresidioClient(t *testing.T, baseURL string) *PresidioClient {
 	// production default so retry-related assertions stay representative.
 	client.baseBackoff = 0
 	return client
+}
+
+func TestRemapPresidioOffsets_IndexesSourceText(t *testing.T) {
+	t.Parallel()
+
+	source := `{"a":"x@y.io","b":"note","c":"mail x@y.io and \u00e9 z@w.io"}`
+	scanned := reformatJSONAsYAML(source)
+	require.NotEqual(t, source, scanned)
+
+	var findings []scanners.Finding
+	for _, m := range []string{"x@y.io", "x@y.io", "z@w.io"} {
+		from := 0
+		if len(findings) > 0 && findings[len(findings)-1].Match == m {
+			from = findings[len(findings)-1].EndPos
+		}
+		idx := strings.Index(scanned[from:], m)
+		require.GreaterOrEqual(t, idx, 0)
+		findings = append(findings, scanners.Finding{Match: m, StartPos: from + idx, EndPos: from + idx + len(m)})
+	}
+	findings = append(findings, scanners.Finding{Match: "and é", StartPos: strings.Index(scanned, "and é"), EndPos: 0})
+
+	remapPresidioOffsets(source, scanned, findings)
+
+	for _, f := range findings[:3] {
+		assert.Equal(t, f.Match, source[f.StartPos:f.EndPos])
+	}
+	assert.Less(t, findings[0].StartPos, findings[1].StartPos, "repeated matches keep their order")
+	assert.Equal(t, 0, findings[3].StartPos, "a match spanning an escape has no source span")
+	assert.Equal(t, 0, findings[3].EndPos)
+
+	// Keys a and z would sort the other way; the rewrite keeps source order.
+	source = `{"z":"x@y.io","a":"x@y.io"}`
+	scanned = reformatJSONAsYAML(source)
+	start := strings.Index(scanned, "a: ") + len("a: ")
+	reordered := []scanners.Finding{{Match: "x@y.io", StartPos: start, EndPos: start + len("x@y.io")}}
+	remapPresidioOffsets(source, scanned, reordered)
+	assert.Equal(t, strings.Index(source, `"a":"`)+len(`"a":"`), reordered[0].StartPos, "a duplicated value maps to its own key's occurrence")
+
+	// The escaped occurrence makes the ordinal of the verbatim one ambiguous.
+	source = `{"a":"\u0078@y.io","b":"x@y.io"}`
+	scanned = reformatJSONAsYAML(source)
+	start = strings.LastIndex(scanned, "x@y.io")
+	escaped := []scanners.Finding{{Match: "x@y.io", StartPos: start, EndPos: start + len("x@y.io")}}
+	remapPresidioOffsets(source, scanned, escaped)
+	assert.Equal(t, 0, escaped[0].StartPos, "ambiguous occurrence counts get an empty span")
+	assert.Equal(t, 0, escaped[0].EndPos)
 }

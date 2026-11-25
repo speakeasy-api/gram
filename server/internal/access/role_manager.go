@@ -26,6 +26,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -35,7 +39,10 @@ var ErrRoleNotFound = errors.New("role not found")
 
 var validRoleNamePattern = regexp.MustCompile(`^[A-Za-z0-9 _-]+$`)
 
-const workOSSyncAttempts = 3
+const (
+	workOSSyncAttempts = 3
+	workOSSyncTimeout  = 10 * time.Second
+)
 
 type RoleProvider interface {
 	CreateRole(ctx context.Context, orgID string, opts workos.CreateRoleOpts) (*workos.Role, error)
@@ -43,24 +50,47 @@ type RoleProvider interface {
 	DeleteRole(ctx context.Context, orgID string, roleSlug string) error
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 	GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*workos.Member, error)
+	ListDirectories(ctx context.Context, organizationID string) ([]workos.Directory, error)
+	ListDirectoryGroups(ctx context.Context, directoryID string) ([]workos.DirectoryGroup, error)
+	ListDirectoryGroupUsers(ctx context.Context, groupID string) ([]workos.DirectoryUser, error)
 }
 
 // RoleManager owns role reads and writes against local records, then syncs successful writes to WorkOS.
 type RoleManager struct {
-	db     *pgxpool.Pool
-	logger *slog.Logger
-	roles  RoleProvider
-	audit  *audit.Logger
+	db                      *pgxpool.Pool
+	logger                  *slog.Logger
+	roles                   RoleProvider
+	audit                   *audit.Logger
+	roleDeliveryPublication plugins.PublicationRequests
+	roleDeliveryGuard       *admission.Guard
+	publisher               plugins.PluginPublishSignaler
 }
 
 // NewRoleManager wires the role manager to the local DB, the WorkOS role client, and the audit logger.
-func NewRoleManager(logger *slog.Logger, db *pgxpool.Pool, roles RoleProvider, auditLogger *audit.Logger) *RoleManager {
+func NewRoleManager(logger *slog.Logger, db *pgxpool.Pool, roles RoleProvider, auditLogger *audit.Logger, publication plugins.PublicationRequests, guard *admission.Guard) *RoleManager {
 	return &RoleManager{
-		db:     db,
-		logger: logger.With(attr.SlogComponent("access.role_manager")),
-		roles:  roles,
-		audit:  auditLogger,
+		roleDeliveryPublication: publication,
+		roleDeliveryGuard:       guard,
+		db:                      db,
+		logger:                  logger.With(attr.SlogComponent("access.role_manager")),
+		roles:                   roles,
+		audit:                   auditLogger,
+		publisher:               nil,
 	}
+}
+
+// WithPluginPublisher signals a debounced republish of every project whose
+// role plugins a committed role change touched. A nil signaler leaves only the
+// durable publication request, which may wait for the hourly rollout sweep.
+func (r *RoleManager) WithPluginPublisher(publisher plugins.PluginPublishSignaler) *RoleManager {
+	r.publisher = publisher
+	return r
+}
+
+// MutationReady reports whether this manager has every dependency required for
+// role writes and post-commit WorkOS reconciliation.
+func (r *RoleManager) MutationReady() bool {
+	return r != nil && r.db != nil && r.logger != nil && r.roles != nil && r.audit != nil
 }
 
 // ListRoles returns active roles for an organization from local records and enriches them with local grants and member counts.
@@ -68,6 +98,15 @@ func (r *RoleManager) ListRoles(ctx context.Context, gramOrgID string) (*gen.Lis
 	rows, err := repo.New(r.db).ListActiveOrganizationRoles(ctx, gramOrgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list roles").LogError(ctx, r.logger)
+	}
+
+	agentIDs, err := r.agentIDsByRoleTx(ctx, r.db, gramOrgID)
+	if err != nil {
+		return nil, err
+	}
+	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, r.db, gramOrgID, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	roles := make([]*gen.Role, 0, len(rows))
@@ -80,7 +119,8 @@ func (r *RoleManager) ListRoles(ctx context.Context, gramOrgID string) (*gen.Lis
 			Description:  conv.FromPGTextOrEmpty[string](row.WorkosDescription),
 			CreatedAt:    conv.FromPGTimestamptz(row.WorkosCreatedAt),
 			UpdatedAt:    conv.FromPGTimestamptz(row.WorkosUpdatedAt),
-			MemberCount:  int(row.MemberCount),
+			MemberCount:  int(row.MemberCount) + mappedMembers[row.RoleUrn],
+			AgentIDs:     agentIDs[row.RoleUrn],
 		})
 		if err != nil {
 			return nil, err
@@ -101,71 +141,231 @@ func (r *RoleManager) GetRoleByID(ctx context.Context, gramOrgID, id string) (*g
 	return r.roleViewFromLocalRole(ctx, gramOrgID, role)
 }
 
-// ListMembers returns locally known organization members and includes a role ID only when a local assignment exists.
+// GetRoleByIDTx returns one active role and its grants from the caller's
+// transaction. Mutation adapters use it after locking the role so optimistic
+// version checks observe exactly the state the following patch will modify.
+func (r *RoleManager) GetRoleByIDTx(ctx context.Context, tx pgx.Tx, gramOrgID, id string) (*gen.Role, error) {
+	role, err := r.getLocalRoleByIDTx(ctx, tx, gramOrgID, id)
+	if err != nil {
+		return nil, err
+	}
+	grants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, role.Slug, role.PrincipalURN, nil, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load grants for role").LogError(ctx, r.logger)
+	}
+	view := make([]*gen.RoleGrant, 0, len(grants))
+	for _, grant := range grants {
+		view = append(view, scopedGrantToGenRoleGrant(grant))
+	}
+	return roleViewFromLocalRoleAndGrants(role, view), nil
+}
+
+// MemberListFilter selects members before applying the result limit.
+type MemberListFilter struct {
+	// Query matches normalized identity text or an effective role name.
+	Query string
+
+	// RoleID selects members holding a role directly or through the directory.
+	RoleID string
+
+	// Limit bounds the returned members; zero returns every matching member.
+	Limit int32
+}
+
+// MemberListPage counts all matching members, including those beyond the limit.
+type MemberListPage struct {
+	// Members contains complete direct and directory role IDs for each member.
+	Members []*gen.AccessMember
+
+	// TotalMatches counts distinct members before limiting the result.
+	TotalMatches int64
+
+	// ExactEmailMatches counts normalized email matches before limiting.
+	ExactEmailMatches int64
+}
+
+// ListMembers returns locally known organization members with their directly
+// assigned role IDs, the role IDs they hold through directory role mappings,
+// and the mappings those roles come from.
 func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.ListMembersResult, error) {
-	rows, err := repo.New(r.db).ListAccessMembers(ctx, gramOrgID)
+	page, err := r.ListMembersFiltered(ctx, gramOrgID, MemberListFilter{Query: "", RoleID: "", Limit: 0})
+	if err != nil {
+		return nil, err
+	}
+	return &gen.ListMembersResult{Members: page.Members}, nil
+}
+
+// ListMembersFiltered uses the dashboard member query with optional filtering
+// and a limit. Exact email matches sort first, then members sort by email and ID.
+func (r *RoleManager) ListMembersFiltered(ctx context.Context, gramOrgID string, filter MemberListFilter) (*MemberListPage, error) {
+	// Both reads share one snapshot, so a concurrent directory sync or mapping
+	// change cannot leave directory_role_ids and directory_role_sources
+	// disagreeing.
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin member read").LogError(ctx, r.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := repo.New(tx)
+	rows, err := queries.ListAccessMembers(ctx, repo.ListAccessMembersParams{
+		OrganizationID: gramOrgID,
+		QueryText:      strings.ToLower(strings.Join(strings.Fields(filter.Query), " ")),
+		RoleID:         filter.RoleID,
+		LimitValue:     filter.Limit,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members").LogError(ctx, r.logger)
 	}
 
-	memberMap := make(map[string]*gen.AccessMember, len(rows))
-	var order []string
-	for _, row := range rows {
-		m, exists := memberMap[row.ID]
-		if !exists {
-			m = &gen.AccessMember{
-				ID:           row.ID,
-				PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, row.ID).String(),
-				Name:         conv.Default(row.DisplayName, row.Email),
-				Email:        row.Email,
-				PhotoURL:     conv.FromPGText[string](row.PhotoUrl),
-				RoleIds:      nil,
-				JoinedAt:     conv.FromPGTimestamptz(row.JoinedAt),
-			}
-			memberMap[row.ID] = m
-			order = append(order, row.ID)
-		}
-		if row.RoleID != "" {
-			m.RoleIds = append(m.RoleIds, row.RoleID)
-		}
+	sourceRows, err := queries.ListAccessMemberDirectoryRoleSources(ctx, gramOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list member directory role sources").LogError(ctx, r.logger)
 	}
-	result := make([]*gen.AccessMember, 0, len(order))
-	for _, id := range order {
-		result = append(result, memberMap[id])
+	sourcesByMember := make(map[string][]*gen.AccessMemberDirectoryRoleSource)
+	for _, row := range sourceRows {
+		sourcesByMember[row.UserID] = append(sourcesByMember[row.UserID], &gen.AccessMemberDirectoryRoleSource{
+			RoleID:           row.RoleID,
+			MappingID:        row.MappingID.String(),
+			SourceKind:       row.SourceKind,
+			DirectoryGroupID: conv.FromNullableUUID(row.DirectoryGroupID),
+		})
 	}
 
-	return &gen.ListMembersResult{Members: result}, nil
+	page := &MemberListPage{Members: make([]*gen.AccessMember, 0, len(rows)), TotalMatches: 0, ExactEmailMatches: 0}
+	for _, row := range rows {
+		page.TotalMatches = row.TotalMatches
+		page.ExactEmailMatches = row.ExactEmailMatches
+		page.Members = append(page.Members, &gen.AccessMember{
+			ID:               row.ID,
+			PrincipalUrn:     urn.NewPrincipal(urn.PrincipalTypeUser, row.ID).String(),
+			Name:             conv.Default(row.DisplayName, row.Email),
+			Email:            row.Email,
+			PhotoURL:         conv.FromPGText[string](row.PhotoUrl),
+			RoleIds:          row.RoleIds,
+			DirectoryRoleIds: row.DirectoryRoleIds,
+			JoinedAt:         conv.FromPGTimestamptz(row.JoinedAt),
+			// Null when no directory row was matched, or when the row reports
+			// no non-empty department. The query collapses both to an empty
+			// string, so the two cannot be told apart here.
+			Department:      conv.PtrEmpty(row.Department),
+			Groups:          row.GroupNames,
+			DirectoryGroups: memberDirectoryGroups(row.GroupIds, row.GroupIDNames),
+			InDirectory:     new(row.InDirectory),
+			// Never nil, so a member with no mapped roles says so as an empty
+			// list.
+			DirectoryRoleSources: append([]*gen.AccessMemberDirectoryRoleSource{}, sourcesByMember[row.ID]...),
+		})
+	}
+	return page, nil
 }
 
-type roleCreateResult struct {
+// memberDirectoryGroups pairs the parallel group ID and name arrays that
+// ListAccessMembers returns.
+func memberDirectoryGroups(ids []uuid.UUID, names []string) []*gen.AccessMemberDirectoryGroup {
+	groups := make([]*gen.AccessMemberDirectoryGroup, 0, len(ids))
+	for i, id := range ids {
+		if i >= len(names) {
+			break
+		}
+		groups = append(groups, &gen.AccessMemberDirectoryGroup{ID: id.String(), Name: names[i]})
+	}
+	return groups
+}
+
+// memberRoleIDs returns every role a member holds, assigned directly or
+// through a directory role mapping, each once.
+func memberRoleIDs(member *gen.AccessMember) []string {
+	ids := slices.Concat(member.RoleIds, member.DirectoryRoleIds)
+	slices.Sort(ids)
+	return slices.Compact(ids)
+}
+
+// RoleCreateResult is the safe local result of creating a role.
+type RoleCreateResult struct {
 	Role *gen.Role
 	Slug string
 }
 
 type workosSync func(context.Context)
 
-type accessAuditActor struct {
+// RoleReconciliation is an opaque set of best-effort WorkOS writes produced by
+// a transactional role mutation. Call ReconcileRole only after committing the
+// transaction passed to CreateRoleTx or UpdateRoleTx.
+type RoleReconciliation struct {
+	syncs    []workosSync
+	delivery roleDeliveryPublish
+}
+
+// roleDeliveryPublish names the projects whose role plugins a committed
+// transaction changed, so they can be republished without waiting on the
+// outbox consumer or the hourly rollout sweep.
+type roleDeliveryPublish struct {
+	projectIDs []uuid.UUID
+	actorID    string
+}
+
+// RoleAuditActor identifies the principal responsible for an access role mutation.
+type RoleAuditActor struct {
 	Principal   urn.Principal
 	DisplayName *string
 }
 
-// CreateRole creates the local role, grants, optional assignments, and audit entry atomically, then best-effort syncs WorkOS after commit.
-func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID string, actor accessAuditActor, payload *gen.CreateRolePayload) (roleCreateResult, error) {
+// Keep access service call sites concise while exposing the actor to other packages.
+type accessAuditActor = RoleAuditActor
+
+// validateRoleGrants runs before any write, so a bad grant is a 400 rather
+// than a failed write.
+func validateRoleGrants(grants []*authz.RoleGrant) error {
+	if err := authz.ValidateGrantSource(authz.GrantSourceRoles, grants); err != nil {
+		return fmt.Errorf("check grant source: %w", err)
+	}
+	for _, grant := range grants {
+		if grant == nil {
+			continue
+		}
+		for _, sel := range grant.Selectors {
+			if err := authz.ValidateSelector(authz.Scope(grant.Scope), sel); err != nil {
+				return fmt.Errorf("invalid selector for scope %q: %w", grant.Scope, err)
+			}
+		}
+	}
+	return nil
+}
+
+// CreateRole creates the local role, grants, optional assignments, and audit
+// entry atomically, then best-effort syncs WorkOS after commit.
+func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.CreateRolePayload) (RoleCreateResult, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return RoleCreateResult{}, oops.E(oops.CodeUnexpected, err, "begin role transaction").LogError(ctx, r.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	result, reconciliation, err := r.CreateRoleTx(ctx, tx, gramOrgID, workosOrgID, actor, payload)
+	if err != nil {
+		return RoleCreateResult{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return RoleCreateResult{}, oops.E(oops.CodeUnexpected, err, "commit role transaction").LogError(ctx, r.logger)
+	}
+
+	r.ReconcileRole(ctx, reconciliation)
+	return result, nil
+}
+
+// CreateRoleTx performs the local role, grant, member-assignment, and audit
+// writes on tx. It neither commits tx nor contacts WorkOS.
+func (r *RoleManager) CreateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.CreateRolePayload) (RoleCreateResult, RoleReconciliation, error) {
 	roleSlug, err := slugify(payload.Name)
 	if err != nil {
-		return roleCreateResult{}, err
+		return RoleCreateResult{}, RoleReconciliation{}, err
 	}
 	description := conv.PtrValOr(payload.Description, "")
 	grants := roleGrantPayloads(payload.Grants)
-	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, grants); err != nil {
-		return roleCreateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
+	if err := validateRoleGrants(grants); err != nil {
+		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
-
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "begin role transaction").LogError(ctx, r.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	now := time.Now().UTC()
 	createdRow, err := repo.New(tx).CreateOrganizationRole(ctx, repo.CreateOrganizationRoleParams{
@@ -180,12 +380,12 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	var pgErr *pgconn.PgError
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return roleCreateResult{}, oops.E(oops.CodeConflict, err, "role %q already exists", payload.Name).LogError(ctx, r.logger)
+		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeConflict, err, "role %q already exists", payload.Name).LogError(ctx, r.logger)
 	case errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation:
-		return roleCreateResult{}, oops.E(oops.CodeConflict, err, "role %q already exists", payload.Name).LogError(ctx, r.logger)
+		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeConflict, err, "role %q already exists", payload.Name).LogError(ctx, r.logger)
 	case err != nil:
 		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "create local role record").LogError(ctx, r.logger)
+		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "create local role record").LogError(ctx, r.logger)
 	}
 
 	createdRole := localRole{
@@ -197,17 +397,24 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 		CreatedAt:    conv.FromPGTimestamptz(createdRow.WorkosCreatedAt),
 		UpdatedAt:    conv.FromPGTimestamptz(createdRow.WorkosUpdatedAt),
 		MemberCount:  int(createdRow.MemberCount),
+		AgentIDs:     nil,
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleID(createdRole.ID))
 
-	if _, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, grants, nil); err != nil {
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "add grants for created role").LogError(ctx, r.logger)
+	syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, grants, nil)
+	if err != nil {
+		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "add grants for created role").LogError(ctx, r.logger)
+	}
+	roleGrants := make([]*gen.RoleGrant, 0, len(syncedGrants))
+	for _, grant := range syncedGrants {
+		roleGrants = append(roleGrants, scopedGrantToGenRoleGrant(grant))
 	}
 
+	roleName := payload.Name
 	workosSyncs := []workosSync{func(ctx context.Context) {
 		r.syncWorkOS(ctx, "create role in workos", func() error {
 			_, err := r.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{
-				Name:        payload.Name,
+				Name:        roleName,
 				Slug:        roleSlug,
 				Description: description,
 			})
@@ -222,15 +429,23 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 		})
 	}}
 
-	if len(payload.MemberIds) > 0 {
-		var memberSyncs []workosSync
-		if _, memberSyncs, err = r.assignMembersToRoleTx(ctx, tx, gramOrgID, roleSlug, payload.MemberIds); err != nil {
-			return roleCreateResult{}, err
+	if len(payload.AgentIds) > 0 {
+		if err := r.assignAgentsToRoleTx(ctx, tx, gramOrgID, createdRole.PrincipalURN, payload.AgentIds); err != nil {
+			return RoleCreateResult{}, RoleReconciliation{}, err
 		}
-		workosSyncs = append(workosSyncs, memberSyncs...)
+	}
+
+	if len(payload.MemberIds) > 0 || len(payload.AgentIds) > 0 {
+		if len(payload.MemberIds) > 0 {
+			var memberSyncs []workosSync
+			if _, memberSyncs, err = r.assignMembersToRoleTx(ctx, tx, gramOrgID, roleSlug, payload.MemberIds); err != nil {
+				return RoleCreateResult{}, RoleReconciliation{}, err
+			}
+			workosSyncs = append(workosSyncs, memberSyncs...)
+		}
 		createdRole, err = r.getLocalRoleBySlugTx(ctx, tx, gramOrgID, roleSlug)
 		if err != nil {
-			return roleCreateResult{}, err
+			return RoleCreateResult{}, RoleReconciliation{}, err
 		}
 	}
 
@@ -242,22 +457,17 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 		RoleID:           createdRole.ID,
 		RoleName:         createdRole.Name,
 		RoleSlug:         createdRole.Slug,
+		// A new role had nothing before, so everything sensitive it grants
+		// is added.
+		SensitiveScopesAdded: authz.SensitiveScopesAdded(nil, grantScopes(roleGrants)),
 	}); err != nil {
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "log access role creation").LogError(ctx, r.logger)
+		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "log access role creation").LogError(ctx, r.logger)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "commit role transaction").LogError(ctx, r.logger)
-	}
-
-	r.runWorkOSSyncs(ctx, workosSyncs)
-
-	role, err := r.roleViewFromLocalRole(ctx, gramOrgID, createdRole)
-	if err != nil {
-		return roleCreateResult{}, err
-	}
-
-	return roleCreateResult{Role: role, Slug: roleSlug}, nil
+	return RoleCreateResult{
+		Role: roleViewFromLocalRoleAndGrants(createdRole, roleGrants),
+		Slug: roleSlug,
+	}, RoleReconciliation{syncs: workosSyncs, delivery: roleDeliveryPublish{projectIDs: nil, actorID: ""}}, nil
 }
 
 type localRole struct {
@@ -269,44 +479,88 @@ type localRole struct {
 	CreatedAt    string
 	UpdatedAt    string
 	MemberCount  int
+	AgentIDs     []string
 }
 
 type roleUpdateResult struct {
 	Before *gen.Role
 	After  *gen.Role
-	Role   localRole
+	Slug   string
 }
 
-// UpdateRole updates an existing local role, optional grants/assignments, and audit entry atomically, then best-effort syncs WorkOS after commit.
-func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID string, actor accessAuditActor, payload *gen.UpdateRolePayload) (roleUpdateResult, error) {
-	currentRole, err := r.getLocalRoleByID(ctx, gramOrgID, payload.ID)
+// RoleUpdateResult is the safe local result of updating a role.
+type RoleUpdateResult struct {
+	Before *gen.Role
+	After  *gen.Role
+	Slug   string
+}
+
+// UpdateRole updates an existing local role, optional grants/assignments, and
+// audit entry atomically, then best-effort syncs WorkOS after commit.
+func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.UpdateRolePayload) (roleUpdateResult, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "begin role transaction").LogError(ctx, r.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	result, reconciliation, err := r.UpdateRoleTx(ctx, tx, gramOrgID, workosOrgID, actor, payload)
 	if err != nil {
 		return roleUpdateResult{}, err
 	}
-	existingRole, err := r.roleViewFromLocalRole(ctx, gramOrgID, currentRole)
-	if err != nil {
-		return roleUpdateResult{}, err
+	if err := tx.Commit(ctx); err != nil {
+		return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "commit role transaction").LogError(ctx, r.logger)
 	}
+
+	r.ReconcileRole(ctx, reconciliation)
+	return roleUpdateResult(result), nil
+}
+
+// UpdateRoleTx performs the local role, grant, member-assignment, and audit
+// writes on tx. It neither commits tx nor contacts WorkOS. Role-delivery
+// admission is decided inside tx from the project's Shadow MCP policies.
+func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.UpdateRolePayload) (RoleUpdateResult, RoleReconciliation, error) {
+	roleID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid role ID").LogError(ctx, r.logger)
+	}
+	if _, err := repo.New(tx).LockOrganizationRoleByID(ctx, repo.LockOrganizationRoleByIDParams{OrganizationID: gramOrgID, ID: roleID}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "lock role for update").LogError(ctx, r.logger)
+	}
+	currentRole, err := r.getLocalRoleByIDTx(ctx, tx, gramOrgID, payload.ID)
+	if err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, err
+	}
+
+	currentGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, nil, nil)
+	if err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load grants for role update").LogError(ctx, r.logger)
+	}
+	existingGrants := make([]*gen.RoleGrant, 0, len(currentGrants))
+	for _, grant := range currentGrants {
+		existingGrants = append(existingGrants, scopedGrantToGenRoleGrant(grant))
+	}
+	existingRole := roleViewFromLocalRoleAndGrants(currentRole, existingGrants)
 
 	sysRole := isSystemRole(currentRole.Slug)
 	// System role names/descriptions are platform-managed and shared globally
 	// (global_roles), so they stay immutable. Grants are stored per-org and may
 	// be customized, so grant and member changes are allowed below.
 	if sysRole && (payload.Name != nil || payload.Description != nil) {
-		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "system role name and description cannot be changed").LogError(ctx, r.logger)
+		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "system role name and description cannot be changed").LogError(ctx, r.logger)
 	}
 	if payload.Name != nil {
 		if _, err := slugify(*payload.Name); err != nil {
-			return roleUpdateResult{}, err
+			return RoleUpdateResult{}, RoleReconciliation{}, err
 		}
 	}
 	addGrants := roleGrantPayloads(payload.AddGrants)
 	removeGrants := roleGrantPayloads(payload.RemoveGrants)
-	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, addGrants); err != nil {
-		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
+	if err := validateRoleGrants(addGrants); err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
-	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, removeGrants); err != nil {
-		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
+	if err := validateRoleGrants(removeGrants); err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
 
 	// Lockout guardrail: removing org:admin from the Admin role would lock the
@@ -323,27 +577,20 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 			// An org:admin add only counts if it actually writes a grant row:
 			// nil selectors flatten to a wildcard row, a non-empty slice writes
 			// the listed rows. An empty (non-nil) selector slice flattens to
-			// zero rows (see grants.go), so pairing such a no-op add with an
-			// org:admin removal must not satisfy the guardrail — that would
-			// strip org:admin from the Admin role and lock the org out.
+			// zero rows, so pairing such a no-op add with a removal is rejected.
 			if g.Scope == string(authz.ScopeOrgAdmin) {
 				addingOrgAdmin = addingOrgAdmin || g.Selectors == nil || len(g.Selectors) > 0
 			}
 		}
 		if removingOrgAdmin && !addingOrgAdmin {
-			return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "the Admin role must keep the org:admin permission").LogError(ctx, r.logger)
+			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "the Admin role must keep the org:admin permission").LogError(ctx, r.logger)
 		}
 	}
 
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "begin role transaction").LogError(ctx, r.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
 	updatedRole := currentRole
 	var workosSyncs []workosSync
-	var updatedGrants []*gen.RoleGrant
+	var delivery roleDeliveryPublish
+	updatedGrants := existingGrants
 	if !sysRole {
 		localRecord := currentRole
 		if payload.Name != nil {
@@ -364,9 +611,14 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 		})
 		if err != nil {
 			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
-			return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").LogError(ctx, r.logger)
+			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").LogError(ctx, r.logger)
+		}
+		mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, tx, gramOrgID, []string{updatedRow.RoleUrn})
+		if err != nil {
+			return RoleUpdateResult{}, RoleReconciliation{}, err
 		}
 		updatedRole = localRole{
+			AgentIDs:     currentRole.AgentIDs,
 			ID:           updatedRow.ID.String(),
 			PrincipalURN: updatedRow.RoleUrn,
 			Name:         updatedRow.WorkosName,
@@ -374,14 +626,17 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 			Description:  conv.FromPGTextOrEmpty[string](updatedRow.WorkosDescription),
 			CreatedAt:    conv.FromPGTimestamptz(updatedRow.WorkosCreatedAt),
 			UpdatedAt:    conv.FromPGTimestamptz(updatedRow.WorkosUpdatedAt),
-			MemberCount:  int(updatedRow.MemberCount),
+			MemberCount:  int(updatedRow.MemberCount) + mappedMembers[updatedRow.RoleUrn],
 		}
 
+		name := cloneString(payload.Name)
+		description := cloneString(payload.Description)
+		roleSlug := currentRole.Slug
 		workosSyncs = append(workosSyncs, func(ctx context.Context) {
 			r.syncWorkOS(ctx, "update role in workos", func() error {
-				_, err := r.roles.UpdateRole(ctx, workosOrgID, currentRole.Slug, workos.UpdateRoleOpts{
-					Name:        payload.Name,
-					Description: payload.Description,
+				_, err := r.roles.UpdateRole(ctx, workosOrgID, roleSlug, workos.UpdateRoleOpts{
+					Name:        name,
+					Description: description,
 				})
 				if err == nil {
 					return nil
@@ -393,46 +648,71 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 
 	// Grants live in the per-org grant store and are patched the same way for
 	// custom and system roles. WorkOS only tracks role identity/membership, not
-	// gram scopes, so no grant sync to WorkOS is needed.
+	// Speakeasy scopes, so no grant sync to WorkOS is needed.
 	if payload.AddGrants != nil || payload.RemoveGrants != nil {
+		before, err := roledelivery.Snapshot(ctx, tx, gramOrgID, currentRole.PrincipalURN)
+		if err != nil {
+			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "snapshot role delivery grants").LogError(ctx, r.logger)
+		}
 		syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
 		if err != nil {
-			return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
+			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
 		}
+		changedProjectIDs, err := roledelivery.RoleChanged(ctx, tx, gramOrgID, currentRole.PrincipalURN, before, r.roleDeliveryGuard)
+		if err != nil {
+			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "update role audience plugin servers").LogError(ctx, r.logger)
+		}
+		actorID := ""
+		if actor.Principal.Type == urn.PrincipalTypeUser {
+			actorID = actor.Principal.ID
+		}
+		for _, projectID := range changedProjectIDs {
+			if err := r.roleDeliveryPublication.Project(ctx, tx, gramOrgID, projectID, actorID); err != nil {
+				return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "request role delivery publication").LogError(ctx, r.logger)
+			}
+		}
+		delivery = roleDeliveryPublish{projectIDs: changedProjectIDs, actorID: actorID}
 		updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
 		for _, grant := range syncedGrants {
 			updatedGrants = append(updatedGrants, scopedGrantToGenRoleGrant(grant))
 		}
 	}
 
-	if payload.MemberIds != nil {
-		var memberSyncs []workosSync
-		if _, memberSyncs, err = r.assignMembersToRoleTx(ctx, tx, gramOrgID, currentRole.Slug, payload.MemberIds); err != nil {
-			return roleUpdateResult{}, err
+	// The members are resolved once, for what they gain and for the write.
+	memberTargets, err := r.memberAssignmentTargetsTx(ctx, tx, gramOrgID, payload.MemberIds)
+	if err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, err
+	}
+
+	// What the members and agents this save assigns gain by holding the role,
+	// read before the assignments are written so a principal that already
+	// holds it adds nothing.
+	assignedSensitive, err := r.sensitiveScopesForNewHoldersTx(ctx, tx, gramOrgID, currentRole.PrincipalURN, updatedGrants, memberTargets, payload.AgentIds)
+	if err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, err
+	}
+
+	if payload.AgentIds != nil {
+		if err := r.assignAgentsToRoleTx(ctx, tx, gramOrgID, currentRole.PrincipalURN, payload.AgentIds); err != nil {
+			return RoleUpdateResult{}, RoleReconciliation{}, err
 		}
-		workosSyncs = append(workosSyncs, memberSyncs...)
+	}
+
+	if payload.MemberIds != nil || payload.AgentIds != nil {
+		if payload.MemberIds != nil {
+			var memberSyncs []workosSync
+			if _, memberSyncs, err = r.assignMemberTargetsToRoleTx(ctx, tx, gramOrgID, currentRole.Slug, memberTargets); err != nil {
+				return RoleUpdateResult{}, RoleReconciliation{}, err
+			}
+			workosSyncs = append(workosSyncs, memberSyncs...)
+		}
 		updatedRole, err = r.getLocalRoleByIDTx(ctx, tx, gramOrgID, payload.ID)
 		if err != nil {
-			return roleUpdateResult{}, err
+			return RoleUpdateResult{}, RoleReconciliation{}, err
 		}
 	}
 
-	updatedRoleView := &gen.Role{
-		ID:           updatedRole.ID,
-		PrincipalUrn: updatedRole.PrincipalURN,
-		Name:         updatedRole.Name,
-		Slug:         updatedRole.Slug,
-		Description:  updatedRole.Description,
-		IsSystem:     isSystemRole(updatedRole.Slug),
-		Grants:       existingRole.Grants,
-		MemberCount:  updatedRole.MemberCount,
-		CreatedAt:    conv.Default(updatedRole.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-		UpdatedAt:    conv.Default(updatedRole.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-	}
-	if updatedGrants != nil {
-		updatedRoleView.Grants = updatedGrants
-	}
-
+	updatedRoleView := roleViewFromLocalRoleAndGrants(updatedRole, updatedGrants)
 	if err := r.audit.LogAccessRoleUpdate(ctx, tx, audit.LogAccessRoleUpdateEvent{
 		OrganizationID:     gramOrgID,
 		Actor:              actor.Principal,
@@ -443,17 +723,19 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 		RoleSlug:           updatedRole.Slug,
 		RoleSnapshotBefore: existingRole,
 		RoleSnapshotAfter:  updatedRoleView,
+		SensitiveScopesAdded: mergeSensitiveScopes(
+			authz.SensitiveScopesAdded(grantScopes(existingGrants), grantScopes(updatedGrants)),
+			assignedSensitive,
+		),
 	}); err != nil {
-		return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "log access role update").LogError(ctx, r.logger)
+		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "log access role update").LogError(ctx, r.logger)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "commit role transaction").LogError(ctx, r.logger)
-	}
-
-	r.runWorkOSSyncs(ctx, workosSyncs)
-
-	return roleUpdateResult{Before: existingRole, After: updatedRoleView, Role: updatedRole}, nil
+	return RoleUpdateResult{
+		Before: existingRole,
+		After:  updatedRoleView,
+		Slug:   updatedRole.Slug,
+	}, RoleReconciliation{syncs: workosSyncs, delivery: delivery}, nil
 }
 
 // DeleteRole deletes a custom local role, reassignment records, grants, and audit entry atomically, then best-effort syncs WorkOS after commit.
@@ -472,6 +754,28 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	// Match assignment/update lock order: role first, then member rows.
+	roleUUID, err := uuid.Parse(currentRole.ID)
+	if err != nil {
+		return localRole{}, oops.E(oops.CodeBadRequest, err, "invalid role ID").LogError(ctx, r.logger)
+	}
+	if _, err := repo.New(tx).LockOrganizationRoleByID(ctx, repo.LockOrganizationRoleByIDParams{OrganizationID: gramOrgID, ID: roleUUID}); errors.Is(err, pgx.ErrNoRows) {
+		return localRole{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogError(ctx, r.logger)
+	} else if err != nil {
+		return localRole{}, oops.E(oops.CodeUnexpected, err, "lock role for deletion").LogError(ctx, r.logger)
+	}
+	currentRole, err = r.getLocalRoleByIDTx(ctx, tx, gramOrgID, roleID)
+	if err != nil {
+		return localRole{}, err
+	}
+	if err := repo.New(tx).SoftDeleteAgentRoleAssignmentsByRole(ctx, repo.SoftDeleteAgentRoleAssignmentsByRoleParams{
+		OrganizationID: gramOrgID,
+		RoleUrn:        currentRole.PrincipalURN,
+	}); err != nil {
+		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
+		return localRole{}, oops.E(oops.CodeUnexpected, err, "soft-delete agent role assignments for deleted role").LogError(ctx, r.logger)
+	}
+
 	rows, err := repo.New(tx).ListOrganizationRoleAssignmentsBySlug(ctx, repo.ListOrganizationRoleAssignmentsBySlugParams{
 		OrganizationID: gramOrgID,
 		WorkosRoleSlug: currentRole.Slug,
@@ -485,6 +789,9 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	for _, row := range rows {
 		membershipID := conv.FromPGTextOrEmpty[string](row.WorkosMembershipID)
 		if row.WorkosUserID != "" {
+			if _, err := repo.New(tx).LockMemberRoleSyncRelationship(ctx, repo.LockMemberRoleSyncRelationshipParams{OrganizationID: gramOrgID, WorkosUserID: row.WorkosUserID}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return localRole{}, oops.E(oops.CodeUnexpected, err, "lock member for role deletion").LogError(ctx, r.logger)
+			}
 			// Soft-delete only this role's assignment; other roles for the user are preserved.
 			if _, err := repo.New(tx).SoftDeleteRoleAssignmentsBySlug(ctx, repo.SoftDeleteRoleAssignmentsBySlugParams{
 				OrganizationID: gramOrgID,
@@ -503,14 +810,8 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 			if err != nil {
 				return localRole{}, oops.E(oops.CodeUnexpected, err, "list remaining role assignments").LogError(ctx, r.logger)
 			}
-			remainingSlugs := make([]string, 0, len(remaining))
-			for _, r := range remaining {
-				remainingSlugs = append(remainingSlugs, r.RoleSlug)
-			}
-
 			// If user has no remaining roles, assign the default member role locally.
-			if len(remainingSlugs) == 0 {
-				remainingSlugs = []string{authz.SystemRoleMember}
+			if len(remaining) == 0 {
 				if _, err := repo.New(tx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
 					OrganizationID:     gramOrgID,
 					WorkosUserID:       row.WorkosUserID,
@@ -525,15 +826,9 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 				}
 			}
 
-			workosSyncs = append(workosSyncs, func(ctx context.Context) {
-				r.syncWorkOS(ctx, "sync member roles after role deletion in workos", func() error {
-					_, err := r.roles.UpdateMemberRoles(ctx, membershipID, remainingSlugs)
-					if err == nil {
-						return nil
-					}
-					return fmt.Errorf("sync member roles after role deletion in workos: %w", err)
-				})
-			})
+			workosSyncs = append(workosSyncs, r.memberRoleSync(MemberRoleReconciliation{
+				organizationID: gramOrgID, workosUserID: row.WorkosUserID, membershipID: membershipID,
+			}))
 		}
 	}
 
@@ -547,6 +842,15 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	}
 	if deletedCount == 0 {
 		return localRole{}, oops.E(oops.CodeNotFound, nil, "role not found").LogError(ctx, r.logger)
+	}
+
+	if err := pluginassignments.RemoveDeletedRole(ctx, tx, r.audit, pluginassignments.RoleDeletion{
+		OrganizationID:   gramOrgID,
+		PrincipalURN:     currentRole.PrincipalURN,
+		Actor:            actor.Principal,
+		ActorDisplayName: actor.DisplayName,
+	}); err != nil {
+		return localRole{}, oops.E(oops.CodeUnexpected, err, "delete plugin assignments for deleted role").LogError(ctx, r.logger)
 	}
 
 	if err := authz.DeleteRoleGrants(ctx, repo.New(tx), gramOrgID, currentRole.PrincipalURN); err != nil {
@@ -592,6 +896,35 @@ type memberRoleUpdateContext struct {
 	After        *gen.AccessMember
 }
 
+// MemberRoleState is the privacy-safe, complete state exposed to an optimistic
+// validation callback while the member's relationship row and selected role are locked.
+type MemberRoleState struct {
+	MemberID         string
+	RoleIDs          []string
+	RoleSlug         string
+	RolePrincipalURN string
+}
+
+// MemberRoleValidation runs after the member and role are resolved in the
+// current organization and after the complete active role set is read under lock.
+type MemberRoleValidation func(MemberRoleState) error
+
+// MemberRoleAddResult is the safe local result of an additive role assignment.
+type MemberRoleAddResult struct {
+	After   MemberRoleState
+	Member  *gen.AccessMember
+	Changed bool
+}
+
+// MemberRoleReconciliation identifies a WorkOS membership, never a role snapshot.
+// Invoke it only after the originating transaction commits. Roles are read again
+// under a cross-process send lock, including on receipt replay.
+type MemberRoleReconciliation struct {
+	organizationID string
+	workosUserID   string
+	membershipID   string
+}
+
 // UpdateMemberRoles replaces all of a member's local role assignments atomically, then best-effort syncs WorkOS after commit.
 func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID string, roleIDs []string, actor accessAuditActor) (memberRoleUpdateContext, error) {
 	tx, err := r.db.Begin(ctx)
@@ -608,6 +941,15 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 			return memberRoleUpdateContext{}, err
 		}
 		roles = append(roles, role)
+	}
+
+	if _, err := repo.New(tx).LockOrganizationUserRelationship(ctx, repo.LockOrganizationUserRelationshipParams{
+		OrganizationID: gramOrgID,
+		UserID:         userID,
+	}); errors.Is(err, pgx.ErrNoRows) {
+		return memberRoleUpdateContext{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	} else if err != nil {
+		return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, err, "lock member for role update").LogError(ctx, r.logger)
 	}
 
 	connectedUser, err := connectedUser(ctx, tx, gramOrgID, userID)
@@ -714,24 +1056,52 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		MembershipID: membershipID,
 		WorkosUserID: connectedUser.WorkosID.String,
 		UserID:       connectedUser.ID,
+		// These two are the audit record of a role change, so they carry the
+		// roles and nothing the directory owns: a profile this update cannot
+		// alter would read as part of the diff.
 		Before: &gen.AccessMember{
-			ID:           connectedUser.ID,
-			PrincipalUrn: memberPrincipalURN,
-			Name:         memberName,
-			Email:        connectedUser.Email,
-			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:      existingRoleIDs,
-			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
+			ID:                   connectedUser.ID,
+			PrincipalUrn:         memberPrincipalURN,
+			Name:                 memberName,
+			Email:                connectedUser.Email,
+			PhotoURL:             conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:              existingRoleIDs,
+			JoinedAt:             conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:           nil,
+			Groups:               nil,
+			DirectoryRoleIds:     nil,
+			DirectoryGroups:      nil,
+			InDirectory:          nil,
+			DirectoryRoleSources: nil,
 		},
 		After: &gen.AccessMember{
-			ID:           connectedUser.ID,
-			PrincipalUrn: memberPrincipalURN,
-			Name:         memberName,
-			Email:        connectedUser.Email,
-			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:      afterRoleIDs,
-			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
+			ID:                   connectedUser.ID,
+			PrincipalUrn:         memberPrincipalURN,
+			Name:                 memberName,
+			Email:                connectedUser.Email,
+			PhotoURL:             conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:              afterRoleIDs,
+			JoinedAt:             conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:           nil,
+			Groups:               nil,
+			DirectoryRoleIds:     nil,
+			DirectoryGroups:      nil,
+			InDirectory:          nil,
+			DirectoryRoleSources: nil,
 		},
+	}
+
+	beforePrincipals := make([]string, 0, len(existingRolePrincipals))
+	for _, rp := range existingRolePrincipals {
+		beforePrincipals = append(beforePrincipals, rp.PrincipalUrn)
+	}
+	afterPrincipals := make([]string, 0, len(roles))
+	for _, role := range roles {
+		afterPrincipals = append(afterPrincipals, role.PrincipalURN)
+	}
+	sensitiveAdded, err := r.sensitiveScopesAddedTx(ctx, tx, gramOrgID, beforePrincipals, afterPrincipals)
+	if err != nil {
+		return memberRoleUpdateContext{}, err
 	}
 
 	if err := r.audit.LogAccessMemberRoleUpdate(ctx, tx, audit.LogAccessMemberRoleUpdateEvent{
@@ -744,6 +1114,7 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		MemberEmail:          result.After.Email,
 		MemberSnapshotBefore: result.Before,
 		MemberSnapshotAfter:  result.After,
+		SensitiveScopesAdded: sensitiveAdded,
 	}); err != nil {
 		return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, err, "log access member role update").LogError(ctx, r.logger)
 	}
@@ -752,19 +1123,309 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, err, "commit role transaction").LogError(ctx, r.logger)
 	}
 
-	r.runWorkOSSyncs(ctx, []workosSync{
-		func(ctx context.Context) {
-			r.syncWorkOS(ctx, "update member roles in workos", func() error {
-				_, err := r.roles.UpdateMemberRoles(ctx, result.MembershipID, result.RoleSlugs)
-				if err == nil {
-					return nil
-				}
-				return fmt.Errorf("update member roles in workos: %w", err)
-			})
-		},
+	r.ReconcileMemberRoles(ctx, MemberRoleReconciliation{
+		organizationID: gramOrgID, workosUserID: result.WorkosUserID, membershipID: result.MembershipID,
 	})
 
 	return result, nil
+}
+
+// AddMemberRoleTx adds one active custom organization role to one connected
+// member while preserving every existing active role assignment. It neither
+// commits tx nor contacts WorkOS.
+func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, userID, roleID string, actor RoleAuditActor, validate MemberRoleValidation) (MemberRoleAddResult, MemberRoleReconciliation, error) {
+	roleUUID, err := uuid.Parse(roleID)
+	if err != nil || roleUUID == uuid.Nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogError(ctx, r.logger)
+	}
+	roleRow, err := repo.New(tx).LockOrganizationRoleByID(ctx, repo.LockOrganizationRoleByIDParams{OrganizationID: gramOrgID, ID: roleUUID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogError(ctx, r.logger)
+	case err != nil:
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "lock role for member assignment").LogError(ctx, r.logger)
+	}
+	role, err := r.getLocalRoleByIDTx(ctx, tx, gramOrgID, roleRow.String())
+	if err != nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, err
+	}
+	if isSystemRole(role.Slug) {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogError(ctx, r.logger)
+	}
+
+	if _, err := repo.New(tx).LockOrganizationUserRelationship(ctx, repo.LockOrganizationUserRelationshipParams{
+		OrganizationID: gramOrgID,
+		UserID:         userID,
+	}); errors.Is(err, pgx.ErrNoRows) {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	} else if err != nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "lock member for role assignment").LogError(ctx, r.logger)
+	}
+
+	connected, err := connectedUser(ctx, tx, gramOrgID, userID)
+	switch {
+	case errors.Is(err, errConnectedUserNotFound):
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	case err != nil:
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load connected member").LogError(ctx, r.logger)
+	}
+	if connected.DeletedAt.Valid {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	}
+	if !connected.WorkosID.Valid || connected.WorkosID.String == "" {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "member is not linked to WorkOS").LogError(ctx, r.logger)
+	}
+
+	existing, err := repo.New(tx).GetOrganizationRoleAssignmentByWorkosUser(ctx, repo.GetOrganizationRoleAssignmentByWorkosUserParams{
+		OrganizationID: gramOrgID,
+		WorkosUserID:   connected.WorkosID.String,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member not found").LogError(ctx, r.logger)
+	case err != nil:
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load member role assignment").LogError(ctx, r.logger)
+	}
+	membershipID := conv.FromPGTextOrEmpty[string](existing.WorkosMembershipID)
+	if membershipID == "" {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member is missing local WorkOS membership linkage").LogError(ctx, r.logger)
+	}
+
+	roleIDs, err := repo.New(tx).ListActiveRoleIDsByWorkosUser(ctx, repo.ListActiveRoleIDsByWorkosUserParams{
+		OrganizationID: gramOrgID,
+		WorkosUserID:   connected.WorkosID.String,
+	})
+	if err != nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list existing member roles").LogError(ctx, r.logger)
+	}
+	slices.Sort(roleIDs)
+	if validate != nil {
+		state := MemberRoleState{
+			MemberID:         connected.ID,
+			RoleIDs:          slices.Clone(roleIDs),
+			RoleSlug:         role.Slug,
+			RolePrincipalURN: role.PrincipalURN,
+		}
+		if err := validate(state); err != nil {
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, err
+		}
+	}
+
+	alreadyAssigned := slices.Contains(roleIDs, role.ID)
+	linkRepaired := false
+	if alreadyAssigned {
+		repaired, err := repo.New(tx).RepairOrganizationRoleAssignmentUserLink(ctx, repo.RepairOrganizationRoleAssignmentUserLinkParams{
+			OrganizationID: gramOrgID,
+			WorkosUserID:   connected.WorkosID.String,
+			RoleUrn:        role.PrincipalURN,
+			UserID:         connected.ID,
+		})
+		if err != nil {
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "repair member role linkage").LogError(ctx, r.logger)
+		}
+		linkRepaired = repaired > 0
+	}
+	afterRoleIDs := slices.Clone(roleIDs)
+	// What the member gains by holding the role, read before the assignment
+	// is written. A repaired link changes no role, so it adds nothing.
+	var sensitiveAdded []string
+	if !alreadyAssigned {
+		existingRolePrincipals, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{
+			OrganizationID: gramOrgID,
+			WorkosUserID:   connected.WorkosID.String,
+		})
+		if err != nil {
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list existing member role principals").LogError(ctx, r.logger)
+		}
+		heldBefore := make([]string, 0, len(existingRolePrincipals))
+		for _, rp := range existingRolePrincipals {
+			heldBefore = append(heldBefore, rp.PrincipalUrn)
+		}
+		sensitiveAdded, err = r.sensitiveScopesAddedTx(ctx, tx, gramOrgID, heldBefore, append(slices.Clone(heldBefore), role.PrincipalURN))
+		if err != nil {
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, err
+		}
+		inserted, err := repo.New(tx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
+			OrganizationID:     gramOrgID,
+			WorkosUserID:       connected.WorkosID.String,
+			WorkosRoleSlug:     role.Slug,
+			UserID:             conv.ToPGTextEmpty(connected.ID),
+			WorkosMembershipID: conv.ToPGTextEmpty(membershipID),
+			WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+			WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		})
+		if err != nil {
+			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "insert role assignment").LogError(ctx, r.logger)
+		}
+		if inserted == 0 {
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, nil, "insert role assignment").LogError(ctx, r.logger)
+		}
+		afterRoleIDs = append(afterRoleIDs, role.ID)
+		slices.Sort(afterRoleIDs)
+	}
+
+	memberName := conv.Default(connected.DisplayName, connected.Email)
+	after := &gen.AccessMember{
+		ID:                   connected.ID,
+		PrincipalUrn:         urn.NewPrincipal(urn.PrincipalTypeUser, connected.ID).String(),
+		Name:                 memberName,
+		Email:                connected.Email,
+		PhotoURL:             conv.FromPGText[string](connected.PhotoUrl),
+		RoleIds:              afterRoleIDs,
+		JoinedAt:             conv.FromPGTimestamptz(existing.CreatedAt),
+		Department:           nil,
+		Groups:               nil,
+		DirectoryRoleIds:     nil,
+		DirectoryGroups:      nil,
+		InDirectory:          nil,
+		DirectoryRoleSources: nil,
+	}
+	safeAfter := MemberRoleState{
+		MemberID:         connected.ID,
+		RoleIDs:          slices.Clone(afterRoleIDs),
+		RoleSlug:         role.Slug,
+		RolePrincipalURN: role.PrincipalURN,
+	}
+	reconciliation := MemberRoleReconciliation{organizationID: gramOrgID, workosUserID: connected.WorkosID.String, membershipID: membershipID}
+	if alreadyAssigned && !linkRepaired {
+		return MemberRoleAddResult{After: safeAfter, Member: after, Changed: false}, reconciliation, nil
+	}
+
+	before := *after
+	before.RoleIds = slices.Clone(roleIDs)
+	if err := r.audit.LogAccessMemberRoleUpdate(ctx, tx, audit.LogAccessMemberRoleUpdateEvent{
+		OrganizationID:       gramOrgID,
+		Actor:                actor.Principal,
+		ActorDisplayName:     actor.DisplayName,
+		ActorSlug:            nil,
+		MemberID:             connected.ID,
+		MemberName:           memberName,
+		MemberEmail:          connected.Email,
+		MemberSnapshotBefore: &before,
+		MemberSnapshotAfter:  after,
+		SensitiveScopesAdded: sensitiveAdded,
+	}); err != nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "log access member role update").LogError(ctx, r.logger)
+	}
+
+	return MemberRoleAddResult{After: safeAfter, Member: after, Changed: true}, reconciliation, nil
+}
+
+// CurrentMemberRoleReconciliationTx resolves the member's current sync target
+// without changing local assignments or auditing. Desired roles are read later,
+// under the send lock, rather than captured by this transaction.
+func (r *RoleManager) CurrentMemberRoleReconciliationTx(ctx context.Context, tx pgx.Tx, gramOrgID, userID string) (MemberRoleReconciliation, error) {
+	if _, err := repo.New(tx).LockOrganizationUserRelationship(ctx, repo.LockOrganizationUserRelationshipParams{OrganizationID: gramOrgID, UserID: userID}); errors.Is(err, pgx.ErrNoRows) {
+		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	} else if err != nil {
+		return MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "lock member for role reconciliation").LogError(ctx, r.logger)
+	}
+	connected, err := connectedUser(ctx, tx, gramOrgID, userID)
+	switch {
+	case errors.Is(err, errConnectedUserNotFound):
+		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	case err != nil:
+		return MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load connected member for role reconciliation").LogError(ctx, r.logger)
+	}
+	if !connected.WorkosID.Valid || connected.WorkosID.String == "" {
+		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member is not linked to WorkOS").LogError(ctx, r.logger)
+	}
+	existing, err := repo.New(tx).GetOrganizationRoleAssignmentByWorkosUser(ctx, repo.GetOrganizationRoleAssignmentByWorkosUserParams{OrganizationID: gramOrgID, WorkosUserID: connected.WorkosID.String})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member is missing local WorkOS membership linkage").LogError(ctx, r.logger)
+	case err != nil:
+		return MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load member role reconciliation state").LogError(ctx, r.logger)
+	}
+	membershipID := conv.FromPGTextOrEmpty[string](existing.WorkosMembershipID)
+	if membershipID == "" {
+		return MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member is missing local WorkOS membership linkage").LogError(ctx, r.logger)
+	}
+	return MemberRoleReconciliation{organizationID: gramOrgID, workosUserID: connected.WorkosID.String, membershipID: membershipID}, nil
+}
+
+// ReconcileMemberRoles starts a bounded, detached desired-state WorkOS sync.
+func (r *RoleManager) ReconcileMemberRoles(ctx context.Context, reconciliation MemberRoleReconciliation) {
+	if r == nil || r.roles == nil || reconciliation.membershipID == "" {
+		return
+	}
+	r.runWorkOSSyncs(ctx, []workosSync{r.memberRoleSync(reconciliation)})
+}
+
+// memberRoleSync serializes RoleManager sends across processes. The relationship
+// lock also excludes connected-member mutations while reading and sending. This
+// does not order external provider events or requests that outlive cancellation.
+func (r *RoleManager) memberRoleSync(target MemberRoleReconciliation) workosSync {
+	return func(ctx context.Context) {
+		if target.organizationID == "" || target.workosUserID == "" || target.membershipID == "" {
+			return
+		}
+		tx, err := r.db.Begin(ctx)
+		if err != nil {
+			r.logger.ErrorContext(ctx, "begin member role sync", attr.SlogError(err))
+			return
+		}
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+			defer cancel()
+			o11y.NoLogDefer(func() error { return tx.Rollback(cleanupCtx) })
+		}()
+		queries := repo.New(tx)
+		if err := queries.LockMemberRoleSync(ctx, repo.LockMemberRoleSyncParams{OrganizationID: target.organizationID, WorkosUserID: target.workosUserID}); err != nil {
+			r.logger.ErrorContext(ctx, "lock member role sync", attr.SlogError(err))
+			return
+		}
+		member, err := queries.LockMemberRoleSyncRelationship(ctx, repo.LockMemberRoleSyncRelationshipParams{OrganizationID: target.organizationID, WorkosUserID: target.workosUserID})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Older assignment-only members have no relationship row to lock.
+			// Validate the expected linkage rather than reviving a stale target.
+			records, err := queries.ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, repo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{OrganizationID: target.organizationID, WorkosUserID: target.workosUserID})
+			if err != nil {
+				r.logger.ErrorContext(ctx, "load legacy member role sync linkage", attr.SlogError(err))
+				return
+			}
+			linked := false
+			for _, record := range records {
+				if record.DeletedAt.Valid {
+					continue
+				}
+				if record.UserID.Valid || conv.FromPGTextOrEmpty[string](record.WorkosMembershipID) != target.membershipID {
+					return
+				}
+				linked = true
+			}
+			if !linked {
+				return
+			}
+		case err != nil:
+			r.logger.ErrorContext(ctx, "lock member role sync relationship", attr.SlogError(err))
+			return
+		default:
+			if member.Deleted || member.UserDeleted || conv.FromPGTextOrEmpty[string](member.WorkosMembershipID) != target.membershipID {
+				return
+			}
+		}
+		r.syncWorkOS(ctx, "reconcile member roles in workos", func() error {
+			// Read on every attempt: never retry a captured pre-commit role set.
+			roles, err := queries.ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{OrganizationID: target.organizationID, WorkosUserID: target.workosUserID})
+			if err != nil {
+				return fmt.Errorf("read current member roles: %w", err)
+			}
+			slugs := make([]string, 0, len(roles))
+			for _, role := range roles {
+				slugs = append(slugs, role.RoleSlug)
+			}
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("member role sync canceled: %w", err)
+			}
+			if _, err := r.roles.UpdateMemberRoles(ctx, target.membershipID, slugs); err != nil {
+				return fmt.Errorf("update current member roles in workos: %w", err)
+			}
+			return nil
+		})
+	}
 }
 
 // MemberRolePrincipals returns role slug and principal URN for each role assigned to a WorkOS user in this org.
@@ -785,7 +1446,7 @@ func (r *RoleManager) MemberRolePrincipals(ctx context.Context, gramOrgID, worko
 	return rows, nil
 }
 
-// getLocalRoleByID loads one local role record by Gram role ID.
+// getLocalRoleByID loads one local role record by Speakeasy role ID.
 func (r *RoleManager) getLocalRoleByID(ctx context.Context, gramOrgID, id string) (localRole, error) {
 	return r.getLocalRoleByIDTx(ctx, r.db, gramOrgID, id)
 }
@@ -807,6 +1468,15 @@ func (r *RoleManager) getLocalRoleByIDTx(ctx context.Context, dbtx repo.DBTX, gr
 		return localRole{}, oops.E(oops.CodeUnexpected, err, "get role").LogError(ctx, r.logger)
 	}
 
+	agentIDs, err := r.agentIDsByRoleTx(ctx, dbtx, gramOrgID)
+	if err != nil {
+		return localRole{}, err
+	}
+	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, dbtx, gramOrgID, []string{row.RoleUrn})
+	if err != nil {
+		return localRole{}, err
+	}
+
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
 	return localRole{
 		ID:           row.ID.String(),
@@ -816,7 +1486,8 @@ func (r *RoleManager) getLocalRoleByIDTx(ctx context.Context, dbtx repo.DBTX, gr
 		Description:  conv.FromPGTextOrEmpty[string](row.WorkosDescription),
 		CreatedAt:    conv.FromPGTimestamptz(row.WorkosCreatedAt),
 		UpdatedAt:    conv.FromPGTimestamptz(row.WorkosUpdatedAt),
-		MemberCount:  int(row.MemberCount),
+		MemberCount:  int(row.MemberCount) + mappedMembers[row.RoleUrn],
+		AgentIDs:     agentIDs[row.RoleUrn],
 	}, nil
 }
 
@@ -832,6 +1503,15 @@ func (r *RoleManager) getLocalRoleBySlugTx(ctx context.Context, dbtx repo.DBTX, 
 		return localRole{}, oops.E(oops.CodeUnexpected, err, "get role").LogError(ctx, r.logger)
 	}
 
+	agentIDs, err := r.agentIDsByRoleTx(ctx, dbtx, gramOrgID)
+	if err != nil {
+		return localRole{}, err
+	}
+	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, dbtx, gramOrgID, []string{row.RoleUrn})
+	if err != nil {
+		return localRole{}, err
+	}
+
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
 	return localRole{
 		ID:           row.ID.String(),
@@ -841,7 +1521,8 @@ func (r *RoleManager) getLocalRoleBySlugTx(ctx context.Context, dbtx repo.DBTX, 
 		Description:  conv.FromPGTextOrEmpty[string](row.WorkosDescription),
 		CreatedAt:    conv.FromPGTimestamptz(row.WorkosCreatedAt),
 		UpdatedAt:    conv.FromPGTimestamptz(row.WorkosUpdatedAt),
-		MemberCount:  int(row.MemberCount),
+		MemberCount:  int(row.MemberCount) + mappedMembers[row.RoleUrn],
+		AgentIDs:     agentIDs[row.RoleUrn],
 	}, nil
 }
 
@@ -855,6 +1536,132 @@ type memberAssignmentTarget struct {
 type requestedMemberAssignment struct {
 	InputIDs []string
 	UserID   string
+}
+
+// agentIDsByRoleTx maps each role principal URN to the agents assigned to it.
+// Agent membership is small, and reading it once for the organization keeps the
+// roles page at one query rather than one per role.
+func (r *RoleManager) agentIDsByRoleTx(ctx context.Context, dbtx repo.DBTX, gramOrgID string) (map[string][]string, error) {
+	rows, err := repo.New(dbtx).ListAgentRoleAssignments(ctx, gramOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list agent role assignments").LogError(ctx, r.logger)
+	}
+
+	byRole := make(map[string][]string, len(rows))
+	for _, row := range rows {
+		byRole[row.PrincipalUrn] = append(byRole[row.PrincipalUrn], row.AgentID.String())
+	}
+	return byRole, nil
+}
+
+// directoryMappedMemberCountsTx returns, per role principal URN, the members
+// who hold the role only through a directory role mapping. Adding it to the
+// direct assignment count gives everyone who holds the role. A nil roleURNs
+// counts every role; otherwise only the listed ones.
+func (r *RoleManager) directoryMappedMemberCountsTx(ctx context.Context, dbtx repo.DBTX, gramOrgID string, roleURNs []string) (map[string]int, error) {
+	rows, err := repo.New(dbtx).ListDirectoryMappedRoleMemberCounts(ctx, repo.ListDirectoryMappedRoleMemberCountsParams{
+		OrganizationID: gramOrgID,
+		RoleUrns:       roleURNs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count directory mapped role members").LogError(ctx, r.logger)
+	}
+
+	byRole := make(map[string]int, len(rows))
+	for _, row := range rows {
+		byRole[row.RoleUrn] = int(row.MemberCount)
+	}
+	return byRole, nil
+}
+
+// assignAgentsToRoleTx makes agentIDs the complete agent membership of one role.
+// Member assignment is additive because a member can be taken off a role from
+// the team page; an agent has no such surface, so this write is declarative and
+// an omitted agent loses the role.
+//
+// Agents that already hold the role stay assignable even once suspended or
+// revoked, so re-saving a role does not silently drop them. Only adding a
+// suspended or revoked agent is refused.
+func (r *RoleManager) assignAgentsToRoleTx(ctx context.Context, dbtx repo.DBTX, gramOrgID, rolePrincipalURN string, agentIDs []string) error {
+	// Serialize this role's agent membership for the transaction. The caller's
+	// role row lock only covers organization roles — a system role lives in
+	// global_roles and has no per-organization row — so without this two
+	// concurrent saves could each read the membership before either replaced
+	// it, and the later write would drop the earlier one's agents.
+	if err := repo.New(dbtx).LockAgentRoleAssignments(ctx, repo.LockAgentRoleAssignmentsParams{
+		OrganizationID: gramOrgID,
+		RoleUrn:        rolePrincipalURN,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock agent role assignments").LogError(ctx, r.logger)
+	}
+
+	assignable, err := repo.New(dbtx).ListAssignableAgents(ctx, gramOrgID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list assignable agents").LogError(ctx, r.logger)
+	}
+	allowed := make(map[uuid.UUID]struct{}, len(assignable))
+	for _, agent := range assignable {
+		allowed[agent.ID] = struct{}{}
+	}
+
+	assigned, err := r.agentIDsByRoleTx(ctx, dbtx, gramOrgID)
+	if err != nil {
+		return err
+	}
+	for _, existing := range assigned[rolePrincipalURN] {
+		agentID, err := uuid.Parse(existing)
+		if err != nil {
+			continue
+		}
+		allowed[agentID] = struct{}{}
+	}
+
+	retained := make([]uuid.UUID, 0, len(agentIDs))
+	seen := make(map[uuid.UUID]struct{}, len(agentIDs))
+	for _, raw := range agentIDs {
+		agentID, err := uuid.Parse(raw)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "invalid agent ID").LogError(ctx, r.logger)
+		}
+		if _, ok := allowed[agentID]; !ok {
+			return oops.E(oops.CodeBadRequest, nil, "agent cannot be assigned a role").LogError(ctx, r.logger)
+		}
+		if _, duplicate := seen[agentID]; duplicate {
+			continue
+		}
+		seen[agentID] = struct{}{}
+		retained = append(retained, agentID)
+	}
+
+	slices.SortFunc(retained, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	for _, agentID := range retained {
+		// The upsert selects the agent row, so it writes nothing when the agent
+		// was deleted between validation and here. Treating that as success
+		// would report a membership that does not exist.
+		written, err := repo.New(dbtx).UpsertAgentRoleAssignment(ctx, repo.UpsertAgentRoleAssignmentParams{
+			OrganizationID: gramOrgID,
+			RoleUrn:        rolePrincipalURN,
+			AgentID:        agentID,
+		})
+		if err != nil {
+			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
+			return oops.E(oops.CodeUnexpected, err, "upsert agent role assignment").LogError(ctx, r.logger)
+		}
+		if written == 0 {
+			return oops.E(oops.CodeConflict, nil, "agent is no longer available to assign").LogError(ctx, r.logger)
+		}
+	}
+
+	if err := repo.New(dbtx).SoftDeleteAgentRoleAssignmentsExcept(ctx, repo.SoftDeleteAgentRoleAssignmentsExceptParams{
+		OrganizationID:   gramOrgID,
+		RoleUrn:          rolePrincipalURN,
+		RetainedAgentIds: retained,
+	}); err != nil {
+		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
+		return oops.E(oops.CodeUnexpected, err, "remove agent role assignments").LogError(ctx, r.logger)
+	}
+
+	return nil
 }
 
 func (r *RoleManager) memberAssignmentTargetsTx(ctx context.Context, dbtx repo.DBTX, gramOrgID string, memberIDs []string) ([]memberAssignmentTarget, error) {
@@ -953,11 +1760,34 @@ func (r *RoleManager) assignMembersToRoleTx(ctx context.Context, dbtx repo.DBTX,
 	if err != nil {
 		return 0, nil, err
 	}
+	return r.assignMemberTargetsToRoleTx(ctx, dbtx, gramOrgID, roleSlug, targets)
+}
 
+// assignMemberTargetsToRoleTx gives the role to members already resolved by
+// memberAssignmentTargetsTx, so a caller that needs the targets for its own
+// reads resolves them once.
+func (r *RoleManager) assignMemberTargetsToRoleTx(ctx context.Context, dbtx repo.DBTX, gramOrgID, roleSlug string, targets []memberAssignmentTarget) (int, []workosSync, error) {
+	targets = slices.Clone(targets)
+	slices.SortFunc(targets, func(a, b memberAssignmentTarget) int { return strings.Compare(a.WorkosUserID, b.WorkosUserID) })
 	assignedCount := 0
 	workosSyncs := make([]workosSync, 0, len(targets))
 	for _, target := range targets {
 		if target.WorkosUserID != "" && roleSlug != "" {
+			member, err := repo.New(dbtx).LockMemberRoleSyncRelationship(ctx, repo.LockMemberRoleSyncRelationshipParams{OrganizationID: gramOrgID, WorkosUserID: target.WorkosUserID})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				if target.UserID != "" || target.MembershipID == "" {
+					return 0, nil, oops.E(oops.CodeNotFound, nil, "member has no current organization linkage").LogError(ctx, r.logger)
+				}
+			case err != nil:
+				return 0, nil, oops.E(oops.CodeUnexpected, err, "lock member for role assignment").LogError(ctx, r.logger)
+			default:
+				if member.Deleted || member.UserDeleted || !member.WorkosMembershipID.Valid || member.WorkosMembershipID.String == "" {
+					return 0, nil, oops.E(oops.CodeNotFound, nil, "member has no current organization linkage").LogError(ctx, r.logger)
+				}
+				target.UserID = conv.FromPGTextOrEmpty[string](member.UserID)
+				target.MembershipID = member.WorkosMembershipID.String
+			}
 			inserted, err := repo.New(dbtx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
 				OrganizationID:     gramOrgID,
 				WorkosUserID:       target.WorkosUserID,
@@ -976,42 +1806,85 @@ func (r *RoleManager) assignMembersToRoleTx(ctx context.Context, dbtx repo.DBTX,
 				return 0, nil, oops.E(oops.CodeUnexpected, nil, "upsert local role assignment record").LogError(ctx, r.logger)
 			}
 
-			// Collect all current role slugs for WorkOS sync.
-			allRoles, err := repo.New(dbtx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{
-				OrganizationID: gramOrgID,
-				WorkosUserID:   target.WorkosUserID,
-			})
-			if err != nil {
-				return 0, nil, oops.E(oops.CodeUnexpected, err, "list member roles for workos sync").LogError(ctx, r.logger)
-			}
-			allSlugs := make([]string, 0, len(allRoles))
-			for _, r := range allRoles {
-				allSlugs = append(allSlugs, r.RoleSlug)
-			}
-
-			membershipID := target.MembershipID
-			workosSyncs = append(workosSyncs, func(ctx context.Context) {
-				r.syncWorkOS(ctx, "assign member to role in workos", func() error {
-					_, err := r.roles.UpdateMemberRoles(ctx, membershipID, allSlugs)
-					if err == nil {
-						return nil
-					}
-					return fmt.Errorf("assign member to role in workos: %w", err)
-				})
-			})
+			workosSyncs = append(workosSyncs, r.memberRoleSync(MemberRoleReconciliation{
+				organizationID: gramOrgID, workosUserID: target.WorkosUserID, membershipID: target.MembershipID,
+			}))
 		}
 		assignedCount++
 	}
 	return assignedCount, workosSyncs, nil
 }
 
-// runWorkOSSyncs starts best-effort WorkOS writes after the local transaction commits.
+// ReconcileRole starts the opaque best-effort WorkOS writes returned by a role
+// transaction. The caller must invoke it only after that transaction commits.
+func (r *RoleManager) ReconcileRole(ctx context.Context, reconciliation RoleReconciliation) {
+	r.runWorkOSSyncs(ctx, reconciliation.syncs)
+	r.ReconcileRoleDelivery(ctx, reconciliation)
+}
+
+// ReconcileRoleDelivery republishes the role plugins a committed role
+// transaction changed, without the WorkOS writes. Platform MCP calls it
+// directly because it reapplies role identity separately.
+func (r *RoleManager) ReconcileRoleDelivery(ctx context.Context, reconciliation RoleReconciliation) {
+	r.signalRoleDeliveryPublish(ctx, reconciliation.delivery.projectIDs, reconciliation.delivery.actorID)
+}
+
+// signalRoleDeliveryPublish enqueues a republish for each project whose role
+// plugins changed. Best-effort: the durable publication request and the
+// rollout sweep still cover a failed enqueue, and duplicate signals are
+// debounced per project. Must only be called after the transaction commits.
+func (r *RoleManager) signalRoleDeliveryPublish(ctx context.Context, projectIDs []uuid.UUID, actorID string) {
+	if r == nil || r.publisher == nil {
+		return
+	}
+	for _, projectID := range projectIDs {
+		if err := r.publisher.SignalPluginPublish(context.WithoutCancel(ctx), projectID, actorID); err != nil {
+			r.logger.WarnContext(ctx, "failed to signal role delivery plugin publish",
+				attr.SlogProjectID(projectID.String()), attr.SlogError(err))
+		}
+	}
+}
+
+// ReconcileRoleIdentity reapplies one role's desired WorkOS identity after the
+// local transaction commits. Platform MCP calls it for fresh writes and exact
+// receipt replays so a transient provider failure can converge on retry.
+func (r *RoleManager) ReconcileRoleIdentity(ctx context.Context, workosOrgID, slug, name, description string, create bool) {
+	if r == nil || r.roles == nil || workosOrgID == "" || slug == "" || name == "" {
+		return
+	}
+	r.runWorkOSSyncs(ctx, []workosSync{func(ctx context.Context) {
+		operation := "update role in workos"
+		r.syncWorkOS(ctx, operation, func() error {
+			if create {
+				_, err := r.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{Name: name, Slug: slug, Description: description})
+				var apiErr *workos.APIError
+				if errors.As(err, &apiErr) && apiErr.StatusCode == 409 {
+					return nil
+				}
+				if err != nil {
+					return fmt.Errorf("create role in workos: %w", err)
+				}
+				return nil
+			}
+			_, err := r.roles.UpdateRole(ctx, workosOrgID, slug, workos.UpdateRoleOpts{Name: &name, Description: &description})
+			if err != nil {
+				return fmt.Errorf("update role in workos: %w", err)
+			}
+			return nil
+		})
+	}})
+}
+
+// runWorkOSSyncs starts best-effort WorkOS writes after the local transaction
+// commits. It detaches request cancellation and gives the entire batch a shared
+// deadline, including lock waits and sends. Providers must honor cancellation.
 func (r *RoleManager) runWorkOSSyncs(ctx context.Context, syncs []workosSync) {
 	if len(syncs) == 0 {
 		return
 	}
-	syncCtx := context.WithoutCancel(ctx)
+	syncCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workOSSyncTimeout)
 	go func() {
+		defer cancel()
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				r.logger.ErrorContext(syncCtx, "workos sync panic", attr.SlogError(fmt.Errorf("%v", recovered)))
@@ -1067,6 +1940,175 @@ func (r *RoleManager) roleViewFromLocalRole(ctx context.Context, organizationID 
 		genGrants = append(genGrants, scopedGrantToGenRoleGrant(g))
 	}
 
+	return roleViewFromLocalRoleAndGrants(role, genGrants), nil
+}
+
+// grantScopes lists the scopes a set of grants names, for comparing what a
+// role gave before and after an edit.
+func grantScopes(grants []*gen.RoleGrant) []authz.Scope {
+	scopes := make([]authz.Scope, 0, len(grants))
+	for _, grant := range grants {
+		if grant == nil {
+			continue
+		}
+		scopes = append(scopes, authz.Scope(grant.Scope))
+	}
+	return scopes
+}
+
+// grantCoverage reads how widely a role's grants hold each scope. A grant
+// without selectors is the API's form of an unrestricted one; a stored
+// wildcard selector reads the same. Every other selector names a resource.
+func grantCoverage(grants []*gen.RoleGrant) []authz.ScopeCoverage {
+	coverage := make([]authz.ScopeCoverage, 0, len(grants))
+	for _, grant := range grants {
+		if grant == nil {
+			continue
+		}
+		held := authz.ScopeCoverage{Scope: authz.Scope(grant.Scope), Unrestricted: grant.Selectors == nil, Resources: nil}
+		for _, selector := range grant.Selectors {
+			if selector == nil {
+				continue
+			}
+			if authzSelector := genSelectorToAuthz(selector); authzSelector.CoversEveryResource() {
+				held.Unrestricted = true
+			} else {
+				held.Resources = append(held.Resources, authzSelector.Key())
+			}
+		}
+		coverage = append(coverage, held)
+	}
+	return coverage
+}
+
+// coverageOf concatenates what the listed principals hold.
+func coverageOf(byPrincipal map[string][]authz.ScopeCoverage, principals []string) []authz.ScopeCoverage {
+	var coverage []authz.ScopeCoverage
+	for _, principal := range principals {
+		coverage = append(coverage, byPrincipal[principal]...)
+	}
+	return coverage
+}
+
+// sensitiveScopesAddedTx names the sensitive scopes the roles in after grant
+// that the roles in before did not, or grant everywhere where before held
+// them only on some resources. Read inside the membership transaction, in one
+// query over both sets.
+func (r *RoleManager) sensitiveScopesAddedTx(ctx context.Context, tx pgx.Tx, orgID string, before, after []string) ([]string, error) {
+	principals := slices.Clone(before)
+	for _, principal := range after {
+		if !slices.Contains(principals, principal) {
+			principals = append(principals, principal)
+		}
+	}
+	coverage, err := authz.ScopeCoverageTx(ctx, tx, orgID, principals)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list grants around role change").LogError(ctx, r.logger)
+	}
+	return authz.SensitiveScopesWidened(coverageOf(coverage, before), coverageOf(coverage, after)), nil
+}
+
+// sensitiveScopesForNewHoldersTx names the sensitive scopes the members and
+// agents a role save assigns gain by holding it, merged across every principal
+// that did not already hold the role. It reads memberships before the save
+// writes them, so re-saving a role's existing holders reports nothing and
+// costs no grant reads. roleGrants are the role's grants after the save.
+func (r *RoleManager) sensitiveScopesForNewHoldersTx(ctx context.Context, tx pgx.Tx, orgID, roleURN string, roleGrants []*gen.RoleGrant, members []memberAssignmentTarget, agentIDs []string) ([]string, error) {
+	// The roles each holder has today, one read per kind of holder.
+	var heldBefore [][]string
+	if len(members) > 0 {
+		workosIDs := make([]string, 0, len(members))
+		for _, member := range members {
+			workosIDs = append(workosIDs, member.WorkosUserID)
+		}
+		rows, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUsers(ctx, repo.ListMemberRolePrincipalsByWorkosUsersParams{
+			OrganizationID: orgID,
+			WorkosUserIds:  workosIDs,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list member roles before assignment").LogError(ctx, r.logger)
+		}
+		byMember := make(map[string][]string, len(members))
+		for _, row := range rows {
+			byMember[row.WorkosUserID] = append(byMember[row.WorkosUserID], row.PrincipalUrn)
+		}
+		for _, member := range members {
+			heldBefore = append(heldBefore, byMember[member.WorkosUserID])
+		}
+	}
+	if len(agentIDs) > 0 {
+		byRole, err := r.agentIDsByRoleTx(ctx, tx, orgID)
+		if err != nil {
+			return nil, err
+		}
+		rolesByAgent := make(map[string][]string, len(agentIDs))
+		for role, agents := range byRole {
+			for _, agent := range agents {
+				rolesByAgent[agent] = append(rolesByAgent[agent], role)
+			}
+		}
+		for _, raw := range agentIDs {
+			agentID, err := uuid.Parse(raw)
+			if err != nil {
+				// The assignment itself rejects the save.
+				continue
+			}
+			heldBefore = append(heldBefore, rolesByAgent[agentID.String()])
+		}
+	}
+
+	// Only holders the save adds gain anything.
+	var newHolders [][]string
+	var principals []string
+	for _, held := range heldBefore {
+		if slices.Contains(held, roleURN) {
+			continue
+		}
+		newHolders = append(newHolders, held)
+		for _, principal := range held {
+			if !slices.Contains(principals, principal) {
+				principals = append(principals, principal)
+			}
+		}
+	}
+	if len(newHolders) == 0 {
+		return nil, nil
+	}
+
+	// What every new holder's current roles grant, in one read, against the
+	// role's own grants as the save leaves them.
+	coverage, err := authz.ScopeCoverageTx(ctx, tx, orgID, principals)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list grants before assignment").LogError(ctx, r.logger)
+	}
+	role := grantCoverage(roleGrants)
+	perHolder := make([][]string, 0, len(newHolders))
+	for _, held := range newHolders {
+		before := coverageOf(coverage, held)
+		perHolder = append(perHolder, authz.SensitiveScopesWidened(before, append(slices.Clone(before), role...)))
+	}
+	return mergeSensitiveScopes(perHolder...), nil
+}
+
+// mergeSensitiveScopes unions lists of sensitive scopes, in catalogue order
+// and without duplicates. Nil when every list is empty.
+func mergeSensitiveScopes(lists ...[]string) []string {
+	set := make(map[string]struct{})
+	for _, list := range lists {
+		for _, scope := range list {
+			set[scope] = struct{}{}
+		}
+	}
+	var merged []string
+	for _, scope := range authz.SensitiveScopes() {
+		if _, ok := set[string(scope)]; ok {
+			merged = append(merged, string(scope))
+		}
+	}
+	return merged
+}
+
+func roleViewFromLocalRoleAndGrants(role localRole, grants []*gen.RoleGrant) *gen.Role {
 	return &gen.Role{
 		ID:           role.ID,
 		PrincipalUrn: role.PrincipalURN,
@@ -1074,11 +2116,20 @@ func (r *RoleManager) roleViewFromLocalRole(ctx context.Context, organizationID 
 		Slug:         role.Slug,
 		Description:  role.Description,
 		IsSystem:     isSystemRole(role.Slug),
-		Grants:       genGrants,
+		Grants:       grants,
 		MemberCount:  role.MemberCount,
+		AgentIds:     role.AgentIDs,
 		CreatedAt:    conv.Default(role.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		UpdatedAt:    conv.Default(role.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-	}, nil
+	}
+}
+
+func cloneString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
 
 // workosTimeOrNow parses a WorkOS RFC3339 timestamp or returns the current UTC time when WorkOS omits or malforms it.
@@ -1093,7 +2144,7 @@ func workosTimeOrNow(value string) time.Time {
 	return t.UTC()
 }
 
-// slugify validates a role name and turns it into Gram's WorkOS role slug format.
+// slugify validates a role name and turns it into Speakeasy's WorkOS role slug format.
 func slugify(name string) (string, error) {
 	slug := conv.ToSlug(strings.ReplaceAll(name, "_", " "))
 	if slug == "" {

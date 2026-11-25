@@ -5,38 +5,52 @@ import {
   TooltipPortal,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import type { PulseMCPServer } from "./hooks";
-import { requiresManualSetup } from "./hooks/serverMetadata";
+import { catalogServerHasGuidedSetup } from "@/pages/mcp/x/setup/provider-setup";
+import type { CatalogServer } from "./hooks";
+import { serverSetupType } from "./hooks/serverMetadata";
 
 const MANUAL_SETUP_TOOLTIP =
-  "This server doesn't support dynamic client registration (DCR). Connecting requires manual auth setup — static OAuth client credentials or API keys.";
+  "Connecting requires manual authentication setup. Follow this server's setup guide for the required credentials.";
+const UNKNOWN_SETUP_TOOLTIP =
+  "Automatic authentication setup has not been confirmed. Check the server's setup guide or discover its sign-in options during setup.";
+const GUIDED_SETUP_TOOLTIP =
+  "After you add this server, Speakeasy walks you through connecting it step by step.";
 
-/**
- * Flags a catalog server that requires manual auth setup (no DCR support).
- * Renders nothing for automatic / DCR-capable servers, so callers can drop it
- * inline without a guard. Uses the Moonshine badge so it lines up with the
- * neighbouring catalog badges (tool count, Official/Latest).
- */
+/** Show setup requirements without treating missing discovery as a rejection. */
 export function ManualSetupBadge({
   server,
   className,
 }: {
-  server: PulseMCPServer;
+  server: CatalogServer;
   className?: string;
 }): JSX.Element | null {
-  if (!requiresManualSetup(server)) return null;
+  const setup = serverSetupType(server);
+  const guided = catalogServerHasGuidedSetup(server);
+  if (setup === "auto" && !guided) return null;
+  const isManual = setup === "manual";
+
+  let label = "Setup unknown";
+  let tooltip = UNKNOWN_SETUP_TOOLTIP;
+  if (guided) {
+    label = "Guided setup";
+    tooltip = GUIDED_SETUP_TOOLTIP;
+  } else if (isManual) {
+    label = "Manual Setup";
+    tooltip = MANUAL_SETUP_TOOLTIP;
+  }
 
   return (
     <Tooltip>
       <TooltipTrigger>
-        <Badge variant="warning" className={className}>
-          <Badge.Text>Manual Setup</Badge.Text>
+        <Badge
+          variant={guided ? "information" : isManual ? "warning" : "neutral"}
+          className={className}
+        >
+          <Badge.Text>{label}</Badge.Text>
         </Badge>
       </TooltipTrigger>
       <TooltipPortal>
-        <TooltipContent className="max-w-sm">
-          {MANUAL_SETUP_TOOLTIP}
-        </TooltipContent>
+        <TooltipContent className="max-w-sm">{tooltip}</TooltipContent>
       </TooltipPortal>
     </Tooltip>
   );

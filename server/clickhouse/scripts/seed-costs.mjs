@@ -175,7 +175,7 @@ const DEPARTMENTS = [
     name: "Engineering",
     division: "R&D",
     cc: "CC-ENG-1000",
-    teams: ["Platform", "SDK Generation", "Gram / MCP", "Infrastructure"],
+    teams: ["Platform", "SDK Generation", "Speakeasy / MCP", "Infrastructure"],
     icTitles: [
       "Software Engineer",
       "Senior Software Engineer",

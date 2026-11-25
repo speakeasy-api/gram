@@ -10,6 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	assistantidentityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -17,6 +20,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -54,6 +60,54 @@ func seedChat(t *testing.T, ctx context.Context, ti *chatTestInstance, userID, e
 	return id
 }
 
+// chatRow reads one chat row from the test project.
+func chatRow(t *testing.T, ti *chatTestInstance, chatID uuid.UUID) repo.GetChatRow {
+	t.Helper()
+	row, err := repo.New(ti.conn).GetChat(t.Context(), repo.GetChatParams{ID: chatID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	return row
+}
+
+// seedAgent creates an agent owned by ownerUserID in the test organization.
+func seedAgent(t *testing.T, ctx context.Context, ti *chatTestInstance, ownerUserID, name string) uuid.UUID {
+	t.Helper()
+	return seedAgentInOrg(t, ctx, ti, ti.orgID, uuid.NullUUID{UUID: ti.projectID, Valid: true}, ownerUserID, name)
+}
+
+// seedAgentInOrg creates an agent owned by ownerUserID in orgID, which must
+// already exist in the test database.
+func seedAgentInOrg(t *testing.T, ctx context.Context, ti *chatTestInstance, orgID string, projectID uuid.NullUUID, ownerUserID, name string) uuid.UUID {
+	t.Helper()
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: orgID,
+		UserID:         conv.ToPGText(ownerUserID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: orgID,
+		OwnerUserID:    ownerUserID,
+		ProjectID:      projectID,
+		Name:           name,
+	})
+	require.NoError(t, err)
+	return agent.ID
+}
+
+// seedAgentChat inserts a session the way agent-actor capture records one: no
+// user owner, with the producing agent stamped on the chat.
+func seedAgentChat(t *testing.T, ctx context.Context, ti *chatTestInstance, agentID uuid.UUID, title string) uuid.UUID {
+	t.Helper()
+	chatID := seedChat(t, ctx, ti, "", "", title)
+	linked, err := hooksrepo.New(ti.conn).LinkChatActingAgent(ctx, hooksrepo.LinkChatActingAgentParams{
+		AgentID:   uuid.NullUUID{UUID: agentID, Valid: true},
+		ID:        chatID,
+		ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), linked)
+	return chatID
+}
+
 // seedChatAtTime inserts a chat at a specific timestamp for date-range tests.
 func seedChatAtTime(t *testing.T, ctx context.Context, ti *chatTestInstance, externalUserID string, at time.Time) uuid.UUID {
 	t.Helper()
@@ -70,8 +124,9 @@ func seedChatAtTime(t *testing.T, ctx context.Context, ti *chatTestInstance, ext
 	return id
 }
 
-// seedRiskOnChat creates a chat message and attaches a risk result to it.
-func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID, found bool) {
+// seedRiskOnChat creates a chat message under a new enabled policy and records
+// a live ClickHouse finding on it.
+func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID) {
 	t.Helper()
 	r := repo.New(ti.conn)
 	msgID, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
@@ -84,14 +139,28 @@ func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, cha
 		OrganizationID: ti.orgID,
 	})
 	require.NoError(t, err)
-	err = r.SeedRiskResult(ctx, repo.SeedRiskResultParams{
-		ProjectID:      ti.projectID,
-		OrganizationID: ti.orgID,
-		RiskPolicyID:   policyID,
-		ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
-		Found:          found,
-	})
-	require.NoError(t, err)
+	require.NoError(t, riskchrepo.New(ti.chConn).InsertRiskFindings(ctx, []riskchrepo.RiskFindingRow{
+		seedClickHouseFinding(t, ti, uuid.New(), chatID, msgID, policyID),
+	}))
+}
+
+func seedClickHouseFinding(t *testing.T, ti *chatTestInstance, findingID, chatID, messageID, policyID uuid.UUID) riskchrepo.RiskFindingRow {
+	t.Helper()
+	now := time.Now().UTC()
+	return riskchrepo.RiskFindingRow{
+		ID:                findingID,
+		CreatedAt:         now,
+		OrganizationID:    ti.orgID,
+		ProjectID:         ti.projectID.String(),
+		ChatMessageID:     messageID.String(),
+		RiskPolicyID:      policyID.String(),
+		RiskPolicyVersion: 1,
+		RuleID:            "secret.test",
+		Source:            "gitleaks",
+		ChatID:            chatID.String(),
+		MessageCreatedAt:  now,
+		EventKind:         riskchrepo.EventKindFinding,
+	}
 }
 
 // seedChatWithSource inserts a chat owned by externalUserID with a single
@@ -110,9 +179,9 @@ func seedChatWithSource(t *testing.T, ctx context.Context, ti *chatTestInstance,
 	return chatID
 }
 
-// seedRiskOnChatDisabledPolicy seeds a found risk result whose policy is
-// disabled. The finding row is real, but every risk surface must treat it as
-// absent because the policy is off (mirrors a policy disabled after detection).
+// seedRiskOnChatDisabledPolicy seeds a live finding whose policy is disabled.
+// The finding row is real, but every risk surface must treat it as absent
+// because the policy is off (mirrors a policy disabled after detection).
 func seedRiskOnChatDisabledPolicy(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID) {
 	t.Helper()
 	r := repo.New(ti.conn)
@@ -126,14 +195,9 @@ func seedRiskOnChatDisabledPolicy(t *testing.T, ctx context.Context, ti *chatTes
 		OrganizationID: ti.orgID,
 	})
 	require.NoError(t, err)
-	err = r.SeedRiskResult(ctx, repo.SeedRiskResultParams{
-		ProjectID:      ti.projectID,
-		OrganizationID: ti.orgID,
-		RiskPolicyID:   policyID,
-		ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
-		Found:          true,
-	})
-	require.NoError(t, err)
+	require.NoError(t, riskchrepo.New(ti.chConn).InsertRiskFindings(ctx, []riskchrepo.RiskFindingRow{
+		seedClickHouseFinding(t, ti, uuid.New(), chatID, msgID, policyID),
+	}))
 }
 
 // initSessionCtx creates a session-authenticated context and overrides ProjectID
@@ -144,6 +208,9 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.ProjectID = &ti.projectID
+	authCtx.ActiveOrganizationID = ti.orgID
+	authCtx.OrganizationSlug = ti.orgID
+	authCtx.ProjectSlug = &ti.projectSlug
 	// chat:write satisfies chat:read by expansion, so this is a fully-privileged
 	// session for chat purposes. Tests that need to distinguish the two use
 	// grantOrgAdminWithChatRead / grantOrgAdminWithChatWrite / memberSessionCtx.
@@ -292,6 +359,187 @@ func TestListChats_RegularUser_SeesOnlyOwnChats(t *testing.T) {
 	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
 }
 
+// A chat is one row however many assistant threads it carries, and the
+// assistant reported for it is always one recorded under the listed project.
+// A thread whose project_id points elsewhere while its chat_id points here is
+// an inconsistent relationship, and it must neither surface its assistant nor
+// add a row.
+func TestListChats_OneRowPerChat_ReportsOnlyThisProjectsAssistant(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	queries := repo.New(ti.conn)
+
+	foreignProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Foreign Project",
+		Slug:           "foreign-" + uuid.NewString()[:8],
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	foreignAssistant, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      foreignProject.ID,
+		OrganizationID: ti.orgID,
+		Name:           "Foreign Assistant",
+	})
+	require.NoError(t, err)
+	localAssistant, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Local Assistant",
+	})
+	require.NoError(t, err)
+
+	// One chat in the listed project with a thread from each project on it.
+	sharedChat := seedChat(t, ctx, ti, "", "ext-shared", "shared chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     foreignProject.ID,
+		CorrelationID: "foreign-on-shared",
+		ChatID:        sharedChat,
+	}))
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   localAssistant,
+		ProjectID:     ti.projectID,
+		CorrelationID: "local-on-shared",
+		ChatID:        sharedChat,
+	}))
+	// And one chat whose only thread is the foreign one.
+	foreignOnlyChat := seedChat(t, ctx, ti, "", "ext-foreign-only", "foreign only chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     foreignProject.ID,
+		CorrelationID: "foreign-on-foreign-only",
+		ChatID:        foreignOnlyChat,
+	}))
+	// And one chat whose thread is recorded under this project but points at
+	// the foreign project's assistant: assistant_threads has no composite
+	// (project_id, assistant_id) key, so the row is insertable.
+	crossAssistantChat := seedChat(t, ctx, ti, "", "ext-cross-assistant", "cross assistant chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     ti.projectID,
+		CorrelationID: "local-thread-foreign-assistant",
+		ChatID:        crossAssistantChat,
+	}))
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total, "total counts chats, not assistant threads")
+	require.Len(t, result.Chats, 3, "one row per chat however many threads it carries")
+	byID := map[string]*gen.ChatOverview{}
+	for _, chat := range result.Chats {
+		byID[chat.ID] = chat
+	}
+	shared, ok := byID[sharedChat.String()]
+	require.True(t, ok)
+	require.NotNil(t, shared.AssistantID)
+	require.Equal(t, localAssistant.String(), *shared.AssistantID, "the assistant recorded under this project is the one reported")
+	require.NotNil(t, shared.AssistantName)
+	require.Equal(t, "Local Assistant", *shared.AssistantName)
+	foreignOnly, ok := byID[foreignOnlyChat.String()]
+	require.True(t, ok)
+	require.Nil(t, foreignOnly.AssistantID, "a thread from another project never surfaces its assistant")
+	require.Nil(t, foreignOnly.AssistantName)
+	crossAssistant, ok := byID[crossAssistantChat.String()]
+	require.True(t, ok)
+	require.Nil(t, crossAssistant.AssistantID, "a thread here pointing at another project's assistant surfaces neither its id nor its name")
+	require.Nil(t, crossAssistant.AssistantName)
+	loadedCross, err := ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: crossAssistantChat.String()})
+	require.NoError(t, err)
+	require.Nil(t, loadedCross.AssistantID, "loading the chat reports the same attribution as listing it")
+	require.Nil(t, loadedCross.AssistantName)
+
+	// Narrowing to the foreign assistant admits only the chat whose thread is
+	// recorded here (the admission filter is project-scoped), and even that row
+	// reports no assistant because the assistant itself is not this project's.
+	payload := defaultPayload()
+	foreignAssistantID := foreignAssistant.String()
+	payload.AssistantID = &foreignAssistantID
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, crossAssistantChat.String(), result.Chats[0].ID)
+	require.Nil(t, result.Chats[0].AssistantID)
+	require.Nil(t, result.Chats[0].AssistantName)
+}
+
+// An assistant session reports the agent its assistant acts as, so the
+// session can name that agent; an assistant without one reports none.
+func TestListChats_ReportsAssistantAgentIdentity(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := repo.New(ti.conn)
+
+	agentBacked, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Agent-backed Assistant",
+	})
+	require.NoError(t, err)
+	legacy, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Legacy Assistant",
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: ti.orgID,
+		UserID:         conv.ToPGText(authCtx.UserID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Name:           "Assistant Agent",
+	})
+	require.NoError(t, err)
+	_, err = assistantidentityrepo.New(ti.conn).CreateAssistantBinding(ctx, assistantidentityrepo.CreateAssistantBindingParams{
+		OrganizationID: ti.orgID,
+		ProjectID:      ti.projectID,
+		AssistantID:    agentBacked,
+		AgentID:        agent.ID,
+	})
+	require.NoError(t, err)
+
+	agentChat := seedChat(t, ctx, ti, authCtx.UserID, "", "agent-backed chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   agentBacked,
+		ProjectID:     ti.projectID,
+		CorrelationID: "agent-backed",
+		ChatID:        agentChat,
+	}))
+	legacyChat := seedChat(t, ctx, ti, authCtx.UserID, "", "legacy chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   legacy,
+		ProjectID:     ti.projectID,
+		CorrelationID: "legacy",
+		ChatID:        legacyChat,
+	}))
+	plainChat := seedChat(t, ctx, ti, authCtx.UserID, "", "plain chat")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	byID := map[string]*gen.ChatOverview{}
+	for _, chat := range result.Chats {
+		byID[chat.ID] = chat
+	}
+	require.Equal(t, agent.ID.String(), conv.PtrValOr(byID[agentChat.String()].AssistantAgentID, ""))
+	require.Nil(t, byID[legacyChat.String()].AssistantAgentID)
+	require.Nil(t, byID[plainChat.String()].AssistantAgentID)
+
+	loaded, err := ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: agentChat.String()})
+	require.NoError(t, err)
+	require.Equal(t, agent.ID.String(), conv.PtrValOr(loaded.AssistantAgentID, ""))
+	loaded, err = ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: legacyChat.String()})
+	require.NoError(t, err)
+	require.Nil(t, loaded.AssistantAgentID)
+}
+
 // TestListChats_ChatRead_SeesAllChats verifies that a caller holding an
 // unrestricted chat:read (here alongside org:admin) sees every chat in the
 // project, regardless of which user or external user owns them.
@@ -307,6 +555,33 @@ func TestListChats_ChatRead_SeesAllChats(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, result.Total)
 	require.Len(t, result.Chats, 2)
+}
+
+// Cron chats captured before cron titles existed stored the raw OpenClaw
+// envelope. They list under the job name, unless someone renamed them by hand.
+func TestListChats_ShowsStoredCronEnvelopesUnderTheJobName(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	envelope := "[cron:0f0e0d0c-0b0a-4908-8706-050403020100 nightly-digest] Summarize the day"
+	derived := seedChat(t, ctx, ti, "", "ext-cron", envelope)
+	renamed := seedChat(t, ctx, ti, "", "ext-cron", "placeholder")
+	require.NoError(t, repo.New(ti.conn).RenameChat(ctx, repo.RenameChatParams{
+		ID:               renamed,
+		ProjectID:        ti.projectID,
+		Title:            conv.ToPGText(envelope),
+		TitleManuallySet: true,
+	}))
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	titles := make(map[string]string, len(result.Chats))
+	for _, c := range result.Chats {
+		titles[c.ID] = c.Title
+	}
+	require.Equal(t, "Cron: nightly-digest", titles[derived.String()])
+	require.Equal(t, envelope, titles[renamed.String()])
 }
 
 // TestListChats_OrgAdminWithoutChatRead_SeesOnlyOwnChats is the regression guard
@@ -358,6 +633,255 @@ func TestListChats_Member_SeesOnlyOwnChats(t *testing.T) {
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
 	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
+}
+
+// An agent's session has no user owner, so without chat:read it belonged to
+// nobody and its owner could not see what the agent did. Own-session
+// visibility includes the sessions of agents the caller owns — and only those.
+func TestListChats_Member_SeesOwnedAgentSessions(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	owned := seedAgent(t, ctx, ti, authCtx.UserID, "My Agent")
+	foreign := seedAgent(t, ctx, ti, "other-owner", "Their Agent")
+	own := seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
+	ownedAgentChat := seedAgentChat(t, ctx, ti, owned, "my agent's session")
+	seedAgentChat(t, ctx, ti, foreign, "their agent's session")
+	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	ids := make([]string, 0, len(result.Chats))
+	for _, chat := range result.Chats {
+		ids = append(ids, chat.ID)
+	}
+	require.ElementsMatch(t, []string{own.String(), ownedAgentChat.String()}, ids)
+
+	// The fallback count, read when the page is past the end, scopes the same way.
+	payload := defaultPayload()
+	payload.Offset = 10
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Empty(t, result.Chats)
+	require.Equal(t, 2, result.Total)
+}
+
+// An agent's editors (agent:write) answer for it as its owner does, so a member
+// granted agent:write on someone else's agent lists that agent's sessions, and
+// no other agent's.
+func TestListChats_Member_SeesEditableAgentSessions(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	edited := seedAgent(t, ctx, ti, "other-owner", "Shared Agent")
+	untouched := seedAgent(t, ctx, ti, "other-owner", "Their Agent")
+	editedChat := seedAgentChat(t, ctx, ti, edited, "shared agent's session")
+	seedAgentChat(t, ctx, ti, untouched, "their agent's session")
+	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+
+	editorCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAgentWrite, edited.String()))
+	result, err := ti.service.ListChats(editorCtx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, editedChat.String(), result.Chats[0].ID)
+
+	// agent:read alone does not open what the agent did.
+	readerCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAgentRead, edited.String()))
+	result, err = ti.service.ListChats(readerCtx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Total)
+
+	// Where RBAC is not enforced (no session), an agent:write grant does not
+	// widen visibility: the editor sees only their own sessions.
+	authCtx, ok := contextvalues.GetAuthContext(editorCtx)
+	require.True(t, ok)
+	unenforced := *authCtx
+	unenforced.SessionID = nil
+	own := seedChat(t, ctx, ti, unenforced.UserID, "", "own chat")
+	result, err = ti.service.ListChats(contextvalues.SetAuthContext(editorCtx, &unenforced), defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, own.String(), result.Chats[0].ID)
+}
+
+// A chat that carries a human identity belongs to that human, even if an
+// agent the caller owns was stamped onto it, so owning the agent does not
+// reveal it.
+func TestListChats_Member_AgentStampedOnOtherUsersChatHidden(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	owned := seedAgent(t, ctx, ti, authCtx.UserID, "My Agent")
+	for _, chatID := range []uuid.UUID{
+		seedChat(t, ctx, ti, "other-user-id", "", "other users chat"),
+		seedChat(t, ctx, ti, "", "someone@example.com", "external users chat"),
+	} {
+		linked, err := hooksrepo.New(ti.conn).LinkChatActingAgent(ctx, hooksrepo.LinkChatActingAgentParams{
+			AgentID:   uuid.NullUUID{UUID: owned, Valid: true},
+			ID:        chatID,
+			ProjectID: ti.projectID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), linked)
+	}
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Total)
+	require.Empty(t, result.Chats)
+}
+
+// An owner whose agent is latched for reassignment no longer answers for it,
+// so its sessions stop being theirs.
+func TestListChats_Member_LatchedAgentSessionsHidden(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	agentID := seedAgent(t, ctx, ti, authCtx.UserID, "Latched Agent")
+	seedAgentChat(t, ctx, ti, agentID, "latched agent's session")
+	_, err := agentrepo.New(ti.conn).LatchAgentsForOwnerLossByMembership(ctx, agentrepo.LatchAgentsForOwnerLossByMembershipParams{
+		OwnerReassignmentReason: conv.ToPGText("membership_loss"),
+		OrganizationID:          ti.orgID,
+		OwnerUserID:             authCtx.UserID,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Total)
+	require.Empty(t, result.Chats)
+}
+
+// The agent_id filter narrows a listing to one agent's sessions, inside the
+// caller's visibility: naming an agent someone else owns shows a member nothing.
+func TestListChats_Filter_AgentID(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	memberCtx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(memberCtx)
+	require.True(t, ok)
+
+	owned := seedAgent(t, memberCtx, ti, authCtx.UserID, "My Agent")
+	foreign := seedAgent(t, memberCtx, ti, "other-owner", "Their Agent")
+	ownedAgentChat := seedAgentChat(t, memberCtx, ti, owned, "my agent's session")
+	foreignAgentChat := seedAgentChat(t, memberCtx, ti, foreign, "their agent's session")
+	seedChat(t, memberCtx, ti, authCtx.UserID, "", "own chat")
+
+	payload := defaultPayload()
+	payload.AgentID = new(owned.String())
+	result, err := ti.service.ListChats(memberCtx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, ownedAgentChat.String(), result.Chats[0].ID)
+	require.Equal(t, owned.String(), conv.PtrValOr(result.Chats[0].AgentID, ""))
+	require.Equal(t, "My Agent", conv.PtrValOr(result.Chats[0].AgentName, ""))
+
+	payload.AgentID = new(foreign.String())
+	result, err = ti.service.ListChats(memberCtx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Total)
+	require.Empty(t, result.Chats)
+
+	// A chat:read holder may narrow to any agent.
+	readerCtx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	result, err = ti.service.ListChats(readerCtx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, foreignAgentChat.String(), result.Chats[0].ID)
+}
+
+// An assistant's runtime chats never carry chats.agent_id: they reach the agent
+// the assistant acts as through the assistant's binding. Filtering by that
+// agent must list them next to the sessions capture stamped with it.
+func TestListChats_Filter_AgentID_MatchesBoundAssistantSessions(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := repo.New(ti.conn)
+
+	agent := seedAgent(t, ctx, ti, authCtx.UserID, "Assistant Agent")
+	bound, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Bound Assistant",
+	})
+	require.NoError(t, err)
+	legacy, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Legacy Assistant",
+	})
+	require.NoError(t, err)
+	_, err = assistantidentityrepo.New(ti.conn).CreateAssistantBinding(ctx, assistantidentityrepo.CreateAssistantBindingParams{
+		OrganizationID: ti.orgID,
+		ProjectID:      ti.projectID,
+		AssistantID:    bound,
+		AgentID:        agent,
+	})
+	require.NoError(t, err)
+
+	boundChat := seedChat(t, ctx, ti, authCtx.UserID, "", "bound assistant session")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   bound,
+		ProjectID:     ti.projectID,
+		CorrelationID: "bound",
+		ChatID:        boundChat,
+	}))
+	legacyChat := seedChat(t, ctx, ti, authCtx.UserID, "", "legacy assistant session")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   legacy,
+		ProjectID:     ti.projectID,
+		CorrelationID: "legacy",
+		ChatID:        legacyChat,
+	}))
+	stampedChat := seedAgentChat(t, ctx, ti, agent, "captured agent session")
+	seedChat(t, ctx, ti, authCtx.UserID, "", "plain chat")
+
+	payload := defaultPayload()
+	payload.AgentID = new(agent.String())
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	ids := make([]string, 0, len(result.Chats))
+	for _, chat := range result.Chats {
+		ids = append(ids, chat.ID)
+	}
+	require.ElementsMatch(t, []string{boundChat.String(), stampedChat.String()}, ids)
+
+	// A page past the end takes its total from CountChats, which must agree.
+	payload.Offset = 10
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	require.Empty(t, result.Chats)
+}
+
+func TestListChats_Filter_AgentID_Invalid(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	payload := defaultPayload()
+	payload.AgentID = new("not-a-uuid")
+	_, err := ti.service.ListChats(ctx, payload)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 // TestListChats_ManagedAssistant_SeesAllChats verifies that the managed
@@ -415,7 +939,7 @@ func TestListChats_OrgAdmin_FilterByExternalUserID(t *testing.T) {
 }
 
 // TestListChats_OrgAdmin_FilterByUserID verifies that an org admin can narrow
-// results to a specific Gram user via the payload filter.
+// results to a specific Speakeasy user via the payload filter.
 func TestListChats_OrgAdmin_FilterByUserID(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
@@ -511,7 +1035,7 @@ func TestListChats_Filter_SearchResolvedUserEmail(t *testing.T) {
 	require.NotNil(t, authCtx.Email)
 
 	now := time.Now().UTC()
-	chatID, err := repo.New(ti.conn).UpsertExternalChat(ctx, repo.UpsertExternalChatParams{
+	upserted, err := repo.New(ti.conn).UpsertExternalChat(ctx, repo.UpsertExternalChatParams{
 		ID:             uuid.New(),
 		ProjectID:      ti.projectID,
 		OrganizationID: ti.orgID,
@@ -530,7 +1054,7 @@ func TestListChats_Filter_SearchResolvedUserEmail(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
-	require.Equal(t, chatID.String(), result.Chats[0].ID)
+	require.Equal(t, upserted.ID.String(), result.Chats[0].ID)
 
 	payload.Offset = 1
 	result, err = ti.service.ListChats(ctx, payload)
@@ -594,7 +1118,7 @@ func TestListChats_Filter_HasRisk_True(t *testing.T) {
 	risky := seedChat(t, ctx, ti, "", "ext-risk", "risky chat")
 	_ = seedChat(t, ctx, ti, "", "ext-risk", "safe chat")
 
-	seedRiskOnChat(t, ctx, ti, risky, true)
+	seedRiskOnChat(t, ctx, ti, risky)
 
 	hasRisk := "true"
 	payload := defaultPayload()
@@ -617,7 +1141,7 @@ func TestListChats_Filter_HasRisk_False(t *testing.T) {
 	risky := seedChat(t, ctx, ti, "", "ext-risk2", "risky chat")
 	safe := seedChat(t, ctx, ti, "", "ext-risk2", "safe chat")
 
-	seedRiskOnChat(t, ctx, ti, risky, true)
+	seedRiskOnChat(t, ctx, ti, risky)
 
 	hasRisk := "false"
 	payload := defaultPayload()
@@ -643,10 +1167,10 @@ func TestListChats_Filter_MinRiskScore(t *testing.T) {
 	_ = seedChat(t, ctx, ti, "", "ext-minrisk", "safe chat")
 
 	// high accrues 3 findings, low accrues 1, safe none.
-	seedRiskOnChat(t, ctx, ti, high, true)
-	seedRiskOnChat(t, ctx, ti, high, true)
-	seedRiskOnChat(t, ctx, ti, high, true)
-	seedRiskOnChat(t, ctx, ti, low, true)
+	seedRiskOnChat(t, ctx, ti, high)
+	seedRiskOnChat(t, ctx, ti, high)
+	seedRiskOnChat(t, ctx, ti, high)
+	seedRiskOnChat(t, ctx, ti, low)
 
 	// Threshold 3 is inclusive: only the chat with exactly 3 findings qualifies.
 	min3 := 3
@@ -669,6 +1193,93 @@ func TestListChats_Filter_MinRiskScore(t *testing.T) {
 	result, err = ti.service.ListChats(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, 2, result.Total)
+}
+
+func TestListChats_ClickHouseFindingEligibility(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-ch-risk")
+
+	r := repo.New(ti.conn)
+	high := seedChat(t, ctx, ti, "", "ext-ch-risk", "high policy score")
+	low := seedChat(t, ctx, ti, "", "ext-ch-risk", "low policy score")
+	hidden := seedChat(t, ctx, ti, "", "ext-ch-risk", "ineligible findings")
+	safe := seedChat(t, ctx, ti, "", "ext-ch-risk", "safe")
+	highMessage, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{ChatID: high, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}})
+	require.NoError(t, err)
+	lowMessage, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{ChatID: low, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}})
+	require.NoError(t, err)
+	hiddenMessage, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{ChatID: hidden, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}})
+	require.NoError(t, err)
+	highPolicy, err := r.SeedRiskPolicy(ctx, repo.SeedRiskPolicyParams{ProjectID: ti.projectID, OrganizationID: ti.orgID, Score: 8})
+	require.NoError(t, err)
+	lowPolicy, err := r.SeedRiskPolicy(ctx, repo.SeedRiskPolicyParams{ProjectID: ti.projectID, OrganizationID: ti.orgID, Score: 3})
+	require.NoError(t, err)
+	disabledPolicy, err := r.SeedDisabledRiskPolicy(ctx, repo.SeedDisabledRiskPolicyParams{ProjectID: ti.projectID, OrganizationID: ti.orgID})
+	require.NoError(t, err)
+
+	rows := []riskchrepo.RiskFindingRow{
+		seedClickHouseFinding(t, ti, uuid.New(), high, highMessage, highPolicy),
+		seedClickHouseFinding(t, ti, uuid.New(), high, highMessage, highPolicy),
+		seedClickHouseFinding(t, ti, uuid.New(), low, lowMessage, lowPolicy),
+		seedClickHouseFinding(t, ti, uuid.New(), hidden, hiddenMessage, disabledPolicy),
+	}
+	now := time.Now().UTC()
+	excluded := seedClickHouseFinding(t, ti, uuid.New(), hidden, hiddenMessage, highPolicy)
+	excluded.ExcludedAt = &now
+	shadow := seedClickHouseFinding(t, ti, uuid.New(), hidden, hiddenMessage, highPolicy)
+	shadow.Shadow = true
+	deadLetter := seedClickHouseFinding(t, ti, uuid.New(), hidden, hiddenMessage, highPolicy)
+	deadLetter.DeadLetterReason = "fixture"
+	dismissed := seedClickHouseFinding(t, ti, uuid.New(), hidden, hiddenMessage, highPolicy)
+	dismissal := dismissed
+	dismissal.FalsePositiveAt = &now
+	dismissal.EventKind = riskchrepo.EventKindSuppression
+	rows = append(rows, excluded, shadow, deadLetter, dismissed, dismissal)
+	require.NoError(t, riskchrepo.New(ti.chConn).InsertRiskFindings(ctx, rows))
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 4, result.Total)
+	counts := make(map[string]int, len(result.Chats))
+	for _, item := range result.Chats {
+		require.NotNil(t, item.RiskFindingsCount)
+		counts[item.ID] = *item.RiskFindingsCount
+	}
+	require.Equal(t, 2, counts[high.String()])
+	require.Equal(t, 1, counts[low.String()])
+	require.Zero(t, counts[hidden.String()])
+	require.Zero(t, counts[safe.String()])
+
+	hasRisk := "true"
+	withRisk := defaultPayload()
+	withRisk.HasRisk = &hasRisk
+	result, err = ti.service.ListChats(ctx, withRisk)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	require.ElementsMatch(t, []string{high.String(), low.String()}, []string{result.Chats[0].ID, result.Chats[1].ID})
+
+	hasRisk = "false"
+	withoutRisk := defaultPayload()
+	withoutRisk.HasRisk = &hasRisk
+	result, err = ti.service.ListChats(ctx, withoutRisk)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	require.ElementsMatch(t, []string{hidden.String(), safe.String()}, []string{result.Chats[0].ID, result.Chats[1].ID})
+
+	// min_risk_score is a live finding count threshold, independent of policy score.
+	minimumCount := 2
+	scored := defaultPayload()
+	scored.MinRiskScore = &minimumCount
+	result, err = ti.service.ListChats(ctx, scored)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Equal(t, high.String(), result.Chats[0].ID)
+
+	overview, err := ti.service.LoadChatOverview(ctx, &gen.LoadChatOverviewPayload{ID: high.String()})
+	require.NoError(t, err)
+	require.NotNil(t, overview.RiskFindingsCount)
+	require.Equal(t, 2, *overview.RiskFindingsCount)
 }
 
 // TestListChats_Filter_DateRange verifies that from/to filters include only chats created within
@@ -818,6 +1429,64 @@ func TestListChats_SortByLastMessageTimestampAscending(t *testing.T) {
 	require.Equal(t, lastActiveChat.String(), result.Chats[1].ID)
 }
 
+// TestListChats_SortByNumMessages verifies that the message count is computed
+// before paging when it drives the order, and that every page row reports it.
+func TestListChats_SortByNumMessages(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-num-messages")
+	r := repo.New(ti.conn)
+
+	now := time.Now().UTC()
+	seedWithMessages := func(title string, count int) uuid.UUID {
+		chatID := seedChat(t, ctx, ti, "", "ext-num-messages", title)
+		for i := range count {
+			_, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+				ChatID:    chatID,
+				ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+				CreatedAt: pgtype.Timestamptz{Time: now.Add(time.Duration(i-count) * time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
+			})
+			require.NoError(t, err)
+		}
+		return chatID
+	}
+	oneMessage := seedWithMessages("one", 1)
+	threeMessages := seedWithMessages("three", 3)
+	twoMessages := seedWithMessages("two", 2)
+
+	payload := defaultPayload()
+	payload.SortBy = "num_messages"
+	payload.SortOrder = "desc"
+	payload.Limit = 2
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Len(t, result.Chats, 2)
+	require.Equal(t, threeMessages.String(), result.Chats[0].ID)
+	require.Equal(t, 3, result.Chats[0].NumMessages)
+	require.Equal(t, twoMessages.String(), result.Chats[1].ID)
+	require.Equal(t, 2, result.Chats[1].NumMessages)
+
+	payload.Offset = 2
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, oneMessage.String(), result.Chats[0].ID)
+	require.Equal(t, 1, result.Chats[0].NumMessages)
+
+	payload.Offset = 0
+	payload.SortOrder = "asc"
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 2)
+	require.Equal(t, oneMessage.String(), result.Chats[0].ID)
+	require.Equal(t, 1, result.Chats[0].NumMessages)
+	require.Equal(t, twoMessages.String(), result.Chats[1].ID)
+	require.Equal(t, 2, result.Chats[1].NumMessages)
+}
+
 // TestListChats_Pagination verifies that limit/offset correctly pages through results and that
 // the total count reflects all matching chats regardless of the page window.
 func TestListChats_Pagination(t *testing.T) {
@@ -872,7 +1541,7 @@ func TestListChats_RiskFindingsCountInResult(t *testing.T) {
 
 	chatID := seedChat(t, ctx, ti, "", "ext-count", "chat with risk")
 	for range 3 {
-		seedRiskOnChat(t, ctx, ti, chatID, true)
+		seedRiskOnChat(t, ctx, ti, chatID)
 	}
 
 	result, err := ti.service.ListChats(ctx, defaultPayload())
@@ -1106,4 +1775,76 @@ func TestListChats_Filter_Source_ExpandsAliases(t *testing.T) {
 	}
 	require.True(t, got[newStyle.String()], "expected claude-code chat in results")
 	require.True(t, got[legacy.String()], "expected legacy ClaudeCode chat in results")
+}
+
+func TestListChats_NumMessagesIgnoresOtherProjectRows(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	r := repo.New(ti.conn)
+
+	chatID := seedChat(t, ctx, ti, "", "ext-drift", "drifted stamp chat")
+	early := time.Date(2026, 7, 16, 16, 20, 0, 0, time.UTC)
+	late := time.Date(2026, 7, 16, 21, 41, 0, 0, time.UTC)
+	_, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: early, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: early.Add(time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	otherProject := createProjectInSameOrg(t, ti)
+	_, err = r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: otherProject, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: late, Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, chatID.String(), result.Chats[0].ID)
+	require.Equal(t, 2, result.Chats[0].NumMessages,
+		"list count must match the transcript, which filters project_id")
+	// Compare instants, not strings: the driver renders the timestamp in the
+	// local zone, so a formatted comparison only passes when TZ=UTC.
+	lastMessageAt, err := time.Parse(time.RFC3339, result.Chats[0].LastMessageTimestamp)
+	require.NoError(t, err)
+	require.WithinDuration(t, early.Add(time.Minute), lastMessageAt, 0,
+		"a later sibling-project stamp must not move last_message_timestamp")
+}
+
+func TestListChatsSpeakeasySlackSurface(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	slackChat := seedChatWithSource(t, ctx, ti, "ext-slack", "assistants")
+	ordinaryChat := seedChatWithSource(t, ctx, ti, "ext-assistant", "assistants")
+	require.NoError(t, assistantsrepo.New(ti.conn).UpsertAssistantChat(ctx, assistantsrepo.UpsertAssistantChatParams{
+		ChatID: slackChat, ProjectID: ti.projectID, OrganizationID: ti.orgID, UserID: pgtype.Text{}, Title: pgtype.Text{}, SessionSurface: conv.ToPGText("speakeasy-slack"),
+	}))
+	sources, err := ti.service.ListSources(ctx, &gen.ListSourcesPayload{})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"assistants", "speakeasy-slack"}, sources.Sources)
+	for _, tc := range []struct {
+		source string
+		id     uuid.UUID
+	}{{"speakeasy-slack", slackChat}, {"assistants", ordinaryChat}} {
+		payload := defaultPayload()
+		payload.Source = &tc.source
+		result, err := ti.service.ListChats(ctx, payload)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.Total)
+		require.Len(t, result.Chats, 1)
+		require.Equal(t, tc.id.String(), result.Chats[0].ID)
+		require.Equal(t, &tc.source, result.Chats[0].Source)
+	}
 }

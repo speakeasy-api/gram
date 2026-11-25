@@ -70,6 +70,9 @@ type CreateRemoteSessionIssuerRequestBody struct {
 	ScopesSupported []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	// Grant types advertised by the issuer.
 	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
 	// Response types advertised by the issuer.
 	ResponseTypesSupported []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
 	// Token endpoint auth methods advertised by the issuer.
@@ -88,6 +91,46 @@ type CreateRemoteSessionIssuerRequestBody struct {
 	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
 	// pre-flight outbound CIMD. Default false.
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// Route this issuer's OAuth endpoint calls through an MCP tunnel in the same
+	// project. Platform admins only.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	// OpenID Connect userinfo endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	IntrospectionEndpointAuthMethodsSupported []string `form:"introspection_endpoint_auth_methods_supported,omitempty" json:"introspection_endpoint_auth_methods_supported,omitempty" xml:"introspection_endpoint_auth_methods_supported,omitempty"`
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field stores
+	// null ("not captured"), distinct from an empty array ("the issuer advertises
+	// none").
+	IDTokenSigningAlgValuesSupported []string `form:"id_token_signing_alg_values_supported,omitempty" json:"id_token_signing_alg_values_supported,omitempty" xml:"id_token_signing_alg_values_supported,omitempty"`
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	ClaimsSupported []string `form:"claims_supported,omitempty" json:"claims_supported,omitempty" xml:"claims_supported,omitempty"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field stores null ("not captured").
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field stores null ("not captured").
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
+	// authorize redirect in place of the resolved scope set. Omit or send an empty
+	// array to leave it unset.
+	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit to leave it unset: such a login requests the provider's whole
+	// scopes_supported.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
+	// unset: the parameter is then sent, and a login or refresh the issuer answers
+	// with invalid_target is retried once without it. Set false to never send it.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
 }
 
 // UpdateRemoteSessionIssuerRequestBody is the type of the
@@ -127,11 +170,14 @@ type UpdateRemoteSessionIssuerRequestBody struct {
 	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
 	// Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any
 	// other value must be an absolute http(s) URL.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	OpTosURI            *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported     []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
+	ResponseTypesSupported              []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Omitting the field leaves the stored
 	// value unchanged; an empty array records that the issuer advertises no
@@ -142,6 +188,46 @@ type UpdateRemoteSessionIssuerRequestBody struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// Set or clear this issuer's MCP tunnel binding. Omission keeps the binding;
+	// an empty string clears it; any other value must be a tunneled MCP server in
+	// the same project. Platform admins only.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	// Set or clear the OpenID Connect userinfo endpoint. An empty string clears it
+	// to NULL; any other value must be an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// Set or clear the RFC 7662 token introspection endpoint. An empty string
+	// clears it to NULL; any other value must be an absolute https URL, or http on
+	// loopback.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `form:"introspection_endpoint_auth_methods_supported,omitempty" json:"introspection_endpoint_auth_methods_supported,omitempty" xml:"introspection_endpoint_auth_methods_supported,omitempty"`
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field leaves
+	// the stored value unchanged; an empty array records that the issuer
+	// advertises none.
+	IDTokenSigningAlgValuesSupported []string `form:"id_token_signing_alg_values_supported,omitempty" json:"id_token_signing_alg_values_supported,omitempty" xml:"id_token_signing_alg_values_supported,omitempty"`
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	ClaimsSupported []string `form:"claims_supported,omitempty" json:"claims_supported,omitempty" xml:"claims_supported,omitempty"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field leaves the stored value unchanged.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field leaves the stored value unchanged.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Set or clear the operator-pinned scope request. Omitting the field (or
+	// sending null) leaves the stored value unchanged; an empty array clears it.
+	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit or send null to keep the stored value; false restores the
+	// default.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
+	// field leaves the stored value unchanged.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
 }
 
 // FetchRemoteSessionIssuerMetadataResponseBody is the type of the
@@ -169,11 +255,14 @@ type FetchRemoteSessionIssuerMetadataResponseBody struct {
 	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
 	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised
 	// or when the advertised value is not an absolute http(s) URL.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	OpTosURI            *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported     []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
+	ResponseTypesSupported              []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// PKCE code challenge methods advertised in the discovery document (RFC 8414
 	// code_challenge_methods_supported). Null when the document omits the field.
 	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
@@ -184,6 +273,33 @@ type FetchRemoteSessionIssuerMetadataResponseBody struct {
 	// Whether the issuer advertises support for a Client ID Metadata Document URL
 	// as client_id (OAuth CIMD draft), parsed from the discovery document.
 	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// OpenID Connect userinfo endpoint advertised in the discovery document. Null
+	// when not advertised.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint advertised in the discovery document.
+	// Null when not advertised.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null when
+	// the document omits the field.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null when the document omits
+	// the field.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null when the
+	// document omits the field.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the discovery document advertises OpenID Connect Back-Channel Logout
+	// support; false when the document omits the field.
+	BackchannelLogoutSupported bool `form:"backchannel_logout_supported" json:"backchannel_logout_supported" xml:"backchannel_logout_supported"`
+	// Whether the discovery document advertises the RFC 9207 iss parameter in
+	// authorization responses; false when the document omits the field.
+	AuthorizationResponseIssParameterSupported bool `form:"authorization_response_iss_parameter_supported" json:"authorization_response_iss_parameter_supported" xml:"authorization_response_iss_parameter_supported"`
+	// Operator-pinned scope request. Never proposed by discovery, so always null
+	// on a draft.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Never proposed
+	// by discovery, so always null on a draft.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
 	DiscoveryWarnings []string `form:"discovery_warnings" json:"discovery_warnings" xml:"discovery_warnings"`
 }
@@ -232,6 +348,12 @@ type CreateRemoteSessionIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
+	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
+	// When the persisted JWK Set becomes stale under the upstream cache policy.
+	// Null until the first successful refresh.
+	JwksCacheExpiresAt *string `form:"jwks_cache_expires_at,omitempty" json:"jwks_cache_expires_at,omitempty" xml:"jwks_cache_expires_at,omitempty"`
 	// RFC 8414 service_documentation; developer documentation for the issuer. Null
 	// when not advertised.
 	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
@@ -239,11 +361,14 @@ type CreateRemoteSessionIssuerResponseBody struct {
 	// advertised.
 	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
 	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	OpTosURI            *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported     []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
+	ResponseTypesSupported              []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Null when neither discovery nor an
 	// operator has captured the field for this issuer yet; an empty array means
@@ -255,9 +380,49 @@ type CreateRemoteSessionIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
+	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
+	// stated it. Null when unset; false omits the parameter on every grant.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateRemoteSessionIssuerResponseBody is the type of the
@@ -291,6 +456,12 @@ type UpdateRemoteSessionIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
+	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
+	// When the persisted JWK Set becomes stale under the upstream cache policy.
+	// Null until the first successful refresh.
+	JwksCacheExpiresAt *string `form:"jwks_cache_expires_at,omitempty" json:"jwks_cache_expires_at,omitempty" xml:"jwks_cache_expires_at,omitempty"`
 	// RFC 8414 service_documentation; developer documentation for the issuer. Null
 	// when not advertised.
 	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
@@ -298,11 +469,14 @@ type UpdateRemoteSessionIssuerResponseBody struct {
 	// advertised.
 	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
 	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	OpTosURI            *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported     []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
+	ResponseTypesSupported              []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Null when neither discovery nor an
 	// operator has captured the field for this issuer yet; an empty array means
@@ -314,9 +488,49 @@ type UpdateRemoteSessionIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
+	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
+	// stated it. Null when unset; false omits the parameter on every grant.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListRemoteSessionIssuersResponseBody is the type of the
@@ -358,6 +572,12 @@ type GetRemoteSessionIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
+	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
+	// When the persisted JWK Set becomes stale under the upstream cache policy.
+	// Null until the first successful refresh.
+	JwksCacheExpiresAt *string `form:"jwks_cache_expires_at,omitempty" json:"jwks_cache_expires_at,omitempty" xml:"jwks_cache_expires_at,omitempty"`
 	// RFC 8414 service_documentation; developer documentation for the issuer. Null
 	// when not advertised.
 	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
@@ -365,11 +585,14 @@ type GetRemoteSessionIssuerResponseBody struct {
 	// advertised.
 	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
 	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	OpTosURI            *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported     []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
+	ResponseTypesSupported              []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Null when neither discovery nor an
 	// operator has captured the field for this issuer yet; an empty array means
@@ -381,9 +604,49 @@ type GetRemoteSessionIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
+	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
+	// stated it. Null when unset; false omits the parameter on every grant.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetRemoteSessionIssuerDuplicatePreflightResponseBody is the type of the
@@ -1959,6 +2222,12 @@ type RemoteSessionIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
+	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
+	// When the persisted JWK Set becomes stale under the upstream cache policy.
+	// Null until the first successful refresh.
+	JwksCacheExpiresAt *string `form:"jwks_cache_expires_at,omitempty" json:"jwks_cache_expires_at,omitempty" xml:"jwks_cache_expires_at,omitempty"`
 	// RFC 8414 service_documentation; developer documentation for the issuer. Null
 	// when not advertised.
 	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
@@ -1966,11 +2235,14 @@ type RemoteSessionIssuerResponseBody struct {
 	// advertised.
 	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
 	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	OpTosURI            *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported     []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
+	ResponseTypesSupported              []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Null when neither discovery nor an
 	// operator has captured the field for this issuer yet; an empty array means
@@ -1982,9 +2254,90 @@ type RemoteSessionIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
+	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
+	// stated it. Null when unset; false omits the parameter on every grant.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
+	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
+}
+
+// EMAProviderResponseBody is used to define fields on response body types.
+type EMAProviderResponseBody struct {
+	// external or speakeasy.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The external provider's remote session issuer. Omitted for speakeasy, and in
+	// the organization-wide default order, where an external entry stands for each
+	// endpoint's own trusted issuer.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization's internal session issuer, for speakeasy.
+	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// When the vendor last accepted an assertion from this provider anywhere in
+	// the organization, so the vendor already trusts it, from cached credentials
+	// that still hold an access token. Attributed to the exact issuer that
+	// vouched; the organization-wide default's external entry takes the newest
+	// acceptance of any external issuer. Set on every response that returns an
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
@@ -2028,6 +2381,11 @@ func NewFetchRemoteSessionIssuerMetadataResponseBody(res *types.RemoteSessionIss
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 res.ResourceIndicatorSupported,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -2039,6 +2397,12 @@ func NewFetchRemoteSessionIssuerMetadataResponseBody(res *types.RemoteSessionIss
 		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
 		for i, val := range res.GrantTypesSupported {
 			body.GrantTypesSupported[i] = val
+		}
+	}
+	if res.AuthorizationGrantProfilesSupported != nil {
+		body.AuthorizationGrantProfilesSupported = make([]string, len(res.AuthorizationGrantProfilesSupported))
+		for i, val := range res.AuthorizationGrantProfilesSupported {
+			body.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if res.ResponseTypesSupported != nil {
@@ -2057,6 +2421,30 @@ func NewFetchRemoteSessionIssuerMetadataResponseBody(res *types.RemoteSessionIss
 		body.CodeChallengeMethodsSupported = make([]string, len(res.CodeChallengeMethodsSupported))
 		for i, val := range res.CodeChallengeMethodsSupported {
 			body.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
+		}
+	}
+	if res.ScopeOverride != nil {
+		body.ScopeOverride = make([]string, len(res.ScopeOverride))
+		for i, val := range res.ScopeOverride {
+			body.ScopeOverride[i] = val
 		}
 	}
 	if res.DiscoveryWarnings != nil {
@@ -2107,14 +2495,23 @@ func NewCreateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *C
 		RevocationEndpoint:                res.RevocationEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
 		JwksURI:                           res.JwksURI,
+		JwksFetchedAt:                     res.JwksFetchedAt,
+		JwksCacheExpiresAt:                res.JwksCacheExpiresAt,
 		ServiceDocumentation:              res.ServiceDocumentation,
 		OpPolicyURI:                       res.OpPolicyURI,
 		OpTosURI:                          res.OpTosURI,
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         res.CreatedAt,
-		UpdatedAt:                         res.UpdatedAt,
+		TunneledMcpServerID:               res.TunneledMcpServerID,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          res.OmitScopeFallback,
+		ResourceIndicatorSupported:                 res.ResourceIndicatorSupported,
+		CreatedAt:                                  res.CreatedAt,
+		UpdatedAt:                                  res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -2126,6 +2523,12 @@ func NewCreateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *C
 		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
 		for i, val := range res.GrantTypesSupported {
 			body.GrantTypesSupported[i] = val
+		}
+	}
+	if res.AuthorizationGrantProfilesSupported != nil {
+		body.AuthorizationGrantProfilesSupported = make([]string, len(res.AuthorizationGrantProfilesSupported))
+		for i, val := range res.AuthorizationGrantProfilesSupported {
+			body.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if res.ResponseTypesSupported != nil {
@@ -2145,6 +2548,33 @@ func NewCreateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *C
 		for i, val := range res.CodeChallengeMethodsSupported {
 			body.CodeChallengeMethodsSupported[i] = val
 		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
+		}
+	}
+	if res.ScopeOverride != nil {
+		body.ScopeOverride = make([]string, len(res.ScopeOverride))
+		for i, val := range res.ScopeOverride {
+			body.ScopeOverride[i] = val
+		}
+	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
 	}
 	return body
 }
@@ -2167,14 +2597,23 @@ func NewUpdateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *U
 		RevocationEndpoint:                res.RevocationEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
 		JwksURI:                           res.JwksURI,
+		JwksFetchedAt:                     res.JwksFetchedAt,
+		JwksCacheExpiresAt:                res.JwksCacheExpiresAt,
 		ServiceDocumentation:              res.ServiceDocumentation,
 		OpPolicyURI:                       res.OpPolicyURI,
 		OpTosURI:                          res.OpTosURI,
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         res.CreatedAt,
-		UpdatedAt:                         res.UpdatedAt,
+		TunneledMcpServerID:               res.TunneledMcpServerID,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          res.OmitScopeFallback,
+		ResourceIndicatorSupported:                 res.ResourceIndicatorSupported,
+		CreatedAt:                                  res.CreatedAt,
+		UpdatedAt:                                  res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -2186,6 +2625,12 @@ func NewUpdateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *U
 		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
 		for i, val := range res.GrantTypesSupported {
 			body.GrantTypesSupported[i] = val
+		}
+	}
+	if res.AuthorizationGrantProfilesSupported != nil {
+		body.AuthorizationGrantProfilesSupported = make([]string, len(res.AuthorizationGrantProfilesSupported))
+		for i, val := range res.AuthorizationGrantProfilesSupported {
+			body.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if res.ResponseTypesSupported != nil {
@@ -2205,6 +2650,33 @@ func NewUpdateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *U
 		for i, val := range res.CodeChallengeMethodsSupported {
 			body.CodeChallengeMethodsSupported[i] = val
 		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
+		}
+	}
+	if res.ScopeOverride != nil {
+		body.ScopeOverride = make([]string, len(res.ScopeOverride))
+		for i, val := range res.ScopeOverride {
+			body.ScopeOverride[i] = val
+		}
+	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
 	}
 	return body
 }
@@ -2249,14 +2721,23 @@ func NewGetRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *GetR
 		RevocationEndpoint:                res.RevocationEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
 		JwksURI:                           res.JwksURI,
+		JwksFetchedAt:                     res.JwksFetchedAt,
+		JwksCacheExpiresAt:                res.JwksCacheExpiresAt,
 		ServiceDocumentation:              res.ServiceDocumentation,
 		OpPolicyURI:                       res.OpPolicyURI,
 		OpTosURI:                          res.OpTosURI,
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         res.CreatedAt,
-		UpdatedAt:                         res.UpdatedAt,
+		TunneledMcpServerID:               res.TunneledMcpServerID,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          res.OmitScopeFallback,
+		ResourceIndicatorSupported:                 res.ResourceIndicatorSupported,
+		CreatedAt:                                  res.CreatedAt,
+		UpdatedAt:                                  res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -2268,6 +2749,12 @@ func NewGetRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *GetR
 		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
 		for i, val := range res.GrantTypesSupported {
 			body.GrantTypesSupported[i] = val
+		}
+	}
+	if res.AuthorizationGrantProfilesSupported != nil {
+		body.AuthorizationGrantProfilesSupported = make([]string, len(res.AuthorizationGrantProfilesSupported))
+		for i, val := range res.AuthorizationGrantProfilesSupported {
+			body.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if res.ResponseTypesSupported != nil {
@@ -2287,6 +2774,33 @@ func NewGetRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *GetR
 		for i, val := range res.CodeChallengeMethodsSupported {
 			body.CodeChallengeMethodsSupported[i] = val
 		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
+		}
+	}
+	if res.ScopeOverride != nil {
+		body.ScopeOverride = make([]string, len(res.ScopeOverride))
+		for i, val := range res.ScopeOverride {
+			body.ScopeOverride[i] = val
+		}
+	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
 	}
 	return body
 }
@@ -3572,6 +4086,13 @@ func NewCreateRemoteSessionIssuerPayload(body *CreateRemoteSessionIssuerRequestB
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               body.TunneledMcpServerID,
+		UserinfoEndpoint:                  body.UserinfoEndpoint,
+		IntrospectionEndpoint:             body.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          body.OmitScopeFallback,
+		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -3583,6 +4104,12 @@ func NewCreateRemoteSessionIssuerPayload(body *CreateRemoteSessionIssuerRequestB
 		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
 		for i, val := range body.GrantTypesSupported {
 			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.AuthorizationGrantProfilesSupported != nil {
+		v.AuthorizationGrantProfilesSupported = make([]string, len(body.AuthorizationGrantProfilesSupported))
+		for i, val := range body.AuthorizationGrantProfilesSupported {
+			v.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if body.ResponseTypesSupported != nil {
@@ -3601,6 +4128,30 @@ func NewCreateRemoteSessionIssuerPayload(body *CreateRemoteSessionIssuerRequestB
 		v.CodeChallengeMethodsSupported = make([]string, len(body.CodeChallengeMethodsSupported))
 		for i, val := range body.CodeChallengeMethodsSupported {
 			v.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if body.IntrospectionEndpointAuthMethodsSupported != nil {
+		v.IntrospectionEndpointAuthMethodsSupported = make([]string, len(body.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range body.IntrospectionEndpointAuthMethodsSupported {
+			v.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if body.IDTokenSigningAlgValuesSupported != nil {
+		v.IDTokenSigningAlgValuesSupported = make([]string, len(body.IDTokenSigningAlgValuesSupported))
+		for i, val := range body.IDTokenSigningAlgValuesSupported {
+			v.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if body.ClaimsSupported != nil {
+		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
+		for i, val := range body.ClaimsSupported {
+			v.ClaimsSupported[i] = val
+		}
+	}
+	if body.ScopeOverride != nil {
+		v.ScopeOverride = make([]string, len(body.ScopeOverride))
+		for i, val := range body.ScopeOverride {
+			v.ScopeOverride[i] = val
 		}
 	}
 	v.SessionToken = sessionToken
@@ -3631,6 +4182,13 @@ func NewUpdateRemoteSessionIssuerPayload(body *UpdateRemoteSessionIssuerRequestB
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               body.TunneledMcpServerID,
+		UserinfoEndpoint:                  body.UserinfoEndpoint,
+		IntrospectionEndpoint:             body.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          body.OmitScopeFallback,
+		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -3642,6 +4200,12 @@ func NewUpdateRemoteSessionIssuerPayload(body *UpdateRemoteSessionIssuerRequestB
 		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
 		for i, val := range body.GrantTypesSupported {
 			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.AuthorizationGrantProfilesSupported != nil {
+		v.AuthorizationGrantProfilesSupported = make([]string, len(body.AuthorizationGrantProfilesSupported))
+		for i, val := range body.AuthorizationGrantProfilesSupported {
+			v.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if body.ResponseTypesSupported != nil {
@@ -3662,6 +4226,30 @@ func NewUpdateRemoteSessionIssuerPayload(body *UpdateRemoteSessionIssuerRequestB
 			v.CodeChallengeMethodsSupported[i] = val
 		}
 	}
+	if body.IntrospectionEndpointAuthMethodsSupported != nil {
+		v.IntrospectionEndpointAuthMethodsSupported = make([]string, len(body.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range body.IntrospectionEndpointAuthMethodsSupported {
+			v.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if body.IDTokenSigningAlgValuesSupported != nil {
+		v.IDTokenSigningAlgValuesSupported = make([]string, len(body.IDTokenSigningAlgValuesSupported))
+		for i, val := range body.IDTokenSigningAlgValuesSupported {
+			v.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if body.ClaimsSupported != nil {
+		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
+		for i, val := range body.ClaimsSupported {
+			v.ClaimsSupported[i] = val
+		}
+	}
+	if body.ScopeOverride != nil {
+		v.ScopeOverride = make([]string, len(body.ScopeOverride))
+		for i, val := range body.ScopeOverride {
+			v.ScopeOverride[i] = val
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3671,10 +4259,13 @@ func NewUpdateRemoteSessionIssuerPayload(body *UpdateRemoteSessionIssuerRequestB
 
 // NewListRemoteSessionIssuersPayload builds a remoteSessionIssuers service
 // listRemoteSessionIssuers endpoint payload.
-func NewListRemoteSessionIssuersPayload(cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.ListRemoteSessionIssuersPayload {
+func NewListRemoteSessionIssuersPayload(cursor *string, limit *int, search *string, upstreamHost *string, tier *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.ListRemoteSessionIssuersPayload {
 	v := &remotesessionissuers.ListRemoteSessionIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Search = search
+	v.UpstreamHost = upstreamHost
+	v.Tier = tier
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3753,6 +4344,9 @@ func ValidateCreateRemoteSessionIssuerRequestBody(body *CreateRemoteSessionIssue
 	}
 	if body.LogoAssetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
+	if body.TunneledMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
 	return
 }

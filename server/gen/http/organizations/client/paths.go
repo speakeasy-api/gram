@@ -12,6 +12,16 @@ func GetOrganizationsPath() string {
 	return "/rpc/organizations.get"
 }
 
+// GetGatewayOrganizationsPath returns the URL path to the organizations service getGateway HTTP endpoint.
+func GetGatewayOrganizationsPath() string {
+	return "/rpc/organizations.getGateway"
+}
+
+// GetProjectGatewayOrganizationsPath returns the URL path to the organizations service getProjectGateway HTTP endpoint.
+func GetProjectGatewayOrganizationsPath() string {
+	return "/rpc/organizations.getProjectGateway"
+}
+
 // SendInviteOrganizationsPath returns the URL path to the organizations service sendInvite HTTP endpoint.
 func SendInviteOrganizationsPath() string {
 	return "/rpc/organizations.sendInvite"
@@ -40,6 +50,11 @@ func ListUsersOrganizationsPath() string {
 // RemoveUserOrganizationsPath returns the URL path to the organizations service removeUser HTTP endpoint.
 func RemoveUserOrganizationsPath() string {
 	return "/rpc/organizations.removeUser"
+}
+
+// RevokeMemberSignInsOrganizationsPath returns the URL path to the organizations service revokeMemberSignIns HTTP endpoint.
+func RevokeMemberSignInsOrganizationsPath() string {
+	return "/rpc/organizations.revokeMemberSignIns"
 }
 
 // EnableWebhooksOrganizationsPath returns the URL path to the organizations service enableWebhooks HTTP endpoint.
@@ -75,4 +90,19 @@ func SendEnterpriseAdminOnboardingEmailOrganizationsPath() string {
 // GenerateWorkOSAdminPortalLinkOrganizationsPath returns the URL path to the organizations service generateWorkOSAdminPortalLink HTTP endpoint.
 func GenerateWorkOSAdminPortalLinkOrganizationsPath() string {
 	return "/rpc/organizations.generateWorkOSAdminPortalLink"
+}
+
+// ListSetupTasksOrganizationsPath returns the URL path to the organizations service listSetupTasks HTTP endpoint.
+func ListSetupTasksOrganizationsPath() string {
+	return "/rpc/organizations.listSetupTasks"
+}
+
+// UpdateSetupTaskOrganizationsPath returns the URL path to the organizations service updateSetupTask HTTP endpoint.
+func UpdateSetupTaskOrganizationsPath() string {
+	return "/rpc/organizations.updateSetupTask"
+}
+
+// SubmitOnboardingSurveyOrganizationsPath returns the URL path to the organizations service submitOnboardingSurvey HTTP endpoint.
+func SubmitOnboardingSurveyOrganizationsPath() string {
+	return "/rpc/organizations.submitOnboardingSurvey"
 }

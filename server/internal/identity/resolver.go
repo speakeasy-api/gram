@@ -49,11 +49,11 @@ type Record struct {
 	Kind Kind
 
 	// CanonicalURN is the identity URN callers should navigate to. It is the
-	// user URN whenever the subject owns a Gram user row, so links built from
+	// user URN whenever the subject owns a Speakeasy user row, so links built from
 	// an email and from a user id converge on one URL.
 	CanonicalURN urn.Identity
 
-	// UserIDs are the Gram user ids the subject resolves to. Normally one;
+	// UserIDs are the Speakeasy user ids the subject resolves to. Normally one;
 	// an email owned by both a directory row and a linked account resolves
 	// to both, and the first is the directory owner.
 	UserIDs []string
@@ -81,7 +81,7 @@ type Record struct {
 	Directory *directory.UserProfile
 }
 
-// GramUserID is the subject's owning Gram user id, or "" when the identity
+// GramUserID is the subject's owning Speakeasy user id, or "" when the identity
 // resolves to no directory row.
 func (i Record) GramUserID() string {
 	if len(i.UserIDs) == 0 {
@@ -99,7 +99,7 @@ func (i Record) PrimaryEmail() string {
 }
 
 // Resolver maps any identity key to the full set of identifiers the subject
-// is known by across Gram's subsystems.
+// is known by across Speakeasy's subsystems.
 type Resolver struct {
 	logger    *slog.Logger
 	users     *usersRepo.Queries
@@ -117,17 +117,17 @@ func NewResolver(logger *slog.Logger, db *pgxpool.Pool) *Resolver {
 	}
 }
 
-// Subject is the identifier fan-out for one person: the Gram user ids and the
+// Subject is the identifier fan-out for one person: the Speakeasy user ids and the
 // emails their work can be attributed to.
 type Subject struct {
-	// UserIDs are the Gram user ids the identifier resolves to.
+	// UserIDs are the Speakeasy user ids the identifier resolves to.
 	UserIDs []string
 
 	// Emails are every address attributable to the same person.
 	Emails []string
 }
 
-// ExpandIdentifier resolves an email or a Gram user id into every identifier
+// ExpandIdentifier resolves an email or a Speakeasy user id into every identifier
 // the same person's work is recorded under.
 //
 // Personal accounts are the reason the linked-account lookup is here: their
@@ -153,42 +153,26 @@ func (r *Resolver) ExpandIdentifier(ctx context.Context, orgID, identifier strin
 	return r.ExpandUserID(ctx, orgID, identifier), nil
 }
 
-// ExpandEmail folds an address, and ExpandUserID a Gram user id, onto the same
+// ExpandEmail folds an address, and ExpandUserID a Speakeasy user id, onto the same
 // set of identifiers. Callers that already know which namespace they hold — an
 // identity URN carries its kind — must use these rather than the classifier,
 // so a user id shaped like an address cannot resolve against someone else.
 func (r *Resolver) ExpandEmail(ctx context.Context, orgID, email string) Subject {
 	subject := Subject{UserIDs: nil, Emails: []string{email, conv.NormalizeEmail(email)}}
 
-	rows, err := r.users.GetConnectedUsersMatchingEmails(ctx, usersRepo.GetConnectedUsersMatchingEmailsParams{
-		Emails:         subject.Emails,
-		OrganizationID: orgID,
-	})
-	if err != nil {
-		r.logger.WarnContext(ctx, "failed to resolve identity email to org user", attr.SlogError(err))
-		return subject
+	ownership := r.emailOwners(ctx, orgID, []string{email})[conv.NormalizeEmail(email)]
+	if ownership.userID != "" {
+		subject.UserIDs = append(subject.UserIDs, ownership.userID)
 	}
-
-	switch len(rows) {
-	case 0:
-		// Directory ownership wins, so a provider account is only
-		// reverse-resolved when the address has no directory row at all.
-		if owner, ok := r.accountOwner(ctx, orgID, subject.Emails); ok {
-			subject.UserIDs = append(subject.UserIDs, owner)
-			// A linked account email resolves through user_accounts rather
-			// than users, so the owner's own address still has to be added.
-			subject.Emails = append(subject.Emails, r.userEmails(ctx, orgID, subject.UserIDs)...)
-		}
-
-	case 1:
+	switch {
+	case ownership.directoryEmail != "":
 		// The member row already carries the canonical email, so there is
 		// nothing more to look up by id.
-		subject.UserIDs = append(subject.UserIDs, rows[0].ID)
-		subject.Emails = append(subject.Emails, rows[0].Email, conv.NormalizeEmail(rows[0].Email))
-
-	default:
-		// More than one member matches: ownership is ambiguous, so the address
-		// stays attached to no user.
+		subject.Emails = append(subject.Emails, ownership.directoryEmail, conv.NormalizeEmail(ownership.directoryEmail))
+	case ownership.userID != "":
+		// A linked account email resolves through user_accounts rather than
+		// users, so the owner's own address still has to be added.
+		subject.Emails = append(subject.Emails, r.userEmails(ctx, orgID, subject.UserIDs)...)
 	}
 
 	r.completeSubject(ctx, orgID, &subject)
@@ -196,7 +180,82 @@ func (r *Resolver) ExpandEmail(ctx context.Context, orgID, email string) Subject
 	return subject
 }
 
-// ExpandUserID folds a Gram user id onto every identifier the same person's
+// EmailOwnerUserIDs returns the Speakeasy user who owns each address, by the
+// same rule ExpandEmail applies, keyed by normalized address. Addresses nobody
+// owns are absent. It is the cheaper call for a caller that needs only the
+// owners and not every address they are known by, and it costs at most two
+// queries however many addresses it is given.
+func (r *Resolver) EmailOwnerUserIDs(ctx context.Context, orgID string, emails []string) map[string]string {
+	ownerships := r.emailOwners(ctx, orgID, emails)
+	owners := make(map[string]string, len(ownerships))
+	for key, ownership := range ownerships {
+		owners[key] = ownership.userID
+	}
+	return owners
+}
+
+// emailOwnership is who owns an address, and their directory email when
+// ownership came from a directory row.
+type emailOwnership struct {
+	userID         string
+	directoryEmail string
+}
+
+// emailOwners returns the owner of each address, keyed by normalized address;
+// addresses nobody owns are absent. Directory ownership wins, so a provider
+// account is only reverse-resolved for addresses with no directory row at
+// all. More than one matching member, or more than one linked-account owner,
+// makes ownership ambiguous, so the address resolves to nobody. Best effort:
+// a failed lookup also resolves to nobody.
+func (r *Resolver) emailOwners(ctx context.Context, orgID string, emails []string) map[string]emailOwnership {
+	// Each address is matched both verbatim and normalized; results are
+	// grouped under the normalized form.
+	query := make([]string, 0, len(emails)*2)
+	for _, email := range emails {
+		if key := conv.NormalizeEmail(email); key != "" {
+			query = append(query, email, key)
+		}
+	}
+	query = conv.DedupeNonEmpty(query)
+	if len(query) == 0 {
+		return nil
+	}
+
+	rows, err := r.users.GetConnectedUsersMatchingEmails(ctx, usersRepo.GetConnectedUsersMatchingEmailsParams{
+		Emails:         query,
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		r.logger.WarnContext(ctx, "failed to resolve identity email to org user", attr.SlogError(err))
+		return nil
+	}
+
+	members := make(map[string][]usersRepo.User, len(rows))
+	for _, row := range rows {
+		key := conv.NormalizeEmail(row.Email)
+		members[key] = append(members[key], row)
+	}
+
+	owners := make(map[string]emailOwnership, len(query))
+	unclaimed := make([]string, 0, len(query))
+	for _, email := range query {
+		key := conv.NormalizeEmail(email)
+		switch len(members[key]) {
+		case 0:
+			unclaimed = append(unclaimed, email)
+		case 1:
+			owners[key] = emailOwnership{userID: members[key][0].ID, directoryEmail: members[key][0].Email}
+		}
+	}
+
+	for key, owner := range r.accountOwners(ctx, orgID, unclaimed) {
+		owners[key] = emailOwnership{userID: owner, directoryEmail: ""}
+	}
+
+	return owners
+}
+
+// ExpandUserID folds a Speakeasy user id onto every identifier the same person's
 // work is recorded under.
 func (r *Resolver) ExpandUserID(ctx context.Context, orgID, userID string) Subject {
 	subject := Subject{
@@ -218,29 +277,38 @@ func (r *Resolver) completeSubject(ctx context.Context, orgID string, subject *S
 	subject.UserIDs = conv.DedupeNonEmpty(subject.UserIDs)
 }
 
-// accountOwner returns the single Gram user who linked an AI provider account
-// under one of these addresses. No owner and several owners are the same
-// answer: nobody the usage can be attributed to.
-func (r *Resolver) accountOwner(ctx context.Context, orgID string, emails []string) (string, bool) {
+// accountOwners returns, keyed by normalized address, the single Speakeasy user
+// who linked an AI provider account under each address. No owner and several
+// owners are the same answer: nobody the usage can be attributed to, so the
+// address is absent.
+func (r *Resolver) accountOwners(ctx context.Context, orgID string, emails []string) map[string]string {
+	if len(emails) == 0 {
+		return nil
+	}
+
 	accounts, err := r.hooks.ListUserAccountsByEmails(ctx, hooksRepo.ListUserAccountsByEmailsParams{
 		OrganizationID: orgID,
 		Emails:         emails,
 	})
 	if err != nil {
 		r.logger.WarnContext(ctx, "failed to resolve identity account email to org user", attr.SlogError(err))
-		return "", false
+		return nil
 	}
 
-	owners := make([]string, 0, len(accounts))
+	candidates := make(map[string][]string, len(accounts))
 	for _, account := range accounts {
-		owners = append(owners, conv.FromPGTextOrEmpty[string](account.UserID))
-	}
-	owners = conv.DedupeNonEmpty(owners)
-	if len(owners) != 1 {
-		return "", false
+		key := conv.NormalizeEmail(conv.FromPGTextOrEmpty[string](account.Email))
+		candidates[key] = append(candidates[key], conv.FromPGTextOrEmpty[string](account.UserID))
 	}
 
-	return owners[0], true
+	owners := make(map[string]string, len(candidates))
+	for key, ids := range candidates {
+		if ids = conv.DedupeNonEmpty(ids); len(ids) == 1 {
+			owners[key] = ids[0]
+		}
+	}
+
+	return owners
 }
 
 // userEmails returns the addresses of the given org members, both verbatim and
@@ -289,7 +357,7 @@ func (r *Resolver) appendLinkedAccountEmails(ctx context.Context, orgID string, 
 }
 
 // isEmailIdentifier reports whether an identifier is an address rather than a
-// Gram user id. A bare "@" test would classify anything containing one as an
+// Speakeasy user id. A bare "@" test would classify anything containing one as an
 // address and fold it against every email-keyed row, so the value is parsed.
 // Only the bare form counts: a display name ("Dev User <dev@example.com>") or a
 // quoted local part is not what any subsystem stores an address under, and

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	deprepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -40,7 +41,7 @@ func TokenV1(enc *encryption.Client, req TokenRequestV1) (string, error) {
 	return fmt.Sprintf("v01.%s", encBs), nil
 }
 
-// CallToolPayload is the request body Gram POSTs to a function runner's
+// CallToolPayload is the request body Speakeasy POSTs to a function runner's
 // /tool-call endpoint. Mirrored by the runner's own decode type in
 // `functions/internal/runner/handle_tool_call.go` — the two live in separate
 // `internal` subtrees and cannot import one another, so they must be changed
@@ -80,7 +81,7 @@ type ReadResourcePayload struct {
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
 }
 
-func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, enc *encryption.Client, token string, scheme *security.JWTScheme) (context.Context, error) {
+func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, keys *runnerkeys.Keys, token string, scheme *security.JWTScheme) (context.Context, error) {
 	logger = logger.With(attr.SlogComponent("functions_auth"))
 
 	if scheme == nil || scheme.Name != constants.FunctionTokenSecurityScheme {
@@ -111,12 +112,16 @@ func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, enc *enc
 			return nil, fmt.Errorf("function credentials not found")
 		}
 
-		unsealed, err := enc.Decrypt(string(rows[0].EncryptionKey.Reveal()))
+		key, err := keys.Open(ctx, runnerkeys.Stored{
+			OrganizationID: rows[0].OrganizationID,
+			Platform:       rows[0].EncryptionKey,
+			Org:            rows[0].EncryptionKeyOrgEncrypted,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("unseal function encryption key: %w", err)
 		}
 
-		return []byte(unsealed), nil
+		return key, nil
 	}, jwt.WithExpirationRequired(), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	if err != nil {
 		err = fmt.Errorf("parse runner jwt: %w", err)

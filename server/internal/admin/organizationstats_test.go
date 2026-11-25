@@ -150,7 +150,7 @@ func TestGetOrganizationStats_AgreesWithTheListItNavigatesTo(t *testing.T) {
 	// both statuses to see the same rows.
 	list, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{
 		TrialStates:    []string{"ending_soon"},
-		DisabledStates: []string{"active", "disabled"},
+		DisabledStatus: new("all"),
 	})
 	require.NoError(t, err)
 
@@ -180,7 +180,7 @@ func TestGetOrganizationStats_IgnoresFilters(t *testing.T) {
 	_, err = svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{
 		AccountTypes:   []string{"free"},
 		TrialStates:    []string{"expired"},
-		DisabledStates: []string{"disabled"},
+		DisabledStatus: new("disabled"),
 	})
 	require.NoError(t, err)
 

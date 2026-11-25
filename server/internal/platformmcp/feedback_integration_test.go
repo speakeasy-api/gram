@@ -1,4 +1,3 @@
-//nolint:glint // This test exercises raw feedback retention state that has no dedicated fixture helper.
 package platformmcp
 
 import (
@@ -43,46 +42,33 @@ func TestFeedbackServicePersistsBoundedLocalFeedbackAndReplaysExactRetries(t *te
 	_, err = service.Submit(ctx, principal, input)
 	require.ErrorIs(t, err, ErrFeedbackConflict)
 
-	var stored struct {
-		OrganizationID       string
-		ConnectionID         uuid.UUID
-		ConnectionGeneration uuid.UUID
-		Rating               int
-		Note                 string
-		DeliveryState        string
-		ExpiresAt            time.Time
-	}
-	err = conn.QueryRow(ctx, `
-SELECT organization_id, connection_id, connection_generation, rating, note, delivery_state, expires_at
-FROM platform_mcp_feedback
-WHERE id = $1`, created.TrackingID).Scan(
-		&stored.OrganizationID,
-		&stored.ConnectionID,
-		&stored.ConnectionGeneration,
-		&stored.Rating,
-		&stored.Note,
-		&stored.DeliveryState,
-		&stored.ExpiresAt,
-	)
+	trackingID, err := uuid.Parse(created.TrackingID)
+	require.NoError(t, err)
+	stored, err := platformrepo.New(conn).GetPlatformMCPFeedbackFixture(ctx, trackingID)
 	require.NoError(t, err)
 	connectionID, generation, err := parseConnection(principal)
 	require.NoError(t, err)
 	require.Equal(t, principal.OrganizationID, stored.OrganizationID)
-	require.Equal(t, connectionID, stored.ConnectionID)
-	require.Equal(t, generation, stored.ConnectionGeneration)
-	require.Equal(t, rating, stored.Rating)
-	require.Equal(t, "Helpful", stored.Note)
+	require.Equal(t, uuid.NullUUID{UUID: connectionID, Valid: true}, stored.ConnectionID)
+	require.Equal(t, uuid.NullUUID{UUID: generation, Valid: true}, stored.ConnectionGeneration)
+	require.Equal(t, pgtype.Int4{Int32: int32(rating), Valid: true}, stored.Rating)
+	require.Equal(t, pgtype.Text{String: "Helpful", Valid: true}, stored.Note)
 	require.Equal(t, feedbackDeliveryQueued, stored.DeliveryState)
-	require.WithinDuration(t, created.ExpiresAt, stored.ExpiresAt, time.Second)
+	require.True(t, stored.ExpiresAt.Valid)
+	require.WithinDuration(t, created.ExpiresAt, stored.ExpiresAt.Time, time.Second)
 
-	_, err = conn.Exec(ctx, `UPDATE platform_mcp_feedback SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1`, created.TrackingID)
+	err = platformrepo.New(conn).ExpirePlatformMCPFeedbackFixture(ctx, trackingID)
 	require.NoError(t, err)
 	_, err = service.Submit(ctx, principal, FeedbackInput{Category: "other", Note: "Fresh", IdempotencyKey: "feedback-after-expiry"})
 	require.NoError(t, err)
-	var expiredCount int
-	err = conn.QueryRow(ctx, `SELECT COUNT(*) FROM platform_mcp_feedback WHERE id = $1`, created.TrackingID).Scan(&expiredCount)
-	require.NoError(t, err)
-	require.Zero(t, expiredCount)
+	// The idempotency key identifies the created row (the replay above returned
+	// its tracking ID), so its absence proves the retention purge removed it.
+	_, err = platformrepo.New(conn).GetPlatformMCPFeedbackByIdempotencyKey(ctx, platformrepo.GetPlatformMCPFeedbackByIdempotencyKeyParams{
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+		IdempotencyKey: "feedback-replay",
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestFeedbackServiceEnforcesConnectionLimitAndRejectsReplacedGeneration(t *testing.T) {
@@ -131,7 +117,7 @@ func TestFeedbackServiceRejectsCrossTenantConnectionBinding(t *testing.T) {
 	_, err = NewFeedbackService(conn).Submit(ctx, foreignPrincipal, FeedbackInput{Category: "other", Note: "Note", IdempotencyKey: "feedback-cross-tenant"})
 	require.ErrorIs(t, err, ErrFeedbackForbidden)
 
-	_, err = conn.Exec(ctx, `SELECT 1`)
+	err = platformrepo.New(conn).PingPlatformMCPDatabaseFixture(ctx)
 	require.NoError(t, err)
 	_, err = platformrepo.New(conn).GetPlatformMCPFeedbackByIdempotencyKey(ctx, platformrepo.GetPlatformMCPFeedbackByIdempotencyKeyParams{
 		OrganizationID: principal.OrganizationID,

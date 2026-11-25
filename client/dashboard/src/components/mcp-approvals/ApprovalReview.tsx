@@ -1,25 +1,30 @@
+import { Spinner } from "@/components/ui/Spinner";
+import { IdentityLink } from "@/components/identity-link";
 import {
   EvidenceGroup,
   EvidencePanel,
   StatusBadge,
 } from "@/components/mcp-approvals/EvidencePanel";
 import { EvidenceChangedNotice } from "@/components/mcp-approvals/EvidenceChangedNotice";
-import {
-  parseEvidenceDocument,
-  USAGE_QUESTION,
-} from "@/components/mcp-approvals/evidence";
+import { parseEvidenceDocument } from "@/components/mcp-approvals/evidence";
 import { Button } from "@/components/ui/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { useProject } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { HumanizeDateTime } from "@/lib/dates";
 import {
   openSafeExternalUrl,
   safeExternalHttpUrl,
 } from "@/lib/safe-external-url";
+import { RetryButton } from "@/components/retry-button";
+import { describeApiError } from "@/lib/api-error";
+import { handleError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import type { ApprovalDecision } from "@gram/client/models/components/approvaldecision.js";
 import type { ApprovalRequester } from "@gram/client/models/components/approvalrequester.js";
@@ -33,7 +38,7 @@ import { useRefreshMcpApprovalEvidenceMutation } from "@gram/client/react-query/
 import { useStartMcpResearchMutation } from "@gram/client/react-query/startMcpResearch.js";
 import { RequireScope } from "@/components/require-scope";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -48,17 +53,10 @@ import { toast } from "sonner";
 export function ApprovalReview({
   requestId,
   title,
-  usage,
-  summary,
+  collapseEvidence = false,
+  evidenceAction,
 }: {
   requestId: string;
-  /**
-   * The page's at-a-glance strip, rendered beside this review's header as one
-   * two-column row. Owned by the caller because only it has the traffic
-   * figures; sharing the row keeps the summary and the review's own state on
-   * one line instead of two stacked bands.
-   */
-  summary?: React.ReactNode;
   /**
    * Section title, when this review is a section of a larger page. Given
    * one, the request's status shares its row instead of costing a strip of
@@ -66,11 +64,16 @@ export function ApprovalReview({
    */
   title?: string;
   /**
-   * Who is calling the server today. Owned by the caller, which holds the
-   * traffic query, and rendered inside the evidence as one more question
-   * about the server.
+   * Put the gathered evidence and web research behind one closed "Evidence"
+   * disclosure. The server page sets it: there the decision and the official
+   * server come first, and the evidence is detail a reviewer opens when they
+   * need it. The review sheet exists to show the evidence, so it leaves it
+   * inline.
    */
-  usage?: React.ReactNode;
+  collapseEvidence?: boolean;
+  /** A control for the evidence itself, such as re-gathering it. Shown on
+   *  the disclosure row when the evidence is collapsed. */
+  evidenceAction?: React.ReactNode;
 }): JSX.Element {
   const project = useProject();
 
@@ -79,6 +82,8 @@ export function ApprovalReview({
     undefined,
     {
       enabled: requestId.length > 0 && project.slug.length > 0,
+      // The failure renders inline with its reason and a Retry.
+      throwOnError: false,
       // A running research report resolves server-side; poll until it does
       // so the report appears without a manual refresh.
       refetchInterval: (query) =>
@@ -98,31 +103,28 @@ export function ApprovalReview({
 
   // A failed fetch must not read as "still loading" forever: name the
   // failure and offer a retry.
-  // Observed traffic comes from the caller's own query, so it survives a
-  // review that will not load: what the server is doing right now is exactly
-  // what an admin still wants when the dossier is unavailable.
+  // The evidence action does not depend on this query, so it stays
+  // reachable while the review loads or after it fails to.
+  const fallbackAction =
+    collapseEvidence && evidenceAction ? (
+      <div className="flex justify-end">{evidenceAction}</div>
+    ) : null;
+
   if (detailQuery.error && !detail) {
     return (
       <div className="space-y-4">
-        {/* The summary is the page's own data and is already loaded — it must
-            not disappear because this review's query failed. */}
-        {summary}
+        {fallbackAction}
         <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
           <p className="text-sm font-medium">The review could not be loaded</p>
           <p className="text-muted-foreground mt-1 max-w-md text-sm">
-            It may be a temporary problem — try again.
+            {describeApiError(detailQuery.error).message}
           </p>
-          <Button
+          <RetryButton
             className="mt-3"
-            variant="secondary"
-            onClick={() => void detailQuery.refetch()}
-          >
-            <Button.Text>Retry</Button.Text>
-          </Button>
+            isRetrying={detailQuery.isFetching}
+            onRetry={() => void detailQuery.refetch()}
+          />
         </div>
-        {usage && (
-          <EvidenceGroup question={USAGE_QUESTION}>{usage}</EvidenceGroup>
-        )}
       </div>
     );
   }
@@ -130,11 +132,8 @@ export function ApprovalReview({
   if (!detail) {
     return (
       <div className="space-y-4">
-        {summary}
+        {fallbackAction}
         <SkeletonTable />
-        {usage && (
-          <EvidenceGroup question={USAGE_QUESTION}>{usage}</EvidenceGroup>
-        )}
       </div>
     );
   }
@@ -144,6 +143,9 @@ export function ApprovalReview({
   // what is left to say is that nobody asked — one clause that rides the
   // heading row rather than costing a box of its own beneath it.
   const untouched = unreviewed && detail.decisions.length === 0;
+  // Every ask attaches its requester, so a review with none was opened by
+  // viewing the server and was never raised, even after an admin decided it.
+  const asked = !unreviewed && detail.requesters.length > 0;
 
   let reviewBody: React.ReactNode = null;
   if (!unreviewed) {
@@ -151,8 +153,13 @@ export function ApprovalReview({
     // evidence, so they sit side by side rather than pushing the evidence a
     // screen further down.
     reviewBody = (
-      <div className="grid items-start gap-x-6 gap-y-4 md:grid-cols-2">
-        <Requesters requesters={detail.requesters} />
+      // Stretched, and each list fills its column, so the two boxes end on
+      // the same line however long either list runs.
+      <div className="grid items-stretch gap-x-6 gap-y-4 md:grid-cols-2">
+        <Requesters
+          requesters={detail.requesters}
+          decided={detail.decisions.length > 0}
+        />
         <PriorDecisions decisions={detail.decisions} />
       </div>
     );
@@ -165,34 +172,27 @@ export function ApprovalReview({
   const header = (
     <ReviewHeader
       title={title}
-      collectedAt={detail.evidenceCollectedAt}
+      // Collapsed, the provenance caveat rides the evidence it describes
+      // rather than the heading row.
+      collectedAt={collapseEvidence ? undefined : detail.evidenceCollectedAt}
       status={detail.request.status}
-      createdAt={unreviewed ? undefined : detail.request.createdAt}
+      createdAt={asked ? detail.request.createdAt : undefined}
       versionPinned={detail.request.versionPinned}
-      notice={
-        untouched
-          ? "No one has asked for it — this is its first review."
-          : undefined
-      }
+      notice={untouched ? "No one has asked for it yet." : undefined}
+      boxed={!collapseEvidence}
     />
   );
 
-  // Given a summary strip, the two share one row: the figures on the left and
-  // what the review makes of them on the right, both boxed and both ending on
-  // the same line.
-  let headerRow = header;
-  if (summary) {
-    headerRow = (
-      <div className="grid items-stretch gap-x-6 gap-y-3 lg:grid-cols-2">
-        {summary}
-        {header}
-      </div>
-    );
-  }
+  const evidence = (
+    <>
+      <EvidencePanel document={document} />
+      <ResearchReports reports={detail.researchReports} requestId={requestId} />
+    </>
+  );
 
   return (
     <div className="space-y-4">
-      {headerRow}
+      {header}
       {detail.request.status === "approved" && detail.evidenceDiff?.changed && (
         <EvidenceChangedNotice
           diff={detail.evidenceDiff}
@@ -200,9 +200,60 @@ export function ApprovalReview({
         />
       )}
       {reviewBody}
-      <EvidencePanel document={document} usage={usage} />
-      <ResearchReports reports={detail.researchReports} requestId={requestId} />
+      {collapseEvidence ? (
+        <EvidenceDisclosure
+          collectedAt={detail.evidenceCollectedAt}
+          action={evidenceAction}
+        >
+          {evidence}
+        </EvidenceDisclosure>
+      ) : (
+        evidence
+      )}
     </div>
+  );
+}
+
+/**
+ * The evidence and web research behind one closed row. The row carries what
+ * a reviewer needs to judge whether to open it: when the evidence was
+ * gathered, and the control to gather it again.
+ */
+function EvidenceDisclosure({
+  collectedAt,
+  action,
+  children,
+}: {
+  collectedAt: Date | undefined;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <Collapsible className="border-border border-t">
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
+        <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
+          <ChevronRight className="size-3.5 transition-transform" aria-hidden />
+          <span className="text-foreground font-medium">Evidence</span>
+          {collectedAt && (
+            <span>
+              · gathered <HumanizeDateTime date={collectedAt} />
+            </span>
+          )}
+        </CollapsibleTrigger>
+        {action}
+      </div>
+      <CollapsibleContent className="mt-3 space-y-4">
+        {/* Where the evidence came from only applies once some was
+            gathered. */}
+        {collectedAt && (
+          <Text muted small>
+            Declared by the server or its registry, or seen in this
+            organization's traffic — nothing is verified behavior.
+          </Text>
+        )}
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -221,15 +272,19 @@ export function RefreshEvidenceButton({
   ready: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const refresh = useRefreshMcpApprovalEvidenceMutation();
+  const refresh = useRefreshMcpApprovalEvidenceMutation({ onError: () => {} });
 
   const run = async () => {
     try {
       await refresh.mutateAsync({
         request: { id: requestId, gramProject: projectSlug },
       });
-    } catch {
-      toast.error("Evidence refresh failed — the stored evidence is unchanged");
+    } catch (err) {
+      handleError(err, {
+        title:
+          "Couldn't refresh the evidence. The stored evidence is unchanged.",
+        customAction: { label: "Retry", onClick: () => void run() },
+      });
       return;
     }
     await Promise.all([
@@ -250,7 +305,7 @@ export function RefreshEvidenceButton({
         <RefreshCw className={refresh.isPending ? "animate-spin" : undefined} />
       </Button.LeftIcon>
       <Button.Text>
-        {refresh.isPending ? "Refreshing" : "Refresh Data"}
+        {refresh.isPending ? "Refreshing…" : "Refresh evidence"}
       </Button.Text>
     </Button>
   );
@@ -269,6 +324,7 @@ function ReviewHeader({
   createdAt,
   versionPinned,
   notice,
+  boxed = true,
 }: {
   title: string | undefined;
   /**
@@ -280,21 +336,26 @@ function ReviewHeader({
    */
   collectedAt: Date | undefined;
   status: string;
-  /** Absent for an unreviewed dossier: nobody raised it. */
+  /** Absent when no one has asked: nobody raised it. */
   createdAt: Date | undefined;
   versionPinned: boolean;
   /** The review's state, when it is short enough to ride this row. */
   notice?: string;
+  /** Boxed where the review is the whole surface; plain where it is one
+   *  section of a page that already frames it. */
+  boxed?: boolean;
 }): JSX.Element {
-  // The badge rides the heading instead of a right-aligned cluster. Pushed
-  // right it floated against the page edge with nothing holding it, squeezed
-  // the subtitle into an orphaned second line, and put a second status
-  // treatment far from the summary strip's. Beside the title it reads as this
-  // section's own state, and the subtitle gets the full width to sit on.
-  // Boxed like every other section on the page, and centred in its own height
-  // so it sits level with the metric strip sharing its row.
+  // The badge rides the heading instead of a right-aligned cluster, so it
+  // reads as this section's own state and the subtitle gets the full width.
+  // Boxed where the review is the whole surface, such as the review sheet;
+  // plain where it is one section of a page that already frames it.
   return (
-    <div className="border-border flex h-full flex-col justify-center gap-1 border px-3 py-3">
+    <div
+      className={cn(
+        "flex h-full flex-col justify-center gap-1",
+        boxed && "border-border border px-3 py-3",
+      )}
+    >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {/* Serif like the evidence questions rather than a sans subheading,
             which was smaller and plainer than its own children. Sized with
@@ -339,28 +400,37 @@ function ReviewHeader({
 
 function Requesters({
   requesters,
+  decided,
 }: {
   requesters: ApprovalRequester[];
+  /** Whether an admin has decided, so an empty list does not hide it. */
+  decided: boolean;
 }): JSX.Element {
   return (
-    <section className="space-y-2">
+    <section className="flex flex-col gap-2">
       <h3 className="text-eyebrow">Who asked, and why</h3>
       {requesters.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No requester is attached — this ask arrived without an identifiable
-          user.
-        </p>
+        // Every ask records who made it, so no requesters means no ask: the
+        // review was opened from the server page, not raised by anyone.
+        <EmptyListNote>
+          {decided
+            ? "No one has asked for it. An admin decided without a request."
+            : "No one has asked for it."}
+        </EmptyListNote>
       ) : (
         // One framed list with hairline rules, not a stack of cards: three
         // requesters cost three rows here instead of three bordered blocks
         // with gaps between them.
-        <ul className="divide-border border-border divide-y border">
+        <ul className="divide-border border-border flex-1 divide-y border">
           {requesters.map((requester) => (
             <li key={requester.userId} className="px-3 py-1.5 text-xs">
               <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate font-medium">
+                <IdentityLink
+                  identifier={{ userId: requester.userId }}
+                  className="truncate font-medium"
+                >
                   {requester.userEmail ?? requester.userId}
-                </span>
+                </IdentityLink>
                 <span className="text-muted-foreground shrink-0 text-xs">
                   <HumanizeDateTime
                     date={requester.requestedAt}
@@ -381,20 +451,37 @@ function Requesters({
   );
 }
 
+/**
+ * An empty list, framed like a full one. The two lists share a row, so an
+ * empty one drawn as bare text sat beside a bordered box of a different
+ * height; framed, both read as the same kind of block and stretch together.
+ */
+function EmptyListNote({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <p className="border-border text-muted-foreground flex-1 border px-3 py-1.5 text-xs">
+      {children}
+    </p>
+  );
+}
+
 function PriorDecisions({
   decisions,
 }: {
   decisions: ApprovalDecision[];
 }): JSX.Element {
   return (
-    <section className="space-y-2">
+    <section className="flex flex-col gap-2">
       <h3 className="text-eyebrow">Have we decided on this before?</h3>
       {decisions.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
+        <EmptyListNote>
           No prior decisions. This is the first review of this server here.
-        </p>
+        </EmptyListNote>
       ) : (
-        <ul className="divide-border border-border divide-y border">
+        <ul className="divide-border border-border flex-1 divide-y border">
           {decisions.map((decision) => (
             <li key={decision.id} className="px-3 py-1.5 text-xs">
               <div className="flex items-center justify-between gap-2">
@@ -482,6 +569,12 @@ function reportStatusLabel(status: string): string {
   }
 }
 
+function researchButtonLabel(running: boolean, starting: boolean): string {
+  if (starting) return "Starting…";
+  if (running) return "Researching…";
+  return "Run research";
+}
+
 function ResearchReports({
   reports,
   requestId,
@@ -489,7 +582,6 @@ function ResearchReports({
   reports: ResearchReport[];
   requestId: string;
 }): JSX.Element {
-  const researchFlag = useFeatureFlag(FEATURE_FLAGS.mcpResearch);
   const project = useProject();
   const queryClient = useQueryClient();
   const startResearch = useStartMcpResearchMutation({
@@ -498,8 +590,10 @@ function ResearchReports({
         { id: requestId, gramProject: project.slug },
       ]);
     },
-    onError: () => {
-      toast.error("Starting the research run failed — nothing was spent");
+    onError: (err) => {
+      handleError(err, {
+        title: "Couldn't start the research run. Nothing was spent.",
+      });
     },
   });
 
@@ -511,43 +605,32 @@ function ResearchReports({
   const latest = reports[0];
   const previous = reports.slice(1);
 
-  // Display only — the endpoint enforces the same flag, and it fails closed on
-  // an unreadable flag, so anything but a confirmed enabled renders no button:
-  // a control the server would 403 is the breakage this section exists to
-  // remove. Loading/missing/error resolve to nothing at all.
-  let headerNote: React.ReactNode = null;
-  if (researchFlag.status === "enabled") {
-    // The same org-admin gate as the endpoint behind it: research spends the
-    // org's money, so a non-admin must not see a button whose click comes
-    // back 403.
-    headerNote = (
-      <RequireScope scope="org:admin" resourceId={project.id} level="component">
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={running || startResearch.isPending}
-          onClick={() =>
-            startResearch.mutate({
-              request: { id: requestId, gramProject: project.slug },
-            })
-          }
-        >
-          {running && (
-            <Button.LeftIcon>
-              <Loader2 className="animate-spin" />
-            </Button.LeftIcon>
-          )}
-          <Button.Text>{running ? "Researching…" : "Run Research"}</Button.Text>
-        </Button>
-      </RequireScope>
-    );
-  } else if (researchFlag.status === "disabled") {
-    headerNote = (
-      <span className="text-muted-foreground text-xs">
-        Not included in your plan — contact your Speakeasy representative.
-      </span>
-    );
-  }
+  // The same org-admin gate as the endpoint behind it: research spends the
+  // org's money, so a non-admin must not see a button whose click comes back
+  // 403.
+  const headerNote = (
+    <RequireScope scope="org:admin" resourceId={project.id} level="component">
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={running || startResearch.isPending}
+        onClick={() =>
+          startResearch.mutate({
+            request: { id: requestId, gramProject: project.slug },
+          })
+        }
+      >
+        {(running || startResearch.isPending) && (
+          <Button.LeftIcon>
+            <Spinner className="mr-0" />
+          </Button.LeftIcon>
+        )}
+        <Button.Text>
+          {researchButtonLabel(running, startResearch.isPending)}
+        </Button.Text>
+      </Button>
+    </RequireScope>
+  );
 
   // The same group shell as the evidence questions above it, so its heading,
   // its hint icon and the top edge of its body line up with theirs instead of
@@ -558,16 +641,14 @@ function ResearchReports({
       hint={RESEARCH_HINT}
       note={headerNote}
     >
-      {researchFlag.status === "enabled" && (
-        <p className="border-warning border px-2.5 py-1.5 text-xs">
-          <span className="font-medium">
-            A research run spends real AI credits.
-          </span>{" "}
-          The agent makes dozens of model calls, web searches, and page reads —
-          typically several hundred thousand tokens, several minutes per run.
-        </p>
-      )}
-      {!latest && researchFlag.status === "enabled" && (
+      <p className="border-warning border px-2.5 py-1.5 text-xs">
+        <span className="font-medium">
+          A research run spends real AI credits.
+        </span>{" "}
+        The agent makes dozens of model calls, web searches, and page reads —
+        typically several hundred thousand tokens, several minutes per run.
+      </p>
+      {!latest && (
         <p className="border-border text-muted-foreground border border-dashed px-2.5 py-1.5 text-xs">
           No research has been run for this server.
         </p>
@@ -622,9 +703,7 @@ function ResearchReportCard({
     <div className="border-border border p-2.5 text-xs">
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5 font-medium">
-          {report.status === "running" && (
-            <Loader2 className="size-3 animate-spin" />
-          )}
+          {report.status === "running" && <Spinner className="mr-0 size-3" />}
           {reportStatusLabel(report.status)}
         </span>
         <span className="text-muted-foreground shrink-0 text-xs">

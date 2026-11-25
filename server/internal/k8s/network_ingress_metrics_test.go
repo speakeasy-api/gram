@@ -1,0 +1,227 @@
+package k8s
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+)
+
+type telemetryNetworkIngressProvisioner struct {
+	observation NetworkIngressObservation
+	err         error
+}
+
+func (p telemetryNetworkIngressProvisioner) Apply(context.Context, NetworkIngressDesired) (NetworkIngressObservation, error) {
+	return p.observation, p.err
+}
+
+func (p telemetryNetworkIngressProvisioner) Observe(context.Context, NetworkIngressResourceNames) (NetworkIngressObservation, error) {
+	return p.observation, p.err
+}
+
+func (p telemetryNetworkIngressProvisioner) Delete(context.Context, NetworkIngressResourceNames) error {
+	return p.err
+}
+
+func TestNetworkIngressDeletionTelemetry(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "private-provider-request-sentinel"
+	for _, tc := range []struct {
+		name   string
+		err    error
+		code   string
+		result string
+	}{
+		{"completed", nil, networkIngressErrorCodeNone, networkIngressResultSuccess},
+		{"pending", ErrNetworkIngressDeletionPending, networkIngressErrorCodeDeletionPending, networkIngressResultPending},
+		{"wrapped pending", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressDeletionPending), networkIngressErrorCodeDeletionPending, networkIngressResultPending},
+		{"rejected credentials", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressProviderCredentialsRejected), NetworkIngressErrorProviderCredentialsRejected, networkIngressResultError},
+		{"missing permission", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressProviderForbidden), NetworkIngressErrorProviderForbidden, networkIngressResultError},
+		{"rate limited", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressProviderRateLimited), NetworkIngressErrorProviderRateLimited, networkIngressResultError},
+		{"provider API unavailable", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressProviderAPIUnavailable), NetworkIngressErrorProviderAPIUnavailable, networkIngressResultError},
+		{"pending with rate limit", errors.Join(ErrNetworkIngressDeletionPending, ErrNetworkIngressProviderRateLimited), NetworkIngressErrorProviderRateLimited, networkIngressResultError},
+		{"invalid desired state", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressInvalidDesiredState), NetworkIngressErrorInvalidDesiredState, networkIngressResultError},
+		{"unsupported provider", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressUnsupportedProvider), NetworkIngressErrorUnsupportedProvider, networkIngressResultError},
+		{"unknown error", errors.New(sensitive), networkIngressErrorCodeInternal, networkIngressResultError},
+		{"error text is not a classification", errors.New("deletion_pending: " + sensitive), networkIngressErrorCodeInternal, networkIngressResultError},
+		{"pending with rejected credentials", errors.Join(ErrNetworkIngressDeletionPending, ErrNetworkIngressProviderCredentialsRejected), NetworkIngressErrorProviderCredentialsRejected, networkIngressResultError},
+		{"pending with API failure", errors.Join(ErrNetworkIngressDeletionPending, ErrNetworkIngressProviderAPIUnavailable), NetworkIngressErrorProviderAPIUnavailable, networkIngressResultError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			reader := sdkmetric.NewManualReader()
+			provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+			provisioner := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale,
+				telemetryNetworkIngressProvisioner{err: tc.err}, logger, NewNetworkIngressMetrics(logger, provider))
+
+			err := provisioner.Delete(t.Context(), NetworkIngressResourceNames{})
+			require.ErrorIs(t, err, tc.err)
+
+			var log map[string]any
+			require.NoError(t, json.Unmarshal(logs.Bytes(), &log))
+			require.Equal(t, "network_ingress_provisioner", log[string(attr.ComponentKey)])
+			require.Equal(t, NetworkIngressProviderTailscale, log[string(attr.ProviderKey)])
+			require.Equal(t, networkIngressOperationDelete, log[string(attr.NetworkIngressOperationKey)])
+			require.Equal(t, tc.result, log[string(attr.OutcomeKey)])
+			require.Equal(t, tc.code, log[string(attr.NetworkIngressErrorCodeKey)])
+			require.NotContains(t, logs.String(), sensitive)
+			require.NotContains(t, logs.String(), "private-resource")
+			switch tc.result {
+			case networkIngressResultPending:
+				require.Equal(t, "DEBUG", log["level"])
+				require.Equal(t, "network ingress provisioner deletion pending", log["msg"])
+				require.NotContains(t, log, "error.message")
+			case networkIngressResultSuccess:
+				require.Equal(t, "INFO", log["level"])
+				require.Equal(t, "network ingress provisioner operation completed", log["msg"])
+				require.NotContains(t, log, "error.message")
+			default:
+				require.Equal(t, "ERROR", log["level"])
+				require.Equal(t, "network ingress provisioner operation failed", log["msg"])
+				require.Equal(t, "network ingress provider: "+tc.code, log["error.message"])
+			}
+
+			var metrics metricdata.ResourceMetrics
+			require.NoError(t, reader.Collect(t.Context(), &metrics))
+			require.Len(t, metrics.ScopeMetrics, 1)
+			require.Len(t, metrics.ScopeMetrics[0].Metrics, 2)
+			wantAttributes := attribute.NewSet(
+				attr.Provider(NetworkIngressProviderTailscale),
+				attr.NetworkIngressOperation(networkIngressOperationDelete),
+				attr.NetworkIngressResult(tc.result),
+				attr.NetworkIngressErrorCode(tc.code),
+			)
+			for _, metric := range metrics.ScopeMetrics[0].Metrics {
+				switch metric.Name {
+				case networkIngressOperationsMetric:
+					sum, ok := metric.Data.(metricdata.Sum[int64])
+					require.True(t, ok)
+					require.Len(t, sum.DataPoints, 1)
+					require.Equal(t, int64(1), sum.DataPoints[0].Value)
+					require.Equal(t, wantAttributes, sum.DataPoints[0].Attributes)
+				case networkIngressDurationMetric:
+					histogram, ok := metric.Data.(metricdata.Histogram[float64])
+					require.True(t, ok)
+					require.Len(t, histogram.DataPoints, 1)
+					require.Equal(t, uint64(1), histogram.DataPoints[0].Count)
+					require.Equal(t, wantAttributes, histogram.DataPoints[0].Attributes)
+				default:
+					t.Fatalf("unexpected metric %s", metric.Name)
+				}
+			}
+		})
+	}
+}
+
+func TestNetworkIngressObservationErrorTelemetry(t *testing.T) {
+	t.Parallel()
+
+	for _, operation := range []string{networkIngressOperationApply, networkIngressOperationObserve} {
+		for _, tc := range []struct {
+			name            string
+			err             error
+			observationCode string
+			code            string
+		}{
+			{"bounded observation", errors.New("sensitive"), NetworkIngressErrorInvalidCredentials, NetworkIngressErrorInvalidCredentials},
+			{"unknown observation", errors.New("sensitive"), "sensitive", networkIngressErrorCodeInternal},
+			{"none with an error", errors.New("sensitive"), networkIngressErrorCodeNone, networkIngressErrorCodeInternal},
+			{"untyped pending observation", errors.New("sensitive"), networkIngressErrorCodeDeletionPending, networkIngressErrorCodeInternal},
+			{"typed error takes precedence", ErrNetworkIngressProviderCredentialsRejected, NetworkIngressErrorInvalidCredentials, NetworkIngressErrorProviderCredentialsRejected},
+			{"bounded provider observation", errors.New("sensitive"), NetworkIngressErrorProviderRateLimited, NetworkIngressErrorProviderRateLimited},
+			{"unapproved service observation", errors.New("sensitive"), NetworkIngressErrorProviderServiceNotApproved, NetworkIngressErrorProviderServiceNotApproved},
+			{"missing certificate observation", errors.New("sensitive"), NetworkIngressErrorProviderCertificateUnavailable, NetworkIngressErrorProviderCertificateUnavailable},
+			{"unavailable encryption key observation", errors.New("sensitive"), NetworkIngressErrorEncryptionKeyUnavailable, NetworkIngressErrorEncryptionKeyUnavailable},
+			{"missing permission is not rejected credentials", ErrNetworkIngressProviderForbidden, NetworkIngressErrorProviderForbidden, NetworkIngressErrorProviderForbidden},
+			{"deletion pending outside delete", ErrNetworkIngressDeletionPending, "", networkIngressErrorCodeDeletionPending},
+		} {
+			t.Run(operation+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				var logs bytes.Buffer
+				logger := slog.New(slog.NewJSONHandler(&logs, nil))
+				provisioner := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale,
+					telemetryNetworkIngressProvisioner{observation: NetworkIngressObservation{ErrorCode: tc.observationCode}, err: tc.err}, logger, nil)
+				var err error
+				if operation == networkIngressOperationApply {
+					_, err = provisioner.Apply(t.Context(), NetworkIngressDesired{})
+				} else {
+					_, err = provisioner.Observe(t.Context(), NetworkIngressResourceNames{})
+				}
+				require.ErrorIs(t, err, tc.err)
+				var log map[string]any
+				require.NoError(t, json.Unmarshal(logs.Bytes(), &log))
+				require.Equal(t, "ERROR", log["level"])
+				require.Equal(t, networkIngressResultError, log[string(attr.OutcomeKey)])
+				require.Equal(t, tc.code, log[string(attr.NetworkIngressErrorCodeKey)])
+				require.NotContains(t, logs.String(), "sensitive")
+			})
+		}
+	}
+}
+
+type telemetryCredentialedProvisioner struct {
+	telemetryNetworkIngressProvisioner
+	received []byte
+}
+
+func (p *telemetryCredentialedProvisioner) DeleteWithCredentials(_ context.Context, _ NetworkIngressResourceNames, credentials []byte) error {
+	p.received = credentials
+	return p.err
+}
+
+func TestObservedProvisionerExposesCredentialedTeardownOnlyWhenWrapped(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	logger := testenv.NewLogger(t)
+	metrics := NewNetworkIngressMetrics(logger, provider)
+
+	plain := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale, telemetryNetworkIngressProvisioner{err: nil}, logger, metrics)
+	_, ok := plain.(NetworkIngressCredentialedDeleter)
+	require.False(t, ok, "a provider without credentialed teardown must not gain one by being observed")
+
+	inner := &telemetryCredentialedProvisioner{telemetryNetworkIngressProvisioner: telemetryNetworkIngressProvisioner{err: nil}, received: nil}
+	wrapped := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale, inner, logger, metrics)
+	deleter, ok := wrapped.(NetworkIngressCredentialedDeleter)
+	require.True(t, ok)
+	require.NoError(t, deleter.DeleteWithCredentials(t.Context(), NetworkIngressResourceNames{}, []byte("creds")))
+	require.Equal(t, []byte("creds"), inner.received)
+
+	var data metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &data))
+	deletes := int64(0)
+	for _, scope := range data.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != networkIngressOperationsMetric {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				if op, found := point.Attributes.Value(attr.NetworkIngressOperationKey); found && op.AsString() == networkIngressOperationDelete {
+					deletes += point.Value
+				}
+			}
+		}
+	}
+	require.EqualValues(t, 1, deletes, "the credentialed teardown is recorded as one delete operation")
+}

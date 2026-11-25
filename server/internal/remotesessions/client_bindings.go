@@ -36,7 +36,7 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 	if !userSessionIssuerID.Valid {
 		rows, err := q.ListRemoteSessionClientsByProjectID(ctx, repo.ListRemoteSessionClientsByProjectIDParams{
 			ProjectID:             projectID,
-			OrganizationID:        conv.ToPGText(organizationID),
+			OrganizationID:        organizationID,
 			RemoteSessionIssuerID: remoteSessionIssuerID,
 			Cursor:                cursor,
 			LimitValue:            limit,
@@ -54,7 +54,7 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 	rows, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
 		UserSessionIssuerID:   userSessionIssuerID.UUID,
 		ProjectID:             projectID,
-		OrganizationID:        conv.ToPGText(organizationID),
+		OrganizationID:        organizationID,
 		RemoteSessionIssuerID: remoteSessionIssuerID,
 		Cursor:                cursor,
 		LimitValue:            limit,
@@ -72,18 +72,39 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 // listRemoteSessionClientRowsForUserSessionIssuer is the runtime counterpart to
 // listRemoteSessionClientsByProjectID: it resolves the clients linked to a user
 // session issuer solely through the join table, including organization-level
-// clients (project_id NULL) belonging to organizationID. Used by consent
+// clients (project_id NULL) belonging to organizationID and global catalog
+// clients. Every tier requires an explicit issuer link. Used by consent
 // rendering and token resolution.
+//
+// organizationWide admits the clients of every live project in the
+// organization instead of projectID's alone, for an organization-level
+// issuer only.
 func (m *ChallengeManager) listRemoteSessionClientRowsForUserSessionIssuer(
 	ctx context.Context,
 	projectID uuid.UUID,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
+	organizationWide bool,
 ) ([]repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {
-	rows, err := repo.New(m.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{
+	return listRemoteSessionClientRows(ctx, m.db, projectID, organizationID, userSessionIssuerID, organizationWide)
+}
+
+// listRemoteSessionClientRows runs the listing listRemoteSessionClientRowsForUserSessionIssuer
+// describes through dbtx, so every caller admits exactly the same clients
+// whether it reads from the pool or from its own transaction.
+func listRemoteSessionClientRows(
+	ctx context.Context,
+	dbtx repo.DBTX,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	organizationWide bool,
+) ([]repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {
+	rows, err := repo.New(dbtx).ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           conv.ToNullUUID(projectID),
 		OrganizationID:      conv.ToPGText(organizationID),
+		OrganizationWide:    organizationWide,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients for user_session_issuer: %w", err)

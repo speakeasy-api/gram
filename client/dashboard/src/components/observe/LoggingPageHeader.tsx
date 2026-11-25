@@ -52,7 +52,7 @@ export function LoggingPageHeader({
     <div className="flex min-w-0 flex-col gap-1.5">
       <PageEyebrow area={eyebrow} />
       <h1 className="text-display-sm font-thin">{title}</h1>
-      <p className="text-muted-foreground text-sm">
+      <p className="text-muted-foreground text-sm short:hidden">
         {description}{" "}
         <span className="inline-flex align-middle">
           <LogDataRetentionTooltip />

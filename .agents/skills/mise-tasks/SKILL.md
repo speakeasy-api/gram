@@ -11,6 +11,7 @@ description: Rules and best practices for writing and editing mise tasks.
     - `.mise-tasks/start.sh` corresponds to `mise run start`
     - `.mise-tasks/test/app.mts` corresponds to `mise run test:app`
     - `.mise-tasks/agents/worktree/init.sh` corresponds to `mise run agents:worktree:init`
+- `goodies:*` (`.mise-tasks/goodies/`) holds optional developer extras, such as menu bar items or shell helpers. Nothing in the dev stack, CI, or other tasks may depend on them. Start their descriptions with `Bonus:`.
 - When creating tasks, run `chmod +x <task>` to make them executable.
 - Consult `mise.toml` to understand more about what tools and environment variables are available to support tasks.
 - For typescript tasks, the root `package.json` has utilities for writing tasks in TypeScript more effectively.
@@ -274,12 +275,11 @@ Tasks may define inputs as flags. It is CRITICAL that you leverage flags and not
 Many of the aspects of task configuration for bash tasks also apply to TypeScript tasks. The main things to change over:
 
 - All typescript tasks in `.mise-tasks/**/*.mts` must end in `.mts`
-- All typescript tasks must use the shebang: `#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types`
 
 The general layout of a TypeScript task should look like this:
 
 ```ts
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Description of the task goes here"
 //MISE dir="{{ config_root }}"

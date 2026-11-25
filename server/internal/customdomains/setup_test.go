@@ -5,8 +5,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
@@ -19,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -59,10 +63,22 @@ type stubTemporalClient struct {
 	reconcileStartErr error
 	reconcileErr      error
 	reconcile         func(context.Context, uuid.UUID) error
+	reconcileStatus   enums.WorkflowExecutionStatus
 }
 
 func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 	return nil, nil
+}
+
+func (s *stubTemporalClient) GetReconcileWorkflowInfo(ctx context.Context, customDomainID uuid.UUID) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	if s.reconcileStatus == enums.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
+		return nil, nil
+	}
+	return &workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Status: s.reconcileStatus,
+		},
+	}, nil
 }
 
 func (s *stubTemporalClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID, createdBy urn.Principal, createdByName *string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
@@ -113,6 +129,10 @@ func (s *stubTemporalClient) ExecuteCustomDomainHealthCheck(ctx context.Context,
 	return stubTemporalRun{err: nil, onGet: nil}, nil
 }
 
+// testDNSTargetSuffix is the per-domain CNAME target suffix the test service
+// is configured with.
+const testDNSTargetSuffix = "domains.example.net"
+
 type serviceTestInstance struct {
 	service        *customdomains.Service
 	conn           *pgxpool.Pool
@@ -136,11 +156,30 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
+	// Custom domains need a paid tier and the billing stub reports none.
+	testAuthContext(t, ctx).AccountType = string(billing.TierEnterprise)
 
 	temporal := &stubTemporalClient{}
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
-	svc := customdomains.NewService(logger, tracerProvider, conn, sessionManager, temporal, authzEngine, auditLogger, "cname.example.net.", nil)
+	svc := customdomains.NewService(
+		logger,
+		tracerProvider,
+		conn,
+		sessionManager,
+		temporal,
+		authzEngine,
+		auditLogger,
+		func(ctx context.Context, dbtx pgx.Tx, organizationID string, customDomainID uuid.UUID) (bool, error) {
+			return networkingressrepo.New(dbtx).HasActiveNetworkIngressForCustomDomain(ctx, networkingressrepo.HasActiveNetworkIngressForCustomDomainParams{
+				OrganizationID: organizationID,
+				CustomDomainID: uuid.NullUUID{UUID: customDomainID, Valid: true},
+			})
+		},
+		"cname.example.net.",
+		nil,
+		testDNSTargetSuffix,
+	)
 
 	return ctx, &serviceTestInstance{service: svc, conn: conn, sessionManager: sessionManager, temporal: temporal, repo: cdrepo.New(conn)}
 }

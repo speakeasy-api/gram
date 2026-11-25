@@ -1,0 +1,29 @@
+package idjag
+
+import (
+	"encoding/json"
+	"errors"
+)
+
+type additionalClaims struct {
+	// Resource is raw so an absent claim is told apart from an empty, null, or non-string one.
+	Resource json.RawMessage `json:"resource,omitempty"`
+	ClientID string          `json:"client_id"`
+	Email    string          `json:"email"`
+	Scope    string          `json:"scope"`
+}
+
+// ErrResourceClaimInvalid is a present resource claim that is not a non-empty string.
+var ErrResourceClaimInvalid = errors.New("resource claim must be a non-empty string")
+
+// parseResourceClaim parses a raw resource claim and reports whether the assertion carries one.
+func parseResourceClaim(raw json.RawMessage) (string, bool, error) {
+	if len(raw) == 0 {
+		return "", false, nil
+	}
+	var value *string
+	if err := json.Unmarshal(raw, &value); err != nil || value == nil || *value == "" {
+		return "", true, ErrResourceClaimInvalid
+	}
+	return *value, true, nil
+}

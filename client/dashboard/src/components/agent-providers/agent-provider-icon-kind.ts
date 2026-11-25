@@ -4,21 +4,47 @@ export type AgentProviderIconKind =
   | "codex"
   | "opencode"
   | "openclaw"
+  | "pi"
+  | "kit"
   | "litellm"
+  | "cline"
+  | "warp"
+  | "trae"
+  | "vllm"
+  | "ollama"
+  | "lmstudio"
+  | "windsurf"
+  | "hermes"
   | "devin"
   | "mistral"
+  | "microsoft-copilot"
   | "copilot"
   | "gemini"
+  | "antigravity"
   | "glean"
   | "bedrock"
   | "catchall"
   | "unknown";
+
+/**
+ * Whether a source resolves to a real provider mark rather than the generic
+ * fallback. Callers that would rather show nothing than a globe use this.
+ */
+export function hasAgentProviderIcon(source?: string): boolean {
+  const kind = agentProviderIconKind(source);
+  return kind !== "unknown" && kind !== "catchall";
+}
 
 export function agentProviderIconKind(source?: string): AgentProviderIconKind {
   const normalizedSource = source
     ?.trim()
     .toLowerCase()
     .replace(/[\s_]+/g, "-");
+
+  // Exact aliases avoid assigning Kit's mark to unrelated toolkit sources.
+  if (normalizedSource === "kit" || normalizedSource === "ahp-harness:kit") {
+    return "kit";
+  }
 
   if (
     normalizedSource === "anthropic" ||
@@ -37,15 +63,44 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
   }
   if (normalizedSource?.includes("opencode")) return "opencode";
   if (normalizedSource?.includes("openclaw")) return "openclaw";
+  // Matched exactly, not by substring: "pi" is a substring of other agent
+  // names ("copilot"), and Pi's hook source is always the bare slug.
+  if (normalizedSource === "pi") return "pi";
   if (normalizedSource?.includes("litellm")) return "litellm";
+  if (normalizedSource?.includes("cline")) return "cline";
+  if (normalizedSource?.includes("warp")) return "warp";
+  if (normalizedSource?.includes("trae")) return "trae";
+  if (normalizedSource?.includes("vllm")) return "vllm";
+  if (normalizedSource?.includes("ollama")) return "ollama";
+  // Matches both the "lmstudio" target id and the "lm-studio" the normalizer
+  // produces from "LM Studio".
+  if (
+    normalizedSource?.includes("lmstudio") ||
+    normalizedSource?.includes("lm-studio")
+  ) {
+    return "lmstudio";
+  }
+  if (
+    normalizedSource?.includes("windsurf") ||
+    normalizedSource === "codeium"
+  ) {
+    return "windsurf";
+  }
+  if (
+    normalizedSource?.includes("hermes") ||
+    normalizedSource === "nousresearch"
+  ) {
+    return "hermes";
+  }
   if (normalizedSource?.includes("devin")) return "devin";
   if (normalizedSource?.includes("mistral")) return "mistral";
-  if (
-    normalizedSource?.includes("copilot") ||
-    normalizedSource?.includes("microsoft")
-  ) {
+  // Microsoft Copilot is a separate product from GitHub's coding agent.
+  // Check its explicit source first, before the generic Copilot aliases.
+  if (normalizedSource?.includes("microsoft")) return "microsoft-copilot";
+  if (normalizedSource?.includes("copilot")) {
     return "copilot";
   }
+  if (normalizedSource?.includes("antigravity")) return "antigravity";
   if (normalizedSource === "google" || normalizedSource?.includes("gemini")) {
     return "gemini";
   }

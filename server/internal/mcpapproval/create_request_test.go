@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -133,8 +134,13 @@ func TestCreateRequest_RejectsBadInput(t *testing.T) {
 	_, err = ti.service.CreateRequest(ctx, createPayload("stdio_command", "   ", ""))
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	// Only a server the MCP backend could actually reach gets a review.
+	// Proactive review intake probes external evidence, so it accepts only
+	// authenticated transport and rejects plaintext URLs before any gather starts.
 	_, err = ti.service.CreateRequest(ctx, createPayload("server_url", "ftp://server.example/mcp", ""))
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = ti.service.CreateRequest(ctx, createPayload("server_url", "http://server.example/mcp", ""))
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = ti.service.CreateRequest(ctx, createPayload("stdio_command", "npx -y mcp-remote http://server.example/mcp", ""))
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	// The justification is the one input no automated evidence supplies.
@@ -152,8 +158,8 @@ func TestCreateRequest_RejectsBadInput(t *testing.T) {
 }
 
 // Raising a request deliberately needs no RBAC grant — the same posture as
-// the block and bypass surfaces — but the feature gate still holds.
-func TestCreateRequest_NeedsNoScopeButRespectsTheGate(t *testing.T) {
+// the block and bypass surfaces.
+func TestCreateRequest_NeedsNoScope(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -162,10 +168,6 @@ func TestCreateRequest_NeedsNoScopeButRespectsTheGate(t *testing.T) {
 	created, err := ti.service.CreateRequest(ungranted, createPayload("server_url", "https://mcp.example.com/sse", "no grants held"))
 	require.NoError(t, err)
 	require.Equal(t, 1, created.RequesterCount)
-
-	disableMCPApproval(ti)
-	_, err = ti.service.CreateRequest(ungranted, createPayload("server_url", "https://other.example.com/sse", ""))
-	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestCreateRequest_WritesAnAuditEntry(t *testing.T) {
@@ -310,7 +312,7 @@ func TestCreateRequest_AssemblesEvidenceAtIntake(t *testing.T) {
 	detail, err := ti.service.GetRequest(ctx, getPayload(created.ID))
 	require.NoError(t, err)
 	require.NotNil(t, detail.EvidenceVersion)
-	require.Equal(t, 1, *detail.EvidenceVersion)
+	require.Equal(t, evidence.Version, *detail.EvidenceVersion)
 	require.NotNil(t, detail.EvidenceCollectedAt)
 
 	doc, ok := detail.Evidence.(map[string]any)

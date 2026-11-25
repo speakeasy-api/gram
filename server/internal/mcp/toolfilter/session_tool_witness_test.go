@@ -1,6 +1,7 @@
 package toolfilter
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -95,4 +96,18 @@ func TestSessionToolWitness_MissingGrantNeverMatchesAndEmptySessionDoes(t *testi
 	require.False(t, s.MatchesWitnessed(t.Context(), "", "s", "a", []string{AnnotationReadOnly}))
 	require.True(t, s.MatchesWitnessed(t.Context(), "g", "", "a", []string{AnnotationReadOnly}))
 	require.False(t, s.MatchesWitnessed(t.Context(), "g", "stateful", "a", []string{AnnotationReadOnly}), "stateless fallback must be isolated from stateful sessions")
+}
+
+func TestWitnessMatchesFullInventoryBudget(t *testing.T) {
+	t.Parallel()
+	store := witnessStoreForTest(t)
+	tools := make([]WitnessedTool, MaxTools)
+	for i := range tools {
+		tools[i] = readOnlyTool(fmt.Sprintf("tool_%05d", i))
+	}
+	store.WitnessPage(t.Context(), "large", "session", "", tools, "")
+	require.True(t, store.MatchesWitnessed(t.Context(), "large", "session", tools[len(tools)-1].Name, []string{AnnotationReadOnly}))
+	tools = append(tools, readOnlyTool("over_limit"))
+	store.WitnessPage(t.Context(), "large", "session", "", tools, "")
+	require.False(t, store.MatchesWitnessed(t.Context(), "large", "session", tools[0].Name, []string{AnnotationReadOnly}))
 }

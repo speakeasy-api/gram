@@ -10,7 +10,7 @@ import { fetchFullTranscript, FULL_LOAD_PAGE_SIZE } from "./transcriptFull";
 
 // Initial window is generous so most matches + context arrive in one request;
 // gaps between disjoint windows are expanded on demand.
-const WINDOW_INITIAL_LIMIT = 200;
+export const WINDOW_INITIAL_LIMIT = 200;
 
 type WindowLoadKey = "before" | "after" | "all" | `gap:${number}`;
 

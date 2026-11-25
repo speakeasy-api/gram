@@ -1,0 +1,1387 @@
+package aivendors
+
+// registry is Speakeasy's curated list of AI products.
+//
+// Every Document here becomes a CIMD admission entry. A MISSING one is a hard,
+// unrecoverable auth failure: MCP clients pick CIMD over dynamic registration
+// once at discovery and do not fall back, so the user sees an OAuth error with
+// no recourse. Be generous — an extra document costs a string comparison.
+//
+// Verify every document live before it lands (HTTP 200, valid JSON, client_id
+// equal to URL, token_endpoint_auth_method "none" or absent OR
+// "private_key_jwt" with exactly one of jwks or jwks_uri) and record the date
+// above the product. Every product with Signatures is also a scan target.
+//
+// Declaration order is listing order; the most specific matching wildcard
+// decides attribution regardless of order.
+var registry = []Product{
+	// Verified 2026-07. Claude Code selects CIMD when the AS advertises
+	// client_id_metadata_document_supported AND "none" among its
+	// token_endpoint_auth_methods_supported.
+	//
+	// Claude Code and Claude are separate products under one vendor key, so
+	// neither may be named by `anthropic` — blocking the CLI must not take
+	// the chat app with it. GatewayMatchersFor derives that.
+	{
+		ID:          "claude-code",
+		VendorKey:   "anthropic",
+		Family:      "claude",
+		DisplayName: "Claude Code",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"claude"},
+			ConfigDirs:   []string{"~/.claude"},
+			ProcessNames: []string{"claude"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"claude-code", "Claude Code"},
+		Aliases: []Alias{
+			{Name: "claude-code", Client: ClientUnknown},
+			{Name: "claude-code-cli", Client: ClientCLI},
+			{Name: "claude-code-web", Client: ClientCloud},
+			{Name: "claude-code-desktop", Client: ClientDesktop},
+			{Name: "claude-tag", Client: ClientSlack},
+		},
+		Documents: []Document{{
+			URL:         "https://claude.ai/oauth/claude-code-client-metadata",
+			Pattern:     false,
+			DisplayName: "Anthropic (Claude Code)",
+			Enabled:     true,
+		}},
+	},
+	{
+		ID:              "claude",
+		VendorKey:       "anthropic",
+		Family:          "claude",
+		DisplayName:     "Claude",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases: []Alias{
+			{Name: "claude-chat", Client: ClientUnknown},
+			{Name: "claude-chat-web", Client: ClientWeb},
+			{Name: "claude-web", Client: ClientWeb},
+			{Name: "claude-desktop", Client: ClientDesktop},
+			{Name: "claude-chat-desktop", Client: ClientDesktop},
+			{Name: "Anthropic/ClaudeAI", Client: ClientUnknown},
+			{Name: "claude-ai", Client: ClientDesktop},
+		},
+		Documents: []Document{{
+			URL:         "https://claude.ai/oauth/mcp-oauth-client-metadata",
+			Pattern:     false,
+			DisplayName: "Anthropic (Claude)",
+			Enabled:     true,
+		}},
+	},
+	// Cowork runs in the Claude desktop app but is its own product, known only
+	// from hooks.
+	{
+		ID:              "cowork",
+		VendorKey:       "anthropic",
+		Family:          "claude",
+		DisplayName:     "Cowork",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases: []Alias{
+			{Name: "cowork", Client: ClientDesktop},
+			{Name: "claude-cowork", Client: ClientDesktop},
+			{Name: "cowork-desktop", Client: ClientDesktop},
+		},
+		Documents: nil,
+	},
+
+	// Verified 2026-07. Insiders ships a distinct document; both are literal
+	// constants in the VS Code source. One product, two documents — which is
+	// what the vendor key is for, and why `microsoft` names it.
+	{
+		ID:              "vscode",
+		VendorKey:       "microsoft",
+		Family:          "",
+		DisplayName:     "Visual Studio Code",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{
+			{
+				URL:         "https://vscode.dev/oauth/client-metadata.json",
+				Pattern:     false,
+				DisplayName: "Visual Studio Code",
+				Enabled:     true,
+			},
+			{
+				URL:         "https://insiders.vscode.dev/oauth/client-metadata.json",
+				Pattern:     false,
+				DisplayName: "Visual Studio Code (Insiders)",
+				Enabled:     true,
+			},
+		},
+	},
+
+	// Verified 2026-07. Signatures verified 2026-09-11 against Zed's
+	// configuring-zed docs: settings live at ~/.config/zed/settings.json on
+	// both macOS and Linux. The macOS app also keeps state under
+	// ~/Library/Application Support/Zed, which the config dir above already
+	// covers for detection purposes.
+	{
+		ID:          "zed",
+		VendorKey:   "zed",
+		Family:      "",
+		DisplayName: "Zed",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"dev.zed.Zed"},
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/.config/zed"},
+			ProcessNames: []string{"Zed"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{{
+			URL:         "https://zed.dev/oauth/client-metadata.json",
+			Pattern:     false,
+			DisplayName: "Zed",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-07. CIMD shipped in goose v1.32.0 (2026-04-23).
+	//
+	// Signatures verified 2026-09-11: the CLI and the desktop app share
+	// ~/.config/goose/config.yaml, and the CLI is invoked as `goose`.
+	//
+	// Filed as a harness because that is what it is used for and how every
+	// roundup lists it, but Block describes it as a general-purpose agent
+	// that "goes beyond code suggestions" — it is the entry in this registry
+	// most arguable as an assistant.
+	{
+		ID:          "goose",
+		VendorKey:   "block",
+		Family:      "",
+		DisplayName: "Goose",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"goose"},
+			ConfigDirs:   []string{"~/.config/goose"},
+			ProcessNames: []string{"goose"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{{
+			URL:         "https://goose-docs.ai/oauth/client-metadata.json",
+			Pattern:     false,
+			DisplayName: "Goose",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-07, re-verified 2026-08-19 (all four documents fetched
+	// live). OpenAI mints CIMD documents per connector and per Codex target
+	// server, so those namespaces are unbounded and only patterns can admit
+	// them — see the admission package's pattern rules.
+	//
+	// chatgpt.com is a TEMPLATE endpoint: any id in a wildcard position
+	// returns HTTP 200 with a valid self-referential document, so a
+	// successful fetch proves nothing about an id being real. The patterns
+	// stay safe because the id is never reflected into consent-visible
+	// metadata — client_name, client_uri, and logo_uri are constant per
+	// product — and the per-id redirect_uris are loopback-only, so minting a
+	// document at a chosen id gains an attacker nothing over presenting the
+	// vendor's real client_id.
+	//
+	// Filed as an assistant, not a harness: this entry is the general-purpose
+	// ChatGPT app and its connector platform, and the category is what scan
+	// results and category-based displays read to say what a device is running.
+	// Calling it a harness would report ChatGPT installs as coding tools. The
+	// coding tool under this vendor key is Codex, which is its own product
+	// below.
+	{
+		ID:          "chatgpt",
+		VendorKey:   "openai",
+		Family:      "",
+		DisplayName: "ChatGPT",
+		Category:    CategoryAssistant,
+		// Verified 2026-09 against the shipping app (ChatGPT 26.903.71938):
+		// its CFBundleIdentifier is com.openai.codex. The desktop app first
+		// shipped as com.openai.chat, and OpenAI left that identifier on
+		// ChatGPT Classic below rather than carrying it forward, so the
+		// bundle id is the only thing that tells the two builds apart.
+		//
+		// com.openai.codex names THIS app, not the Codex CLI further down.
+		// The CLI has no bundle to carry an identifier, and folding this into
+		// that entry would file every ChatGPT desktop install as a coding
+		// tool. The shared string is OpenAI's naming, not a mistake to tidy.
+		//
+		// No config dir: the bundle id already detects the install exactly,
+		// and a support directory under com.openai.codex survives the app
+		// being removed, so it would report people who no longer run it.
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.openai.codex"},
+			Binaries:     nil,
+			ConfigDirs:   nil,
+			ProcessNames: []string{"ChatGPT"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"ChatGPT", "chatgpt"},
+		Aliases: []Alias{
+			{Name: "chatgpt", Client: ClientUnknown},
+			{Name: "chatgpt-work", Client: ClientUnknown},
+			{Name: "openai-mcp", Client: ClientUnknown},
+		},
+		Documents: []Document{
+			{
+				// One document per ChatGPT connector, {id} derived from the
+				// MCP server origin (SHAKE-256 over the origin, per OpenAI's
+				// Apps SDK docs and the Codex CLI source) — deterministic per
+				// server, unbounded across servers.
+				URL:         "https://chatgpt.com/oauth/*/client.json",
+				Pattern:     true,
+				DisplayName: "ChatGPT (connectors)",
+				Enabled:     true,
+			},
+			{
+				// The connector platform's stable shared document. The
+				// connector wildcard requires exactly one path segment
+				// between /oauth/ and /client.json, and this URL has none,
+				// so this entry is the only thing that admits it.
+				URL:         "https://chatgpt.com/oauth/client.json",
+				Pattern:     false,
+				DisplayName: "ChatGPT",
+				Enabled:     true,
+			},
+		},
+	},
+
+	// ChatGPT Classic is the older desktop build, installed alongside the
+	// current app rather than over it, and it is a scan target only.
+	//
+	// It deliberately carries no gateway matchers. Both builds authorize
+	// through chatgpt.com and present the documents registered above, so the
+	// identity a caller proves is "a ChatGPT client" and nothing finer. The
+	// builds do differ in their HTTP User-Agent, but that is self-reported
+	// and trivially set by anything, so it can separate them for counting and
+	// never for admitting. Registering those documents here too would make
+	// blocking Classic refuse everyone on the current app and on chatgpt.com,
+	// which is the reach a Product is defined to prevent. Classic is
+	// therefore visible on the device and decided about, at the gateway, as
+	// ChatGPT.
+	{
+		ID:          "chatgpt-classic",
+		VendorKey:   "openai",
+		Family:      "",
+		DisplayName: "ChatGPT Classic",
+		Category:    CategoryAssistant,
+		// Verified 2026-09 against the Homebrew cask (chatgpt-classic
+		// 1.2026.184): Classic kept com.openai.chat, the identifier the
+		// desktop app shipped under originally.
+		//
+		// The process name is the main executable, which is what an installed
+		// bundle is launched as. Its helpers (ChatGPTHelper,
+		// ChatGPTCodexUpgradeHelper) are unique to Classic too, but they are
+		// implementation detail that a release can rename; the executable
+		// matching the bundle name is the stable running signal. Process
+		// names are matched exactly, so "ChatGPT" above never fires here.
+		//
+		// No config dir on purpose, though Classic keeps one at
+		// ~/Library/Application Support/com.openai.chat. That path is the
+		// original desktop app's, which Classic inherited along with the
+		// bundle id, and macOS leaves it behind when an app is removed. So it
+		// reports "has ever run the original ChatGPT app", not "Classic is
+		// installed" — true for a large share of people who have since moved
+		// to the current app. The bundle id already detects the install
+		// exactly, and all the config dir would add is the app having been
+		// renamed or moved out of /Applications. That is not worth a false
+		// positive across everyone who used ChatGPT desktop before the split.
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.openai.chat"},
+			Binaries:     nil,
+			ConfigDirs:   nil,
+			ProcessNames: []string{"ChatGPT Classic"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents:       nil,
+	},
+	{
+		ID:          "codex",
+		VendorKey:   "openai",
+		Family:      "",
+		DisplayName: "Codex",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"codex"},
+			ConfigDirs:   []string{"~/.codex"},
+			ProcessNames: []string{"codex"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"codex", "codex-cli", "Codex CLI"},
+		Aliases: []Alias{
+			{Name: "codex", Client: ClientUnknown},
+			{Name: "codex-cli", Client: ClientCLI},
+			{Name: "codex-web", Client: ClientCloud},
+			{Name: "openai-mcp (Codex)", Client: ClientCloud},
+			{Name: "codex-cli-rs", Client: ClientCLI},
+			{Name: "codex-exec", Client: ClientCLI},
+			{Name: "codex-tui", Client: ClientCLI},
+			{Name: "codex-exec-server", Client: ClientUnknown},
+			{Name: "codex-app-server", Client: ClientUnknown},
+			{Name: "codex-mcp-client", Client: ClientUnknown},
+		},
+		Documents: []Document{
+			{
+				// Codex CLI >=0.148.0 (first stable release 2026-08-18,
+				// openai/codex PR #38089) mints one document per MCP server:
+				// {id} is base64url-no-pad of the first 9 bytes of SHA-256 of
+				// the full server URL, computed client-side. Deterministic
+				// per server URL, not per install, but the server URL space
+				// is unbounded, so only a pattern can admit it.
+				URL:         "https://chatgpt.com/oauth/codex/*/client.json",
+				Pattern:     true,
+				DisplayName: "Codex CLI",
+				Enabled:     true,
+			},
+			{
+				// The stable shared Codex document. Verified 2026-09: Codex
+				// CLI 0.154.0 presents this one, not the per-server document
+				// above, when it authorizes against a Speakeasy MCP server.
+				// OpenAI's docs tie that switch to authorization servers
+				// advertising RFC 9207. Both forms stay registered: older
+				// CLIs still mint a document per server, and which one a
+				// given release sends is OpenAI's to change.
+				//
+				// The ChatGPT connector wildcard also admits this URL. That
+				// overlap is fine and is why this entry has to exist: a
+				// literal entry is resolved ahead of a wildcard, so naming it
+				// here is what attributes a caller presenting it to Codex
+				// rather than to ChatGPT.
+				URL:         "https://chatgpt.com/oauth/codex/client.json",
+				Pattern:     false,
+				DisplayName: "Codex CLI (stable document)",
+				Enabled:     true,
+			},
+		},
+	},
+
+	// Verified 2026-07. Notion publishes two equally-valid documents on two
+	// origins, each self-consistent with its own client_uri and redirect_uris.
+	// Seeding only one would reject half of Notion's traffic. The apex
+	// (notion.so, no www) 301s to the www document, whose client_id is the www
+	// form, so the apex URL is not itself a valid client_id.
+	{
+		ID:              "notion",
+		VendorKey:       "notion",
+		Family:          "",
+		DisplayName:     "Notion",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{
+			{
+				URL:         "https://www.notion.so/oauth/mcp-client-metadata.json",
+				Pattern:     false,
+				DisplayName: "Notion",
+				Enabled:     true,
+			},
+			{
+				URL:         "https://app.notion.com/oauth/mcp-client-metadata.json",
+				Pattern:     false,
+				DisplayName: "Notion (app.notion.com)",
+				Enabled:     true,
+			},
+		},
+	},
+
+	// Verified 2026-07.
+	{
+		ID:              "mcpjam",
+		VendorKey:       "mcpjam",
+		Family:          "",
+		DisplayName:     "MCPJam Inspector",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{{
+			URL:         "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
+			Pattern:     false,
+			DisplayName: "MCPJam Inspector",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-07. CIMD shipped in droid 0.148.0 (2026-06-15).
+	{
+		ID:              "factory-droid",
+		VendorKey:       "factory",
+		Family:          "",
+		DisplayName:     "Factory Droid",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{{
+			URL:         "https://api.factory.ai/mcp/oauth-client",
+			Pattern:     false,
+			DisplayName: "Factory Droid",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-07.
+	{
+		ID:              "toolhive",
+		VendorKey:       "stacklok",
+		Family:          "",
+		DisplayName:     "ToolHive",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{{
+			URL:         "https://toolhive.dev/oauth/client-metadata.json",
+			Pattern:     false,
+			DisplayName: "ToolHive",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-08-21. Hermes Agent is served from GitHub Pages. Exact
+	// matching keeps this scoped to the single document path; the shared
+	// github.io apex is not a widening concern.
+	//
+	// Signatures verified 2026-09-11 against NousResearch/hermes-agent: the
+	// install script puts a `hermes` binary on PATH and the agent keeps its
+	// state in ~/.hermes ($HERMES_HOME). Windows uses %LOCALAPPDATA%\hermes,
+	// which the home-relative config dir does not cover — the binary carries
+	// the match there.
+	{
+		ID:          "hermes-agent",
+		VendorKey:   "nousresearch",
+		Family:      "",
+		DisplayName: "Hermes Agent",
+		Category:    CategoryAssistant,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"hermes"},
+			ConfigDirs:   []string{"~/.hermes"},
+			ProcessNames: []string{"hermes"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases: []Alias{
+			{Name: "hermes-agent", Client: ClientUnknown},
+		},
+		Documents: []Document{{
+			URL:         "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+			Pattern:     false,
+			DisplayName: "Hermes Agent",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-08-26. The apex form (skydive.com, no www) 301s to the www
+	// document, whose client_id is the www form, so the apex URL is not itself
+	// a valid client_id and is deliberately absent.
+	{
+		ID:              "skydive",
+		VendorKey:       "skydive",
+		Family:          "",
+		DisplayName:     "Skydive",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{{
+			URL:         "https://www.skydive.com/api/v1/external-oauth/client-metadata",
+			Pattern:     false,
+			DisplayName: "Skydive",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-09-10, after a production CIMD admission denial for this
+	// client_id. The extra "opencode" path segment does NOT mark a per-server
+	// namespace the way OpenAI's does: the shorter /oauth/client.json form and
+	// any other segment both 404, so there is exactly one document to admit.
+	{
+		ID:          "opencode",
+		VendorKey:   "opencode",
+		Family:      "",
+		DisplayName: "opencode",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"opencode"},
+			ConfigDirs:   []string{"~/.config/opencode"},
+			ProcessNames: []string{"opencode"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"opencode"},
+		Aliases: []Alias{
+			{Name: "opencode", Client: ClientCLI},
+		},
+		Documents: []Document{{
+			URL:         "https://opencode.ai/oauth/opencode/client.json",
+			Pattern:     false,
+			DisplayName: "opencode",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-09-21: HTTP 200, a self-referential client_id, and
+	// token_endpoint_auth_method "none". Shorter, invented-segment, and
+	// sibling-file paths return 404, so this is an exact entry, not a pattern.
+	{
+		ID:              "github-copilot-cli",
+		VendorKey:       "github",
+		Family:          "",
+		DisplayName:     "GitHub Copilot CLI",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases: []Alias{
+			{Name: "copilot-cli", Client: ClientCLI},
+		},
+		Documents: []Document{{
+			URL:         "https://github.com/copilot/cli/client-metadata.json",
+			Pattern:     false,
+			DisplayName: "GitHub Copilot CLI",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-05 against Conductor 0.90.1 (macOS aarch64 DMG): HTTP
+	// 200, a self-referential client_id, and token_endpoint_auth_method "none".
+	// Shorter (/oauth/client.json), invented-segment, and sibling-file paths
+	// all return 404, so this is an exact entry, not a pattern. A desktop app
+	// (Tauri shell orchestrating Claude Code + Codex), with a hosted callback
+	// matching Skydive's shape, not loopback. CFBundleIdentifier is the exact
+	// install signal; the process name is generic but kept on purpose (matching
+	// convention in goose, pi, crush, qwen above). No binaries: the CLI shim
+	// in Contents/Resources/bin is not installed onto PATH. ~/.conductor is the
+	// user config directory per Conductor's settings docs; .conductor/ in the
+	// repository root are per-repo workspace settings.
+	{
+		ID:          "conductor",
+		VendorKey:   "conductor",
+		Family:      "",
+		DisplayName: "Conductor",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.conductor.app"},
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/.conductor"},
+			ProcessNames: []string{"conductor"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{{
+			URL:         "https://api.conductor.build/oauth/client-metadata.json",
+			Pattern:     false,
+			DisplayName: "Conductor",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-05: HTTP 200, self-referential client_id,
+	// token_endpoint_auth_method "private_key_jwt" with jwks_uri. This is a
+	// wildcard: Vercel Connect mints one document per connector, with
+	// server-generated IDs (scl_...). Sibling paths return 404 (/connectors,
+	// /connectors/a/b), so the namespace is bounded. The single redirect_uri
+	// is Vercel's own /callback. client_name is user-chosen (the connector
+	// owner's chosen name); the consent page shows it alongside the
+	// connect.vercel.com origin, which is the verifiable trust anchor. The
+	// catalog DisplayName ("Vercel Connect") attributes the client in the
+	// dashboard.
+	{
+		ID:              "vercel-connect",
+		VendorKey:       "vercel",
+		Family:          "",
+		DisplayName:     "Vercel Connect",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{{
+			URL:         "https://connect.vercel.com/connectors/*",
+			Pattern:     true,
+			DisplayName: "Vercel Connect (connectors)",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-09. The only redirect is a hosted https URL on
+	// linear.app, not a loopback URL, matching Skydive and Conductor. Sibling
+	// paths return 404 (/.well-known/oauth-client-metadata/zzz.json,
+	// /.well-known/oauth-client-metadata/agent.json, etc.), so an exact entry
+	// rather than a pattern is the right rule.
+	{
+		ID:              "linear",
+		VendorKey:       "linear",
+		Family:          "",
+		DisplayName:     "Linear",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{{
+			URL:         "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
+			Pattern:     false,
+			DisplayName: "Linear",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-12. Lovable is a hosted connector client with a
+	// same-origin https callback (api.lovable.dev). Sibling paths return 404
+	// (/.well-known/oauth-client/, /.well-known/oauth-client.json, etc.), so
+	// an exact entry rather than a pattern is the right rule. The document
+	// carries an unregistered code_challenge_methods_used field, which the
+	// validator ignores.
+	{
+		ID:              "lovable",
+		VendorKey:       "lovable",
+		Family:          "",
+		DisplayName:     "Lovable",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{{
+			URL:         "https://api.lovable.dev/.well-known/oauth-client",
+			Pattern:     false,
+			DisplayName: "Lovable",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-14, re-verified 2026-10-14. A desktop IDE and CLI with
+	// a same-origin hosted https callback (antigravity.google). Sibling paths
+	// return 404 (/oauth/client-metadata, /oauth/zzz.json, etc.), so an exact
+	// entry rather than a pattern is the right rule. The www form
+	// (www.antigravity.google) is deliberately absent because its client_id is
+	// the apex URL.
+	//
+	// Signatures verified 2026-10-14 against the Antigravity 2.23.0 macOS DMG
+	// and Antigravity CLI 1.3.5 tarball (the Homebrew cask artifacts). Both
+	// bundled language servers embed the document URL above; the separate
+	// Antigravity IDE (com.google.antigravity-ide, 2.5.5) does not, so it is
+	// not covered here. The app's CFBundleExecutable is "Antigravity" and it
+	// keeps state in ~/.gemini/antigravity. The CLI installer writes the binary
+	// to ~/.local/bin/agy, while the Homebrew cask links agy to a file named
+	// antigravity, so both process names are kept; its settings live in
+	// ~/.gemini/antigravity-cli. ~/.antigravity is deliberately absent: the
+	// 2.x app never references it (only the cask's zap stanza does, a leftover
+	// of the earlier IDE builds), so it would match stale installs.
+	{
+		ID:          "antigravity",
+		VendorKey:   "google",
+		Family:      "",
+		DisplayName: "Google Antigravity",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.google.antigravity"},
+			Binaries:     []string{"agy"},
+			ConfigDirs:   []string{"~/.gemini/antigravity", "~/.gemini/antigravity-cli"},
+			ProcessNames: []string{"Antigravity", "agy", "antigravity"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents: []Document{{
+			URL:         "https://antigravity.google/oauth/client-metadata.json",
+			Pattern:     false,
+			DisplayName: "Google Antigravity",
+			Enabled:     true,
+		}},
+	},
+
+	// Products below publish no CIMD document. They register dynamically or
+	// do not speak MCP to Speakeasy at all, so an access decision about them is
+	// recorded and enforces nothing — the dashboard says so rather than
+	// implying the gateway turns them away. They carry reported client names
+	// for attribution only.
+	{
+		ID:          "cursor",
+		VendorKey:   "cursor",
+		Family:      "",
+		DisplayName: "Cursor",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.todesktop.230313mzl4w4u92"},
+			Binaries:     []string{"cursor"},
+			ConfigDirs:   []string{"~/.cursor"},
+			ProcessNames: []string{"Cursor"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"Cursor", "cursor", "cursor-vscode"},
+		Aliases: []Alias{
+			{Name: "cursor", Client: ClientIDE},
+			{Name: "cursor-vscode", Client: ClientIDE},
+			{Name: "cursor-cli", Client: ClientCLI},
+		},
+		Documents: nil,
+	},
+	{
+		// ~/.gemini itself is shared with Google Antigravity, which keeps its
+		// state in ~/.gemini/antigravity, ~/.gemini/config and others, so the
+		// root would report every Antigravity install as Gemini CLI too. The
+		// marker is the CLI's session directory instead, written on first use,
+		// which neither Antigravity 2.23.0 nor its CLI 1.3.5 references.
+		ID:          "gemini-cli",
+		VendorKey:   "google",
+		Family:      "",
+		DisplayName: "Gemini CLI",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"gemini"},
+			ConfigDirs:   []string{"~/.gemini/tmp"},
+			ProcessNames: []string{"gemini"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"gemini-cli", "Gemini CLI"},
+		Aliases: []Alias{
+			{Name: "gemini", Client: ClientUnknown},
+			{Name: "gemini-cli", Client: ClientCLI},
+		},
+		Documents: nil,
+	},
+	{
+		// Rebranded as Devin Desktop in June 2026 and still writing to
+		// ~/.codeium/windsurf, so this entry keeps matching it. The id stays
+		// `windsurf` because detections and access decisions are recorded
+		// against it; renaming would orphan both. Devin's own CLI and editor
+		// extension are a separate product below.
+		ID:          "windsurf",
+		VendorKey:   "codeium",
+		Family:      "",
+		DisplayName: "Windsurf",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.exafunction.windsurf"},
+			Binaries:     []string{"windsurf"},
+			ConfigDirs:   []string{"~/.codeium/windsurf"},
+			ProcessNames: []string{"Windsurf"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"Windsurf", "windsurf"},
+		Aliases: []Alias{
+			{Name: "windsurf", Client: ClientIDE},
+		},
+		Documents: nil,
+	},
+	{
+		ID:          "aider",
+		VendorKey:   "aider",
+		Family:      "",
+		DisplayName: "Aider",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"aider"},
+			ConfigDirs:   []string{"~/.aider"},
+			ProcessNames: []string{"aider"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"aider"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+	{
+		ID:          "openclaw",
+		VendorKey:   "openclaw",
+		Family:      "",
+		DisplayName: "OpenClaw",
+		Category:    CategoryAssistant,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"openclaw"},
+			ConfigDirs:   []string{"~/.openclaw"},
+			ProcessNames: []string{"openclaw"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"openclaw", "OpenClaw"},
+		Aliases: []Alias{
+			{Name: "openclaw", Client: ClientUnknown},
+		},
+		Documents: nil,
+	},
+
+	// Signatures verified 2026-09-16 against pi.dev: the binary is `pi`, with
+	// global configuration under ~/.pi/agent (settings, sessions, extensions,
+	// installed packages) and project-local overrides in a repository's .pi.
+	// ~/.pi is matched rather than the agent dir so a fresh install counts
+	// before anything has populated it. Documents verified 2026-11-13 against
+	// pi.dev and earendil-works/pi commit 908aa7b: MCP OAuth prefers the stable
+	// document when the server supports RFC 9207, otherwise a per-server
+	// document with one callback ID path segment.
+	{
+		ID:          "pi",
+		VendorKey:   "pi",
+		Family:      "",
+		DisplayName: "Pi",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"pi"},
+			ConfigDirs:   []string{"~/.pi"},
+			ProcessNames: []string{"pi"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"pi"},
+		Aliases: []Alias{
+			{Name: "pi", Client: ClientCLI},
+		},
+		Documents: []Document{
+			{URL: "https://pi.dev/oauth/client.json", Pattern: false, DisplayName: "Pi", Enabled: true},
+			{URL: "https://pi.dev/oauth/*/client.json", Pattern: true, DisplayName: "Pi (per-server document)", Enabled: true},
+		},
+	},
+
+	// Mistral Vibe (mistralai/mistral-vibe): the binary is `vibe` (uv tool
+	// install mistral-vibe), global configuration under ~/.vibe (config.toml,
+	// hooks.toml, plugins/, skills/), overridable via VIBE_HOME. ~/.vibe is
+	// matched rather than a deeper subdir so a fresh install counts before
+	// anything has populated it. No CIMD document published, so no access
+	// decision can be recorded or enforced for it — detection only.
+	{
+		ID:          "vibe",
+		VendorKey:   "mistral",
+		Family:      "",
+		DisplayName: "Mistral Vibe",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"vibe"},
+			ConfigDirs:   []string{"~/.vibe"},
+			ProcessNames: []string{"vibe"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"vibe", "mistral-vibe", "Mistral Vibe"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// Signatures verified 2026-09-11 against charmbracelet/crush: the binary
+	// is `crush`, config at ~/.config/crush and state at
+	// ~/.local/share/crush. XDG-aware, so both can move; the binary carries
+	// the match when they do. No CIMD document published, so a decision
+	// about it is recorded but not enforceable.
+	{
+		ID:          "crush",
+		VendorKey:   "charm",
+		Family:      "",
+		DisplayName: "Crush",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"crush"},
+			ConfigDirs:   []string{"~/.config/crush"},
+			ProcessNames: []string{"crush"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"crush", "Crush"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// Signatures verified 2026-09-11 against QwenLM/qwen-code: the CLI is
+	// invoked as `qwen`. Its config directory is referenced as ~/.qwen in the
+	// docs but not stated normatively, so only the binary is claimed here —
+	// a config dir that turns out to be wrong is a signature that never
+	// fires, which is worse than not having one.
+	{
+		ID:          "qwen-code",
+		VendorKey:   "alibaba",
+		Family:      "",
+		DisplayName: "Qwen Code",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"qwen"},
+			ConfigDirs:   nil,
+			ProcessNames: []string{"qwen"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"qwen-code", "Qwen Code"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// Signatures verified 2026-09-11 against docs.cline.bot: the CLI installs
+	// as `cline` via npm. The npm CLI is optional though — Cline is primarily a
+	// VS Code extension, so matching on the binary alone left every
+	// extension-only install undetected. Config dirs take a wildcard now, so
+	// the version-stamped extension directory is expressible and carries those
+	// devices; see the editor-extension agents below for the same shape.
+	//
+	// The extension identifier is `saoudrizwan.claude-dev`, which does not read
+	// as Cline because it predates the rename. Roo Code below is a Cline fork
+	// and still ships as `roo-cline`, which is the trail that corroborates it.
+	{
+		ID:          "cline",
+		VendorKey:   "cline",
+		Family:      "",
+		DisplayName: "Cline",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"cline"},
+			ConfigDirs:   []string{"~/.vscode*/extensions/saoudrizwan.claude-dev-*", "~/.cursor/extensions/saoudrizwan.claude-dev-*", "~/.windsurf/extensions/saoudrizwan.claude-dev-*"},
+			ProcessNames: []string{"cline"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"cline", "Cline"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// ---------------------------------------------------------------------
+	// Editor-extension agents. Verified 2026-09-11 against the VS Code
+	// Marketplace extensionquery API (identifiers and install counts) — these
+	// are the most-installed agentic tools there, and until config dirs took
+	// a wildcard none of them could be detected at all: an extension lives
+	// under a version-stamped directory name that moves every release.
+	// ---------------------------------------------------------------------
+
+	// 2.0M installs. A Cline fork, so it ships no CLI of its own.
+	{
+		ID:          "roo-code",
+		VendorKey:   "roocode",
+		Family:      "",
+		DisplayName: "Roo Code",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/.vscode*/extensions/rooveterinaryinc.roo-cline-*", "~/.cursor/extensions/rooveterinaryinc.roo-cline-*", "~/.windsurf/extensions/rooveterinaryinc.roo-cline-*"},
+			ProcessNames: nil,
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"roo-code", "Roo Code"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// 4.1M installs. The CLI installs as `cn` (npm @continuedev/cli).
+	{
+		ID:          "continue",
+		VendorKey:   "continue",
+		Family:      "",
+		DisplayName: "Continue",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"cn"},
+			ConfigDirs:   []string{"~/.vscode*/extensions/continue.continue-*", "~/.cursor/extensions/continue.continue-*", "~/.windsurf/extensions/continue.continue-*"},
+			ProcessNames: nil,
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"continue", "Continue"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// 1.5M installs. The CLI installs as `kilo` and `kilocode`
+	// (npm @kilocode/cli). The marketplace id is mixed-case but VS Code
+	// lowercases the directory it writes.
+	{
+		ID:          "kilo-code",
+		VendorKey:   "kilocode",
+		Family:      "",
+		DisplayName: "Kilo Code",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"kilo", "kilocode"},
+			ConfigDirs:   []string{"~/.vscode*/extensions/kilocode.kilo-code-*", "~/.cursor/extensions/kilocode.kilo-code-*", "~/.windsurf/extensions/kilocode.kilo-code-*"},
+			ProcessNames: nil,
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"kilo-code", "Kilo Code"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// 777k installs. Extension only.
+	{
+		ID:          "augment",
+		VendorKey:   "augment",
+		Family:      "",
+		DisplayName: "Augment Code",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/.vscode*/extensions/augment.vscode-augment-*", "~/.cursor/extensions/augment.vscode-augment-*", "~/.windsurf/extensions/augment.vscode-augment-*"},
+			ProcessNames: nil,
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"augment", "Augment Code"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// Cognition's cloud agent, which reaches a device through its editor
+	// extension (cognition.devin) and its `devin` CLI. Distinct from Devin
+	// Desktop, which is the rebranded Windsurf above and matches on
+	// ~/.codeium/windsurf.
+	{
+		ID:          "devin",
+		VendorKey:   "cognition",
+		Family:      "",
+		DisplayName: "Devin",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"devin"},
+			ConfigDirs:   []string{"~/.vscode*/extensions/cognition.devin-*", "~/.cursor/extensions/cognition.devin-*", "~/.windsurf/extensions/cognition.devin-*"},
+			ProcessNames: nil,
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"devin", "Devin"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// ---------------------------------------------------------------------
+	// Terminal and IDE agents with their own install.
+	// ---------------------------------------------------------------------
+
+	// Binary verified 2026-09-11 from npm @sourcegraph/amp.
+	{
+		ID:          "amp",
+		VendorKey:   "sourcegraph",
+		Family:      "",
+		DisplayName: "Amp",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"amp"},
+			ConfigDirs:   nil,
+			ProcessNames: []string{"amp"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"amp", "Amp"},
+		Aliases: []Alias{
+			{Name: "amp-thread-actor", Client: ClientUnknown},
+			{Name: "amp-mcp-client", Client: ClientUnknown},
+		},
+		Documents: nil,
+	},
+
+	// Binary verified 2026-09-11 from PyPI openhands-ai.
+	{
+		ID:          "openhands",
+		VendorKey:   "allhands",
+		Family:      "",
+		DisplayName: "OpenHands",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"openhands"},
+			ConfigDirs:   nil,
+			ProcessNames: []string{"openhands"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"openhands", "OpenHands"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// Bundle id and data paths verified 2026-09-11 from the Homebrew cask.
+	{
+		ID:          "trae",
+		VendorKey:   "bytedance",
+		Family:      "",
+		DisplayName: "Trae",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.trae.app"},
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/.trae", "~/Library/Application Support/Trae"},
+			ProcessNames: []string{"Trae"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"trae", "Trae"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// Bundle id and data paths verified 2026-09-11 from the Homebrew cask.
+	// An AI terminal rather than a coding agent, but it runs agents and is
+	// filed with them for the same reason Goose is.
+	{
+		ID:          "warp",
+		VendorKey:   "warp",
+		Family:      "",
+		DisplayName: "Warp",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"dev.warp.Warp-Stable"},
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/.warp"},
+			ProcessNames: []string{"Warp"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"warp", "Warp"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// ---------------------------------------------------------------------
+	// Assistants: multi-provider chat apps that speak MCP but are not coding
+	// tools. Bundle ids and data paths verified 2026-09-11 from Homebrew
+	// casks; the two server-shaped ones carry binaries from their package
+	// registries instead.
+	// ---------------------------------------------------------------------
+	{
+		ID:          "cherry-studio",
+		VendorKey:   "cherrystudio",
+		Family:      "",
+		DisplayName: "Cherry Studio",
+		Category:    CategoryAssistant,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.kangfenmao.CherryStudio"},
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/Library/Application Support/CherryStudio"},
+			ProcessNames: []string{"Cherry Studio"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"cherry-studio", "Cherry Studio"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+	{
+		ID:          "msty",
+		VendorKey:   "msty",
+		Family:      "",
+		DisplayName: "Msty",
+		Category:    CategoryAssistant,
+		Signatures: Signatures{
+			BundleIDs:    []string{"app.msty.app"},
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/Library/Application Support/Msty"},
+			ProcessNames: []string{"Msty"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"msty", "Msty"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+	{
+		ID:          "anythingllm",
+		VendorKey:   "mintplexlabs",
+		Family:      "",
+		DisplayName: "AnythingLLM",
+		Category:    CategoryAssistant,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/Library/Application Support/anythingllm-desktop"},
+			ProcessNames: []string{"AnythingLLM"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"anythingllm", "AnythingLLM"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// Self-hosted web UIs. Installed as packages and reached through a
+	// browser, so there is no bundle to match — the console script is the
+	// signature. Binaries verified 2026-09-11 from PyPI open-webui and the
+	// LibreChat repository.
+	{
+		ID:          "open-webui",
+		VendorKey:   "openwebui",
+		Family:      "",
+		DisplayName: "Open WebUI",
+		Category:    CategoryAssistant,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"open-webui"},
+			ConfigDirs:   nil,
+			ProcessNames: []string{"open-webui"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"open-webui", "Open WebUI"},
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// Local model runtimes. They never speak MCP to Speakeasy, so they carry no
+	// documents and no reported names: there is no caller to recognize.
+	// Bundle id and data path verified 2026-09-11 from the Homebrew cask. Jan
+	// is both a runtime and a chat UI; filed as a runtime because that is the
+	// job it is compared against Ollama and LM Studio for.
+	{
+		ID:          "jan",
+		VendorKey:   "menlo",
+		Family:      "",
+		DisplayName: "Jan",
+		Category:    CategoryLocalModel,
+		Signatures: Signatures{
+			BundleIDs:    []string{"jan.ai.app"},
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/Library/Application Support/Jan", "~/.config/jan"},
+			ProcessNames: []string{"Jan"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// Bundle id and data path verified 2026-09-11 from the Homebrew cask.
+	{
+		ID:          "gpt4all",
+		VendorKey:   "nomic",
+		Family:      "",
+		DisplayName: "GPT4All",
+		Category:    CategoryLocalModel,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.nomic-ai.gpt4all"},
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/Library/Application Support/GPT4All"},
+			ProcessNames: []string{"gpt4all"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// The engine most of the others embed, installed on its own by people
+	// running models by hand. Binaries are the upstream console scripts.
+	{
+		ID:          "llamacpp",
+		VendorKey:   "ggml",
+		Family:      "",
+		DisplayName: "llama.cpp",
+		Category:    CategoryLocalModel,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"llama-server", "llama-cli"},
+			ConfigDirs:   nil,
+			ProcessNames: []string{"llama-server"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	// Binary verified 2026-09-11 from PyPI vllm. A serving runtime rather
+	// than a desktop app, so it shows up on developer machines and build
+	// boxes rather than laptops generally.
+	{
+		ID:          "vllm",
+		VendorKey:   "vllm",
+		Family:      "",
+		DisplayName: "vLLM",
+		Category:    CategoryLocalModel,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"vllm"},
+			ConfigDirs:   nil,
+			ProcessNames: []string{"vllm"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	{
+		ID:          "localai",
+		VendorKey:   "localai",
+		Family:      "",
+		DisplayName: "LocalAI",
+		Category:    CategoryLocalModel,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"local-ai"},
+			ConfigDirs:   nil,
+			ProcessNames: []string{"local-ai"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	{
+		ID:          "koboldcpp",
+		VendorKey:   "koboldcpp",
+		Family:      "",
+		DisplayName: "KoboldCpp",
+		Category:    CategoryLocalModel,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"koboldcpp"},
+			ConfigDirs:   nil,
+			ProcessNames: []string{"koboldcpp"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents:       nil,
+	},
+
+	{
+		ID:          "ollama",
+		VendorKey:   "ollama",
+		Family:      "",
+		DisplayName: "Ollama",
+		Category:    CategoryLocalModel,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.electron.ollama"},
+			Binaries:     []string{"ollama"},
+			ConfigDirs:   []string{"~/.ollama"},
+			ProcessNames: []string{"ollama"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents:       nil,
+	},
+	{
+		ID:          "lmstudio",
+		VendorKey:   "lmstudio",
+		Family:      "",
+		DisplayName: "LM Studio",
+		Category:    CategoryLocalModel,
+		Signatures: Signatures{
+			BundleIDs:    []string{"ai.elementlabs.lmstudio"},
+			Binaries:     []string{"lms"},
+			ConfigDirs:   []string{"~/.lmstudio"},
+			ProcessNames: []string{"LM Studio"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases:         nil,
+		Documents:       nil,
+	},
+}

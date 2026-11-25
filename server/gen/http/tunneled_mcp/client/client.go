@@ -33,6 +33,10 @@ type Client struct {
 	// listServerConnections endpoint.
 	ListServerConnectionsDoer goahttp.Doer
 
+	// GetServerMetrics Doer is the HTTP client used to make requests to the
+	// getServerMetrics endpoint.
+	GetServerMetricsDoer goahttp.Doer
+
 	// UpdateServer Doer is the HTTP client used to make requests to the
 	// updateServer endpoint.
 	UpdateServerDoer goahttp.Doer
@@ -69,6 +73,7 @@ func NewClient(
 		ListServersDoer:           doer,
 		GetServerDoer:             doer,
 		ListServerConnectionsDoer: doer,
+		GetServerMetricsDoer:      doer,
 		UpdateServerDoer:          doer,
 		RotateServerKeyDoer:       doer,
 		DeleteServerDoer:          doer,
@@ -171,6 +176,30 @@ func (c *Client) ListServerConnections() goa.Endpoint {
 		resp, err := c.ListServerConnectionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("tunneledMcp", "listServerConnections", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetServerMetrics returns an endpoint that makes HTTP requests to the
+// tunneledMcp service getServerMetrics server.
+func (c *Client) GetServerMetrics() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetServerMetricsRequest(c.encoder)
+		decodeResponse = DecodeGetServerMetricsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetServerMetricsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetServerMetricsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("tunneledMcp", "getServerMetrics", err)
 		}
 		return decodeResponse(resp)
 	}

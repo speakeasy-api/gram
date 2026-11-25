@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
@@ -11,7 +12,7 @@ import {
   useMembers,
 } from "@gram/client/react-query/members.js";
 import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Button } from "@/components/ui/Button";
 import {
   DropdownMenu,
@@ -20,10 +21,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
+import { useOrgRoutes } from "@/routes";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
-import { CreateRoleDialog } from "./CreateRoleDialog";
+import { useNavigate, useSearchParams } from "react-router";
 import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { MemberFacepile } from "@/components/member-facepile";
 import { Ellipsis } from "lucide-react";
@@ -33,6 +34,8 @@ import type { Action } from "@/components/ui/MoreActions";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
+import { allMemberRoleIds } from "@/lib/member-roles";
+import { pluralize } from "@/lib/format";
 
 // Single source of truth for the per-role actions: the "⋯" dropdown and the
 // row's right-click context menu both render from this list. Edit always;
@@ -105,6 +108,7 @@ type RowMember = {
   email: string;
   photoUrl?: string;
   roleIds: string[];
+  directoryRoleIds: string[];
 };
 
 function RoleRow({
@@ -121,13 +125,18 @@ function RoleRow({
   onDelete: () => void;
 }): JSX.Element {
   const roleMembers = members
-    .filter((m) => m.roleIds.includes(role.id))
+    .filter((m) => allMemberRoleIds(m).includes(role.id))
     .map((m) => ({
       id: m.id,
       name: m.name,
       email: m.email,
       photoUrl: m.photoUrl,
     }));
+  // The faces are everyone who holds the role. When a directory mapping gives
+  // it to some of them, say how many hold it directly, since only those
+  // assignments can be changed on the member.
+  const directCount = members.filter((m) => m.roleIds.includes(role.id)).length;
+  const mappedOnly = roleMembers.length - directCount;
 
   // Mirror the row-actions menu via the shared builder. Without org:admin the
   // menu is empty and the row stays unwrapped.
@@ -170,7 +179,19 @@ function RoleRow({
           {role.description}
         </Text>
         <Text variant="body">{visiblePermissionCount(role.grants)}</Text>
-        <MemberFacepile members={roleMembers} />
+        <div className="flex items-center gap-2">
+          <MemberFacepile members={roleMembers} />
+          {mappedOnly > 0 && (
+            <Text
+              muted
+              small
+              className="whitespace-nowrap"
+              title={`${pluralize(roleMembers.length, "member")} in total: ${directCount} assigned directly, ${mappedOnly} only through directory role mappings.`}
+            >
+              {directCount} direct · {mappedOnly} via directory
+            </Text>
+          )}
+        </div>
         <div aria-hidden />
         <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
           <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
@@ -185,8 +206,17 @@ export function RolesTab(): JSX.Element {
   // Mirror the row-actions menu gate (org:admin): without it, the row is not
   // clickable and shows no affordance.
   const canManageRoles = hasAnyScope(["org:admin"]);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const navigate = useNavigate();
+  const orgRoutes = useOrgRoutes();
+  // Authoring a role is its own page: a sheet cannot hold a role's permissions
+  // and their rules without scrolling away the thing being edited.
+  // A string, so the deep-link effect below can depend on it: the routes
+  // object itself is rebuilt every render.
+  const rolesHref = orgRoutes.access.roles.href();
+  const openRoleEditor = (role: Role | null) =>
+    void navigate(
+      role ? `${rolesHref}/${role.id}/edit` : `${rolesHref}/create`,
+    );
   const [deletingRole, setDeletingRole] = useState<Role | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -204,7 +234,7 @@ export function RolesTab(): JSX.Element {
       if (role) {
         // Mirror the row/menu gate (org:admin) on the deep-link path too
         // (still consume the param so it doesn't linger in the URL).
-        if (canManageRoles) setEditingRole(role);
+        if (canManageRoles) void navigate(`${rolesHref}/${role.id}/edit`);
         setSearchParams(
           (prev) => {
             prev.delete("editRole");
@@ -214,7 +244,14 @@ export function RolesTab(): JSX.Element {
         );
       }
     }
-  }, [searchParams, roles, setSearchParams, canManageRoles]);
+  }, [
+    searchParams,
+    roles,
+    setSearchParams,
+    canManageRoles,
+    navigate,
+    rolesHref,
+  ]);
 
   const defaultRole =
     roles.find((r) => r.isSystem && r.name === "Member") ?? null;
@@ -227,6 +264,7 @@ export function RolesTab(): JSX.Element {
     onSuccess: async () => {
       await Promise.all([
         invalidateAllRoles(queryClient),
+        invalidateAllResourceAudience(queryClient),
         invalidateAllMembers(queryClient),
       ]);
     },
@@ -242,7 +280,7 @@ export function RolesTab(): JSX.Element {
           </Text>
         </div>
         <RequireScope scope="org:admin" level="component">
-          <Button onClick={() => setIsCreateOpen(true)}>
+          <Button onClick={() => openRoleEditor(null)}>
             <Button.LeftIcon>
               <Icon name="plus" className="h-4 w-4" />
             </Button.LeftIcon>
@@ -280,7 +318,7 @@ export function RolesTab(): JSX.Element {
                 role={role}
                 members={members}
                 canManageRoles={canManageRoles}
-                onEdit={() => setEditingRole(role)}
+                onEdit={() => openRoleEditor(role)}
                 onDelete={() => setDeletingRole(role)}
               />
             ))
@@ -320,17 +358,6 @@ export function RolesTab(): JSX.Element {
           </Text>
         </div>
       </div>
-
-      <CreateRoleDialog
-        open={isCreateOpen || !!editingRole}
-        onOpenChange={(open) => {
-          if (!open) {
-            setIsCreateOpen(false);
-            setEditingRole(null);
-          }
-        }}
-        editingRole={editingRole}
-      />
 
       <DeleteRoleDialog
         isOpen={!!deletingRole}

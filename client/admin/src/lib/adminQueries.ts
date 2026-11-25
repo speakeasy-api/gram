@@ -5,42 +5,48 @@
 // mutation that updates the server and leaves the table showing the old row.
 
 import {
-  infiniteQueryOptions,
   queryOptions,
-  type InfiniteData,
   type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
 import {
+  getHooksRollout,
   getOrganization,
   getOrganizationChatAnalysisSettings,
-  getOrganizationFeatures,
+  getOrganizationHooksRollout,
   getOrganizationStats,
-  getInferenceKeys,
   getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
   getProject,
   getSession,
-  listOrganizationActivity,
   listOrganizationMembers,
   listOrganizationProjects,
+  listOrganizationAssistants,
+  listAssistantMigrationOrganizations,
   listOrganizations,
+  listUsers,
+  listUserOrganizations,
+  listProjectMcpServers,
   omitUnset,
-  type AdminInferenceKey,
   type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
-  type AdminOrganizationFeatures,
+  type AdminOrganizationHooksRollout,
   type AdminProjectDetail,
   type AdminPaygBillingSummary,
   type AdminStripeSubscription,
-  type ListOrganizationActivityResult,
   type ListOrganizationMembersResult,
   type ListOrganizationProjectsResult,
+  type AdminOrganizationAssistants,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
+  type ListProjectMcpServersResult,
 } from "@/lib/gramAdminApi";
+import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
+import { buildAdminListCustomDomainsQuery } from "@gram/admin-client/react-query/adminListCustomDomains.core";
+import type { AdminListCustomDomainsRequest } from "@gram/admin-client/models/operations/adminlistcustomdomains";
+import { redirecting, redirectingClient } from "@/lib/adminSdkClient";
 
 // What queryOptions infers, named so the exports can carry the return type that
 // `typescript/explicit-module-boundary-types` demands. Writing the shape out by
@@ -98,46 +104,15 @@ export function organizationQuery(
   });
 }
 
-type OrganizationActivityQuery = ReturnType<
-  typeof infiniteQueryOptions<
-    ListOrganizationActivityResult,
-    Error,
-    InfiniteData<ListOrganizationActivityResult, string | undefined>,
-    readonly ["gram-admin-organization-activity", string],
-    string | undefined
-  >
->;
-
-export function organizationActivityQuery(
-  organizationID: string,
-): OrganizationActivityQuery {
-  return infiniteQueryOptions({
-    queryKey: ["gram-admin-organization-activity", organizationID] as const,
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      listOrganizationActivity(organizationID, pageParam),
-    getNextPageParam: (lastPage) => lastPage.next_cursor,
-  });
-}
-
 export function invalidateOrganizationActivity(
   qc: QueryClient,
   organizationID: string,
 ): void {
   void qc.invalidateQueries({
-    queryKey: organizationActivityQuery(organizationID).queryKey,
-  });
-}
-
-export function organizationFeaturesQuery(
-  organizationID: string,
-): AdminQuery<
-  AdminOrganizationFeatures,
-  readonly ["gram-admin-organization-features", string]
-> {
-  return queryOptions({
-    queryKey: ["gram-admin-organization-features", organizationID] as const,
-    queryFn: () => getOrganizationFeatures(organizationID),
+    queryKey: queryKeyAdminListOrganizationActivityInfinite({
+      organizationId: organizationID,
+    }),
+    exact: true,
   });
 }
 
@@ -156,6 +131,32 @@ export function organizationChatAnalysisSettingsQuery(
   });
 }
 
+// The platform-wide state, and every organization's state, change together
+// when the default pin moves, so a write invalidates both prefixes.
+export const hooksRolloutQuery = queryOptions({
+  queryKey: ["gram-admin-hooks-rollout"] as const,
+  queryFn: getHooksRollout,
+});
+
+const ORGANIZATION_HOOKS_ROLLOUT_KEY = "gram-admin-organization-hooks-rollout";
+
+export function organizationHooksRolloutQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationHooksRollout,
+  readonly ["gram-admin-organization-hooks-rollout", string]
+> {
+  return queryOptions({
+    queryKey: [ORGANIZATION_HOOKS_ROLLOUT_KEY, organizationID] as const,
+    queryFn: () => getOrganizationHooksRollout(organizationID),
+  });
+}
+
+export function invalidateHooksRollout(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: hooksRolloutQuery.queryKey });
+  void qc.invalidateQueries({ queryKey: [ORGANIZATION_HOOKS_ROLLOUT_KEY] });
+}
+
 export function organizationProjectsQuery(
   organizationID: string,
 ): AdminQuery<
@@ -168,6 +169,35 @@ export function organizationProjectsQuery(
   });
 }
 
+export function organizationAssistantsQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationAssistants,
+  readonly ["gram-admin-organization-assistants", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-organization-assistants", organizationID] as const,
+    queryFn: () => listOrganizationAssistants(organizationID),
+  });
+}
+
+export function projectMcpServersQuery(
+  organizationID: string,
+  projectID: string,
+): AdminQuery<
+  ListProjectMcpServersResult,
+  readonly ["gram-admin-project-mcp-servers", string, string]
+> {
+  return queryOptions({
+    queryKey: [
+      "gram-admin-project-mcp-servers",
+      organizationID,
+      projectID,
+    ] as const,
+    queryFn: () => listProjectMcpServers(organizationID, projectID),
+  });
+}
+
 export function organizationMembersQuery(
   organizationID: string,
 ): AdminQuery<
@@ -177,19 +207,6 @@ export function organizationMembersQuery(
   return queryOptions({
     queryKey: ["gram-admin-organization-members", organizationID] as const,
     queryFn: () => listOrganizationMembers(organizationID),
-  });
-}
-
-export function inferenceKeysQuery(
-  organizationID: string,
-): AdminQuery<
-  AdminInferenceKey[],
-  readonly ["gram-admin-inference-keys", string]
-> {
-  return queryOptions({
-    queryKey: ["gram-admin-inference-keys", organizationID] as const,
-    queryFn: () => getInferenceKeys(organizationID),
-    retry: false,
   });
 }
 
@@ -289,15 +306,14 @@ export function cancelOrganizationFetches(qc: QueryClient): Promise<void> {
   ).then(() => undefined);
 }
 
-// Every admin write answers with the organization in its new state, so the
-// caches that hold that record are written from the response. A refetch would
-// be the alternative, and the list is cursor-paged and filtered: refetching it
-// can move the row out from under the operator who just acted on it.
+// Every admin write answers with the organization in its new state, so paged
+// list caches are written from the response. Refetching a filtered list can
+// move the row out from under the operator who just acted on it; the detail
+// cache is separately invalidated after this immediate repaint.
 //
-// One consequence, accepted rather than overlooked: the default list request
-// sends no disabled_states, which asks for active organizations only, so a row
-// that has just been disabled keeps its place on a page whose filter no longer
-// describes it, until something else fetches that page. The alternative is
+// One consequence, accepted rather than overlooked: a status-changing write
+// keeps its row on a status-filtered page until something else fetches that
+// page, even when the filter no longer describes it. The alternative is
 // dropping the row from under the operator the moment they act on it, which is
 // worse.
 //
@@ -337,6 +353,25 @@ export function writeOrganizationToCache(
   // Refetched, not written: the response holds one record and these are counts
   // over all of them.
   invalidateOrganizationStats(qc);
+}
+
+// Keep the mutation response in paged lists so an acted-on row stays put, but
+// ask the canonical detail endpoint for the record again. Both route addresses
+// are invalidated because the active page may have been opened by id or slug.
+export function invalidateOrganizationDetails(
+  qc: QueryClient,
+  org: AdminOrganization,
+): void {
+  void qc.invalidateQueries({
+    queryKey: organizationQuery(org.id).queryKey,
+    exact: true,
+  });
+  if (org.slug) {
+    void qc.invalidateQueries({
+      queryKey: organizationQuery(org.slug).queryKey,
+      exact: true,
+    });
+  }
 }
 
 /**
@@ -379,5 +414,68 @@ export function projectQuery(
       organizationIdOrSlug ?? null,
     ] as const,
     queryFn: () => getProject(idOrSlug, organizationIdOrSlug),
+  });
+}
+
+// A redeploy adds a deployment, so every read of a project's counts is stale.
+export function invalidateProjects(qc: QueryClient): Promise<void> {
+  return qc.invalidateQueries({ queryKey: ["gram-admin-project"] });
+}
+
+export function usersListQuery(
+  params: Parameters<typeof listUsers>[0],
+): AdminQuery<
+  Awaited<ReturnType<typeof listUsers>>,
+  readonly ["admin", "users", Parameters<typeof listUsers>[0]]
+> {
+  return queryOptions({
+    queryKey: ["admin", "users", params] as const,
+    queryFn: ({ signal }) => listUsers(params, signal),
+  });
+}
+export function userOrganizationsListQuery(
+  params: Parameters<typeof listUserOrganizations>[0],
+): AdminQuery<
+  Awaited<ReturnType<typeof listUserOrganizations>>,
+  readonly [
+    "admin",
+    "user-organizations",
+    Parameters<typeof listUserOrganizations>[0],
+  ]
+> {
+  return queryOptions({
+    queryKey: ["admin", "user-organizations", params] as const,
+    queryFn: ({ signal }) => listUserOrganizations(params, signal),
+  });
+}
+
+function createAdminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest,
+) {
+  const generated = buildAdminListCustomDomainsQuery(
+    redirectingClient(),
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+// Every live custom domain, or the one an organization owns. Both filters are
+// applied by the server, so the query key carries them.
+export function adminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest = {},
+): ReturnType<typeof createAdminListCustomDomainsQuery> {
+  return createAdminListCustomDomainsQuery(request);
+}
+
+export function assistantMigrationOrganizationsQuery(): AdminQuery<
+  Awaited<ReturnType<typeof listAssistantMigrationOrganizations>>,
+  readonly ["admin", "assistant-migration-organizations"]
+> {
+  return queryOptions({
+    queryKey: ["admin", "assistant-migration-organizations"] as const,
+    queryFn: listAssistantMigrationOrganizations,
   });
 }

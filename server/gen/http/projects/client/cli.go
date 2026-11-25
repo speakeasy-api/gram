@@ -91,6 +91,38 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 	return v, nil
 }
 
+// BuildUpdateProjectPayload builds the payload for the projects updateProject
+// endpoint from CLI flags.
+func BuildUpdateProjectPayload(projectsUpdateProjectBody string, projectsUpdateProjectSessionToken string, projectsUpdateProjectProjectSlugInput string) (*projects.UpdateProjectPayload, error) {
+	var err error
+	var body UpdateProjectRequestBody
+	{
+		err = json.Unmarshal([]byte(projectsUpdateProjectBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if projectsUpdateProjectSessionToken != "" {
+			sessionToken = &projectsUpdateProjectSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if projectsUpdateProjectProjectSlugInput != "" {
+			projectSlugInput = &projectsUpdateProjectProjectSlugInput
+		}
+	}
+	v := &projects.UpdateProjectPayload{
+		Name: body.Name,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListProjectsPayload builds the payload for the projects listProjects
 // endpoint from CLI flags.
 func BuildListProjectsPayload(projectsListProjectsOrganizationID string, projectsListProjectsApikeyToken string, projectsListProjectsSessionToken string) (*projects.ListProjectsPayload, error) {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -140,22 +141,22 @@ func officialEntry(registryID uuid.UUID, server serverJSON) *types.ExternalMCPSe
 		})
 	}
 	return &types.ExternalMCPServerEntry{
-		Repository:                          toExternalMCPRepository(server.Repository),
-		Packages:                            toExternalMCPPackages(server.Packages),
-		RegistrySpecifier:                   server.Name,
-		Version:                             server.Version,
-		Description:                         server.Description,
-		ToolsetID:                           nil,
-		McpServerID:                         nil,
-		RegistryID:                          &registryIDString,
-		OrganizationMcpCollectionRegistryID: nil,
-		Title:                               server.Title,
-		IconURL:                             officialIconURL(server),
-		Meta:                                nil,
-		ToolCount:                           0,
-		IsReadOnly:                          false,
-		SupportsDcr:                         false,
-		Remotes:                             remotes,
+		Repository:        toExternalMCPRepository(server.Repository),
+		Packages:          toExternalMCPPackages(server.Packages),
+		RegistrySpecifier: server.Name,
+		Version:           server.Version,
+		Description:       server.Description,
+		ToolsetID:         nil,
+		McpServerID:       nil,
+		RegistryID:        &registryIDString,
+		Title:             server.Title,
+		IconURL:           officialIconURL(server),
+		Meta:              nil,
+		ToolCount:         nil,
+		IsReadOnly:        nil,
+		SupportsDcr:       false,
+		SupportsCimd:      new(false), AuthSetup: new("unknown"),
+		Remotes: remotes,
 	}
 }
 
@@ -199,24 +200,24 @@ func (a *OfficialRegistryAdapter) GetServerDetails(ctx context.Context, registry
 	}
 	remote, ok := selectOfficialRemote(detail.Server.Remotes, allowedRemoteURLs)
 	if !ok {
-		return &ServerDetails{
+		return &ServerDetails{SupportsDCR: false, SupportsCIMD: false, AuthSetup: "unknown",
 			Name:          detail.Server.Name,
+			Title:         conv.PtrValOr(detail.Server.Title, ""),
 			Description:   detail.Server.Description,
 			Version:       detail.Server.Version,
 			RemoteURL:     "",
 			TransportType: "",
-			Tools:         nil,
 			Headers:       nil,
 			Variables:     nil,
 		}, nil
 	}
-	return &ServerDetails{
+	return &ServerDetails{SupportsDCR: false, SupportsCIMD: false, AuthSetup: "unknown",
 		Name:          detail.Server.Name,
+		Title:         conv.PtrValOr(detail.Server.Title, ""),
 		Description:   detail.Server.Description,
 		Version:       detail.Server.Version,
 		RemoteURL:     remote.URL,
 		TransportType: externalmcptypes.TransportType(remote.Type),
-		Tools:         nil,
 		Headers:       remote.Headers,
 		Variables:     remote.Variables,
 	}, nil

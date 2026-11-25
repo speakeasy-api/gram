@@ -3,7 +3,6 @@
  */
 
 import { toolsetsAddExternalOAuthServer } from "../funcs/toolsetsAddExternalOAuthServer.js";
-import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugAvailability.js";
 import { toolsetsCloneBySlug } from "../funcs/toolsetsCloneBySlug.js";
 import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
 import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
@@ -14,8 +13,8 @@ import { toolsetsListToolFilters } from "../funcs/toolsetsListToolFilters.js";
 import { toolsetsListToolSchemaStaticValues } from "../funcs/toolsetsListToolSchemaStaticValues.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
 import { toolsetsSetToolVariationsGroup } from "../funcs/toolsetsSetToolVariationsGroup.js";
-import { toolsetsSetUserSessionIssuer } from "../funcs/toolsetsSetUserSessionIssuer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
+import { toolsetsUpdateExternalOAuthServer } from "../funcs/toolsetsUpdateExternalOAuthServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListToolFiltersResult } from "../models/components/listtoolfiltersresult.js";
 import { ListToolSchemaStaticValuesResult } from "../models/components/listtoolschemastaticvaluesresult.js";
@@ -26,10 +25,6 @@ import {
   AddExternalOAuthServerRequest,
   AddExternalOAuthServerSecurity,
 } from "../models/operations/addexternaloauthserver.js";
-import {
-  CheckMCPSlugAvailabilityRequest,
-  CheckMCPSlugAvailabilitySecurity,
-} from "../models/operations/checkmcpslugavailability.js";
 import {
   CloneToolsetRequest,
   CloneToolsetSecurity,
@@ -71,9 +66,9 @@ import {
   SetToolsetToolVariationsGroupSecurity,
 } from "../models/operations/settoolsettoolvariationsgroup.js";
 import {
-  SetToolsetUserSessionIssuerRequest,
-  SetToolsetUserSessionIssuerSecurity,
-} from "../models/operations/settoolsetusersessionissuer.js";
+  UpdateExternalOAuthServerRequest,
+  UpdateExternalOAuthServerSecurity,
+} from "../models/operations/updateexternaloauthserver.js";
 import {
   UpdateToolsetRequest,
   UpdateToolsetSecurity,
@@ -93,25 +88,6 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsAddExternalOAuthServer(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * checkMCPSlugAvailability toolsets
-   *
-   * @remarks
-   * Check if a MCP slug is available
-   */
-  async checkMCPSlugAvailability(
-    request: CheckMCPSlugAvailabilityRequest,
-    security?: CheckMCPSlugAvailabilitySecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<boolean> {
-    return unwrapAsync(toolsetsCheckMCPSlugAvailability(
       this,
       request,
       security,
@@ -310,25 +286,6 @@ export class Toolsets extends ClientSDK {
   }
 
   /**
-   * setUserSessionIssuer toolsets
-   *
-   * @remarks
-   * Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
-   */
-  async setUserSessionIssuer(
-    request: SetToolsetUserSessionIssuerRequest,
-    security?: SetToolsetUserSessionIssuerSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<Toolset> {
-    return unwrapAsync(toolsetsSetUserSessionIssuer(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * updateToolset toolsets
    *
    * @remarks
@@ -340,6 +297,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsUpdateBySlug(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateExternalOAuthServer toolsets
+   *
+   * @remarks
+   * Change an attached external OAuth server between provider-hosted and Speakeasy-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
+   */
+  async updateExternalOAuthServer(
+    request: UpdateExternalOAuthServerRequest,
+    security?: UpdateExternalOAuthServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Toolset> {
+    return unwrapAsync(toolsetsUpdateExternalOAuthServer(
       this,
       request,
       security,

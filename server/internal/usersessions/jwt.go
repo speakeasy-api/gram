@@ -1,4 +1,4 @@
-// Canonical Gram session-token primitives live in sessiontokens. This package
+// Canonical Speakeasy session-token primitives live in sessiontokens. This package
 // retains aliases while the hosted user-session management API migrates.
 package usersessions
 

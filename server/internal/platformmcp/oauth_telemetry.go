@@ -24,6 +24,11 @@ type OAuthEvent struct {
 	Operation string
 	Outcome   string
 	Reason    string
+
+	// OrganizationSelection is how an interactive authorization chose its
+	// organization. Empty for other operations and for authorizations that
+	// failed before an organization was chosen.
+	OrganizationSelection organizationSelection
 }
 
 type OAuthTelemetry interface {
@@ -84,6 +89,11 @@ func (t *oauthTelemetry) Record(ctx context.Context, event OAuthEvent) {
 	if event.Reason != "" {
 		attributes = append(attributes, attribute.String("platform_mcp.reason", event.Reason))
 	}
+	// An unrecognized selection drops only its attribute, so a challenge
+	// stored by another server version still counts its authorization.
+	if event.OrganizationSelection.valid() {
+		attributes = append(attributes, attribute.String("platform_mcp.organization_selection", string(event.OrganizationSelection)))
+	}
 	t.events.Add(ctx, 1, metric.WithAttributes(attributes...))
 }
 
@@ -125,7 +135,7 @@ func validOAuthReason(reason string) bool {
 		return true
 	}
 	switch reason {
-	case "not_found", "already_used", "expired", "revoked", "client_mismatch", "generation_invalid", "redirect_uri_invalid", "pkce_invalid", "authorization_denied", "authorization_unavailable", "platform_disabled":
+	case "not_found", "already_used", "expired", "revoked", "client_mismatch", "generation_invalid", "redirect_uri_invalid", "pkce_invalid", "authorization_denied", "authorization_unavailable", "membership_denied", "platform_disabled":
 		return true
 	default:
 		return false

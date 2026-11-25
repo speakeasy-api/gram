@@ -1,0 +1,191 @@
+package background
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/worker"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+)
+
+type networkIngressActivities struct {
+	executor *networkingress.Executor
+	db       *pgxpool.Pool
+	queue    string
+}
+
+func (a *networkIngressActivities) reconcile(ctx context.Context, params NetworkIngressReconcileParams) (NetworkIngressReconcileResult, error) {
+	// Activity cancellation must reach blocked provider calls before a retry
+	// can acquire the database serialization lock.
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				activity.RecordHeartbeat(ctx)
+			}
+		}
+	}()
+	result, err := a.executor.Reconcile(ctx, params.OrganizationID, params.IngressID)
+	if err != nil {
+		return NetworkIngressReconcileResult{Requeue: false}, reconcileActivityError(err, activity.GetInfo(ctx).Attempt)
+	}
+	return NetworkIngressReconcileResult{Requeue: result.Requeue}, nil
+}
+
+// reconcileActivityError converts a reconcile failure into the Temporal error
+// that decides the retry. A teardown waiting on Kubernetes deletions retries
+// after a short fixed delay for its first attempts; every other retryable
+// failure uses the activity's exponential backoff.
+func reconcileActivityError(err error, attempt int32) error {
+	failure, ok := errors.AsType[*networkingress.ReconcileError](err)
+	if !ok {
+		return fmt.Errorf("reconcile: %w", temporal.NewApplicationError("reconciliation_failed", "network_ingress"))
+	}
+	if !failure.Retryable {
+		return temporal.NewNonRetryableApplicationError(failure.Code, "network_ingress", nil)
+	}
+	if failure.Code == networkingress.ReconcileCodeDeletionPending && attempt < networkIngressDeletionPendingFastAttempts {
+		return fmt.Errorf("reconcile: %w", temporal.NewApplicationErrorWithOptions(failure.Code, "network_ingress", temporal.ApplicationErrorOptions{
+			NonRetryable:   false,
+			Cause:          nil,
+			Details:        nil,
+			NextRetryDelay: networkIngressDeletionPendingRetryDelay,
+			Category:       temporal.ApplicationErrorCategoryUnspecified,
+		}))
+	}
+	return fmt.Errorf("reconcile: %w", temporal.NewApplicationError(failure.Code, "network_ingress"))
+}
+
+func (a *networkIngressActivities) sweep(ctx context.Context) error {
+	requester := networkingress.NewOutboxRequester(a.queue)
+	after := uuid.Nil
+	cutoff := pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite}
+	for range 10 {
+		rows, err := repo.New(a.db).ListDueNetworkIngresses(ctx, repo.ListDueNetworkIngressesParams{AfterID: after, StaleBefore: cutoff, PageSize: 100})
+		if err != nil {
+			return fmt.Errorf("list due network ingresses")
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		tx, err := a.db.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin network ingress redrive")
+		}
+
+		for _, row := range rows {
+			if err := requester.Enqueue(ctx, tx, row.OrganizationID, row.ID); err != nil {
+				rollbackNetworkIngressSweep(ctx, tx.Rollback)
+				return fmt.Errorf("enqueue network ingress redrive")
+			}
+			if row.DeletedAt.Valid && time.Since(row.DeletedAt.Time) > 24*time.Hour {
+				activity.GetLogger(ctx).Warn("network ingress cleanup overdue", string(attr.NetworkIngressIDKey), row.ID.String())
+			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			rollbackNetworkIngressSweep(ctx, tx.Rollback)
+			return fmt.Errorf("commit network ingress redrive")
+		}
+		after = rows[len(rows)-1].ID
+		if len(rows) < 100 {
+			return nil
+		}
+	}
+	return nil
+}
+
+func rollbackNetworkIngressSweep(ctx context.Context, rollback func(context.Context) error) {
+	rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	o11y.NoLogDefer(func() error { return rollback(rollbackCtx) })
+}
+
+// findOrphans used to inventory Tailscale Kubernetes operator resources. It is
+// a no-op kept for sweep runs started before the inventory was dropped; remove
+// it once none can still be replaying.
+func (a *networkIngressActivities) findOrphans(context.Context) error {
+	return nil
+}
+
+type networkIngressRegistry interface {
+	RegisterActivityWithOptions(a any, options activity.RegisterOptions)
+	RegisterWorkflow(w any)
+}
+
+func registerNetworkIngress(worker networkIngressRegistry, executor *networkingress.Executor, db *pgxpool.Pool, queue string) {
+	a := &networkIngressActivities{executor: executor, db: db, queue: queue}
+	worker.RegisterActivityWithOptions(a.reconcile, activity.RegisterOptions{Name: NetworkIngressReconcileActivityName})
+	worker.RegisterActivityWithOptions(a.sweep, activity.RegisterOptions{Name: "SweepNetworkIngresses"})
+	worker.RegisterActivityWithOptions(a.findOrphans, activity.RegisterOptions{Name: networkIngressOrphanInventoryActivityName})
+	worker.RegisterWorkflow(NetworkIngressReconcileWorkflow)
+	worker.RegisterWorkflow(NetworkIngressSweepWorkflow)
+}
+
+// RegisterNetworkIngress adds lifecycle work only on the authoritative queue.
+// Disabled mutation is not a reason to skip registration: cleanup must continue.
+// Production uses NewNetworkIngressWorker; this path remains for local single-process development.
+func (w *Workers) RegisterNetworkIngress(executor *networkingress.Executor, queue string) {
+	if queue == "" || queue != string(w.env.Queue()) {
+		return
+	}
+	registerNetworkIngress(w.main, executor, w.opts.DB, queue)
+	w.networkIngressQueue = queue
+}
+
+// NetworkIngressWorker polls only the private-ingress queue. Keeping it separate
+// prevents the reconciler's narrow identity from executing unrelated activities.
+type NetworkIngressWorker struct {
+	worker worker.Worker
+	env    *tenv.Environment
+}
+
+func NewNetworkIngressWorker(
+	env *tenv.Environment,
+	db *pgxpool.Pool,
+	executor *networkingress.Executor,
+) (*NetworkIngressWorker, error) {
+	if env == nil || env.Client() == nil || env.Queue() == "" {
+		return nil, fmt.Errorf("network ingress Temporal environment and queue are required")
+	}
+	if db == nil || executor == nil {
+		return nil, fmt.Errorf("network ingress database and executor are required")
+	}
+	w := worker.New(env.Client(), string(env.Queue()), worker.Options{Interceptors: newWorkerInterceptors()})
+	registerNetworkIngress(w, executor, db, string(env.Queue()))
+	return &NetworkIngressWorker{worker: w, env: env}, nil
+}
+
+func (w *NetworkIngressWorker) Start() error {
+	if err := w.worker.Start(); err != nil {
+		return fmt.Errorf("start network ingress worker: %w", err)
+	}
+	return nil
+}
+
+func (w *NetworkIngressWorker) EnsureSchedule(ctx context.Context) error {
+	return addNetworkIngressSweep(ctx, w.env)
+}
+
+func (w *NetworkIngressWorker) Stop() {
+	w.worker.Stop()
+}

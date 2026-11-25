@@ -1,9 +1,19 @@
 import { CollapsibleNavGroup, CollapsibleNavItem } from "@/components/nav-menu";
-import { ReleaseStage } from "@/components/release-stage-badge";
+import type { ReleaseStage } from "@/components/release-stage-badge";
+
+// Stable items lead each group; staged items follow, most mature first. Keyed
+// by stage so a new stage fails to compile until it is given a place here —
+// otherwise its items would match neither list and vanish from the group.
+const STAGE_SECTIONS: Record<ReleaseStage, true> = {
+  beta: true,
+  preview: true,
+};
+const STAGE_ORDER = Object.keys(STAGE_SECTIONS) as ReleaseStage[];
 import { useRBAC } from "@/hooks/useRBAC";
-import { AppRoute } from "@/routes";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { AppRoute } from "@/routes";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import React from "react";
+import { visibleNavEntries } from "./sidebar-nav-layout";
 
 /** A nav sub-item plus the scopes that make it visible. */
 export interface ScopeGatedNavEntry {
@@ -12,6 +22,8 @@ export interface ScopeGatedNavEntry {
   scope?: Scope | Scope[];
   /** Optional resource ID to check the scopes against. */
   resourceId?: string;
+  /** Optional project the resource belongs to, for project-wide grants. */
+  projectId?: string;
   /** Display text override; see `CollapsibleNavItem`'s `label`. */
   label?: string;
 }
@@ -39,13 +51,17 @@ export function ScopeGatedNavGroup({
 }): React.JSX.Element | null {
   const { hasAnyScope } = useRBAC();
 
-  const visible = items.filter((entry) => {
-    if (entry.scope === undefined) return true;
-    const scopes = Array.isArray(entry.scope) ? entry.scope : [entry.scope];
-    return hasAnyScope(scopes, entry.resourceId);
-  });
+  const visible = visibleNavEntries(items, hasAnyScope);
+  // Each staged row carries its own dot, so there is no section around them.
+  const ordered = [
+    ...visible.filter((entry) => !entry.item.stage),
+    ...STAGE_ORDER.flatMap((stageKey) =>
+      visible.filter((entry) => entry.item.stage === stageKey),
+    ),
+  ];
 
-  const first = visible[0];
+  // The header links to the top row as rendered.
+  const first = ordered[0];
   if (!first) return null;
 
   return (
@@ -55,7 +71,7 @@ export function ScopeGatedNavGroup({
       defaultHref={first.item.href()}
       stage={stage}
     >
-      {visible.map((entry) => (
+      {ordered.map((entry) => (
         <CollapsibleNavItem
           key={entry.item.url}
           item={entry.item}

@@ -1,7 +1,10 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import { useMutation } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { DiscoveredEndpoints } from "./issuerFormUtils";
+import {
+  discoveredFromDraft,
+  type DiscoveredEndpoints,
+} from "./issuerFormUtils";
 
 // Initial form values for the Issuer URL + endpoint fields. Pass `null` for
 // the Attach sheet (everything starts blank); pass the loaded record's values
@@ -15,6 +18,7 @@ export type UseIssuerDiscoveryInitial = {
   jwksUri: string;
   scopesSupported: string[];
   grantTypesSupported: string[];
+  authorizationGrantProfilesSupported: string[];
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
   // Null when the saved record has never had the field captured; preserved
@@ -25,6 +29,14 @@ export type UseIssuerDiscoveryInitial = {
   serviceDocumentation: string;
   opPolicyUri: string;
   opTosUri: string;
+  userinfoEndpoint: string;
+  introspectionEndpoint: string;
+  // Null when never captured, same as codeChallengeMethodsSupported.
+  introspectionEndpointAuthMethodsSupported: string[] | null;
+  idTokenSigningAlgValuesSupported: string[] | null;
+  claimsSupported: string[] | null;
+  backchannelLogoutSupported: boolean | null;
+  authorizationResponseIssParameterSupported: boolean | null;
 } | null;
 
 // Which tier's fetchMetadata endpoint the hook calls. All three return the same
@@ -94,6 +106,8 @@ function useIssuerDiscoveryImpl(
             jwksUri: initial.jwksUri,
             scopesSupported: initial.scopesSupported,
             grantTypesSupported: initial.grantTypesSupported,
+            authorizationGrantProfilesSupported:
+              initial.authorizationGrantProfilesSupported,
             responseTypesSupported: initial.responseTypesSupported,
             tokenEndpointAuthMethodsSupported:
               initial.tokenEndpointAuthMethodsSupported,
@@ -105,6 +119,16 @@ function useIssuerDiscoveryImpl(
             serviceDocumentation: initial.serviceDocumentation,
             opPolicyUri: initial.opPolicyUri,
             opTosUri: initial.opTosUri,
+            userinfoEndpoint: initial.userinfoEndpoint,
+            introspectionEndpoint: initial.introspectionEndpoint,
+            introspectionEndpointAuthMethodsSupported:
+              initial.introspectionEndpointAuthMethodsSupported,
+            idTokenSigningAlgValuesSupported:
+              initial.idTokenSigningAlgValuesSupported,
+            claimsSupported: initial.claimsSupported,
+            backchannelLogoutSupported: initial.backchannelLogoutSupported,
+            authorizationResponseIssParameterSupported:
+              initial.authorizationResponseIssParameterSupported,
           }
         : null,
     );
@@ -131,29 +155,7 @@ function useIssuerDiscoveryImpl(
             });
         }
       };
-      const draft = await fetchDraft();
-      return {
-        url,
-        authorizationEndpoint: draft.authorizationEndpoint ?? "",
-        tokenEndpoint: draft.tokenEndpoint ?? "",
-        registrationEndpoint: draft.registrationEndpoint ?? "",
-        jwksUri: draft.jwksUri ?? "",
-        scopesSupported: draft.scopesSupported ?? [],
-        grantTypesSupported: draft.grantTypesSupported ?? [],
-        responseTypesSupported: draft.responseTypesSupported ?? [],
-        tokenEndpointAuthMethodsSupported:
-          draft.tokenEndpointAuthMethodsSupported ?? [],
-        // Discovery ran, so a document that omits the field captures as [] —
-        // never null, which is reserved for "never captured" seeded records.
-        codeChallengeMethodsSupported:
-          draft.codeChallengeMethodsSupported ?? [],
-        clientIdMetadataDocumentSupported:
-          draft.clientIdMetadataDocumentSupported,
-        revocationEndpoint: draft.revocationEndpoint ?? "",
-        serviceDocumentation: draft.serviceDocumentation ?? "",
-        opPolicyUri: draft.opPolicyUri ?? "",
-        opTosUri: draft.opTosUri ?? "",
-      };
+      return discoveredFromDraft(url, await fetchDraft());
     },
     onSuccess: (snapshot) => {
       // Discard a stale discovery whose URL no longer matches the field so we

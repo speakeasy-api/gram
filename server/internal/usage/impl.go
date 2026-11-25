@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/usage/server"
@@ -23,13 +24,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -54,6 +56,7 @@ type Service struct {
 	billingRepo     billing.Repository
 	orgRepo         *orgRepo.Queries
 	telemetryRepo   *telemetryrepo.Queries
+	meterReadConn   clickhouse.Conn
 	auditLogger     *audit.Logger
 	posthogClient   *posthog.Posthog
 	openRouter      openrouter.Provisioner
@@ -61,9 +64,13 @@ type Service struct {
 	stripeClient    stripeclient.Client
 	stripeHandler   stripeWebhookHandler
 	stripeMetrics   stripeWebhookMetricsRecorder
-	featureFlags    feature.Provider
 	productFeatures productFeatureCacheUpdater
 	trial           trialemails.Notifier
+	now             func() time.Time
+
+	// staffOrg is the deployment's Speakeasy staff organization, whose
+	// OpenRouter keys bypass the tier credit limits.
+	staffOrg staff.Organization
 }
 
 type productFeatureCacheUpdater interface {
@@ -74,11 +81,16 @@ var _ gen.Service = (*Service)(nil)
 
 const polarWebhookKeyBillingLockWaitTimeout = 5 * time.Second
 
+type checkoutTrialProvisioner interface {
+	PrepareEnterpriseTrialConversionKeyWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64) (openrouter.EnterpriseTrialConversionKeyChange, error)
+	ReconcileAPIKeyDisabled(context.Context, string, openrouter.KeyType) error
+}
+
 type openRouterBillingDBProvisioner interface {
 	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn, staffOrg staff.Organization) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
@@ -97,6 +109,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		billingRepo:     billingRepo,
 		orgRepo:         orgRepo.New(db),
 		telemetryRepo:   telemetryRepo,
+		meterReadConn:   meterReadConn,
 		auditLogger:     auditLogger,
 		posthogClient:   posthogClient,
 		openRouter:      openRouter,
@@ -104,9 +117,10 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		stripeClient:    stripeClient,
 		stripeHandler:   nil,
 		stripeMetrics:   newStripeWebhookMetrics(otel.GetMeterProvider(), logger),
-		featureFlags:    featureFlags,
 		productFeatures: productFeatures,
 		trial:           trialNotifier,
+		now:             time.Now,
+		staffOrg:        staffOrg,
 	}
 	service.stripeHandler = service.serviceStripeWebhookHandler
 	return service
@@ -114,7 +128,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 
 // NewBillingOperations builds the narrow usage service used by trusted server
 // surfaces that authorize independently and pass canonical organization IDs.
-func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient stripeclient.Client, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger) *Service {
+func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient stripeclient.Client, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, meterReadConn clickhouse.Conn, staffOrg staff.Organization) *Service {
 	return &Service{
 		tracer:          nil,
 		logger:          logger.With(attr.SlogComponent("usage-billing")),
@@ -127,6 +141,7 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		billingRepo:     nil,
 		orgRepo:         orgRepo.New(db),
 		telemetryRepo:   telemetryRepo,
+		meterReadConn:   meterReadConn,
 		auditLogger:     auditLogger,
 		posthogClient:   nil,
 		openRouter:      nil,
@@ -134,9 +149,10 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		stripeClient:    stripeClient,
 		stripeHandler:   nil,
 		stripeMetrics:   nil,
-		featureFlags:    nil,
 		productFeatures: nil,
 		trial:           nil,
+		now:             time.Now,
+		staffOrg:        staffOrg,
 	}
 }
 
@@ -181,9 +197,6 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to read request body").LogError(ctx, s.logger)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
 
 	webhookPayload, err := s.billingRepo.ValidateAndParseWebhookEvent(ctx, body, r.Header)
 	if err != nil {
@@ -226,7 +239,7 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	}
 
 	// we force a refresh of the state of the organization since customer tier may have changed witha subscription update
-	refreshedOrg, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, webhookPayload.Data.Customer.ExternalID)
+	refreshedOrg, err := orgaccount.Describe(ctx, s.logger, s.orgRepo, s.billingRepo, webhookPayload.Data.Customer.ExternalID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").LogError(ctx, logger)
 	}
@@ -334,7 +347,7 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -386,22 +399,15 @@ func (s *Service) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 	return tiers, nil
 }
 
-func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckoutPayload) (res string, err error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return "", oops.C(oops.CodeUnauthorized)
+// platformHostBaseURL returns the base URL of the extra platform host the
+// request arrived on, or fallback. Browser redirects must stay on that host
+// because the session cookie is host-only.
+func (s *Service) platformHostBaseURL(ctx context.Context, fallback *url.URL) string {
+	serverURL := ""
+	if s.serverURL != nil {
+		serverURL = s.serverURL.String()
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return "", err
-	}
-
-	successURL := fmt.Sprintf("%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug)
-
-	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout").LogError(ctx, s.logger)
-	}
-	return checkoutURL, nil
+	return requestorigin.PlatformHostBaseURL(ctx, serverURL, fallback.String())
 }
 
 func (s *Service) CreateTopUpCheckout(ctx context.Context, payload *gen.CreateTopUpCheckoutPayload) (res string, err error) {
@@ -409,13 +415,14 @@ func (s *Service) CreateTopUpCheckout(ctx context.Context, payload *gen.CreateTo
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return "", err
 	}
 
-	successURL := fmt.Sprintf("%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug)
+	baseURL := s.platformHostBaseURL(ctx, s.serverURL)
+	successURL := fmt.Sprintf("%s/%s/billing", baseURL, authCtx.OrganizationSlug)
 
-	checkoutURL, err := s.billingRepo.CreateTopUpCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
+	checkoutURL, err := s.billingRepo.CreateTopUpCheckout(ctx, authCtx.ActiveOrganizationID, baseURL, successURL)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create top-up checkout").LogError(ctx, s.logger)
 	}
@@ -427,7 +434,7 @@ func (s *Service) CreateCustomerSession(ctx context.Context, payload *gen.Create
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return "", err
 	}
 

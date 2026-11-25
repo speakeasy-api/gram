@@ -1,0 +1,140 @@
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Text } from "@/components/ui/Text";
+import type { AccessRequest } from "@gram/client/models/components/accessrequest.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { invalidateAllAccessRequests } from "@gram/client/react-query/accessRequests.js";
+import { useDecideAccessRequestMutation } from "@gram/client/react-query/decideAccessRequest.js";
+import { invalidateAllTemporaryGrants } from "@gram/client/react-query/temporaryGrants.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
+import { useState } from "react";
+import {
+  approvalWindowsFor,
+  requestedDurationLabel,
+} from "./requestedDuration";
+
+/**
+ * Approve a pending access request for a fixed window, or deny it. Approving
+ * gives temporary access that ends on its own; a role assignment below stays
+ * the way to give it permanently.
+ */
+export function AccessRequestDecision({
+  request,
+  requesterName,
+}: {
+  request: AccessRequest;
+  requesterName: string;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const [choice, setChoice] = useState<string | null>(null);
+  // A window can lapse while the dialog stays open (End of day near midnight,
+  // or a requester's deadline). The windows are worked out again at each
+  // render and click; a click on one that has lapsed says so.
+  const [lapsed, setLapsed] = useState<string | null>(null);
+  const decide = useDecideAccessRequestMutation({
+    // Refresh on a refusal too: a 409 means the request was decided
+    // elsewhere, and the list should show that.
+    onSettled: async () => {
+      await Promise.all([
+        invalidateAllAccessRequests(queryClient),
+        invalidateAllTemporaryGrants(queryClient),
+      ]);
+    },
+  });
+
+  if (decide.isSuccess) {
+    const decided = decide.data;
+    return (
+      <div className="flex items-center gap-1.5 py-1">
+        <Icon
+          name={decided.status === "approved" ? "check" : "x"}
+          className="size-4"
+        />
+        <Text variant="body" className="text-sm">
+          {decided.status === "approved" && decided.grantExpiresAt
+            ? `${requesterName} has access until ${format(new Date(decided.grantExpiresAt), "d MMM, HH:mm")}.`
+            : "Request denied."}
+        </Text>
+      </div>
+    );
+  }
+
+  const submit = (key: string, approve: boolean) => {
+    // The window starts when the administrator clicks, not when the dialog
+    // opened.
+    const expiresAt = approve
+      ? approvalWindowsFor(request, new Date()).windows.find(
+          (option) => option.key === key,
+        )?.expiresAt
+      : undefined;
+    if (approve && !expiresAt) {
+      setLapsed(key);
+      return;
+    }
+    setLapsed(null);
+    setChoice(key);
+    decide.mutate({
+      request: {
+        decideAccessRequestForm: {
+          id: request.id,
+          approve,
+          expiresAt,
+        },
+      },
+    });
+  };
+
+  const now = new Date();
+  const { windows, suggested } = approvalWindowsFor(request, now);
+  const asked = requestedDurationLabel(request, now);
+
+  return (
+    <div className="space-y-2">
+      <Text className="text-eyebrow">Give temporary access</Text>
+      {asked && (
+        <Text variant="body" className="text-sm">
+          {requesterName} asked to have it {asked}.
+        </Text>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {windows.map((option) => (
+          <Button
+            key={option.key}
+            size="sm"
+            variant={option.key === suggested ? "primary" : "secondary"}
+            disabled={decide.isPending}
+            onClick={() => submit(option.key, true)}
+          >
+            {decide.isPending && choice === option.key
+              ? "Approving…"
+              : option.label}
+          </Button>
+        ))}
+        <Button
+          size="sm"
+          variant="destructive-secondary"
+          disabled={decide.isPending}
+          onClick={() => submit("deny", false)}
+        >
+          {decide.isPending && choice === "deny" ? "Denying…" : "Deny"}
+        </Button>
+      </div>
+      <Text muted small>
+        Access ends on its own. To give it permanently, assign a role below.
+      </Text>
+      {lapsed && (
+        <Text variant="body" className="text-destructive text-sm">
+          That window has passed. Pick another one.
+        </Text>
+      )}
+      {decide.isError && (
+        <Text variant="body" className="text-destructive text-sm">
+          {decide.error instanceof GramError && decide.error.statusCode === 409
+            ? `${requesterName} already has this access, or the request was decided elsewhere. Check their temporary access.`
+            : "The request could not be decided. Try again."}
+        </Text>
+      )}
+    </div>
+  );
+}

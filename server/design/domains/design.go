@@ -22,6 +22,8 @@ var CustomDomain = Type("CustomDomain", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("is_updating", Boolean, "The custom domain is actively being registered")
+	Attribute("is_reconciling", Boolean, "The custom domain ingress configuration is being applied")
+	Attribute("reconciliation_status", String, "The latest domain ingress reconciliation state. One of: not_started, applying, reconciled, failed.")
 	Attribute("ip_allowlist", ArrayOf(String), "IP addresses or CIDR ranges allowed to access this domain. Empty list means unrestricted.")
 	Attribute("health_status", String, "The latest observed domain health status. One of: unknown, healthy, unhealthy.")
 	Attribute("health_issue", String, "The reason the domain was last observed as unhealthy. One of: dns_not_found, dns_target_mismatch, resource_missing, certificate_missing, certificate_not_ready, certificate_expired, certificate_invalid, check_failed.")
@@ -46,8 +48,17 @@ var CustomDomain = Type("CustomDomain", func() {
 		Description("The suggested DNS record type for this domain. A suggestion only — delegated subzones can make an apex-looking domain CNAME-capable.")
 		Enum("cname", "a")
 	})
+	Attribute("dns_target_token", String, "The random DNS label identifying this domain's designated CNAME target. Assigned when the domain is registered and unchanged for its lifetime. Absent until assigned.")
+	Attribute("dns_target", String, "The designated CNAME target for this domain (<dns_target_token>.<suffix>). Pointing the domain here lets Speakeasy move it without DNS changes. Absent when per-domain targets are not configured or the token is not yet assigned.")
+	Attribute("dns_routing_method", String, "How the latest health check observed this domain's DNS routing traffic to Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers flattened CNAME, ALIAS and ANAME records, which resolve to addresses), unknown. Absent until the first health check.")
 
-	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "ip_allowlist", "suggested_record_type")
+	Attribute("dns_configuration_status", String, "Advisory public DNS configuration: matched, wrong_target, unconfirmed, not_found, check_failed, or not_configured. Does not establish ownership or public availability.")
+	Attribute("dns_checked_at", String, func() {
+		Description("When DNS configuration was observed. Infrastructure health belongs to the same observation only when this matches health_checked_at.")
+		Format(FormatDateTime)
+	})
+
+	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "is_reconciling", "reconciliation_status", "ip_allowlist", "suggested_record_type")
 })
 
 // DomainDNSConfig describes the DNS targets custom domains must point at.
@@ -220,6 +231,26 @@ var _ = Service("domains", func() {
 		Meta("openapi:operationId", "listRootMcpServers")
 		Meta("openapi:extension:x-speakeasy-name-override", "listRootMcpServers")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RootMcpServers", "type": "query"}`)
+	})
+
+	Method("reconcileDomain", func() {
+		Description("Reapply the configured ingress state for the organization's verified custom domain")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(CustomDomain)
+
+		HTTP(func() {
+			POST("/rpc/domain.reconcile")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "reconcileDomain")
+		Meta("openapi:extension:x-speakeasy-name-override", "reconcileDomain")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReconcileDomain"}`)
 	})
 
 	Method("checkHealth", func() {

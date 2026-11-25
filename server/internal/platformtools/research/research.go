@@ -106,6 +106,7 @@ func NewSearchClient(completions CompletionProvider) *SearchClient {
 func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query string, maxResults int) ([]SearchResult, SearchUsage, error) {
 	temperature := 0.0
 	response, err := c.completions.GetCompletion(ctx, openrouter.CompletionRequest{
+		MaxTokens: nil,
 		OrgID:     orgID,
 		ProjectID: projectID,
 		Messages: []or.ChatMessages{

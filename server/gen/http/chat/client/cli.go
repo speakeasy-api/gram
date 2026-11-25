@@ -19,7 +19,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsAgentID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsPinnedFirst string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -50,6 +50,16 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 		if chatListChatsAssistantID != "" {
 			assistantID = &chatListChatsAssistantID
 			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var agentID *string
+	{
+		if chatListChatsAgentID != "" {
+			agentID = &chatListChatsAgentID
+			err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", *agentID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -202,6 +212,15 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 			}
 		}
 	}
+	var pinnedFirst bool
+	{
+		if chatListChatsPinnedFirst != "" {
+			pinnedFirst, err = strconv.ParseBool(chatListChatsPinnedFirst)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for pinnedFirst, must be BOOL")
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if chatListChatsSessionToken != "" {
@@ -226,6 +245,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v.UserID = userID
 	v.Source = source
 	v.AssistantID = assistantID
+	v.AgentID = agentID
 	v.SourceKind = sourceKind
 	v.ExcludeSourceKind = excludeSourceKind
 	v.HasRisk = hasRisk
@@ -238,6 +258,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v.Offset = offset
 	v.SortBy = sortBy
 	v.SortOrder = sortOrder
+	v.PinnedFirst = pinnedFirst
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -336,6 +357,47 @@ func BuildGetWorkUnitsTrendPayload(chatGetWorkUnitsTrendFrom string, chatGetWork
 	v.To = to
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildLoadChatOverviewPayload builds the payload for the chat
+// loadChatOverview endpoint from CLI flags.
+func BuildLoadChatOverviewPayload(chatLoadChatOverviewID string, chatLoadChatOverviewSessionToken string, chatLoadChatOverviewProjectSlugInput string, chatLoadChatOverviewChatSessionsToken string, chatLoadChatOverviewApikeyToken string) (*chat.LoadChatOverviewPayload, error) {
+	var id string
+	{
+		id = chatLoadChatOverviewID
+	}
+	var sessionToken *string
+	{
+		if chatLoadChatOverviewSessionToken != "" {
+			sessionToken = &chatLoadChatOverviewSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatLoadChatOverviewProjectSlugInput != "" {
+			projectSlugInput = &chatLoadChatOverviewProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatLoadChatOverviewChatSessionsToken != "" {
+			chatSessionsToken = &chatLoadChatOverviewChatSessionsToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if chatLoadChatOverviewApikeyToken != "" {
+			apikeyToken = &chatLoadChatOverviewApikeyToken
+		}
+	}
+	v := &chat.LoadChatOverviewPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }
@@ -765,6 +827,79 @@ func BuildListSourcesPayload(chatListSourcesSessionToken string, chatListSources
 		}
 	}
 	v := &chat.ListSourcesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildCountByUserPayload builds the payload for the chat countByUser endpoint
+// from CLI flags.
+func BuildCountByUserPayload(chatCountByUserFrom string, chatCountByUserTo string, chatCountByUserLimit string, chatCountByUserSessionToken string, chatCountByUserProjectSlugInput string, chatCountByUserChatSessionsToken string) (*chat.CountByUserPayload, error) {
+	var err error
+	var from *string
+	{
+		if chatCountByUserFrom != "" {
+			from = &chatCountByUserFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if chatCountByUserTo != "" {
+			to = &chatCountByUserTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if chatCountByUserLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatCountByUserLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if chatCountByUserSessionToken != "" {
+			sessionToken = &chatCountByUserSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatCountByUserProjectSlugInput != "" {
+			projectSlugInput = &chatCountByUserProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatCountByUserChatSessionsToken != "" {
+			chatSessionsToken = &chatCountByUserChatSessionsToken
+		}
+	}
+	v := &chat.CountByUserPayload{}
+	v.From = from
+	v.To = to
+	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

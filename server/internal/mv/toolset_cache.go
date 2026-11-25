@@ -9,15 +9,14 @@ import (
 )
 
 type ToolsetBaseContents struct {
-	DeploymentID                 string
-	ToolsetID                    string
-	Version                      int64
-	Tools                        []*types.Tool
-	Resources                    []*types.Resource
-	SecurityVars                 []*types.SecurityVariable
-	ServerVars                   []*types.ServerVariable
-	FunctionEnvVars              []*types.FunctionEnvironmentVariable
-	ExternalMCPHeaderDefinitions []*types.ExternalMCPHeaderDefinition
+	DeploymentID    string
+	ToolsetID       string
+	Version         int64
+	Tools           []*types.Tool
+	Resources       []*types.Resource
+	SecurityVars    []*types.SecurityVariable
+	ServerVars      []*types.ServerVariable
+	FunctionEnvVars []*types.FunctionEnvironmentVariable
 }
 
 var _ cache.CacheableObject[ToolsetBaseContents] = (*ToolsetBaseContents)(nil)

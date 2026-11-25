@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"log/slog"
 
 	"go.opentelemetry.io/otel/metric"
@@ -160,7 +161,7 @@ func spanEventRow(span *otelv1.Span) (chrepo.OTelTraceRow, string) {
 		ProjectID:          span.GetProvenance().GetProjectId(),
 		TimeUnixNano:       startNano,
 		DurationNano:       durationNano,
-		Source:             canonicalEventSource(spanEventServiceName(span)),
+		Source:             enrich.CanonicalSource(spanEventServiceName(span)),
 		TraceID:            traceID,
 		SpanID:             spanID,
 		ParentSpanID:       hexEventID(span.GetParentSpanId()),
@@ -180,7 +181,7 @@ func spanEventRow(span *otelv1.Span) (chrepo.OTelTraceRow, string) {
 
 func spanEventServiceName(span *otelv1.Span) string {
 	for _, kv := range span.GetResource().GetAttributes() {
-		if kv.GetKey() == serviceNameAttribute && kv.GetValue().HasStringValue() {
+		if kv.GetKey() == enrich.ServiceNameAttribute && kv.GetValue().HasStringValue() {
 			return kv.GetValue().GetStringValue()
 		}
 	}

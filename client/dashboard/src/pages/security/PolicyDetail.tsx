@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ShadowMCPDispositionPicker } from "@/components/shadow-mcp/ShadowMCPDispositionPicker";
@@ -8,17 +9,11 @@ import {
   invalidateShadowMCPPolicyInventory,
   useShadowMCPPolicyInventory,
 } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
+import { Alert, AlertDescription } from "@/components/ui/Alert";
 import { Card } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Heading";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
 import {
   Sheet,
@@ -32,7 +27,11 @@ import { Switch } from "@/components/ui/Switch";
 import { TextArea } from "@/components/ui/Textarea";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
@@ -44,6 +43,7 @@ import {
   invalidateAllRiskPoliciesGet,
   useRiskPoliciesGet,
 } from "@gram/client/react-query/riskPoliciesGet.js";
+import type { RiskMCPScope } from "@gram/client/models/components/riskmcpscope.js";
 import { riskEvalsEvaluate } from "@gram/client/funcs/riskEvalsEvaluate.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskCategoryDefinition } from "@gram/client/models/components/riskcategorydefinition.js";
@@ -59,19 +59,15 @@ import {
 } from "@tanstack/react-query";
 import {
   Check,
-  Code,
   Info,
-  Loader2,
-  Pencil,
   Shield,
-  Sparkles,
   ThumbsDown,
   ThumbsUp,
   TriangleAlert,
   X,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import {
-  Fragment,
   type ReactNode,
   useDeferredValue,
   useEffect,
@@ -79,11 +75,31 @@ import {
   useRef,
   useState,
 } from "react";
-import { useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
+import { toast } from "sonner";
 import { useQueryState } from "nuqs";
+import {
+  ApprovedDomainsRequirement,
+  PolicyDraftProvenance,
+  PolicyStartChooser,
+} from "./PolicyStart";
+import {
+  clearPolicyStartSession,
+  supportsPolicyEditing,
+  invalidEmailDomains,
+  draftMCPScopeValue,
+  type PolicyDraft,
+  readPolicyDraft,
+} from "./policy-draft";
+import {
+  parsePolicyNewPrefill,
+  type PolicyNewPrefill,
+} from "./policy-new-prefill";
 import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
+  SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
+  shadowMCPAllowAllPostureLocked,
   shadowMCPAllowedURLsForMutation,
   shadowMCPBlockedURLsForMutation,
   shadowMCPDecisionConflicts,
@@ -93,44 +109,63 @@ import {
   type ShadowMCPDecisionConflict,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
+import { ApprovalPolicyEditor } from "./ApprovalPolicyEditor";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
-import { type Step } from "@/pages/setup/components/onboarding-stepper";
+import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
+import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
+import { Skeleton, SkeletonParagraph } from "@/components/ui/Skeleton";
+import {
+  initialPolicyMCPScopeValue,
+  policyMCPScopeComplete,
+  policyMCPScopePayload,
+  policyScopeSummary,
+  type PolicyMCPScopeValue,
+  type PolicyScopeChoice,
+} from "./policy-mcp-scope";
+import { useGetHooksStatus } from "@gram/client/react-query/getHooksStatus.js";
+
 import {
   DETECTION_RULES,
-  RULE_CATEGORY_META,
+  ruleCategoryMeta,
+  type DetectorMode,
   type PolicyAction,
   type RuleCategory,
 } from "./policy-data";
-import {
-  ActionPicker,
-  CustomizeRulesSheet,
-  PolicyAudiencePicker,
-  RuleSelectList,
-} from "./PolicyCenter";
+import { CustomizeRulesSheet, RuleSelectList } from "./PolicyCenter";
 import { DetectorCard } from "./DetectorCard";
+import { ShadowAIPolicyEditor } from "./ShadowAIPolicyEditor";
+import { isShadowAIPolicy } from "./policy-type";
+import {
+  ActionStep,
+  PolicyHeader,
+  SectionHeader,
+  StepNav,
+  StepperShell,
+  SummaryRow,
+} from "./policy-editor-shell";
+import { type PolicyStep, useStepParam } from "./use-step-param";
 import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
-import { policyStatusLabel } from "./policy-enabled";
 import {
-  togglePolicyEnabledVariables,
-  useTogglePolicyEnabled,
-} from "./use-toggle-policy-enabled";
-import {
-  ALL_CATEGORIES,
-  AVAILABLE_CATEGORIES,
-  CATEGORY_LEVEL_DETECTORS,
   FLAG_ONLY_CATEGORIES,
-  PRESIDIO_CATEGORIES,
   SCOPE_EXEMPT_CEL_EXAMPLES,
   SCOPE_INCLUDE_CEL_EXAMPLES,
+  allCategories,
   categoriesToPayload,
+  categoryLevelDetectors,
+  detectionPolicyAction,
+  mcpCompatibleAction,
+  normalizeCategoriesForMode,
   parseApprovedEmailDomains,
+  persistedCategories,
+  personalDataCategories,
   pinnedHiddenRuleIds,
   policyToCategories,
 } from "./policy-form";
+import { useDetectorMode } from "./use-detector-mode";
+import { decodeKindScope, encodeKindScope } from "./policy-scope";
 import { SeverityBadge } from "./risk-ui";
 import { CelExpressionField } from "./cel-field";
 import { CelReferenceSheet } from "./cel-reference";
-import { CelTrafficPreview } from "./cel-traffic-preview";
 import { useCelEngine } from "./use-cel-engine";
 import type { CelEngine, CelMessage } from "./cel-wasm";
 import { useDetectionRulesStore } from "./detection-rules-data";
@@ -161,26 +196,11 @@ import {
 import { useChatTranscript } from "@/pages/chatLogs/useChatTranscript";
 import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 
-// Judge models offered in the workbench (mirrors PolicyCenter's list; the
-// picker is intentionally small until the model catalog is centralized).
-// Sentinel for the "use server default" model option — Radix Select forbids an
-// empty-string item value, so "" is mapped through this and back on change.
-const DEFAULT_MODEL_VALUE = "__default__";
-
-// Gemini 3.5 Flash is deliberately absent: the judge disables reasoning
-// (`reasoning.effort: "none"`), which the Gemini 3.5 generation rejects with a
-// 400 — every evaluation on it would fail into the policy's error mode.
-const JUDGE_MODELS: { value: string; label: string }[] = [
-  { value: "", label: "Default (Gemini 3.1 Flash Lite)" },
-  { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
-  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
-];
-
-const PROMPT_STEPS: Step[] = [
+const PROMPT_STEPS: PolicyStep[] = [
   {
     id: "guardrail",
     title: "Guardrail",
-    description: "Describe the behavior to catch and pick the judge.",
+    description: "Describe the behavior to catch and tune the judge.",
   },
   {
     id: "scope",
@@ -204,7 +224,7 @@ const PROMPT_STEPS: Step[] = [
   },
 ];
 
-const STANDARD_STEPS: Step[] = [
+const STANDARD_STEPS: PolicyStep[] = [
   {
     id: "detect",
     title: "Detect",
@@ -227,51 +247,23 @@ const STANDARD_STEPS: Step[] = [
   },
 ];
 
+// Steps a draft from the intent screen fills in, tagged in the stepper.
+const PROMPT_PREFILLED_STEPS: ReadonlySet<string> = new Set([
+  "guardrail",
+  "action",
+]);
+const STANDARD_PREFILLED_STEPS: ReadonlySet<string> = new Set([
+  "detect",
+  "action",
+]);
+
 const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
   flag: "Flag",
   warn: "Warn",
   block: "Block",
   quarantine: "Quarantine",
+  require_approval: "Require approval",
 };
-
-const POLICY_ACTION_MESSAGE: Record<
-  Exclude<PolicyAction, "flag">,
-  { label: string; description: string; placeholder: string }
-> = {
-  warn: {
-    label: "Warning message",
-    description:
-      "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message.",
-    placeholder: "e.g. %{match} looks sensitive. Acknowledge to proceed.",
-  },
-  block: {
-    label: "Block message",
-    description:
-      "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message.",
-    placeholder:
-      "e.g. This action was blocked by your organization's security policy. Contact your admin for help.",
-  },
-  quarantine: {
-    label: "Quarantine message",
-    description:
-      "Shown to the user when this policy quarantines their session. Leave blank to use the default message.",
-    placeholder:
-      "e.g. This session was quarantined by your organization's security policy. Contact your admin for help.",
-  },
-};
-
-// Back the active step with a `?step=<id>` URL param so browser back/forward
-// (and refresh, and shareable links) traverse the steps. history: "push" makes
-// each step change its own history entry.
-function useStepParam(steps: Step[]): [number, (index: number) => void] {
-  const [raw, setRaw] = useQueryState("step", { history: "push" });
-  const found = steps.findIndex((s) => s.id === raw);
-  const index = found >= 0 ? found : 0;
-  const setIndex = (i: number) => {
-    void setRaw(steps[i]?.id ?? null);
-  };
-  return [index, setIndex];
-}
 
 // Mock title summarization from the guardrail prompt (a real impl would use the
 // LLM). Matches a known template name, else derives a short title.
@@ -293,8 +285,66 @@ export default function PolicyDetail(): JSX.Element {
   );
 }
 
+/** The editor a stored policy opens in. Shadow AI is a presentation of the
+ *  blocking Shadow MCP policy, so that policy opens the Shadow AI editor. */
+export function PolicyEditorFor({
+  policy,
+}: {
+  policy: RiskPolicy;
+}): JSX.Element {
+  if (policy.action === "require_approval") {
+    return <ApprovalPolicyEditor policy={policy} />;
+  }
+  if (!supportsPolicyEditing(policy))
+    return (
+      <Stack gap={6}>
+        <Page.Section.Title>{policy.name}</Page.Section.Title>
+        {policy.prompt && (
+          <Text className="whitespace-pre-wrap">{policy.prompt}</Text>
+        )}
+        <dl className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <dt className="text-eyebrow">Action</dt>
+            <dd>
+              {enumPresentation(POLICY_ACTION_LABEL, policy.action, "Unknown")}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-eyebrow">Status</dt>
+            <dd>{policy.enabled ? "Enabled" : "Disabled"}</dd>
+          </div>
+        </dl>
+        <Alert>
+          <AlertDescription>
+            This policy uses settings this dashboard cannot safely edit. Refresh
+            the page to check for an update.
+          </AlertDescription>
+        </Alert>
+        <Button
+          variant="secondary"
+          className="self-start"
+          onClick={() => window.location.reload()}
+        >
+          <Button.Text>Refresh page</Button.Text>
+        </Button>
+      </Stack>
+    );
+  if (policy.policyType === "prompt_based") {
+    return <PromptPolicyEditor policy={policy} />;
+  }
+  if (isShadowAIPolicy(policy)) {
+    return <ShadowAIPolicyEditor policy={policy} />;
+  }
+  return <StandardPolicyEditor policy={policy} />;
+}
+
 function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
+  const location = useLocation();
   const { data: policy, isLoading } = useRiskPoliciesGet({ id: policyId });
+  useRecentLabelOverride(
+    location.pathname,
+    policy ? `Guardrail · ${policy.name}` : undefined,
+  );
 
   return (
     <Page>
@@ -305,16 +355,8 @@ function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
           }
         />
       </Page.Header>
-      <Page.Body>
-        {isLoading || !policy ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-          </div>
-        ) : policy.policyType === "prompt_based" ? (
-          <PromptPolicyEditor policy={policy} />
-        ) : (
-          <StandardPolicyEditor policy={policy} />
-        )}
+      <Page.Body isLoading={isLoading || !policy}>
+        {policy && <PolicyEditorFor policy={policy} />}
       </Page.Body>
     </Page>
   );
@@ -330,405 +372,69 @@ export function PolicyNew(): JSX.Element {
   );
 }
 
-function PolicyNewContent(): JSX.Element {
-  const [kind] = useQueryState("kind");
-  const [category] = useQueryState("category");
-  const initialCategories =
-    category && AVAILABLE_CATEGORIES.has(category as RuleCategory)
-      ? new Set<RuleCategory>([category as RuleCategory])
-      : undefined;
-  if (kind === "standard") {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <StandardPolicyEditor
-            policy={null}
-            initialCategories={initialCategories}
-          />
-        </Page.Body>
-      </Page>
-    );
-  }
-  if (kind === "prompt") {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <PromptPolicyEditor policy={null} />
-        </Page.Body>
-      </Page>
-    );
-  }
-  return <PolicyKindChooser />;
-}
-
-// Kind chooser shown when the create page is opened without a `?kind=` hint
-// (e.g. a direct navigation). Mirrors PolicyCenter's modal chooser.
-function PolicyKindChooser(): JSX.Element {
-  const [, setKind] = useQueryState("kind");
+function NewPolicyFrame({ children }: { children: ReactNode }): JSX.Element {
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>
-        <Stack gap={4} className="mx-auto w-full max-w-2xl">
-          <Stack gap={1}>
-            <Heading variant="h3" className="normal-case">
-              Choose policy type
-            </Heading>
-            <Text small muted>
-              Start with a built-in detector policy or define criteria in plain
-              language.
-            </Text>
-          </Stack>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => void setKind("standard")}
-              className="hover:bg-muted/40 border p-5 text-left transition-colors"
-            >
-              <Shield className="text-muted-foreground mb-3 h-5 w-5" />
-              <Text className="font-medium">Built-in detector</Text>
-              <Text small muted className="mt-1">
-                Scan for secrets, PII, and risky tool calls with built-in and
-                custom detection rules.
-              </Text>
-            </button>
-            <button
-              type="button"
-              onClick={() => void setKind("prompt")}
-              className="hover:bg-muted/40 border p-5 text-left transition-colors"
-            >
-              <Sparkles className="text-muted-foreground mb-3 h-5 w-5" />
-              <Text className="font-medium">Prompt-based</Text>
-              <Text small muted className="mt-1">
-                Describe the behavior to catch in plain language; an LLM judge
-                evaluates each in-scope message.
-              </Text>
-            </button>
-          </div>
-        </Stack>
-      </Page.Body>
+      <Page.Body>{children}</Page.Body>
     </Page>
   );
 }
 
-// ── Stepper shell (pinned header + left rail + spacious content column) ───────
-
-// Horizontal stepper across the top: a left rail competes with the app's own
-// sidebar, so the step nav runs horizontally and the step content gets the full
-// width below it. Free navigation — any step is clickable.
-function HorizontalStepper({
-  steps,
-  current,
-  onStep,
-}: {
-  steps: Step[];
-  current: number;
-  onStep: (index: number) => void;
-}): JSX.Element {
-  return (
-    <nav aria-label="Progress" className="flex items-center">
-      {steps.map((step, index) => {
-        const isDone = index < current;
-        const isCurrent = index === current;
-        return (
-          <Fragment key={step.id}>
-            <button
-              type="button"
-              onClick={() => onStep(index)}
-              className="group flex shrink-0 items-center gap-2 py-1 pr-1 text-left"
-            >
-              <span
-                className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold transition-colors",
-                  isCurrent
-                    ? "bg-foreground text-background"
-                    : isDone
-                      ? "bg-foreground/90 text-background group-hover:bg-foreground"
-                      : "border-border text-muted-foreground border group-hover:border-foreground/40",
-                )}
-              >
-                {isDone ? (
-                  <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-                ) : (
-                  index + 1
-                )}
-              </span>
-              <span
-                className={cn(
-                  "hidden text-sm font-medium sm:inline",
-                  isCurrent ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                {step.title}
-              </span>
-            </button>
-            {index < steps.length - 1 && (
-              <div className="bg-border mx-2 h-px min-w-6 flex-1" />
-            )}
-          </Fragment>
-        );
-      })}
-    </nav>
-  );
-}
-
-function StepperShell({
-  header,
-  steps,
-  current,
-  onStep,
-  children,
-}: {
-  header: React.ReactNode;
-  steps: Step[];
-  current: number;
-  onStep: (index: number) => void;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    // Full width — Page.Body already centers content at max-w-7xl (the app's
-    // standard page width).
-    <Stack gap={6} className="w-full">
-      {header}
-      <div className="bg-muted/20 border px-4 py-3">
-        <HorizontalStepper steps={steps} current={current} onStep={onStep} />
-      </div>
-      <Stack gap={6}>{children}</Stack>
-    </Stack>
-  );
-}
-
-// Back / Continue footer for stepping through sections; the left rail also
-// allows free navigation.
-function StepNav({
-  step,
-  count,
-  onStep,
-}: {
-  step: number;
-  count: number;
-  onStep: (index: number) => void;
-}): JSX.Element {
-  return (
-    <Stack direction="horizontal" justify="space-between" gap={3}>
-      {step > 0 ? (
-        <Button variant="secondary" onClick={() => onStep(step - 1)}>
-          <Button.Text>Back</Button.Text>
-        </Button>
-      ) : (
-        <span />
-      )}
-      {step < count - 1 ? (
-        <Button variant="secondary" onClick={() => onStep(step + 1)}>
-          <Button.Text>Continue</Button.Text>
-        </Button>
-      ) : (
-        <span />
-      )}
-    </Stack>
-  );
-}
-
-// ── Shared header (pinned, both kinds) ───────────────────────────────────────
-
-function PolicyHeader({
-  kind,
-  policy,
-  name,
-  onNameChange,
-  dirty,
-  saving,
-  actionDisabled,
-  onSubmit,
-  onCreate,
-  nameGenerating,
-}: {
-  kind: "prompt" | "standard";
-  policy: RiskPolicy | null;
-  name: string;
-  onNameChange: (v: string) => void;
-  dirty: boolean;
-  saving: boolean;
-  actionDisabled: boolean;
-  onSubmit: () => void;
-  onCreate?: () => void;
-  // Shimmer the title while it's being auto-generated from the guardrail.
-  nameGenerating?: boolean;
-}): JSX.Element {
-  const KindIcon = kind === "prompt" ? Sparkles : Shield;
-  const kindLabel =
-    kind === "prompt" ? "Prompt-based (LLM judge)" : "Built-in detector";
-  const placeholder =
-    kind === "prompt" ? "Untitled prompt policy" : "Untitled standard policy";
-  const isCreate = policy === null;
-  const routes = useRoutes();
-  const [editingName, setEditingName] = useState(false);
-  const toggleEnabledMutation = useTogglePolicyEnabled();
-
-  return (
-    <Stack
-      direction="horizontal"
-      align="center"
-      justify="space-between"
-      gap={4}
-    >
-      <Stack gap={1} className="min-w-0 flex-1">
-        <Stack direction="horizontal" gap={2} align="center">
-          <KindIcon className="text-muted-foreground h-4 w-4 shrink-0" />
-          {editingName ? (
-            <Input
-              value={name}
-              onChange={onNameChange}
-              placeholder={placeholder}
-              autoFocus
-              onBlur={() => setEditingName(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === "Escape") {
-                  setEditingName(false);
-                }
-              }}
-              className="h-9 w-[24rem] max-w-full text-lg font-semibold"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditingName(true)}
-              className="group flex min-w-0 items-center gap-2"
-              title="Rename policy"
-            >
-              <Heading
-                variant="h3"
-                className={cn(
-                  "truncate normal-case",
-                  !name && "text-muted-foreground",
-                  nameGenerating && "animate-pulse",
-                )}
-              >
-                {name || placeholder}
-              </Heading>
-              <Pencil className="text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
-            </button>
-          )}
-          {policy ? (
-            <>
-              <StatusBadge enabled={policy.enabled} />
-              <Switch
-                checked={policy.enabled}
-                disabled={saving || toggleEnabledMutation.isPending}
-                onCheckedChange={(checked) =>
-                  toggleEnabledMutation.mutate(
-                    togglePolicyEnabledVariables(
-                      policy.id,
-                      policy.name,
-                      checked,
-                    ),
-                  )
-                }
-                aria-label={policy.enabled ? "Disable policy" : "Enable policy"}
-              />
-            </>
-          ) : null}
-        </Stack>
-        {policy ? (
-          <Text small muted>
-            Version {policy.version} · {kindLabel}
-            {policy.enabled
-              ? null
-              : " · Inactive — new messages are not scanned"}
-          </Text>
-        ) : (
-          <Text small muted>
-            {kind === "prompt"
-              ? "Describe the behavior to catch. The name is generated for you."
-              : "Leave the name blank to auto-generate one from the detectors."}
-          </Text>
-        )}
-      </Stack>
-      <Stack direction="horizontal" gap={2} align="center" className="shrink-0">
-        <Button variant="tertiary" onClick={() => routes.policyCenter.goTo()}>
-          <Button.Text>{isCreate ? "Cancel" : "Close"}</Button.Text>
-        </Button>
-        {isCreate ? (
-          <CreateButton
-            disabled={actionDisabled || saving}
-            saving={saving}
-            onCreate={() => onCreate?.()}
-          />
-        ) : (
-          dirty && (
-            <Button
-              variant="secondary"
-              disabled={actionDisabled || saving}
-              onClick={onSubmit}
-            >
-              <Button.Text>{saving ? "Saving…" : "Save changes"}</Button.Text>
-            </Button>
-          )
-        )}
-      </Stack>
-    </Stack>
-  );
-}
-
-function CreateButton({
-  disabled,
-  saving,
-  onCreate,
-}: {
-  disabled: boolean;
-  saving: boolean;
-  onCreate: () => void;
-}): JSX.Element {
-  return (
-    <Button disabled={disabled} onClick={onCreate}>
-      <Button.Text>{saving ? "Creating…" : "Create policy"}</Button.Text>
-    </Button>
-  );
-}
-
-function StatusBadge({ enabled }: { enabled: boolean }): JSX.Element {
-  return (
-    <Badge variant={enabled ? "success" : "neutral"}>
-      {policyStatusLabel(enabled)}
-    </Badge>
-  );
-}
-
-// Vertical section header — title stacked over subtext with breathing room.
-// (Card.Header lays title + description side-by-side, which reads cramped.)
-// Title is optional: the step name already shows in the stepper, so primary
-// step sections pass description only (avoids repeating "Guardrail"/"Scope"/…
-// in both the progress rail and the card). Sub-sections (e.g. Judge) keep a
-// title since they aren't named by the stepper.
-function SectionHeader({
-  title,
-  description,
-}: {
-  title?: string;
-  description?: string;
-}): JSX.Element {
-  return (
-    <div className="space-y-1.5">
-      {title ? (
-        <Heading variant="h4" className="leading-none normal-case">
-          {title}
-        </Heading>
-      ) : null}
-      {description ? (
-        <Text small muted>
-          {description}
-        </Text>
-      ) : null}
-    </div>
-  );
+function PolicyNewContent(): JSX.Element {
+  const [kind] = useQueryState("kind");
+  const toolApprovals = useFeatureFlag(FEATURE_FLAGS.toolApprovals).status;
+  const [category] = useQueryState("category");
+  const location = useLocation();
+  const draft = readPolicyDraft(location.state);
+  // Read once: the editor seeds its state on mount and owns it from there.
+  const [prefill] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (category && !params.has("category")) params.set("category", category);
+    return parsePolicyNewPrefill(params);
+  });
+  if (kind === "standard") {
+    return (
+      <NewPolicyFrame>
+        <StandardPolicyEditor
+          policy={null}
+          prefill={prefill}
+          draft={draft?.policyType === "standard" ? draft : null}
+        />
+      </NewPolicyFrame>
+    );
+  }
+  if (kind === "prompt") {
+    return (
+      <NewPolicyFrame>
+        <PromptPolicyEditor
+          policy={null}
+          draft={draft?.policyType === "prompt_based" ? draft : null}
+        />
+      </NewPolicyFrame>
+    );
+  }
+  if (kind === "shadow-ai") {
+    return (
+      <NewPolicyFrame>
+        <ShadowAIPolicyEditor policy={null} />
+      </NewPolicyFrame>
+    );
+  }
+  // With the flag off, a stale link to the approval editor opens the chooser.
+  if (
+    kind === "approval" &&
+    (toolApprovals === "enabled" || toolApprovals === "loading")
+  ) {
+    return (
+      <NewPolicyFrame>
+        <ApprovalPolicyEditor policy={null} />
+      </NewPolicyFrame>
+    );
+  }
+  return <PolicyStartChooser />;
 }
 
 // ── Prompt policy editor (stepped: Guardrail → Scope → Evaluate → Action → Review)
@@ -736,21 +442,24 @@ function SectionHeader({
 
 function PromptPolicyEditor({
   policy,
+  draft = null,
 }: {
   policy: RiskPolicy | null;
+  draft?: PolicyDraft | null;
 }): JSX.Element {
   const routes = useRoutes();
+  const gramProject = useProjectSlugForRequests();
   const queryClient = useQueryClient();
   const isCreate = policy === null;
 
   const [step, setStep] = useStepParam(PROMPT_STEPS);
   const [nameGenerating, setNameGenerating] = useState(false);
 
-  // Editable guardrail definition, seeded from the loaded policy (edit) or
-  // defaults (create). Kept local so the author can iterate freely.
-  const [name, setName] = useState(policy?.name ?? "");
-  const [prompt, setPrompt] = useState(policy?.prompt ?? "");
-  const [model, setModel] = useState(policy?.modelConfig?.model ?? "");
+  // Editable guardrail definition, seeded from the loaded policy (edit), a
+  // draft from the intent screen, or defaults (create). Kept local so the
+  // author can iterate freely.
+  const [name, setName] = useState(policy?.name ?? draft?.name ?? "");
+  const [prompt, setPrompt] = useState(policy?.prompt ?? draft?.prompt ?? "");
   const [temperature, setTemperature] = useState(
     policy?.modelConfig?.temperature ?? 0,
   );
@@ -760,7 +469,26 @@ function PromptPolicyEditor({
   const [scopeOverrides, setScopeOverrides] = useState<
     Map<string, ScopeOverride>
   >(() => scopeOverridesFromPolicy(policy?.detectionScopes));
-  const [action, setAction] = useState<PolicyAction>(policy?.action ?? "flag");
+  const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(
+    () =>
+      (policy ? null : draftMCPScopeValue(draft)) ??
+      initialPolicyMCPScopeValue(policy),
+  );
+  const [draftScopeNames, setDraftScopeNames] = useState<string[]>(
+    policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
+  );
+  const [action, setAction] = useState<PolicyAction>(() => {
+    const initial = detectionPolicyAction(
+      policy?.action ?? draft?.action ?? "flag",
+    );
+    return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;
+  });
+  const updateMCPScope = (next: PolicyMCPScopeValue) => {
+    setMcpScope(next);
+    if (next.mode === "mcp") {
+      setAction((current) => mcpCompatibleAction(current));
+    }
+  };
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
   );
@@ -771,22 +499,25 @@ function PromptPolicyEditor({
       ? new Set(policy.audiencePrincipalUrns ?? [])
       : new Set<string>(),
   );
-  const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
-  const [score, setScore] = useState(policy?.score ?? 5);
+  const [userMessage, setUserMessage] = useState(
+    policy?.userMessage ?? draft?.userMessage ?? "",
+  );
+  const [score, setScore] = useState(policy?.score ?? draft?.score ?? 5);
   const [reviewVerdictFilter, setReviewVerdictFilter] =
     useState<EvalVerdict | null>(null);
+  const mcpScopePayload = policyMCPScopePayload(mcpScope);
 
   const dirty =
     !!policy &&
     (name !== policy.name ||
       prompt !== (policy.prompt ?? "") ||
-      model !== (policy.modelConfig?.model ?? "") ||
       temperature !== (policy.modelConfig?.temperature ?? 0) ||
       failOpen !== (policy.modelConfig?.failOpen ?? true) ||
       !sameScopeOverrides(
         scopeOverrides,
         scopeOverridesFromPolicy(policy.detectionScopes),
       ) ||
+      !sameMCPScope(mcpScopePayload, policy.mcpScope ?? null) ||
       action !== (policy.action ?? "flag") ||
       userMessage !== (policy.userMessage ?? "") ||
       score !== (policy.score ?? 5) ||
@@ -805,10 +536,12 @@ function PromptPolicyEditor({
     onSuccess: () => {
       void invalidateAllRiskPoliciesGet(queryClient);
       void invalidateAllRiskListPolicies(queryClient);
+      toast.success("Policy updated");
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
     onSuccess: () => {
+      clearPolicyStartSession(gramProject);
       void invalidateAllRiskListPolicies(queryClient);
       routes.policyCenter.goTo();
     },
@@ -846,6 +579,7 @@ function PromptPolicyEditor({
     () => new Set<RuleCategory>(["prompt_policy"]),
     [],
   );
+  const mcpScopeValid = policyMCPScopeComplete(mcpScope);
   const detectionScopesPayloadForPrompt = () =>
     detectionScopesPayload(promptPolicyCategories, scopeOverrides);
 
@@ -858,11 +592,11 @@ function PromptPolicyEditor({
           name: name.trim() || policy.name,
           prompt,
           modelConfig: {
-            model: model || undefined,
             temperature,
             failOpen,
           },
           detectionScopes: detectionScopesPayloadForPrompt(),
+          mcpScope: mcpScopePayload ?? { servers: [] },
           ...actionPayload(),
           userMessage,
           score,
@@ -881,8 +615,9 @@ function PromptPolicyEditor({
           ...(autoName ? {} : { name: name.trim() }),
           enabled: true,
           prompt,
-          modelConfig: { model: model || undefined, temperature, failOpen },
+          modelConfig: { temperature, failOpen },
           ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
+          ...(mcpScopePayload === null ? {} : { mcpScope: mcpScopePayload }),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
           score,
@@ -892,7 +627,7 @@ function PromptPolicyEditor({
     });
   };
 
-  const canCreate = prompt.trim().length > 0;
+  const canCreate = prompt.trim().length > 0 && mcpScopeValid;
 
   // Stable guardrail snapshot for eval query keys. The replay uses the
   // prompt_policy category's effective detection scope (the override when
@@ -905,30 +640,25 @@ function PromptPolicyEditor({
     scopeInclude: promptPolicyDef?.recommendedScopeInclude ?? "",
     scopeExempt: promptPolicyDef?.recommendedScopeExempt ?? "",
   };
-  // A preserved legacy policy-level scope still intersects the category scope
-  // in production (scanner: includes AND, exempts OR), so compose it here too.
+  const promptInspectRowsValid = inspectRowsAreValid(
+    promptPolicyCategories,
+    scopeOverrides,
+    categoriesQuery.data?.categories,
+    mcpScope.mode === "mcp",
+  );
   const guardrail = useMemo<Guardrail>(
     () => ({
       prompt,
-      model,
       temperature,
       failOpen,
-      messageTypes: policy?.messageTypes ?? [],
-      scopeInclude: intersectScopeExprs(
-        policy?.scopeInclude ?? "",
-        effectiveScope.scopeInclude,
-      ),
-      scopeExempt: unionScopeExprs(
-        policy?.scopeExempt ?? "",
-        effectiveScope.scopeExempt,
-      ),
+      messageTypes: [],
+      scopeInclude: effectiveScope.scopeInclude,
+      scopeExempt: effectiveScope.scopeExempt,
     }),
     [
       prompt,
-      model,
       temperature,
       failOpen,
-      policy,
       effectiveScope.scopeInclude,
       effectiveScope.scopeExempt,
     ],
@@ -942,7 +672,9 @@ function PromptPolicyEditor({
       onNameChange={setName}
       dirty={dirty}
       saving={saving}
-      actionDisabled={isCreate ? !canCreate : false}
+      actionDisabled={
+        !mcpScopeValid || !promptInspectRowsValid || (isCreate && !canCreate)
+      }
       onSubmit={() => save()}
       onCreate={create}
       nameGenerating={nameGenerating}
@@ -952,16 +684,16 @@ function PromptPolicyEditor({
   return (
     <StepperShell
       header={header}
+      provenance={draft ? <PolicyDraftProvenance draft={draft} /> : null}
       steps={PROMPT_STEPS}
       current={step}
       onStep={handleStep}
+      prefilledStepIds={draft?.origin ? PROMPT_PREFILLED_STEPS : undefined}
     >
       {step === 0 && (
         <>
           <GuardrailCard prompt={prompt} onPromptChange={setPrompt} />
           <JudgeSection
-            model={model}
-            onModelChange={setModel}
             temperature={temperature}
             onTemperatureChange={setTemperature}
             failOpen={failOpen}
@@ -972,11 +704,18 @@ function PromptPolicyEditor({
 
       {step === 1 && (
         <ScopeStep
-          description="Which messages the judge evaluates. Narrow the scope to reduce noise and cost."
           selectedCategories={promptPolicyCategories}
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
-          legacyPolicy={policy}
+          mcpScope={mcpScope}
+          setMcpScope={updateMCPScope}
+          action={action}
+          hasStoredMcpScope={!!policy?.mcpScope}
+          draftScopeNames={draftScopeNames}
+          onClearDraftScope={() => {
+            setDraftScopeNames([]);
+            updateMCPScope(initialPolicyMCPScopeValue(null));
+          }}
         />
       )}
 
@@ -1003,15 +742,16 @@ function PromptPolicyEditor({
           setUserMessage={setUserMessage}
           score={score}
           setScore={setScore}
+          mcpScoped={mcpScope.mode === "mcp"}
         />
       )}
 
       {step === 4 && (
         <PromptReview
           prompt={prompt}
-          model={model}
           temperature={temperature}
           failOpen={failOpen}
+          mcpScope={mcpScope}
           customizedScopeCount={scopeOverrides.size}
           action={action}
           score={score}
@@ -1026,7 +766,12 @@ function PromptPolicyEditor({
         />
       )}
 
-      <StepNav step={step} count={PROMPT_STEPS.length} onStep={handleStep} />
+      <StepNav
+        step={step}
+        count={PROMPT_STEPS.length}
+        onStep={handleStep}
+        continueDisabled={step === 1 && !policyMCPScopeComplete(mcpScope)}
+      />
     </StepperShell>
   );
 }
@@ -1069,18 +814,14 @@ function GuardrailCard({
   );
 }
 
-// ── Judge section (model · temperature · fail behavior) ──────────────────────
+// ── Judge section (temperature · fail behavior) ──────────────────────────────
 
 function JudgeSection({
-  model,
-  onModelChange,
   temperature,
   onTemperatureChange,
   failOpen,
   onFailOpenChange,
 }: {
-  model: string;
-  onModelChange: (v: string) => void;
   temperature: number;
   onTemperatureChange: (v: number) => void;
   failOpen: boolean;
@@ -1090,37 +831,9 @@ function JudgeSection({
     <Card>
       <SectionHeader
         title="Judge"
-        description="The model that evaluates each in-scope message and how it behaves under error."
+        description="How the judge evaluates each in-scope message and how it behaves under error."
       />
       <Stack gap={8}>
-        {/* Model */}
-        <div className="space-y-2">
-          <Text small>Model</Text>
-          <Text small muted>
-            The LLM that judges each in-scope message.
-          </Text>
-          <Select
-            value={model || DEFAULT_MODEL_VALUE}
-            onValueChange={(v) =>
-              onModelChange(v === DEFAULT_MODEL_VALUE ? "" : v)
-            }
-          >
-            <SelectTrigger className="w-[16rem]">
-              <SelectValue placeholder="Default" />
-            </SelectTrigger>
-            <SelectContent>
-              {JUDGE_MODELS.map((m) => (
-                <SelectItem
-                  key={m.value || DEFAULT_MODEL_VALUE}
-                  value={m.value || DEFAULT_MODEL_VALUE}
-                >
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         {/* Temperature */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -1169,98 +882,181 @@ function JudgeSection({
 
 // ── Scope section (message types · include/exempt CEL) ───────────────────────
 
-// Shared Scope step — used identically by prompt and standard editors:
-// message-types vs CEL segmented toggle, message-type cards, and an exemptions
-// allowlist. Message-type set is kept as Set<string> so both editors' state
-// shapes plug in.
+// Shared scope step for both policy editors.
 function ScopeStep({
-  description,
   selectedCategories,
   scopeOverrides,
   setScopeOverrides,
-  legacyPolicy,
+  mcpScope,
+  setMcpScope,
+  action,
+  hasStoredMcpScope,
+  draftScopeNames,
+  onClearDraftScope,
 }: {
-  description: string;
   selectedCategories: Set<RuleCategory>;
   scopeOverrides: Map<string, ScopeOverride>;
   setScopeOverrides: (next: Map<string, ScopeOverride>) => void;
-  legacyPolicy?: RiskPolicy | null;
+  mcpScope: PolicyMCPScopeValue;
+  setMcpScope: (next: PolicyMCPScopeValue) => void;
+  action: PolicyAction;
+  hasStoredMcpScope: boolean;
+  /** Server names a description-based draft pre-selected, shown so the
+   *  administrator can see why the scope is already set. */
+  draftScopeNames: string[];
+  onClearDraftScope: () => void;
 }): JSX.Element {
+  const mcpScopeFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
+  const gramProject = useProjectSlugForRequests();
+  // Configuration only (hooks-scoped keys, inference hooks), never traffic,
+  // so it is cheap enough to read on every policy edit.
+  const hooksStatus = useGetHooksStatus({ gramProject }, undefined, {
+    throwOnError: false,
+    staleTime: 5 * 60 * 1000,
+  });
+  const mcpScoped = mcpScope.mode === "mcp";
+  const chosen = mcpScope.mode !== "unset";
+  // Only a successful read offers Client sessions. A failed read offers no
+  // cards and asks for a retry: guessing either way would let the author save
+  // a policy whose scope was never verified.
+  const sessionsAvailable = hooksStatus.data?.configured ?? false;
+  // Fail closed while the flag loads or is unavailable. A stored scope or an
+  // in-progress MCP draft keeps the MCP option so the form never strands the
+  // user in MCP mode without the control to change it.
+  const mcpAvailable =
+    mcpScopeFlag.status === "enabled" || hasStoredMcpScope || mcpScoped;
+  const settled = hooksStatus.isSuccess && mcpScopeFlag.status !== "loading";
+  // A single available option is taken without a click: an org without hooks
+  // goes straight to MCP scope, an org without the MCP flag to client
+  // sessions. Waits for both signals so a value still loading never pre-empts
+  // the author's choice.
+  useEffect(() => {
+    if (!settled || sessionsAvailable === mcpAvailable) return;
+    const only: PolicyScopeChoice = mcpAvailable ? "mcp" : "everywhere";
+    if (mcpScope.mode !== only) setMcpScope({ ...mcpScope, mode: only });
+  }, [settled, sessionsAvailable, mcpAvailable, mcpScope, setMcpScope]);
   return (
     <Card>
-      <SectionHeader description={description} />
-      <Stack gap={5}>
-        <RecommendedScopesPanel
-          selectedCategories={selectedCategories}
-          scopeOverrides={scopeOverrides}
-          setScopeOverrides={setScopeOverrides}
-        />
-        <LegacyScopeNotice policy={legacyPolicy} />
+      <Stack gap={6}>
+        {hooksStatus.isError ? (
+          <div className="flex items-center gap-3">
+            <Text small muted>
+              Could not check whether hooks are configured.
+            </Text>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void hooksStatus.refetch()}
+            >
+              <Button.Text>Retry</Button.Text>
+            </Button>
+          </div>
+        ) : null}
+        {settled ? (
+          <PolicyScopeModeCards
+            value={mcpScope.mode}
+            sessionsAvailable={sessionsAvailable}
+            mcpAvailable={mcpAvailable}
+            onChange={(mode) => setMcpScope({ ...mcpScope, mode })}
+            // The dialog may have minted a hooks key; the cached status would
+            // otherwise keep Client sessions hidden until staleTime elapses.
+            onHooksSetupClosed={() => void hooksStatus.refetch()}
+          />
+        ) : null}
+        {!settled && !hooksStatus.isError ? (
+          <Skeleton className="h-28 w-full" />
+        ) : null}
+        {settled && !chosen && (sessionsAvailable || mcpAvailable) ? (
+          <Text small muted>
+            Choose where this policy applies to continue.
+          </Text>
+        ) : null}
+        {mcpScoped && draftScopeNames.length > 0 ? (
+          <div className="flex items-center justify-between gap-4 border px-4 py-3 text-sm">
+            <span>
+              Set from your description, which names{" "}
+              {draftScopeNames.join(", ")}.
+            </span>
+            <Button
+              type="button"
+              size="xs"
+              variant="tertiary"
+              onClick={onClearDraftScope}
+            >
+              Clear
+            </Button>
+          </div>
+        ) : null}
+        {mcpScoped ? (
+          <PolicyMCPScopePicker
+            value={mcpScope}
+            onChange={setMcpScope}
+            action={action}
+          />
+        ) : null}
+        {chosen && selectedCategories.size === 0 ? (
+          <Text small muted>
+            Scope options appear here once you enable a detector.
+          </Text>
+        ) : null}
+        {mcpScoped && !mcpScope.allServers && mcpScope.servers.length === 0 ? (
+          <Text small className="text-destructive">
+            Select at least one MCP server or apply the policy to all servers.
+          </Text>
+        ) : null}
+        {mcpScoped && selectedCategories.has("account_identity") ? (
+          <Text small className="text-destructive">
+            Session-scoped account identity detection cannot be limited to MCP
+            tool traffic.
+          </Text>
+        ) : null}
+        {mcpScoped && selectedCategories.has("shadow_mcp") ? (
+          <Text small className="text-destructive">
+            Shadow MCP detection watches unmanaged servers, so it cannot be
+            limited to selected MCP servers.
+          </Text>
+        ) : null}
+        {chosen ? (
+          <InspectMatrix
+            selectedCategories={selectedCategories}
+            scopeOverrides={scopeOverrides}
+            setScopeOverrides={setScopeOverrides}
+            mcpScoped={mcpScoped}
+          />
+        ) : null}
       </Stack>
     </Card>
   );
 }
 
-// Read-only reminder for policies that still carry a policy-level scope from
-// before category detection scopes became the only scoping surface. The
-// dashboard no longer edits these fields; a migration will fold them into
-// category scopes.
-function LegacyScopeNotice({
-  policy,
-}: {
-  policy?: RiskPolicy | null;
-}): JSX.Element | null {
-  if (!policy) return null;
-  const parts: string[] = [];
-  if ((policy.messageTypes ?? []).length > 0) {
-    parts.push(`message types: ${(policy.messageTypes ?? []).join(", ")}`);
-  }
-  if ((policy.scopeInclude ?? "").trim() !== "") {
-    parts.push(`include: ${(policy.scopeInclude ?? "").trim()}`);
-  }
-  if ((policy.scopeExempt ?? "").trim() !== "") {
-    parts.push(`exempt: ${(policy.scopeExempt ?? "").trim()}`);
-  }
-  if (parts.length === 0) return null;
-  return (
-    <div className="border-border bg-muted/20 border px-3 py-2">
-      <Text small muted>
-        A legacy policy-level scope still narrows this policy in addition to the
-        category scopes above ({parts.join("; ")}). It is preserved as-is and
-        will be migrated into category scopes.
-      </Text>
-    </div>
-  );
-}
-
-function RecommendedScopesPanel({
+function InspectMatrix({
   selectedCategories,
   scopeOverrides,
   setScopeOverrides,
+  mcpScoped,
 }: {
   selectedCategories: Set<RuleCategory>;
   scopeOverrides: Map<string, ScopeOverride>;
   setScopeOverrides: (next: Map<string, ScopeOverride>) => void;
+  mcpScoped: boolean;
 }): JSX.Element | null {
-  // Handled inline (retry below) instead of the route error boundary.
   const categoriesQuery = useRiskCategories(undefined, undefined, {
     throwOnError: false,
   });
-
   const rows = useMemo(() => {
     if (!categoriesQuery.data?.categories) return [];
-    return categoriesQuery.data.categories
-      .filter((category) =>
-        selectedCategories.has(category.key as RuleCategory),
-      )
-      .filter((category) => hasDisplayableRecommendedScope(category));
+    return categoriesQuery.data.categories.filter((category) =>
+      selectedCategories.has(category.key as RuleCategory),
+    );
   }, [categoriesQuery.data?.categories, selectedCategories]);
+  // Detectors switched to Customize that still match their recommendation.
+  const [unlocked, setUnlocked] = useState<ReadonlySet<string>>(new Set());
 
   if (categoriesQuery.isLoading) {
     return (
       <Text small muted className="flex items-center gap-2">
-        <Loader2 className="size-4 animate-spin" />
-        Loading detection scopes…
+        <Spinner className="mr-0" />
+        Loading detectors...
       </Text>
     );
   }
@@ -1268,7 +1064,7 @@ function RecommendedScopesPanel({
     return (
       <div className="flex items-center gap-3">
         <Text small muted>
-          Failed to load detection scopes.
+          Couldn't load detectors.
         </Text>
         <Button
           variant="secondary"
@@ -1280,48 +1076,123 @@ function RecommendedScopesPanel({
       </div>
     );
   }
-  if (rows.length === 0) {
-    return null;
-  }
+  if (rows.length === 0) return null;
 
+  const customizedCount = rows.filter(
+    (category) =>
+      category.recommendedScopeApplicable &&
+      (scopeOverrides.has(category.key) || unlocked.has(category.key)),
+  ).length;
   return (
     <div className="space-y-3">
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div className="space-y-1">
-          <Label className="text-sm font-medium">Detection scopes</Label>
+          <Label className="text-sm font-medium">Inspect</Label>
           <p className="text-muted-foreground text-xs">
-            Each category scans the highlighted surfaces. Click a surface to
-            customize; a custom scope replaces the recommendation.
+            Choose which traffic each detector inspects.
           </p>
+          {mcpScoped ? (
+            <p className="text-muted-foreground text-xs">
+              What people type and agent replies aren't part of an MCP call.
+              Tool results are stored now and checked once MCP response scanning
+              ships.
+            </p>
+          ) : null}
         </div>
-        <CelReferenceSheet />
+        {customizedCount > 0 ? (
+          <div className="flex shrink-0 items-center gap-2 text-xs">
+            <span className="text-muted-foreground">
+              {customizedCount} customized
+            </span>
+            <Button
+              type="button"
+              variant="tertiary"
+              size="xs"
+              onClick={() => {
+                const next = new Map(scopeOverrides);
+                for (const category of rows) next.delete(category.key);
+                setScopeOverrides(next);
+                setUnlocked(new Set());
+              }}
+            >
+              Reset all
+            </Button>
+          </div>
+        ) : null}
       </div>
-      <div className="space-y-2">
-        {rows.map((category) => (
-          <RecommendedScopeRow
-            key={category.key}
-            category={category}
-            override={scopeOverrides.get(category.key)}
-            onOverrideChange={(override) => {
-              const next = new Map(scopeOverrides);
-              if (override === null) next.delete(category.key);
-              else next.set(category.key, override);
-              setScopeOverrides(next);
-            }}
-          />
-        ))}
+      <div className="border-border overflow-x-auto border">
+        <div className="divide-border min-w-[768px] divide-y">
+          <div
+            className={cn(
+              INSPECT_GRID,
+              "bg-muted/35 text-muted-foreground text-xs",
+            )}
+          >
+            <div className="flex items-center px-4 py-2 text-sm font-medium">
+              Detector
+            </div>
+            {SCOPE_SURFACES.map(({ kind, label, help }) => (
+              <div
+                key={kind}
+                className="flex items-center justify-center border-l px-2 py-2 text-center"
+              >
+                <SimpleTooltip tooltip={help}>
+                  <span className="text-foreground whitespace-nowrap font-medium">
+                    {label}
+                  </span>
+                </SimpleTooltip>
+              </div>
+            ))}
+          </div>
+          {rows.map((category) => (
+            <InspectRow
+              key={category.key}
+              category={category}
+              override={scopeOverrides.get(category.key)}
+              onOverrideChange={(override) => {
+                const next = new Map(scopeOverrides);
+                if (override === null) next.delete(category.key);
+                else next.set(category.key, override);
+                setScopeOverrides(next);
+              }}
+              unlocked={unlocked.has(category.key)}
+              onUnlockedChange={(on) => {
+                const next = new Set(unlocked);
+                if (on) next.add(category.key);
+                else next.delete(category.key);
+                setUnlocked(next);
+              }}
+              mcpScoped={mcpScoped}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
 }
-
 // The four message surfaces a detection scope selects over, in transcript
-// order. Chip editing serializes back to canonical kind expressions.
+// order. Checkbox editing serializes back to canonical kind expressions.
 const SCOPE_SURFACES = [
-  { kind: "user_message", label: "User" },
-  { kind: "tool_request", label: "Tool requests" },
-  { kind: "tool_response", label: "Tool responses" },
-  { kind: "assistant_message", label: "Assistant" },
+  {
+    kind: "user_message",
+    label: "What people type",
+    help: "Messages people send to the agent.",
+  },
+  {
+    kind: "tool_request",
+    label: "Tool calls",
+    help: "What the agent sends to a tool.",
+  },
+  {
+    kind: "tool_response",
+    label: "Tool results",
+    help: "What a tool sends back to the agent.",
+  },
+  {
+    kind: "assistant_message",
+    label: "Agent replies",
+    help: "What the agent says back.",
+  },
 ] as const;
 type ScopeSurfaceKind = (typeof SCOPE_SURFACES)[number]["kind"];
 const ALL_SURFACE_KINDS: ScopeSurfaceKind[] = SCOPE_SURFACES.map((s) => s.kind);
@@ -1332,6 +1203,10 @@ function kindsFromExpr(expr: string): Set<ScopeSurfaceKind> | null {
   const trimmed = expr.trim();
   const out = new Set<ScopeSurfaceKind>();
   if (trimmed === "") return out;
+
+  const decoded = decodeKindScope(trimmed);
+  if (decoded) return new Set(decoded);
+
   for (const part of trimmed.split("||")) {
     const match = /^\(?\s*kind\s*==\s*"(\w+)"\s*\)?$/.exec(part.trim());
     const kind = match?.[1] as ScopeSurfaceKind | undefined;
@@ -1342,7 +1217,7 @@ function kindsFromExpr(expr: string): Set<ScopeSurfaceKind> | null {
 }
 
 // The surfaces a scope admits, or null when it is not a pure surface
-// expression. An empty include means every surface.
+// expression. A blank include means every surface; `kind in []` means none.
 function surfacesFromScope(
   include: string,
   exempt: string,
@@ -1351,7 +1226,7 @@ function surfacesFromScope(
   const exempted = kindsFromExpr(exempt);
   if (included === null || exempted === null) return null;
   const base =
-    included.size === 0
+    include.trim() === ""
       ? new Set<ScopeSurfaceKind>(ALL_SURFACE_KINDS)
       : included;
   return new Set([...base].filter((kind) => !exempted.has(kind)));
@@ -1455,288 +1330,305 @@ function scopeFromSurfaces(surfaces: Set<ScopeSurfaceKind>): ScopeOverride {
     return { scopeInclude: "", scopeExempt: `kind == "${missing[0]}"` };
   }
   return {
-    scopeInclude: ALL_SURFACE_KINDS.filter((kind) => surfaces.has(kind))
-      .map((kind) => `kind == "${kind}"`)
-      .join(" || "),
+    scopeInclude: encodeKindScope(
+      ALL_SURFACE_KINDS.filter((kind) => surfaces.has(kind)),
+    ),
     scopeExempt: "",
   };
 }
 
-function RecommendedScopeRow({
+function inspectRowsAreValid(
+  selectedCategories: ReadonlySet<RuleCategory>,
+  scopeOverrides: ReadonlyMap<string, ScopeOverride>,
+  categories: RiskCategoryDefinition[] | undefined,
+  mcpScoped: boolean,
+): boolean {
+  if (!categories) return true;
+  return [...selectedCategories].every((key) => {
+    const category = categories.find((candidate) => candidate.key === key);
+    if (!category) return true;
+    if (!category.recommendedScopeApplicable) return true;
+    const scope = scopeOverrides.get(key) ?? {
+      scopeInclude: category.recommendedScopeInclude,
+      scopeExempt: category.recommendedScopeExempt,
+    };
+    const surfaces = surfacesFromScope(scope.scopeInclude, scope.scopeExempt);
+    if (!surfaces) return true;
+    if (!mcpScoped) return surfaces.size > 0;
+    return surfaces.has("tool_request") || surfaces.has("tool_response");
+  });
+}
+
+// Per-surface state of a scope: exact for pure surface expressions, probed
+// for granular CEL, "conditional" while the CEL engine loads.
+function scopeSurfaceStates(
+  scope: ScopeOverride,
+  engine: CelEngine | null,
+): Record<ScopeSurfaceKind, SurfaceState> {
+  const surfaces = surfacesFromScope(scope.scopeInclude, scope.scopeExempt);
+  const probed =
+    surfaces === null && engine
+      ? surfaceStatesFromProbes(engine, scope.scopeInclude, scope.scopeExempt)
+      : null;
+  const out = {} as Record<ScopeSurfaceKind, SurfaceState>;
+  for (const kind of ALL_SURFACE_KINDS) {
+    out[kind] = surfaces
+      ? surfaces.has(kind)
+        ? "in"
+        : "out"
+      : (probed?.[kind] ?? "conditional");
+  }
+  return out;
+}
+
+// Same scope: identical expressions, or ones that admit the same surfaces.
+function sameScope(a: ScopeOverride, b: ScopeOverride): boolean {
+  if (
+    a.scopeInclude.trim() === b.scopeInclude.trim() &&
+    a.scopeExempt.trim() === b.scopeExempt.trim()
+  ) {
+    return true;
+  }
+  const left = surfacesFromScope(a.scopeInclude, a.scopeExempt);
+  const right = surfacesFromScope(b.scopeInclude, b.scopeExempt);
+  return (
+    left !== null &&
+    right !== null &&
+    left.size === right.size &&
+    [...left].every((kind) => right.has(kind))
+  );
+}
+
+const INSPECT_GRID = "grid grid-cols-[minmax(16rem,1fr)_repeat(4,8rem)]";
+
+function InspectRow({
   category,
   override,
   onOverrideChange,
+  unlocked,
+  onUnlockedChange,
+  mcpScoped,
 }: {
   category: RiskCategoryDefinition;
   override: ScopeOverride | undefined;
   onOverrideChange: (override: ScopeOverride | null) => void;
+  unlocked: boolean;
+  onUnlockedChange: (unlocked: boolean) => void;
+  mcpScoped: boolean;
 }): JSX.Element {
   const [celOpen, setCelOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const engineState = useCelEngine();
   const engine = engineState.status === "ready" ? engineState.engine : null;
-
   if (!category.recommendedScopeApplicable) {
     return (
-      <div className="border-border bg-muted/20 flex items-center justify-between gap-3 border px-3 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <Text small className="font-medium">
+      <div className={INSPECT_GRID}>
+        <div className="flex min-w-0 items-center gap-2 px-4 py-3">
+          <Text small className="truncate font-medium">
             {category.label}
           </Text>
           <ScopeRationaleHint rationale={category.recommendedScopeRationale} />
         </div>
-        <Badge variant="neutral">Session-scoped</Badge>
+        <div className="text-muted-foreground col-span-4 flex items-center border-l px-4 py-3 text-xs">
+          Checks the whole session, not individual messages.
+        </div>
       </div>
     );
   }
 
-  const activeScope = override ?? {
+  const recommendedScope = {
     scopeInclude: category.recommendedScopeInclude,
     scopeExempt: category.recommendedScopeExempt,
   };
+  const activeScope = override ?? recommendedScope;
   const activeSurfaces = surfacesFromScope(
     activeScope.scopeInclude,
     activeScope.scopeExempt,
   );
-  const granularChips = !celOpen && activeSurfaces === null;
-  const editorsOpen = celOpen && override !== undefined;
+  const states = scopeSurfaceStates(activeScope, engine);
+  const editableKinds = mcpScoped
+    ? (["tool_request", "tool_response"] as ScopeSurfaceKind[])
+    : ALL_SURFACE_KINDS;
+  const countActive = (s: Record<ScopeSurfaceKind, SurfaceState>) =>
+    editableKinds.filter((kind) => s[kind] !== "out").length;
+  const activeCount = countActive(states);
+  const invalid = activeCount === 0;
+  // In MCP mode a recommendation can cover no MCP traffic; the row then has
+  // to be customised before the policy can be saved.
+  const recommendationUnusable =
+    countActive(scopeSurfaceStates(recommendedScope, engine)) === 0;
+  const customized =
+    override !== undefined || unlocked || recommendationUnusable;
+
+  // A scope that matches the recommendation is stored as no override.
+  const setOverride = (next: ScopeOverride) =>
+    onOverrideChange(sameScope(next, recommendedScope) ? null : next);
 
   const toggleSurface = (kind: ScopeSurfaceKind) => {
-    if (!activeSurfaces) return;
-    const next = new Set(activeSurfaces);
-    if (next.has(kind)) {
-      if (next.size === 1) return;
-      next.delete(kind);
-    } else {
-      next.add(kind);
+    const nextOn = states[kind] !== "in";
+    if (!nextOn && activeCount <= 1) return;
+    if (activeSurfaces) {
+      const next = new Set(activeSurfaces);
+      if (nextOn) next.add(kind);
+      else next.delete(kind);
+      setOverride(scopeFromSurfaces(next));
+      return;
     }
-    onOverrideChange(scopeFromSurfaces(next));
+    setOverride(scopeWithSurface(activeScope, kind, nextOn));
+  };
+
+  const setCustomized = (on: boolean) => {
+    onUnlockedChange(on);
+    if (!on) {
+      setCelOpen(false);
+      setEditing(false);
+      onOverrideChange(null);
+    }
   };
 
   return (
-    <div className="border-border border px-3 py-2.5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Text small className="font-medium">
-            {category.label}
-          </Text>
-          <ScopeRationaleHint rationale={category.recommendedScopeRationale} />
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Badge variant="neutral">
-            {override === undefined ? "Recommended" : "Custom"}
-          </Badge>
-          {override !== undefined && (
-            <button
-              type="button"
-              onClick={() => {
-                setCelOpen(false);
-                onOverrideChange(null);
-              }}
-              className="text-muted-foreground hover:text-foreground text-xs underline"
-            >
-              Reset
-            </button>
-          )}
-        </div>
-      </div>
-
-      {!celOpen && activeSurfaces && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {SCOPE_SURFACES.map(({ kind, label }) => {
-            const active = activeSurfaces.has(kind);
-            return (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => toggleSurface(kind)}
-                aria-pressed={active}
-                className={cn(
-                  "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
-                  active
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-border text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
-          <SimpleTooltip tooltip="Switch to CEL expressions for granular scoping: match on tool names, servers, or message content instead of whole surfaces.">
-            <button
-              type="button"
-              onClick={() => {
-                if (override === undefined) {
-                  onOverrideChange({ ...activeScope });
-                }
-                setCelOpen(true);
-              }}
-              className="border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 ml-1 flex items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs transition-colors"
-            >
-              <Code className="h-3 w-3" />
-              Granular scope
-            </button>
-          </SimpleTooltip>
-        </div>
-      )}
-
-      {granularChips && (
-        <GranularRecommendationChips
-          engine={engine}
-          scope={activeScope}
-          onToggleSurface={(kind, on) =>
-            onOverrideChange(scopeWithSurface(activeScope, kind, on))
-          }
-          onCustomize={() => {
-            if (override === undefined) {
-              onOverrideChange({ ...activeScope });
-            }
-            setCelOpen(true);
-          }}
-        />
-      )}
-
-      {editorsOpen && override !== undefined && (
-        <div className="mt-3 space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              Detect on messages matching
-            </Label>
-            <CelExpressionField
-              value={override.scopeInclude}
-              onChange={(value) =>
-                onOverrideChange({ ...override, scopeInclude: value })
-              }
-              examples={SCOPE_INCLUDE_CEL_EXAMPLES}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              Exempt messages matching
-            </Label>
-            <CelExpressionField
-              value={override.scopeExempt}
-              onChange={(value) =>
-                onOverrideChange({ ...override, scopeExempt: value })
-              }
-              examples={SCOPE_EXEMPT_CEL_EXAMPLES}
-            />
-            <Text small muted>
-              Empty include and exempt scans every message surface. This scope
-              replaces the recommendation; future recommendation updates will
-              not apply.
+    <div>
+      <div className={INSPECT_GRID}>
+        <div className="min-w-0 space-y-0.5 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Text small className="truncate font-medium">
+              {category.label}
             </Text>
-          </div>
-          <div className="border-border border-t pt-3">
-            <CelTrafficPreview
-              includeExpr={override.scopeInclude}
-              exemptExpr={override.scopeExempt}
-              mode="scope"
+            <ScopeRationaleHint
+              rationale={category.recommendedScopeRationale}
             />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// A scope the chips cannot express exactly (e.g. a tool-name allowlist inside
-// tool requests): tri-state chips derived from the scope's probe footprint.
-// Clicking a chip forces that surface fully in or out while the rest of the
-// expression is preserved; conditional chips click to fully in. The exact
-// expression stays behind Granular scope. Falls back to the raw expression
-// while the engine loads.
-function GranularRecommendationChips({
-  engine,
-  scope,
-  onToggleSurface,
-  onCustomize,
-}: {
-  engine: CelEngine | null;
-  scope: ScopeOverride;
-  onToggleSurface: (kind: ScopeSurfaceKind, on: boolean) => void;
-  onCustomize: () => void;
-}): JSX.Element {
-  const states = engine
-    ? surfaceStatesFromProbes(engine, scope.scopeInclude, scope.scopeExempt)
-    : null;
-  const scannedCount = states
-    ? Object.values(states).filter((s) => s !== "out").length
-    : 0;
-
-  return (
-    <div className="mt-2 space-y-2">
-      {states ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {SCOPE_SURFACES.map(({ kind, label }) => {
-            const state = states[kind];
-            // Tri-state checkbox semantics: out and conditional click to
-            // fully in; in clicks to out (unless it is the last surface).
-            const nextOn = state !== "in";
-            const lastSurface = state !== "out" && scannedCount <= 1;
-            const chip = (
+            {customized && !mcpScoped ? (
               <button
-                key={kind}
                 type="button"
-                aria-pressed={state !== "out"}
-                onClick={() => {
-                  if (!nextOn && lastSurface) return;
-                  onToggleSurface(kind, nextOn);
-                }}
-                className={cn(
-                  "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
-                  state === "in" &&
-                    "border-foreground bg-foreground text-background",
-                  state === "conditional" &&
-                    "border-foreground/60 text-foreground border-dashed",
-                  state === "out" &&
-                    "border-border text-muted-foreground hover:text-foreground",
-                )}
+                className="text-muted-foreground hover:text-foreground ml-auto shrink-0 text-xs underline"
+                onClick={() => setCelOpen((value) => !value)}
               >
-                {label}
-                {state === "conditional" && "*"}
+                {celOpen ? "Hide CEL" : "Edit as CEL"}
               </button>
-            );
-            return state === "conditional" ? (
-              <SimpleTooltip
-                key={kind}
-                tooltip="Conditionally in scope: only some messages on this surface are scanned. Click to scan all of them, or open Granular scope for the exact expression."
-              >
-                {chip}
-              </SimpleTooltip>
-            ) : (
-              chip
-            );
-          })}
-          <SimpleTooltip tooltip="View and edit the exact CEL expressions behind this scope.">
-            <button
-              type="button"
-              onClick={onCustomize}
-              className="border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 ml-1 flex items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs transition-colors"
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <Switch
+              aria-label={`Customize ${category.label}`}
+              checked={customized}
+              disabled={recommendationUnusable}
+              onCheckedChange={setCustomized}
+            />
+            <Badge variant="neutral">
+              {customized ? "Customized" : "Recommended"}
+            </Badge>
+          </div>
+          {invalid ? (
+            <Text small className="text-destructive">
+              {mcpScoped
+                ? "Select tool calls, tool results or both."
+                : "Select at least one kind of traffic."}
+            </Text>
+          ) : null}
+        </div>
+        {SCOPE_SURFACES.map(({ kind, label }) => {
+          const unavailable = !editableKinds.includes(kind);
+          const state = states[kind];
+          const checkbox = (
+            <Checkbox
+              aria-label={`${category.label}: ${label}`}
+              disabled={unavailable || !customized}
+              checked={
+                unavailable
+                  ? false
+                  : state === "conditional"
+                    ? "indeterminate"
+                    : state === "in"
+              }
+              onCheckedChange={() => toggleSurface(kind)}
+            />
+          );
+          const tooltip = unavailable
+            ? "Not part of an MCP call."
+            : state === "conditional"
+              ? "Only some of this traffic is checked."
+              : null;
+          return (
+            <div
+              key={kind}
+              className="flex items-center justify-center border-l px-2 py-3"
             >
-              <Code className="h-3 w-3" />
-              Granular scope
-            </button>
-          </SimpleTooltip>
+              {tooltip ? (
+                <SimpleTooltip tooltip={tooltip}>
+                  <span className="inline-flex">{checkbox}</span>
+                </SimpleTooltip>
+              ) : (
+                checkbox
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {celOpen && customized && !mcpScoped ? (
+        <div className="bg-muted/20 border-t px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 space-y-2">
+              <Text small className="font-medium">
+                CEL scope
+              </Text>
+              {activeScope.scopeInclude.trim() === "" &&
+              activeScope.scopeExempt.trim() === "" ? (
+                <code className="text-xs">All message surfaces</code>
+              ) : (
+                <RecommendedScopeCode
+                  include={activeScope.scopeInclude}
+                  exempt={activeScope.scopeExempt}
+                />
+              )}
+              <Text small muted>
+                Checkbox changes update this expression. Editing it replaces the
+                checkboxes.
+              </Text>
+            </div>
+            <div className="flex shrink-0 items-center gap-3">
+              <CelReferenceSheet />
+              <button
+                type="button"
+                className="text-foreground text-xs underline"
+                onClick={() => setEditing((value) => !value)}
+              >
+                {editing ? "Close editor" : "Edit expression"}
+              </button>
+            </div>
+          </div>
+          {editing ? (
+            <div className="mt-4 space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">
+                  Detect on messages matching
+                </Label>
+                <CelExpressionField
+                  value={activeScope.scopeInclude}
+                  onChange={(value) =>
+                    setOverride({ ...activeScope, scopeInclude: value })
+                  }
+                  examples={SCOPE_INCLUDE_CEL_EXAMPLES}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">
+                  Exempt messages matching
+                </Label>
+                <CelExpressionField
+                  value={activeScope.scopeExempt}
+                  onChange={(value) =>
+                    setOverride({ ...activeScope, scopeExempt: value })
+                  }
+                  examples={SCOPE_EXEMPT_CEL_EXAMPLES}
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
-      ) : (
-        <div className="space-y-2">
-          <RecommendedScopeCode
-            include={scope.scopeInclude}
-            exempt={scope.scopeExempt}
-          />
-          <button
-            type="button"
-            onClick={onCustomize}
-            className="text-muted-foreground hover:text-foreground text-xs underline"
-          >
-            Customize
-          </button>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }
-
 function ScopeRationaleHint({
   rationale,
 }: {
@@ -1786,16 +1678,6 @@ function RecommendedScopeCodeLine({
   );
 }
 
-function hasDisplayableRecommendedScope(
-  category: RiskCategoryDefinition,
-): boolean {
-  if (!category.recommendedScopeApplicable) return true;
-  return (
-    category.recommendedScopeInclude.trim() !== "" ||
-    category.recommendedScopeExempt.trim() !== ""
-  );
-}
-
 // A category with an entry here has its recommendation replaced by the
 // user-authored scope; both fields empty scans every message surface.
 type ScopeOverride = { scopeInclude: string; scopeExempt: string };
@@ -1829,36 +1711,25 @@ function sameScopeOverrides(
   return true;
 }
 
-function scopeSummaryText(customizedScopeCount: number): string {
-  return customizedScopeCount > 0
-    ? `Recommended scopes (${customizedScopeCount} customized)`
-    : "Recommended scopes";
-}
-
-// Combine two include expressions: a message must satisfy both.
-function intersectScopeExprs(a: string, b: string): string {
-  const left = a.trim();
-  const right = b.trim();
-  if (left === "") return right;
-  if (right === "") return left;
-  return `(${left}) && (${right})`;
-}
-
-// Combine two exempt expressions: either one takes the message out.
-function unionScopeExprs(a: string, b: string): string {
-  const left = a.trim();
-  const right = b.trim();
-  if (left === "") return right;
-  if (right === "") return left;
-  return `(${left}) || (${right})`;
+function scopeSummaryText(
+  mcpScope: PolicyMCPScopeValue,
+  customizedScopeCount: number,
+): string {
+  const inspect =
+    customizedScopeCount > 0
+      ? `recommended scopes (${customizedScopeCount} customized)`
+      : "recommended scopes";
+  return `${policyScopeSummary(mcpScope)} · ${inspect}`;
 }
 
 function detectionScopesPayload(
   selectedCategories: Set<RuleCategory>,
   overrides: Map<string, ScopeOverride>,
+  mode: DetectorMode = "presidio",
 ): RiskDetectionScope[] {
+  const persistedFor = persistedCategories(selectedCategories, mode);
   return [...overrides]
-    .filter(([category]) => selectedCategories.has(category as RuleCategory))
+    .filter(([category]) => persistedFor.has(category as RuleCategory))
     .map(([category, override]) => ({
       category,
       ...(override.scopeInclude.trim()
@@ -1868,55 +1739,6 @@ function detectionScopesPayload(
         ? { scopeExempt: override.scopeExempt.trim() }
         : {}),
     }));
-}
-
-// ── Action section (flag vs block) ───────────────────────────────────────────
-
-// Shared Action step — identical for prompt and standard: flag/block picker,
-// audience, and the block-time custom message.
-// Severity assigns a CVSS-style score (0.1–10, default 5) to the policy.
-// Findings inherit it at read time to render a severity badge. Pure metadata —
-// changing it never re-scans or regenerates findings.
-const SEVERITY_MIN = 0.1;
-const SEVERITY_MAX = 10;
-
-function SeveritySection({
-  score,
-  setScore,
-}: {
-  score: number;
-  setScore: React.Dispatch<React.SetStateAction<number>>;
-}): JSX.Element {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium">Severity</Label>
-        <Stack direction="horizontal" gap={2} align="center">
-          <Text small mono>
-            {score.toFixed(1)}
-          </Text>
-          <SeverityBadge score={score} />
-        </Stack>
-      </div>
-      <Text small muted>
-        Rate how severe this policy's findings are, from {SEVERITY_MIN} to{" "}
-        {SEVERITY_MAX}. Findings surface this as a severity badge; it does not
-        change what the policy detects.
-      </Text>
-      <div className="pt-3">
-        <Slider
-          value={score}
-          onChange={(v) =>
-            setScore(Math.max(SEVERITY_MIN, Math.min(SEVERITY_MAX, v)))
-          }
-          min={SEVERITY_MIN}
-          max={SEVERITY_MAX}
-          step={0.1}
-          ticks={[SEVERITY_MIN, 4, 7, 9, SEVERITY_MAX]}
-        />
-      </div>
-    </div>
-  );
 }
 
 // ── Sensitivity section (Presidio match-confidence threshold) ────────────────
@@ -1931,6 +1753,20 @@ const PRESIDIO_THRESHOLD_STEP = 0.05;
 const PRESIDIO_THRESHOLD_TICKS = [0, 0.25, 0.5, 0.75, 1];
 const DEFAULT_PRESIDIO_THRESHOLD = 0.5;
 const EMPTY_SHADOW_MCP_URLS: ReadonlySet<string> = new Set<string>();
+
+// Shown on personal-data policies while the LLM analyzer flag is on for the
+// organization. The stored Presidio settings stay on the policy (turning the
+// flag off restores them) but do not drive detection meanwhile.
+export const LLM_ANALYZER_NOTICE =
+  "Entity selection, detection sensitivity and entity-type exclusions are not applied while the LLM analyzer is enabled for this organization. The model decides which personal-data category applies per finding.";
+
+function LlmAnalyzerNotice(): JSX.Element {
+  return (
+    <Alert variant="info">
+      <AlertDescription>{LLM_ANALYZER_NOTICE}</AlertDescription>
+    </Alert>
+  );
+}
 
 function SensitivitySection({
   threshold,
@@ -1977,77 +1813,6 @@ function SensitivitySection({
   );
 }
 
-function ActionStep({
-  action,
-  setAction,
-  audienceType,
-  setAudienceType,
-  audiencePrincipalUrns,
-  setAudiencePrincipalUrns,
-  userMessage,
-  setUserMessage,
-  score,
-  setScore,
-  flagOnlySelected = false,
-  shadowMCPAllowedServers,
-}: {
-  action: PolicyAction;
-  setAction: React.Dispatch<React.SetStateAction<PolicyAction>>;
-  audienceType: "everyone" | "targeted";
-  setAudienceType: React.Dispatch<
-    React.SetStateAction<"everyone" | "targeted">
-  >;
-  audiencePrincipalUrns: Set<string>;
-  setAudiencePrincipalUrns: React.Dispatch<React.SetStateAction<Set<string>>>;
-  userMessage: string;
-  setUserMessage: React.Dispatch<React.SetStateAction<string>>;
-  score: number;
-  setScore: React.Dispatch<React.SetStateAction<number>>;
-  flagOnlySelected?: boolean;
-  shadowMCPAllowedServers?: ReactNode;
-}): JSX.Element {
-  return (
-    <div className="space-y-4">
-      <Card>
-        <SeveritySection score={score} setScore={setScore} />
-      </Card>
-      <Card>
-        <SectionHeader description="Choose how the policy responds when it fires, and who it applies to." />
-        <Stack gap={5}>
-          <ActionPicker
-            formAction={action}
-            setFormAction={setAction}
-            flagOnlySelected={flagOnlySelected}
-          />
-          {shadowMCPAllowedServers}
-          <PolicyAudiencePicker
-            formAudienceType={audienceType}
-            setFormAudienceType={setAudienceType}
-            selectedAudiencePrincipalUrns={audiencePrincipalUrns}
-            setSelectedAudiencePrincipalUrns={setAudiencePrincipalUrns}
-          />
-          {action !== "flag" && (
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">
-                {POLICY_ACTION_MESSAGE[action].label}
-              </Label>
-              <p className="text-muted-foreground text-xs">
-                {POLICY_ACTION_MESSAGE[action].description}
-              </p>
-              <TextArea
-                value={userMessage}
-                onChange={setUserMessage}
-                placeholder={POLICY_ACTION_MESSAGE[action].placeholder}
-                rows={3}
-              />
-            </div>
-          )}
-        </Stack>
-      </Card>
-    </div>
-  );
-}
-
 // ── Evaluate step: prompt-tuning workbench ────────────────────────────────────
 
 type EvalVerdict = "correct" | "false_positive" | "missed";
@@ -2056,7 +1821,6 @@ type EvalMatchFilter = "all" | "flagged" | "clean";
 
 type Guardrail = {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
   messageTypes: string[];
@@ -2072,7 +1836,6 @@ function evalRequestBody(guardrail: Guardrail, chatId: string) {
       chatId,
       prompt: guardrail.prompt,
       modelConfig: {
-        model: guardrail.model || undefined,
         temperature: guardrail.temperature,
         failOpen: guardrail.failOpen,
       },
@@ -2126,7 +1889,6 @@ function usePromptGuardrailEval(
 function guardrailEvalKey(guardrail: Guardrail): string {
   return JSON.stringify({
     prompt: guardrail.prompt,
-    model: guardrail.model || "",
     temperature: guardrail.temperature,
     failOpen: guardrail.failOpen,
     messageTypes: guardrail.messageTypes,
@@ -2383,9 +2145,9 @@ function EvalTuner({
 
 function PromptReview({
   prompt,
-  model,
   temperature,
   failOpen,
+  mcpScope,
   customizedScopeCount,
   action,
   score,
@@ -2396,9 +2158,9 @@ function PromptReview({
   onVerdictSelect,
 }: {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
+  mcpScope: PolicyMCPScopeValue;
   customizedScopeCount: number;
   action: PolicyAction;
   score: number;
@@ -2408,9 +2170,7 @@ function PromptReview({
   activeVerdict: EvalVerdict | null;
   onVerdictSelect: (verdict: EvalVerdict) => void;
 }): JSX.Element {
-  const scopeText = scopeSummaryText(customizedScopeCount);
-  const modelLabel =
-    JUDGE_MODELS.find((m) => m.value === model)?.label ?? model;
+  const scopeText = scopeSummaryText(mcpScope, customizedScopeCount);
 
   return (
     <Stack gap={4}>
@@ -2424,7 +2184,7 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Judge">
             <Text small className="text-right">
-              {modelLabel} · temperature {temperature.toFixed(1)} ·{" "}
+              temperature {temperature.toFixed(1)} ·{" "}
               {failOpen ? "fail open" : "fail closed"}
             </Text>
           </SummaryRow>
@@ -2938,9 +2698,14 @@ function SessionReview({
               onSelect={setSelectedIdState}
             />
           ) : chatsLoading ? (
-            <Text small muted className="block px-3 py-6 text-center">
-              Loading sessions…
-            </Text>
+            <div className="p-3">
+              <Skeleton label="Loading sessions">
+                <div className="h-12 w-full" />
+                <div className="h-12 w-full" />
+                <div className="h-12 w-full" />
+                <div className="h-12 w-full" />
+              </Skeleton>
+            </div>
           ) : chats.length === 0 ? (
             <Text small muted className="block px-3 py-6 text-center">
               No sessions match your search.
@@ -2991,7 +2756,7 @@ function ReevaluatingIndicator({
 
   return (
     <div className="border-border bg-muted/30 text-muted-foreground flex h-9 items-center gap-1.5 border px-2.5">
-      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      <Spinner className="mr-0 h-3.5 w-3.5" />
       <Text small muted>
         Re-evaluating…
       </Text>
@@ -3162,7 +2927,7 @@ function JudgeSessionBanner({
   if (fetching && !evalResult) {
     return (
       <div className="border-border bg-muted/30 flex items-start gap-3 border-b px-4 py-3">
-        <Loader2 className="text-muted-foreground mt-0.5 size-4 shrink-0 animate-spin" />
+        <Spinner className="text-muted-foreground mt-0.5 mr-0 shrink-0" />
         <div className="min-w-0">
           <Text small className="font-medium">
             Judge is evaluating this session
@@ -3199,6 +2964,10 @@ function JudgeSessionBanner({
   const detail = `${matchedCount} ${
     matchedCount === 1 ? "message" : "messages"
   } matched`;
+  let messageLimitNote = "";
+  if (evalResult.messageLimitHit) {
+    messageLimitNote = ` Only the first ${evalResult.judgedCount} of ${evalResult.inScopeMessageCount} in-scope messages were judged.`;
+  }
 
   if (evalResult.flagged) {
     return (
@@ -3215,7 +2984,7 @@ function JudgeSessionBanner({
           </div>
           <Text small muted>
             {detail} across {judgedLabel}. Matching messages are highlighted
-            below.
+            below.{messageLimitNote}
           </Text>
         </div>
       </div>
@@ -3233,7 +3002,7 @@ function JudgeSessionBanner({
           <Badge variant="neutral">Clean</Badge>
         </div>
         <Text small muted>
-          No messages matched across {judgedLabel}.
+          No messages matched across {judgedLabel}.{messageLimitNote}
         </Text>
       </div>
     </div>
@@ -3316,6 +3085,7 @@ function SessionTranscript({
     () => ({
       dimNonRisk: false,
       userLabel: headerChat ? sessionUserLabel(headerChat) : undefined,
+      openClawSession: headerChat?.source?.trim().toLowerCase() === "openclaw",
       rowDecoration: (messageIds) => {
         const matched = messageIds
           .map((id) => verdictByMessage.get(id))
@@ -3397,9 +3167,9 @@ function SessionTranscript({
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {transcript.isLoading ? (
-            <Text small muted className="block p-6 text-center">
-              Loading transcript…
-            </Text>
+            <div className="p-6">
+              <SkeletonParagraph label="Loading transcript" />
+            </div>
           ) : transcript.isError ? (
             <Text small muted className="block p-6 text-center">
               Failed to load transcript.
@@ -3520,15 +3290,24 @@ function ReviewAgreementControl({
 
 export function StandardPolicyEditor({
   policy,
-  initialCategories,
+  prefill,
+  draft = null,
 }: {
   policy: RiskPolicy | null;
-  initialCategories?: ReadonlySet<RuleCategory>;
+  /** Starting values for a new policy; ignored when editing one. */
+  prefill?: PolicyNewPrefill;
+  draft?: PolicyDraft | null;
 }): JSX.Element {
   const routes = useRoutes();
+  const gramProject = useProjectSlugForRequests();
   const project = useProject();
   const queryClient = useQueryClient();
   const { customRules } = useDetectionRulesStore();
+  // Under the LLM analyzer flag the personal-data categories collapse into a
+  // single category-level `pii` detector and the Presidio-only controls
+  // (entity selection, sensitivity) leave the form. See `DetectorMode`.
+  const mode = useDetectorMode();
+  const categoriesQuery = useRiskCategories();
   const [initializedInventoryForPolicy, setInitializedInventoryForPolicy] =
     useState<string | null>(null);
 
@@ -3537,7 +3316,11 @@ export function StandardPolicyEditor({
   // Original values (edit mode) used for dirty tracking.
   const orig = useMemo(() => {
     if (!policy) return null;
-    const cats = policyToCategories(policy.sources, policy.presidioEntities);
+    const cats = policyToCategories(
+      policy.sources,
+      policy.presidioEntities,
+      mode,
+    );
     if ((policy.customRuleIds ?? []).length > 0) cats.add("custom");
     return {
       name: policy.name,
@@ -3545,6 +3328,7 @@ export function StandardPolicyEditor({
       userMessage: policy.userMessage ?? "",
       disabledRules: new Set(policy.disabledRules ?? []),
       scopeOverrides: scopeOverridesFromPolicy(policy.detectionScopes),
+      mcpScope: policy.mcpScope ?? null,
       customRuleIds: new Set(policy.customRuleIds ?? []),
       categories: cats,
       approvedDomains: (policy.approvedEmailDomains ?? []).join(", "),
@@ -3560,24 +3344,70 @@ export function StandardPolicyEditor({
       presidioThreshold:
         policy.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
     };
-  }, [policy]);
+  }, [policy, mode]);
 
-  // ── Local form state, seeded from the policy (edit) or defaults (create). ──
-  const [name, setName] = useState(policy?.name ?? "");
+  // ── Local form state, seeded from the policy (edit), a draft from the
+  // intent screen, or prefill and defaults (create). ──
+  const seed = policy ? undefined : prefill;
+  const [name, setName] = useState(
+    policy?.name ?? draft?.name ?? seed?.name ?? "",
+  );
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
-  >(() => new Set(orig?.categories ?? initialCategories));
+  >(
+    () =>
+      new Set(
+        orig?.categories ??
+          (draft
+            ? policyToCategories(draft.sources, draft.presidioEntities, mode)
+            : seed?.categories),
+      ),
+  );
+  // Categories the draft turned on, tagged on the detect step. Recomputed
+  // with `mode`, which resolves after mount.
+  const draftCategories = useMemo(
+    () =>
+      !policy && draft?.origin
+        ? policyToCategories(draft.sources, draft.presidioEntities, mode)
+        : new Set<RuleCategory>(),
+    [policy, draft, mode],
+  );
+  // The flag behind `mode` resolves asynchronously, so the seed above may
+  // predate it; fold any legacy personal-data selection into `pii` once the
+  // LLM analyzer applies, or the collapsed card would hide it and a save
+  // would drop the presidio source.
+  useEffect(() => {
+    setSelectedCategories((prev) => normalizeCategoriesForMode(prev, mode));
+  }, [mode]);
   const [disabledRules, setDisabledRules] = useState<Set<string>>(
     () => new Set(policy?.disabledRules ?? []),
   );
   const [scopeOverrides, setScopeOverrides] = useState<
     Map<string, ScopeOverride>
   >(() => scopeOverridesFromPolicy(policy?.detectionScopes));
+  const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(() =>
+    seed && seed.mcpServerIds.length > 0
+      ? {
+          mode: "mcp",
+          allServers: false,
+          toolAnnotations: [],
+          servers: seed.mcpServerIds.map((mcpServerId) => ({ mcpServerId })),
+        }
+      : ((policy ? null : draftMCPScopeValue(draft)) ??
+        initialPolicyMCPScopeValue(policy)),
+  );
+  const [draftScopeNames, setDraftScopeNames] = useState<string[]>(
+    policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
+  );
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(() => new Set(policy?.customRuleIds ?? []));
+  const initialAction =
+    (policy?.action as PolicyAction) ?? draft?.action ?? seed?.action ?? "flag";
   const [action, setAction] = useState<PolicyAction>(
-    (policy?.action as PolicyAction) ?? "flag",
+    mcpScope.mode === "mcp"
+      ? mcpCompatibleAction(initialAction)
+      : initialAction,
   );
   // Under block_all the URL set holds allowed servers; under allow_all it
   // holds blocked servers. The disposition is immutable after create, so the
@@ -3597,7 +3427,9 @@ export function StandardPolicyEditor({
       () =>
         (policy?.shadowMcpDisposition as ShadowMCPDisposition) ?? "block_all",
     );
-  const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
+  const [userMessage, setUserMessage] = useState(
+    policy?.userMessage ?? draft?.userMessage ?? "",
+  );
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
   );
@@ -3616,7 +3448,9 @@ export function StandardPolicyEditor({
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
   const [detectionExpanded, setDetectionExpanded] = useState(true);
-  const [score, setScore] = useState(policy?.score ?? 5);
+  const [score, setScore] = useState(
+    policy?.score ?? draft?.score ?? seed?.score ?? 5,
+  );
   const [presidioThreshold, setPresidioThreshold] = useState<number>(
     policy?.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
   );
@@ -3636,6 +3470,10 @@ export function StandardPolicyEditor({
   const originalHasShadowMCPBlockConfiguration = policy
     ? isShadowMCPBlockConfiguration(policy.sources, policy.action)
     : false;
+  // An allow_all policy cannot stop detecting Shadow MCP or stop denying: its
+  // blocked-server list would have nothing to enforce, and the server rejects
+  // the save. Pin both controls so that shows up here, not in an error toast.
+  const allowAllPostureLocked = shadowMCPAllowAllPostureLocked(policy);
 
   useEffect(() => {
     if (
@@ -3672,14 +3510,23 @@ export function StandardPolicyEditor({
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
-  const presidioActive = PRESIDIO_CATEGORIES.some((c) =>
+  const personalDataActive = personalDataCategories(mode).some((c) =>
     selectedCategories.has(c),
   );
+  // The Presidio confidence threshold only exists for the legacy engine; the
+  // LLM analyzer's score is binary, so the control and the field disappear.
+  const presidioActive = mode === "presidio" && personalDataActive;
+  // The banner tells flagged orgs that the policy's stored Presidio settings
+  // are not what runs: shown for any personal-data policy, stored or drafted.
+  const llmAnalyzerActive =
+    mode === "llm" &&
+    (personalDataActive || (policy?.sources ?? []).includes("presidio"));
+  const modeCategoryLevelDetectors = categoryLevelDetectors(mode);
   const hasEnabledDetector =
     selectedCustomRuleIds.size > 0 ||
     [...selectedCategories].some(
       (c) =>
-        CATEGORY_LEVEL_DETECTORS.has(c) ||
+        modeCategoryLevelDetectors.has(c) ||
         DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
     );
   const audienceMissing =
@@ -3694,10 +3541,42 @@ export function StandardPolicyEditor({
     initializedInventoryForPolicy,
     editorIdentity,
   );
+  const mcpScopePayload = policyMCPScopePayload(mcpScope);
+  const mcpScopeMissingServers =
+    mcpScope.mode === "mcp" &&
+    !mcpScope.allServers &&
+    mcpScope.servers.length === 0;
+  const mcpScopeIncompatible =
+    mcpScope.mode === "mcp" &&
+    (selectedCategories.has("account_identity") ||
+      selectedCategories.has("shadow_mcp"));
+  const inspectRowsValid = inspectRowsAreValid(
+    selectedCategories,
+    scopeOverrides,
+    categoriesQuery.data?.categories,
+    mcpScope.mode === "mcp",
+  );
+  // A draft from a use case that needs approved domains can't be created
+  // without them while its Non-Corporate Accounts detector is on.
+  const approvedDomainsRequired =
+    !policy &&
+    draft?.requiresApprovedEmailDomains === true &&
+    selectedCategories.has("account_identity");
+  const parsedApprovedDomains = parseApprovedEmailDomains(approvedDomains);
+  const invalidApprovedDomains = invalidEmailDomains(parsedApprovedDomains);
+  const approvedDomainsMissing =
+    approvedDomainsRequired &&
+    (parsedApprovedDomains.length === 0 || invalidApprovedDomains.length > 0);
+
   const saveBlocked =
     !hasEnabledDetector ||
+    approvedDomainsMissing ||
     audienceMissing ||
     shadowMCPInventoryUnavailable ||
+    mcpScope.mode === "unset" ||
+    mcpScopeMissingServers ||
+    mcpScopeIncompatible ||
+    !inspectRowsValid ||
     !shadowMCPSelectionInitialized;
 
   const shadowMCPSelectionDirty = shadowMCPSelectionIsDirty(
@@ -3714,6 +3593,7 @@ export function StandardPolicyEditor({
       audienceType !== orig.audienceType ||
       !sameSet(disabledRules, orig.disabledRules) ||
       !sameScopeOverrides(scopeOverrides, orig.scopeOverrides) ||
+      !sameMCPScope(mcpScopePayload, orig.mcpScope) ||
       !sameSet(selectedCustomRuleIds, orig.customRuleIds) ||
       !sameSet(selectedCategories, orig.categories) ||
       approvedDomains !== orig.approvedDomains ||
@@ -3736,10 +3616,12 @@ export function StandardPolicyEditor({
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllShadowMCPInventory(queryClient);
       void invalidateShadowMCPPolicyInventory(queryClient, project.id);
+      toast.success("Policy updated");
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
     onSuccess: () => {
+      clearPolicyStartSession(gramProject);
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllShadowMCPInventory(queryClient);
       void invalidateShadowMCPPolicyInventory(queryClient, project.id);
@@ -3747,6 +3629,12 @@ export function StandardPolicyEditor({
     },
   });
   const saving = updateMutation.isPending || createMutation.isPending;
+  const updateMCPScope = (next: PolicyMCPScopeValue) => {
+    setMcpScope(next);
+    if (next.mode === "mcp") {
+      setAction((current) => mcpCompatibleAction(current));
+    }
+  };
 
   // Toggle a whole built-in detector category (clears its per-rule disables).
   // Flag-only categories force the policy action to flag.
@@ -3758,7 +3646,12 @@ export function StandardPolicyEditor({
       return;
     }
 
-    const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
+    // A category-level detector has no rule list to reset; under the LLM
+    // analyzer that includes `pii`, whose stored Presidio overrides must
+    // survive a flip so a flag-off restores them.
+    const rules = modeCategoryLevelDetectors.has(cat)
+      ? []
+      : DETECTION_RULES[cat].filter((r) => !r.hidden);
     const nextCats = new Set(selectedCategories);
     const nextDisabled = new Set(disabledRules);
     if (checked) nextCats.add(cat);
@@ -3776,6 +3669,12 @@ export function StandardPolicyEditor({
     else next.delete(ruleId);
     setSelectedCustomRuleIds(next);
   };
+  // Category-level detectors have no rule list to customize; under the LLM
+  // analyzer that includes `pii`, whose entity picker would be ignored.
+  const customizeCategoryRules = (cat: RuleCategory) => {
+    if (modeCategoryLevelDetectors.has(cat)) return;
+    setCustomizeCategory(cat);
+  };
 
   // Build the full update/create body, mirroring PolicyCenter's standard branch.
   const save = (options?: { supersedeDecisions?: boolean }) => {
@@ -3788,7 +3687,18 @@ export function StandardPolicyEditor({
       selectedCategories,
       disabledRules,
       pinnedHiddenRuleIds(policy?.presidioEntities),
+      mode,
     );
+    // Under the LLM analyzer the entity list is not what runs, so an edit
+    // echoes the stored list back unchanged rather than the empty list the
+    // collapsed PII card would derive: turning the flag off must restore the
+    // policy exactly as it was. Only while PII stays on, though: once the
+    // presidio source is gone the entities go with it, or a flag-off would
+    // read them back as selected detectors. A create has nothing stored.
+    const updatePresidioEntities =
+      mode === "llm" && sources.includes("presidio")
+        ? (policy?.presidioEntities ?? [])
+        : presidioEntities;
     // Flag-only sources (destructive_tool, cli_destructive, account_identity)
     // are rejected by the server with action=block, so force flag as a safety
     // net in case the form state drifted.
@@ -3808,6 +3718,7 @@ export function StandardPolicyEditor({
     const detectionScopes = detectionScopesPayload(
       selectedCategories,
       scopeOverrides,
+      mode,
     );
     const shadowMcpAllowedUrls = shadowMCPAllowedURLsForMutation({
       action: resolvedAction,
@@ -3852,9 +3763,10 @@ export function StandardPolicyEditor({
             id: policy.id,
             name: name.trim() || policy.name,
             sources,
-            presidioEntities,
+            presidioEntities: updatePresidioEntities,
             promptInjectionRules,
             detectionScopes,
+            mcpScope: mcpScopePayload ?? { servers: [] },
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
             action: resolvedAction,
@@ -3863,13 +3775,19 @@ export function StandardPolicyEditor({
             autoName,
             userMessage,
             score,
-            // Always send: default when no Presidio category is active, so
-            // disabling them resets the stored threshold instead of leaving a
-            // stale value that would resurface if Presidio is re-enabled later
-            // (update omits preserve prior values server-side).
-            presidioScoreThreshold: presidioActive
-              ? presidioThreshold
-              : DEFAULT_PRESIDIO_THRESHOLD,
+            // Always send under the legacy engine: default when no Presidio
+            // category is active, so disabling them resets the stored
+            // threshold instead of leaving a stale value that would resurface
+            // if Presidio is re-enabled later (update omits preserve prior
+            // values server-side). Under the LLM analyzer the field is
+            // omitted so the stored value stays untouched for a flag-off.
+            ...(mode === "presidio"
+              ? {
+                  presidioScoreThreshold: presidioActive
+                    ? presidioThreshold
+                    : DEFAULT_PRESIDIO_THRESHOLD,
+                }
+              : {}),
             ...setupFields,
             ...(options?.supersedeDecisions
               ? { supersedeDecisions: true }
@@ -3888,6 +3806,7 @@ export function StandardPolicyEditor({
             presidioEntities,
             promptInjectionRules,
             ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
+            ...(mcpScopePayload === null ? {} : { mcpScope: mcpScopePayload }),
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
             action: resolvedAction,
@@ -3911,6 +3830,14 @@ export function StandardPolicyEditor({
       });
     }
   };
+
+  // Shadow MCP is not a built-in rule: whether a server nobody decided on is
+  // allowed or blocked is set on the Shadow MCP page. A policy that already
+  // carries the detector keeps its card so it can be turned off.
+  const categoryCards = allCategories(mode).filter(
+    (cat) =>
+      cat !== "shadow_mcp" || (policy?.sources.includes("shadow_mcp") ?? false),
+  );
 
   const header = (
     <PolicyHeader
@@ -3936,15 +3863,30 @@ export function StandardPolicyEditor({
       />
       <StepperShell
         header={header}
+        provenance={
+          draft ? (
+            <PolicyDraftProvenance draft={draft}>
+              {approvedDomainsRequired ? (
+                <ApprovedDomainsRequirement
+                  value={approvedDomains}
+                  onChange={setApprovedDomains}
+                  invalid={invalidApprovedDomains}
+                />
+              ) : null}
+            </PolicyDraftProvenance>
+          ) : null
+        }
         steps={STANDARD_STEPS}
         current={step}
         onStep={setStep}
+        prefilledStepIds={draft?.origin ? STANDARD_PREFILLED_STEPS : undefined}
       >
         {step === 0 && (
           <>
             <Card>
               <SectionHeader description="Turn on detector categories and attach your organization's custom rules." />
               <Stack gap={5}>
+                {llmAnalyzerActive && <LlmAnalyzerNotice />}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-medium">
@@ -3952,25 +3894,28 @@ export function StandardPolicyEditor({
                     </Label>
                     <span className="text-muted-foreground text-xs">
                       {
-                        ALL_CATEGORIES.filter((c) => selectedCategories.has(c))
+                        categoryCards.filter((c) => selectedCategories.has(c))
                           .length
                       }{" "}
                       on
                     </span>
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {ALL_CATEGORIES.map((cat) => (
+                    {categoryCards.map((cat) => (
                       <DetectorCard
                         key={cat}
                         category={cat}
                         selected={selectedCategories.has(cat)}
                         disabledRules={disabledRules}
-                        disabledReason={builtInRuleDisabledReason(
-                          cat,
-                          selectedCategories,
-                        )}
+                        disabledReason={
+                          allowAllPostureLocked && cat === "shadow_mcp"
+                            ? SHADOW_MCP_ALLOW_ALL_LOCK_REASON
+                            : builtInRuleDisabledReason(cat, selectedCategories)
+                        }
+                        mode={mode}
+                        fromUseCase={draftCategories.has(cat)}
                         onToggle={(checked) => toggleCategory(cat, checked)}
-                        onCustomize={() => setCustomizeCategory(cat)}
+                        onCustomize={() => customizeCategoryRules(cat)}
                       />
                     ))}
                   </div>
@@ -3983,8 +3928,8 @@ export function StandardPolicyEditor({
                         Attach your organization's custom rules as{" "}
                         <span className="text-foreground font-medium">
                           detectors
-                        </span>{" "}
-                        — a match records a finding.
+                        </span>
+                        . A match records a finding.
                       </>
                     }
                     idPrefix="detector"
@@ -4013,11 +3958,18 @@ export function StandardPolicyEditor({
 
         {step === 1 && (
           <ScopeStep
-            description="Apply everywhere, or narrow the scope to reduce noise and cost."
             selectedCategories={selectedCategories}
             scopeOverrides={scopeOverrides}
             setScopeOverrides={setScopeOverrides}
-            legacyPolicy={policy}
+            mcpScope={mcpScope}
+            setMcpScope={updateMCPScope}
+            action={action}
+            hasStoredMcpScope={!!policy?.mcpScope}
+            draftScopeNames={draftScopeNames}
+            onClearDraftScope={() => {
+              setDraftScopeNames([]);
+              updateMCPScope(initialPolicyMCPScopeValue(null));
+            }}
           />
         )}
 
@@ -4034,6 +3986,15 @@ export function StandardPolicyEditor({
             score={score}
             setScore={setScore}
             flagOnlySelected={flagOnlySelected}
+            mcpScoped={mcpScope.mode === "mcp"}
+            pinnedAction={
+              allowAllPostureLocked
+                ? {
+                    value: "block",
+                    reason: SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
+                  }
+                : undefined
+            }
             shadowMCPAllowedServers={
               targetIsShadowMCPBlock ? (
                 <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
@@ -4076,17 +4037,24 @@ export function StandardPolicyEditor({
             name={name}
             categories={selectedCategories}
             customRuleCount={selectedCustomRuleIds.size}
+            mcpScope={mcpScope}
             customizedScopeCount={scopeOverrides.size}
             action={action}
             score={score}
             presidioActive={presidioActive}
             presidioThreshold={presidioThreshold}
+            mode={mode}
             audienceType={audienceType}
             audiencePrincipalCount={audiencePrincipalUrns.size}
           />
         )}
 
-        <StepNav step={step} count={STANDARD_STEPS.length} onStep={setStep} />
+        <StepNav
+          step={step}
+          count={STANDARD_STEPS.length}
+          onStep={setStep}
+          continueDisabled={step === 1 && !policyMCPScopeComplete(mcpScope)}
+        />
       </StepperShell>
 
       {customizeCategory && (
@@ -4110,35 +4078,39 @@ function StandardReview({
   name,
   categories,
   customRuleCount,
+  mcpScope,
   customizedScopeCount,
   action,
   score,
   presidioActive,
   presidioThreshold,
+  mode,
   audienceType,
   audiencePrincipalCount,
 }: {
   name: string;
   categories: Set<RuleCategory>;
   customRuleCount: number;
+  mcpScope: PolicyMCPScopeValue;
   customizedScopeCount: number;
   action: PolicyAction;
   score: number;
   presidioActive: boolean;
   presidioThreshold: number;
+  mode: DetectorMode;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
 }): JSX.Element {
   const detectorLabels = [...categories]
     .filter((c) => c !== "custom")
-    .map((c) => RULE_CATEGORY_META[c].label);
+    .map((c) => ruleCategoryMeta(c, mode).label);
   if (customRuleCount > 0) {
     detectorLabels.push(
       `${customRuleCount} custom rule${customRuleCount === 1 ? "" : "s"}`,
     );
   }
 
-  const scopeText = scopeSummaryText(customizedScopeCount);
+  const scopeText = scopeSummaryText(mcpScope, customizedScopeCount);
 
   return (
     <Card>
@@ -4199,30 +4171,24 @@ function StandardReview({
   );
 }
 
-function SummaryRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <Stack
-      direction="horizontal"
-      justify="space-between"
-      align="center"
-      gap={4}
-      className="border-border/60 border-b pb-3 last:border-b-0 last:pb-0"
-    >
-      <Text small muted className="shrink-0">
-        {label}
-      </Text>
-      <div className="min-w-0">{children}</div>
-    </Stack>
-  );
-}
-
 // ── helpers ─────────────────────────────────────────────────────────────────
+
+function sameMCPScope(a: RiskMCPScope | null, b: RiskMCPScope | null): boolean {
+  const normalize = (scope: RiskMCPScope | null) => {
+    if (scope === null) return null;
+    return {
+      allServers: scope.allServers ?? false,
+      toolAnnotations: [...(scope.toolAnnotations ?? [])].sort(),
+      servers: scope.servers
+        .map((server) => ({
+          id: server.mcpServerId,
+          tools: server.tools === undefined ? null : [...server.tools].sort(),
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+    };
+  };
+  return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
+}
 
 function sameSet<T>(a: Set<T>, b: Set<T>): boolean {
   if (a.size !== b.size) return false;

@@ -11,13 +11,13 @@ import { GramCore } from "../core.js";
 import { featuresGet } from "../funcs/featuresGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { GetProductFeaturesResponseBody } from "../models/components/getproductfeaturesresponsebody.js";
+import { ProductFeatures } from "../models/components/productfeatures.js";
 import {
   GetProductFeaturesRequest,
   GetProductFeaturesSecurity,
 } from "../models/operations/getproductfeatures.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ProductFeaturesQueryData = GetProductFeaturesResponseBody;
+export type ProductFeaturesQueryData = ProductFeatures;
 
 export function prefetchProductFeatures(
   queryClient: QueryClient,

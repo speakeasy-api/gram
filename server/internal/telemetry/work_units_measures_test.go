@@ -86,21 +86,16 @@ func TestQuery_WorkUnitsEfficiencyMeasures(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	var result *gen.QueryResult
-	require.Eventually(t, func() bool {
-		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("department_name"),
-			TopN:    10,
-			SortBy:  "total_work_units",
-		})
-		if err != nil || res == nil || len(res.Table) != 2 {
-			return false
-		}
-		result = res
-		return true
-	}, 10*time.Second, 200*time.Millisecond)
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("department_name"),
+		TopN:    10,
+		SortBy:  "total_work_units",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Table, 2)
 
 	eng := rowByGroup(t, result.Table, "Engineering")
 	require.InDelta(t, 20.0, eng.Measures.TotalWorkUnits, 1e-9)
@@ -115,21 +110,16 @@ func TestQuery_WorkUnitsEfficiencyMeasures(t *testing.T) {
 	require.InDelta(t, 0.50, sales.Measures.TotalCost, 1e-9)
 
 	// The score row's stamped model attributes the units in a by-model cut.
-	var modelResult *gen.QueryResult
-	require.Eventually(t, func() bool {
-		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("model"),
-			TopN:    10,
-			SortBy:  "total_work_units",
-		})
-		if err != nil || res == nil || len(res.Table) != 2 {
-			return false
-		}
-		modelResult = res
-		return true
-	}, 10*time.Second, 200*time.Millisecond)
+	modelResult, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("model"),
+		TopN:    10,
+		SortBy:  "total_work_units",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, modelResult)
+	require.Len(t, modelResult.Table, 2)
 
 	opus := rowByGroup(t, modelResult.Table, "opus")
 	require.InDelta(t, 20.0, opus.Measures.TotalWorkUnits, 1e-9)

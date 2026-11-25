@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
@@ -21,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
-	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 type allocationStripeMock struct {
@@ -280,7 +278,7 @@ func listAllocationFixturesForKeyType(t *testing.T, db *pgxpool.Pool, organizati
 	rows := listAllAllocationFixtures(t, db, organizationID)
 	filtered := make([]backgroundrepo.ListStripeInvoiceAllocationsFixtureRow, 0, len(rows))
 	for _, row := range rows {
-		if row.SourceKind != "openrouter_daily_spend" || strings.HasSuffix(row.SourceKey, ":"+string(keyType)) {
+		if strings.HasSuffix(row.SourceKey, ":"+string(keyType)) {
 			filtered = append(filtered, row)
 		}
 	}
@@ -292,28 +290,6 @@ func listAllocationFixturesForKeyType(t *testing.T, db *pgxpool.Pool, organizati
 func listChatAllocationFixtures(t *testing.T, db *pgxpool.Pool, organizationID string) []backgroundrepo.ListStripeInvoiceAllocationsFixtureRow {
 	t.Helper()
 	return listAllocationFixturesForKeyType(t, db, organizationID, openrouter.KeyTypeChat)
-}
-
-func addTUMCarry(t *testing.T, db *pgxpool.Pool, organizationID string, start, end time.Time, cents int64, key string) {
-	t.Helper()
-	snapshot := pgtype.Numeric{}
-	amount := pgtype.Numeric{}
-	require.NoError(t, snapshot.Scan(fmt.Sprintf("%d.%02d", max(cents, -cents)/100, max(cents, -cents)%100)))
-	sign := ""
-	if cents < 0 {
-		sign = "-"
-	}
-	absCents := max(cents, -cents)
-	require.NoError(t, amount.Scan(fmt.Sprintf("%s%d.%02d", sign, absCents/100, absCents%100)))
-	require.NoError(t, backgroundrepo.New(db).CreateTUMInvoiceAllocationFixture(t.Context(), backgroundrepo.CreateTUMInvoiceAllocationFixtureParams{
-		OrganizationID:    pgtype.Text{String: organizationID, Valid: true},
-		SourceKey:         key,
-		SourcePeriodStart: pgtype.Timestamptz{Time: start.UTC(), InfinityModifier: pgtype.Finite, Valid: true},
-		SourcePeriodEnd:   pgtype.Timestamptz{Time: end.UTC(), InfinityModifier: pgtype.Finite, Valid: true},
-		SourceSnapshotUsd: snapshot,
-		AmountUsd:         amount,
-		IdempotencyKey:    "tum-carry:" + organizationID + ":" + key,
-	}))
 }
 
 func TestSettleStripeInvoiceAllocations_BillsEveryCanonicalKeyTypeExactlyOnce(t *testing.T) {
@@ -845,56 +821,6 @@ func TestSettleStripeInvoiceAllocations_RoundsCumulativeCycleTotalsAndDrainsBatc
 	require.Len(t, stripe.creditInputs, 1)
 }
 
-func TestSettleStripeInvoiceAllocations_TUMPositiveCarryIgnoresChatReadinessAndBindsExactBounds(t *testing.T) {
-	t.Parallel()
-	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_tum_positive")
-	start := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
-	end := start.AddDate(0, 1, 0)
-	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "open", 0)
-	addStripeInvoice(t, db, stripe, organizationID, "in_future", end, end.AddDate(0, 1, 0), "draft", 0)
-	addTUMCarry(t, db, organizationID, start, end, 35, "positive")
-
-	otherID := "org-" + uuid.NewString()[:8]
-	_, err := orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
-		ID: otherID, Name: "Other", Slug: otherID, WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{},
-	})
-	require.NoError(t, err)
-	addStripeInvoice(t, db, stripe, otherID, "in_cross_tenant_exact", start, end, "open", 0)
-
-	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{
-		Now:                                    end.Add(24 * time.Hour),
-		RestrictOpenRouterToReadyOrganizations: true,
-		OpenRouterReadyOrganizationIDs:         []string{},
-	}))
-	rows := listChatAllocationFixtures(t, db, organizationID)
-	require.Len(t, rows, 1)
-	require.Equal(t, "in_original", rows[0].OriginalInvoiceID.String)
-	require.Equal(t, "in_future", rows[0].DestinationInvoiceID.String)
-	require.Equal(t, "confirmed", rows[0].DeliveryState)
-	require.Len(t, stripe.itemInputs, 1)
-	require.Equal(t, int64(35), stripe.itemInputs[0].AmountCents)
-	require.Equal(t, start, stripe.itemInputs[0].PeriodStart)
-	require.Equal(t, end, stripe.itemInputs[0].PeriodEnd)
-}
-
-func TestSettleStripeInvoiceAllocations_TUMNegativeCarryCreditsOriginal(t *testing.T) {
-	t.Parallel()
-	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_tum_negative")
-	start := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
-	end := start.AddDate(0, 1, 0)
-	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "paid", 0)
-	addTUMCarry(t, db, organizationID, start, end, -35, "negative")
-
-	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(24 * time.Hour)}))
-	rows := listChatAllocationFixtures(t, db, organizationID)
-	require.Len(t, rows, 1)
-	require.Equal(t, "in_original", rows[0].DestinationInvoiceID.String)
-	require.Equal(t, "confirmed", rows[0].DeliveryState)
-	require.Len(t, stripe.creditInputs, 1)
-	require.Equal(t, int64(35), stripe.creditInputs[0].AmountCents)
-	require.Equal(t, int64(35), stripe.creditInputs[0].CreditAmountCents)
-}
-
 func TestSettleStripeInvoiceAllocations_AmbiguousItemWaitsForVisibilityBeforeClosedRebind(t *testing.T) {
 	t.Parallel()
 	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_closed_reconcile")
@@ -965,109 +891,18 @@ func TestSettleStripeInvoiceAllocations_RefusesVoidCreditDestination(t *testing.
 	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_void_credit")
 	start := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
 	end := start.AddDate(0, 0, 1)
-	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "void", 0)
-	addTUMCarry(t, db, organizationID, start, end, -10, "void")
+	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "draft", 0)
+	putDailySpend(t, db, organizationID, start, "1.000000")
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(52 * time.Hour)}))
 
-	err := activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(24 * time.Hour)})
+	putDailySpend(t, db, organizationID, start, "0.500000")
+	state := stripe.invoices["in_original"]
+	state.Status = "void"
+	state.FinalizedAt = end.Add(time.Hour)
+
+	err := activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(76 * time.Hour)})
 	require.ErrorContains(t, err, `status "void" does not support credit notes`)
 	require.Empty(t, stripe.creditInputs)
-}
-
-func TestM3FreezeObservationAndCarrySettlementLifecycle(t *testing.T) {
-	t.Parallel()
-
-	anchor := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
-	reporter, meterStripe, db, organizationID := setupTUMStripeReporter(t, "m3_freeze_carry_lifecycle", "payg", anchor)
-	cycleEnd := anchor.AddDate(0, 1, 0)
-	upsertTUMCycle(t, db, organizationID, anchor, cycleEnd, 2_000_000, nil)
-
-	allocationStripe := &allocationStripeMock{invoices: make(map[string]*stripeclient.InvoiceState)}
-	allocator := activities.NewSettleStripeInvoiceAllocations(testenv.NewLogger(t), db, allocationStripe)
-	addStripeInvoice(t, db, allocationStripe, organizationID, "invoice_original", anchor, cycleEnd, "draft", 0)
-	addStripeInvoice(t, db, allocationStripe, organizationID, "invoice_carry", cycleEnd, cycleEnd.AddDate(0, 1, 0), "draft", 0)
-	createChatKeyAt(t, db, organizationID, anchor.Add(-time.Hour))
-	putDailySpend(t, db, organizationID, anchor, "1.005000")
-
-	meterStripe.On("CreateMeterEvent", mock.Anything, mock.MatchedBy(func(input stripeclient.CreateMeterEventInput) bool {
-		return input.Value == 2_000_000 && input.Timestamp.Equal(cycleEnd.Add(-time.Second)) && input.IdempotencyKey != ""
-	})).Return(nil).Once()
-	freezeAt := cycleEnd.Add(48 * time.Hour)
-	require.NoError(t, reporter.Do(t.Context(), activities.ReportTUMUsageToStripeInput{
-		OrganizationIDs: []string{organizationID},
-		Now:             freezeAt,
-	}))
-	require.NoError(t, allocator.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: freezeAt}))
-
-	finalizedAt := cycleEnd.Add(72 * time.Hour)
-	upsertTUMCycle(t, db, organizationID, anchor, cycleEnd, 2_100_000, &finalizedAt)
-	putDailySpend(t, db, organizationID, anchor, "1.255000")
-	_, err := usagerepo.New(db).UpsertStripeInvoice(t.Context(), usagerepo.UpsertStripeInvoiceParams{
-		StripeInvoiceID:      "invoice_original",
-		OrganizationID:       pgtype.Text{String: organizationID, Valid: true},
-		StripeCustomerID:     "cus_" + organizationID,
-		StripeSubscriptionID: "sub_" + organizationID,
-		ServicePeriodStart:   pgtype.Timestamptz{Time: anchor, InfinityModifier: pgtype.Finite, Valid: true},
-		ServicePeriodEnd:     pgtype.Timestamptz{Time: cycleEnd, InfinityModifier: pgtype.Finite, Valid: true},
-		InvoiceState:         "open",
-		FinalizedAt:          pgtype.Timestamptz{Time: cycleEnd.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
-	})
-	require.NoError(t, err)
-	allocationStripe.invoices["invoice_original"].Status = "open"
-	allocationStripe.invoices["invoice_original"].FinalizedAt = cycleEnd.Add(time.Hour)
-
-	require.NoError(t, reporter.Do(t.Context(), activities.ReportTUMUsageToStripeInput{
-		OrganizationIDs: []string{organizationID},
-		Now:             finalizedAt,
-	}))
-	require.NoError(t, allocator.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: finalizedAt}))
-
-	// Re-running both deterministic passes proves the immutable final source is
-	// allocated once even after the observation window has closed.
-	replayAt := finalizedAt.Add(24 * time.Hour)
-	require.NoError(t, reporter.Do(t.Context(), activities.ReportTUMUsageToStripeInput{
-		OrganizationIDs: []string{organizationID},
-		Now:             replayAt,
-	}))
-	require.NoError(t, allocator.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: replayAt}))
-
-	cycles, err := usagerepo.New(db).ListBillingCycleUsage(t.Context(), organizationID)
-	require.NoError(t, err)
-	require.Len(t, cycles, 1)
-	require.Equal(t, int64(2_000_000), cycles[0].BilledTumTokens.Int64)
-	require.Equal(t, int64(2_100_000), cycles[0].TumTokens)
-
-	tumCarries, err := usagerepo.New(db).ListTUMCarryAllocationsFixture(t.Context(), pgtype.Text{String: organizationID, Valid: true})
-	require.NoError(t, err)
-	require.Len(t, tumCarries, 1)
-	require.Equal(t, int64(100_000), tumCarries[0].DeltaTokens.Int64)
-	require.Equal(t, "0.040000", numericString(t, tumCarries[0].AmountUsd))
-
-	allocations := listChatAllocationFixtures(t, db, organizationID)
-	amountsBySource := make(map[string][]string)
-	for _, allocation := range allocations {
-		require.Equal(t, "confirmed", allocation.DeliveryState)
-		amount := numericString(t, allocation.AmountUsd)
-		if amount == "0.250000" || amount == "0.040000" {
-			require.Equal(t, "invoice_carry", allocation.DestinationInvoiceID.String)
-		}
-		if amount != "0" {
-			amountsBySource[allocation.SourceKind] = append(amountsBySource[allocation.SourceKind], amount)
-		}
-	}
-	require.ElementsMatch(t, []string{"1.010000", "0.250000"}, amountsBySource["openrouter_daily_spend"])
-	require.Equal(t, []string{"0.040000"}, amountsBySource["tum_cycle"])
-
-	require.Len(t, allocationStripe.itemInputs, 3)
-	itemCents := make([]int64, 0, len(allocationStripe.itemInputs))
-	for _, input := range allocationStripe.itemInputs {
-		itemCents = append(itemCents, input.AmountCents)
-		if input.AmountCents == 25 || input.AmountCents == 4 {
-			require.Equal(t, "invoice_carry", input.InvoiceID)
-		}
-	}
-	require.ElementsMatch(t, []int64{101, 25, 4}, itemCents)
-	require.Empty(t, allocationStripe.creditInputs)
-	meterStripe.AssertExpectations(t)
 }
 
 // freezeInvoice writes each day on the pool with no enclosing transaction, so a

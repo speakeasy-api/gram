@@ -25,152 +25,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// The managed assistant must expose the full observability catalog the old
-// client-side AI Insights copilot had — not just search_logs. This guards
-// against the gap silently reopening if a tool is dropped from the bundle.
-func TestManagedAssistantLogsToolsExposesObservabilityCatalog(t *testing.T) {
-	t.Parallel()
-
-	tools := ManagedAssistantLogsTools(nil)
-
-	got := make([]string, 0, len(tools))
-	for _, tool := range tools {
-		got = append(got, tool.Executor.Descriptor().Name)
-	}
-
-	require.ElementsMatch(t, []string{
-		"platform_search_logs",
-		"platform_search_tool_calls",
-		"platform_get_tool_usage_summary",
-		"platform_search_chats",
-		"platform_search_users",
-		"platform_get_project_metrics_summary",
-		"platform_get_user_metrics_summary",
-		"platform_get_observability_overview",
-		"platform_list_attribute_keys",
-	}, got)
-}
-
-func TestManagedAssistantLogsToolsDescribesTunneledMCPUsage(t *testing.T) {
-	t.Parallel()
-
-	tools := ManagedAssistantLogsTools(nil)
-	for _, tool := range tools {
-		if tool.Executor.Descriptor().Name != "platform_get_tool_usage_summary" {
-			continue
-		}
-		require.Contains(t, tool.Executor.Descriptor().Description, "tunneled_mcp_server")
-		return
-	}
-
-	require.Fail(t, "platform_get_tool_usage_summary not registered")
-}
-
-func TestManagedAssistantChatsToolsExposesCatalog(t *testing.T) {
-	t.Parallel()
-
-	got := toolNames(ManagedAssistantChatsTools(nil))
-	require.ElementsMatch(t, []string{
-		"platform_list_chats",
-		"platform_load_chat",
-	}, got)
-}
-
-func TestManagedAssistantUsersToolsExposesCatalog(t *testing.T) {
-	t.Parallel()
-
-	got := toolNames(ManagedAssistantUsersTools(nil))
-	require.ElementsMatch(t, []string{
-		"platform_list_organization_users",
-	}, got)
-}
-
-func TestManagedAssistantRiskToolsExposesCatalog(t *testing.T) {
-	t.Parallel()
-
-	got := toolNames(ManagedAssistantRiskTools(nil, "test-redaction-key"))
-	require.ElementsMatch(t, []string{
-		"platform_list_risk_policies",
-		"platform_list_risk_results_for_agent",
-		"platform_list_risk_results_by_chat",
-		"platform_get_risk_policy_status",
-		"platform_get_risk_rule_breakdown",
-		"platform_list_risk_exclusions",
-		"platform_create_risk_exclusion",
-		"platform_mark_risk_false_positive",
-		"platform_unmark_risk_false_positive",
-	}, got)
-}
-
-// Providers reject tool names longer than 64 characters, and the assistant
-// runtime prefixes every platform tool with `mcp__<server-slug>_` (25 chars
-// for the managed assistant). A name over this budget doesn't degrade — the
-// whole turn fails with a schema error before the model sees anything.
-func TestManagedAssistantToolNamesFitProviderLimit(t *testing.T) {
-	t.Parallel()
-
-	const maxNameLen = 40
-
-	tools := ManagedAssistantRiskTools(nil, "test-redaction-key")
-	tools = append(tools, ManagedAssistantLogsTools(nil)...)
-	tools = append(tools, ManagedAssistantChatsTools(nil)...)
-	tools = append(tools, ManagedAssistantUsersTools(nil)...)
-	tools = append(tools, ManagedAssistantDeploymentsTools(nil)...)
-
-	for _, name := range toolNames(tools) {
-		require.LessOrEqual(t, len(name), maxNameLen, "tool name %q is too long once prefixed", name)
-	}
-}
-
-func TestManagedAssistantDeploymentsToolsExposesCatalog(t *testing.T) {
-	t.Parallel()
-
-	got := toolNames(ManagedAssistantDeploymentsTools(nil))
-	require.ElementsMatch(t, []string{
-		"platform_get_deployment_logs",
-	}, got)
-}
-
-func TestManagedAssistantSkillsToolsExposesCatalog(t *testing.T) {
-	t.Parallel()
-
-	tools := ManagedAssistantSkillsTools(nil, nil)
-	require.ElementsMatch(t, []string{
-		"platform_create_skill",
-		"platform_list_skills",
-		"platform_get_skill",
-		"platform_list_skill_versions",
-		"platform_list_skill_distributions",
-		"platform_distribute_skill",
-		"platform_undistribute_skill",
-		"platform_skill_insights",
-	}, toolNames(tools))
-	for _, tool := range tools {
-		require.Equal(t, "skills", tool.RequiredFeature)
-	}
-}
-
-func TestManagedAssistantPluginsToolsExposesCatalog(t *testing.T) {
-	t.Parallel()
-
-	tools := ManagedAssistantPluginsTools(nil)
-	require.ElementsMatch(t, []string{
-		"platform_list_plugins",
-	}, toolNames(tools))
-	// The plugin catalog is not part of the skills feature; it stays visible so
-	// distribution targets can be resolved regardless of feature state.
-	for _, tool := range tools {
-		require.Empty(t, tool.RequiredFeature)
-	}
-}
-
 func TestAssistantSkillToolsExposesCatalog(t *testing.T) {
 	t.Parallel()
 
-	tools := AssistantSkillTools(testenv.NewLogger(t), nil, nil)
+	tools := AssistantSkillTools(testenv.NewLogger(t), nil)
 	require.Equal(t, []string{
 		platformtools.ToolNameSkillsLoad,
-		platformtools.ToolNamePlatformSkillFeedback,
 	}, toolNames(tools))
 	for _, tool := range tools {
 		require.Empty(t, tool.RequiredFeature)
@@ -226,7 +86,6 @@ func TestService_ExecuteTool_RequiresProjectAuthContext(t *testing.T) {
 	}, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, nil)
@@ -254,7 +113,6 @@ func TestService_ExecuteTool_RejectsMismatchedProjectAuthContext(t *testing.T) {
 	}, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, nil)

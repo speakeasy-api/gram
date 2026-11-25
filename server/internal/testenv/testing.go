@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracernoop "go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -46,6 +47,14 @@ func NewEncryptionClient(t *testing.T) *encryption.Client {
 	enc, err := encryption.New("dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
 	require.NoError(t, err)
 	return enc
+}
+
+// NewAIProviderKeys returns AI provider keys over NewEncryptionClient's key,
+// as in a process without organization encryption.
+func NewAIProviderKeys(t *testing.T, db *pgxpool.Pool) *aiproviderkeys.Keys {
+	t.Helper()
+
+	return aiproviderkeys.WithoutOrganizationEncryption(NewLogger(t), db, NewEncryptionClient(t))
 }
 
 func NewLogger(*testing.T) *slog.Logger {
@@ -79,32 +88,6 @@ func NewMeterProvider(t *testing.T) metric.MeterProvider {
 	return metricnoop.NewMeterProvider()
 }
 
-// WaitForBlockedBackend blocks until some backend in this database is waiting
-// on a lock another one holds. A concurrency test needs it to know its second
-// connection has really blocked: a sleep long enough to be safe would still let
-// a slow start pass the test for the wrong reason.
-//
-// The query is raw because pg_stat_activity is a system view sqlc's catalog does
-// not carry, and it is scoped to the current database because the Postgres
-// instance is shared with every other package's cloned test databases. It reads
-// pg_stat_activity rather than pg_locks because a backend queued behind a row
-// lock waits on a transactionid lock, whose pg_locks row has no database.
-func WaitForBlockedBackend(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
-	t.Helper()
-
-	require.Eventually(t, func() bool {
-		var blocked int64
-		err := conn.QueryRow(ctx, `
-			SELECT count(*)
-			FROM pg_stat_activity
-			WHERE datname = current_database()
-			  AND wait_event_type = 'Lock'
-		`).Scan(&blocked)
-
-		return err == nil && blocked > 0
-	}, 30*time.Second, 10*time.Millisecond, "expected a backend to block on a lock")
-}
-
 // RejectWritesTo makes every insert and update on one table fail with a check
 // constraint violation, so a caller can prove how its handler reports a database
 // error that is not pgx.ErrNoRows. NOT VALID leaves the rows already there
@@ -125,14 +108,21 @@ func RejectWritesTo(t *testing.T, ctx context.Context, conn *pgxpool.Pool, table
 
 // BeginTx starts a transaction that's rolled back on test cleanup, so tests
 // that need a real pgx.Tx (e.g. for savepoint-using functions) don't leak
-// open transactions. Callers that need a write visible to a later call in
-// the same test (simulating separate requests) must Commit explicitly.
+// open transactions. Cleanup uses its own timeout because testing cancels the
+// test context before running cleanup functions. Callers that need a write
+// visible to a later call in the same test (simulating separate requests) must
+// Commit explicitly.
 func BeginTx(t *testing.T, ctx context.Context, conn *pgxpool.Pool) pgx.Tx {
 	t.Helper()
 
 	tx, err := conn.Begin(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(ctx) })
+	t.Cleanup(func() {
+		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+
+		_ = tx.Rollback(rollbackCtx)
+	})
 
 	return tx
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
@@ -27,7 +28,10 @@ import (
 	keysservice "github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/litellm/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
@@ -148,6 +152,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 		sessionManager,
 		cacheAdapter,
+		ratelimit.NewRedisStore(redisClient),
 		nil,
 		nil,
 		authzEngine,
@@ -164,8 +169,10 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		nil,
 		nil,
 		serverURL,
-		siteURL,
+		orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		"test-jwt-secret",
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		nil,
 	)
 	calls := callcache.New(cacheAdapter)
 	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls)

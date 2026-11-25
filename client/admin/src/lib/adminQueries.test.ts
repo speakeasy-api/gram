@@ -2,14 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   cancelOrganizationFetches,
+  invalidateOrganizationActivity,
   invalidateOrganizationStats,
-  organizationActivityQuery,
   organizationQuery,
   organizationsListQuery,
   organizationsStatsQuery,
   projectQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
+import { organizationActivityQuery } from "@/lib/gramAdminClient";
 import type {
   AdminOrganization,
   AdminProjectDetail,
@@ -33,10 +34,78 @@ function org(id: string): AdminOrganization {
 }
 
 describe("organizationsListQuery", () => {
+  it("keys member bounds losslessly and independently alongside AND filters", () => {
+    const params = {
+      q: "fixture",
+      account_types: ["pro"],
+      trial_states: ["running"],
+      disabled_status: "active" as const,
+      sort: "created_at" as const,
+      direction: "asc" as const,
+      page: 2,
+    };
+    const min = organizationsListQuery({
+      ...params,
+      min_members: "9007199254740993",
+    }).queryKey;
+    const max = organizationsListQuery({
+      ...params,
+      max_members: "9007199254740993",
+    }).queryKey;
+    expect(min).not.toEqual(max);
+    expect(min[1]).toEqual({ ...params, min_members: "9007199254740993" });
+    expect(min).not.toEqual(
+      organizationsListQuery({ ...params, min_members: "9007199254740992" })
+        .queryKey,
+    );
+    expect(organizationsListQuery({ min_members: "0" }).queryKey).not.toEqual(
+      organizationsListQuery().queryKey,
+    );
+    expect(
+      organizationsListQuery({
+        min_members: "0",
+        max_members: "9223372036854775807",
+      }).queryKey[1],
+    ).toEqual({ min_members: "0", max_members: "9223372036854775807" });
+  });
+
+  it("separates disabled-only, unrestricted and legacy in-flight keys", () => {
+    const params = {
+      q: "org_exact_id",
+      account_types: ["pro"],
+      trial_states: ["running"],
+      direction: "asc" as const,
+      page: 2,
+    };
+    const unrestricted = organizationsListQuery({
+      ...params,
+      disabled_status: "all",
+    }).queryKey;
+    const disabled = organizationsListQuery({
+      ...params,
+      disabled_status: "disabled",
+    }).queryKey;
+    const active = organizationsListQuery({
+      ...params,
+      disabled_status: "active",
+    }).queryKey;
+    expect(active).not.toEqual(unrestricted);
+    expect(active).not.toEqual(disabled);
+    expect(unrestricted).not.toEqual(disabled);
+    expect(unrestricted).not.toEqual(organizationsListQuery(params).queryKey);
+    expect(disabled).not.toEqual(
+      organizationsListQuery({
+        ...params,
+        disabled_status: "disabled",
+        page: 1,
+      }).queryKey,
+    );
+  });
+
   it("invalidates every filtered page from the unfiltered key", () => {
     const qc = new QueryClient();
     const filtered = organizationsListQuery({ q: "x", cursor: "page-2" });
-    qc.setQueryData(filtered.queryKey, { organizations: [] });
+    qc.setQueryData(filtered.queryKey, { total: 0, organizations: [] });
     qc.setQueryData(["gram-admin-project", "p"], {});
 
     void qc.invalidateQueries({ queryKey: organizationsListQuery().queryKey });
@@ -54,45 +123,19 @@ describe("organizationsListQuery", () => {
   });
 });
 
-describe("organizationActivityQuery", () => {
-  it("uses one organization-scoped key and forwards opaque cursors", async () => {
-    const fetch = vi.fn().mockImplementation(() =>
-      Promise.resolve(
-        new Response(JSON.stringify({ logs: [], next_cursor: "next" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
-    vi.stubGlobal("fetch", fetch);
-    const first = organizationActivityQuery("org_1");
-    const second = organizationActivityQuery("org_2");
+describe("invalidateOrganizationActivity", () => {
+  it("invalidates only the generated query for the changed organization", () => {
+    const qc = new QueryClient();
+    const invalidate = vi
+      .spyOn(qc, "invalidateQueries")
+      .mockResolvedValue(undefined);
 
-    expect(first.queryKey).not.toEqual(second.queryKey);
-    expect(first.initialPageParam).toBeUndefined();
-    if (typeof first.queryFn !== "function") {
-      throw new Error("activity query has no query function");
-    }
-    await first.queryFn({ pageParam: undefined } as never);
-    expect(fetch.mock.calls[0]?.[0]).toContain("organization_id=org_1");
-    expect(fetch.mock.calls[0]?.[0]).not.toContain("cursor=");
+    invalidateOrganizationActivity(qc, "org_1");
 
-    await first.queryFn({ pageParam: "opaque+/=" } as never);
-    expect(fetch.mock.calls[1]?.[0]).toContain(
-      "organization_id=org_1&cursor=opaque%2B%2F%3D",
-    );
-    expect(
-      first.getNextPageParam?.(
-        { logs: [], next_cursor: "next" },
-        [],
-        undefined,
-        [],
-      ),
-    ).toBe("next");
-    expect(
-      first.getNextPageParam?.({ logs: [] }, [], undefined, []),
-    ).toBeUndefined();
-    vi.unstubAllGlobals();
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: organizationActivityQuery("org_1").queryKey,
+      exact: true,
+    });
   });
 });
 
@@ -160,6 +203,7 @@ describe("writeOrganizationToCache", () => {
     const qc = new QueryClient();
     const page = organizationsListQuery({ q: "x" });
     qc.setQueryData(page.queryKey, {
+      total: 3,
       organizations: [org("org-b"), LIVE],
       next_cursor: "cursor_page_two",
     });
@@ -184,6 +228,7 @@ describe("writeOrganizationToCache", () => {
     const qc = new QueryClient();
     const page = organizationsListQuery({ q: "x" });
     qc.setQueryData(page.queryKey, {
+      total: 1,
       organizations: [{ ...LIVE, slug: "placeholder-a-as-it-was" }],
     });
 
@@ -282,7 +327,10 @@ describe("writeOrganizationToCache", () => {
   it("leaves a page that never held the record exactly as it was", () => {
     const qc = new QueryClient();
     const page = organizationsListQuery({ q: "other" });
-    const before: ListOrganizationsResult = { organizations: [org("org-b")] };
+    const before: ListOrganizationsResult = {
+      total: 1,
+      organizations: [org("org-b")],
+    };
     qc.setQueryData(page.queryKey, before);
 
     writeOrganizationToCache(qc, DISABLED);
@@ -302,7 +350,7 @@ describe("writeOrganizationToCache", () => {
   it("survives a read that was already in flight when it landed", async () => {
     const qc = new QueryClient();
     const page = organizationsListQuery();
-    qc.setQueryData(page.queryKey, { organizations: [LIVE] });
+    qc.setQueryData(page.queryKey, { total: 1, organizations: [LIVE] });
 
     let land: (result: ListOrganizationsResult) => void = () => {};
     const stale = new Promise<ListOrganizationsResult>((resolve) => {
@@ -316,7 +364,7 @@ describe("writeOrganizationToCache", () => {
     writeOrganizationToCache(qc, DISABLED);
 
     // The stale answer arrives late, carrying the row in its pre-write state.
-    land({ organizations: [LIVE] });
+    land({ total: 1, organizations: [LIVE] });
     await inFlight;
 
     const after = qc.getQueryData<ListOrganizationsResult>(page.queryKey);
@@ -407,5 +455,66 @@ describe("projectQuery", () => {
     expect(qc.getQueryData(projectQuery("default", "one").queryKey)?.id).toBe(
       "a",
     );
+  });
+});
+
+describe("user query ownership", () => {
+  it("keys every list parameter and forwards AbortSignal through both helpers", async () => {
+    const { usersListQuery, userOrganizationsListQuery } =
+      await import("./adminQueries");
+    const signal = new AbortController().signal;
+    const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            users: [],
+            organizations: [],
+            total: 0,
+            page: 1,
+            limit: 50,
+          }),
+        ),
+    );
+    const client = new QueryClient();
+    const users = usersListQuery({ q: "name:Alice", page: 2, limit: 50 });
+    expect(users.queryKey).not.toEqual(
+      usersListQuery({ q: "name:Alice", page: 1, limit: 50 }).queryKey,
+    );
+    expect(users.queryKey).not.toEqual(
+      usersListQuery({ q: "name:Bob", page: 2, limit: 50 }).queryKey,
+    );
+    expect(users.queryKey).not.toEqual(
+      usersListQuery({ q: "name:Alice", page: 2, limit: 10 }).queryKey,
+    );
+    if (typeof users.queryFn !== "function")
+      throw new Error("Missing query function");
+    await users.queryFn({
+      signal,
+      client,
+      queryKey: users.queryKey,
+      meta: undefined,
+    });
+    const orgs = userOrganizationsListQuery({
+      user_id: "u1",
+      page: 3,
+      limit: 20,
+    });
+    expect(orgs.queryKey).not.toEqual(
+      userOrganizationsListQuery({ user_id: "u2", page: 3, limit: 20 })
+        .queryKey,
+    );
+    if (typeof orgs.queryFn !== "function")
+      throw new Error("Missing query function");
+    await orgs.queryFn({
+      signal,
+      client,
+      queryKey: orgs.queryKey,
+      meta: undefined,
+    });
+    expect(fetcher.mock.calls.map((call) => call[1]?.signal)).toEqual([
+      signal,
+      signal,
+    ]);
+    fetcher.mockRestore();
   });
 });

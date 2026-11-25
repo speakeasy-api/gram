@@ -23,7 +23,8 @@ type Service interface {
 	// Create or update the metadata that powers the MCP install page. Exactly one
 	// of toolset_slug or mcp_server_id must be provided.
 	SetMcpMetadata(context.Context, *SetMcpMetadataPayload) (res *types.McpMetadata, err error)
-	// Export MCP server details as JSON for documentation and integration purposes.
+	// Export MCP server details as JSON for documentation and integration
+	// purposes. Exactly one of mcp_slug or mcp_server_id must be provided.
 	ExportMcpMetadata(context.Context, *ExportMcpMetadataPayload) (res *types.McpExport, err error)
 }
 
@@ -52,8 +53,11 @@ var MethodNames = [3]string{"getMcpMetadata", "setMcpMetadata", "exportMcpMetada
 // ExportMcpMetadataPayload is the payload type of the mcpMetadata service
 // exportMcpMetadata method.
 type ExportMcpMetadataPayload struct {
-	// The MCP server slug (from the install URL)
-	McpSlug          types.Slug
+	// The MCP server slug (from the install URL). Mutually exclusive with
+	// mcp_server_id.
+	McpSlug *types.Slug
+	// The ID of a toolset-backed MCP server. Mutually exclusive with mcp_slug.
+	McpServerID      *string
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string

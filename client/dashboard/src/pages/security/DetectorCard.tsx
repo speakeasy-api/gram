@@ -6,32 +6,53 @@ import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
 import {
   DETECTION_RULES,
-  RULE_CATEGORY_META,
+  ruleCategoryMeta,
+  type DetectionRule,
+  type DetectorMode,
   type RuleCategory,
 } from "./policy-data";
-import { AVAILABLE_CATEGORIES } from "./policy-form";
+import { availableCategories, categoryLevelDetectors } from "./policy-form";
 
 export type DetectorCardProps = {
   category: RuleCategory;
   selected: boolean;
   disabledRules: Set<string>;
   disabledReason?: string;
+  /** Defaults to the legacy Presidio engine; see `DetectorMode`. */
+  mode?: DetectorMode;
   onToggle: (checked: boolean) => void;
   onCustomize: () => void;
+  /** Hide the Customize action, for forms that do not edit per-rule settings. */
+  hideCustomize?: boolean;
+  /** The category was turned on by the use case the policy started from. */
+  fromUseCase?: boolean;
 };
+
+/** The rules the card can offer for customization. A category-level detector
+ *  (under the LLM analyzer that includes `pii`) has no per-rule list. */
+function customizableRules(
+  category: RuleCategory,
+  mode: DetectorMode,
+): DetectionRule[] {
+  if (categoryLevelDetectors(mode).has(category)) return [];
+  return DETECTION_RULES[category].filter((rule) => !rule.hidden);
+}
 
 export function DetectorCard({
   category,
   selected,
   disabledRules,
   disabledReason,
+  mode = "presidio",
   onToggle,
   onCustomize,
+  hideCustomize = false,
+  fromUseCase = false,
 }: DetectorCardProps): JSX.Element {
-  const meta = RULE_CATEGORY_META[category];
-  const available = AVAILABLE_CATEGORIES.has(category);
-  const rules = DETECTION_RULES[category].filter((rule) => !rule.hidden);
-  const customizable = available && rules.length > 1;
+  const meta = ruleCategoryMeta(category, mode);
+  const available = availableCategories(mode).has(category);
+  const rules = customizableRules(category, mode);
+  const customizable = available && !hideCustomize && rules.length > 1;
   const enabledCount = rules.filter(
     (rule) => !disabledRules.has(rule.id),
   ).length;
@@ -61,6 +82,11 @@ export function DetectorCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">{meta.label}</span>
+          {fromUseCase && (
+            <span className="text-muted-foreground font-mono text-[10px] tracking-[0.1em] uppercase">
+              From use case
+            </span>
+          )}
           {!available && (
             <Badge variant="neutral">
               <Badge.Text>Coming soon</Badge.Text>

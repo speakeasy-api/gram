@@ -25,6 +25,7 @@ function inventoryServer(
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: undefined,
     lastSeen: new Date("2026-01-02T10:00:00Z"),
+    blockedCallCount: 0,
     observedUseCount: 0,
     requestCount: 0,
     serverName: undefined,
@@ -799,7 +800,9 @@ describe("ShadowMCPPolicyServerSelector", () => {
         onRetry={onRetry}
       />,
     );
-    expect(screen.getByText("Loading Shadow MCP inventory…")).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: "Loading Shadow MCP inventory" }),
+    ).toBeTruthy();
     expect(
       (
         screen.getByRole("button", {

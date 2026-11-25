@@ -21,6 +21,9 @@ func ClassifyPrincipalCoverage(source any, result killswitches.PrincipalCandidat
 	if !ok {
 		return mcpmetrics.KillswitchIdentityUnattributed
 	}
+	if identity.Kind() == mcpidentity.KindAgent {
+		return mcpmetrics.KillswitchIdentityAgent
+	}
 	if result.Kind() == killswitches.PrincipalCandidateResultCandidates {
 		return mcpmetrics.KillswitchIdentityActiveUser
 	}
@@ -35,6 +38,8 @@ func ClassifyPrincipalCoverage(source any, result killswitches.PrincipalCandidat
 		return mcpmetrics.KillswitchIdentityAssistant
 	case mcpidentity.KindChatSession:
 		return mcpmetrics.KillswitchIdentityChatSession
+	case mcpidentity.KindWorkload:
+		return mcpmetrics.KillswitchIdentityWorkload
 	default:
 		return mcpmetrics.KillswitchIdentityUnattributed
 	}

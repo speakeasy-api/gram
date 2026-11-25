@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -73,6 +74,7 @@ type testInstance struct {
 	enc            *encryption.Client
 	sessionManager *sessions.Manager
 	iconSetter     *recordingIconSetter
+	features       *feature.InMemory
 }
 
 type recordingIconSetter struct {
@@ -90,6 +92,10 @@ func (s *recordingIconSetter) ScheduleDefaultRemoteServerIcon(_ context.Context,
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls = append(s.calls, iconSetterCall{projectID: projectID, mcpServerID: mcpServerID, remoteMCPServerID: remoteMCPServerID})
+}
+
+func (s *recordingIconSetter) SetDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID) {
+	s.ScheduleDefaultRemoteServerIcon(ctx, projectID, mcpServerID, remoteMCPServerID)
 }
 
 func (s *recordingIconSetter) Calls() []iconSetterCall {
@@ -137,8 +143,9 @@ func newTestServiceWithPolicy(t *testing.T, servicePolicy *guardian.Policy) (con
 
 	auditLogger := audit.NewLogger()
 	iconSetter := &recordingIconSetter{}
+	features := &feature.InMemory{}
 
-	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger, iconSetter)
+	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger, iconSetter, features)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -146,6 +153,7 @@ func newTestServiceWithPolicy(t *testing.T, servicePolicy *guardian.Policy) (con
 		enc:            enc,
 		sessionManager: sessionManager,
 		iconSetter:     iconSetter,
+		features:       features,
 	}
 }
 

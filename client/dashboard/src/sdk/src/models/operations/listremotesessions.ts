@@ -29,6 +29,14 @@ export type ListRemoteSessionsSecurity = {
 
 export type ListRemoteSessionsRequest = {
   /**
+   * Owned agent whose eligible sessions to list; requires user_session_issuer_id.
+   */
+  principalId?: string | undefined;
+  /**
+   * Issuer configuration sessions must be eligible for; requires principal_id.
+   */
+  userSessionIssuerId?: string | undefined;
+  /**
    * Exact-match filter on subject URN.
    */
   subjectUrn?: string | undefined;
@@ -165,6 +173,8 @@ export function listRemoteSessionsSecurityToJSON(
 
 /** @internal */
 export type ListRemoteSessionsRequest$Outbound = {
+  principal_id?: string | undefined;
+  user_session_issuer_id?: string | undefined;
   subject_urn?: string | undefined;
   remote_session_client_id?: string | undefined;
   cursor?: string | undefined;
@@ -180,6 +190,8 @@ export const ListRemoteSessionsRequest$outboundSchema: z.ZodMiniType<
   ListRemoteSessionsRequest
 > = z.pipe(
   z.object({
+    principalId: z.optional(z.string()),
+    userSessionIssuerId: z.optional(z.string()),
     subjectUrn: z.optional(z.string()),
     remoteSessionClientId: z.optional(z.string()),
     cursor: z.optional(z.string()),
@@ -190,6 +202,8 @@ export const ListRemoteSessionsRequest$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      principalId: "principal_id",
+      userSessionIssuerId: "user_session_issuer_id",
       subjectUrn: "subject_urn",
       remoteSessionClientId: "remote_session_client_id",
       gramSession: "Gram-Session",

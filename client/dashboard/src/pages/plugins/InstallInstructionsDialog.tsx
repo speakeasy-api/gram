@@ -1,3 +1,4 @@
+import { ClaudeCodeSettingsInstall } from "@/components/claude-code-settings-install";
 import { CodeBlock } from "@/components/code";
 import { InstallSteps } from "@/components/install-steps";
 import { Button } from "@/components/ui/Button";
@@ -14,10 +15,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { getCursorInstallCommand } from "@/lib/cursor-install-command";
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { cn } from "@/lib/utils";
+import { useObservabilityPluginDownload } from "./useObservabilityPluginDownload";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePlugins } from "@gram/client/react-query/plugins";
+import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { usePluginQueryScope } from "./usePluginQueryScope";
 import { Button as MoonshineButton } from "@/components/ui/Button";
 import {
   ArrowLeft,
@@ -25,10 +30,16 @@ import {
   Download,
   ExternalLink,
   Info,
+  Users,
 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
+import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
+import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
+import { PublishDialog } from "./PublishDialog";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { agentProvidersForSurface } from "@/components/agent-providers/agent-providers";
 import { useOrgRoutes } from "@/routes";
@@ -39,56 +50,12 @@ const COWORK_DOCS_URL =
 const CLAUDE_CODE_SETTINGS_DOCS_URL =
   "https://code.claude.com/docs/en/settings";
 
+const CLAUDE_PLUGINS_DOCS_URL =
+  "https://claude.com/docs/plugins/overview#find-and-add-a-plugin";
+
 const CURSOR_DASHBOARD_URL = "https://cursor.com/dashboard";
 
-/**
- * Downloads the server-generated observability plugin ZIP. opencode and copilot
- * differ only in the `platform` query value and the fallback filename.
- */
-function useObservabilityPluginDownload(
-  platform: string,
-  fallbackName: string,
-) {
-  const { fetch: authFetch } = useFetcher();
-  const [isDownloading, setIsDownloading] = useState(false);
-
-  const download = async () => {
-    setIsDownloading(true);
-    try {
-      const resp = await authFetch(
-        `/rpc/plugins.downloadObservabilityPlugin?platform=${platform}`,
-        {},
-      );
-      if (!resp.ok) {
-        toast.error(
-          resp.status === 403
-            ? "Downloading the observability plugin requires an org admin."
-            : "Failed to download observability plugin",
-        );
-        return;
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        resp.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? fallbackName;
-      a.click();
-      // Revoke on the next task: some browsers kick the blob download off
-      // asynchronously and a same-task revoke aborts it.
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-    } catch (err) {
-      toast.error("Failed to download observability plugin");
-      console.error("observability plugin download failed", err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  return { isDownloading, download };
-}
+const CURSOR_PLUGINS_DOCS_URL = "https://cursor.com/docs/plugins";
 
 type ContentProps = {
   repoOwner: string;
@@ -99,10 +66,41 @@ type ContentProps = {
   /** URL-safe slug for the specific plugin — required for the `<plugin>@<marketplace>` addressing Claude Code and Codex use. */
   pluginSlug?: string;
   /** Restricts the plugin-picker step to these plugins (e.g. the ones a given MCP server is actually installed to) instead of every plugin in the org. */
-  candidatePlugins?: { name: string; slug: string; description?: string }[];
+  candidatePlugins?: {
+    name: string;
+    slug: string;
+    description?: string;
+    agentPluginsV1Compatible?: boolean;
+  }[];
 };
 
-const providers = agentProvidersForSurface("plugins");
+/**
+ * Mistral Vibe is only offered on the plugins surface for now, so the plugins
+ * dialog appends it here (with the Mistral mark) instead of widening the shared
+ * provider registry's "plugins" surface for every consumer. The shared
+ * "mistral" coming-soon tile is dropped on this surface only: with Vibe
+ * available, it would just duplicate the Mistral mark as a disabled entry.
+ * Other surfaces keep it.
+ */
+const VIBE_PROVIDER = {
+  id: "vibe",
+  name: "Mistral Vibe",
+  description: "Mistral's agentic CLI",
+  iconSource: "mistral",
+  available: true,
+} as const;
+
+// Active providers first, Vibe among them, coming-soon tiles last — the grid
+// groups enabled and disabled tiles visually, so appending Vibe after the
+// disabled ones would misplace it.
+const surfaceProviders = agentProvidersForSurface("plugins").filter(
+  (p) => p.id !== "mistral",
+);
+const providers = [
+  ...surfaceProviders.filter((p) => p.available),
+  VIBE_PROVIDER,
+  ...surfaceProviders.filter((p) => !p.available),
+];
 type Provider = (typeof providers)[number]["id"];
 
 function ExternalTextLink({
@@ -144,16 +142,12 @@ function RelatedLinks({ links }: { links: { href: string; label: string }[] }) {
 }
 
 /**
- * Claude Code (individual CLI) install. Two paths covered here:
- *  - per-user registration via the slash command, served by the marketplace
- *    proxy
- *  - org-wide enforcement via Claude.ai's Managed Settings, which pushes an
- *    extraKnownMarketplaces entry — and, when a specific plugin is being
- *    installed, an enabledPlugins entry — into every org member's Claude
- *    Code install.
- *
- * Both go through Claude Code itself; neither involves Cowork's plugin
- * distribution (that's its own tab).
+ * Claude Code install: one settings snippet that registers the marketplace
+ * with autoUpdate on and enables the plugin, for the reader's own
+ * ~/.claude/settings.json or for managed settings. The marketplace.json
+ * "name" (not the GitHub repo name) keys extraKnownMarketplaces and suffixes
+ * the enabledPlugins entry; see server/internal/plugins/naming/naming.go.
+ * Cowork's plugin distribution is its own tab.
  */
 function ClaudeCodeInstallContent({
   marketplaceUrl,
@@ -162,177 +156,37 @@ function ClaudeCodeInstallContent({
 }: Pick<ContentProps, "marketplaceUrl" | "pluginSlug"> & {
   marketplaceName: string | undefined;
 }) {
-  const installCommand = marketplaceUrl
-    ? `/plugin marketplace add ${marketplaceUrl}`
-    : null;
-  const resolvedPluginSlug = pluginSlug ?? "<plugin-slug>";
-  const pluginInstallCommand = marketplaceName
-    ? `/plugin install ${resolvedPluginSlug}@${marketplaceName}`
-    : null;
-
-  // Schema reference: https://code.claude.com/docs/en/settings — under
-  // extraKnownMarketplaces (additive; works for managed settings too) and
-  // strictKnownMarketplaces (managed-only, allowlist semantics). The
-  // marketplace.json "name" (not the GitHub repo name, which can be
-  // anything) is what both extraKnownMarketplaces' key and enabledPlugins'
-  // `<plugin>@<marketplace>` suffix reference — see
-  // server/internal/plugins/naming/naming.go. Always paired in one snippet
-  // (mirrors the onboarding wizard's Claude Code step) — registering the
-  // marketplace without also enabling a plugin leaves the org with nothing
-  // to actually use.
-  const managedSettingsJson =
-    marketplaceUrl && marketplaceName
-      ? JSON.stringify(
-          {
-            env: {
-              FORCE_AUTOUPDATE_PLUGINS: "1",
-            },
-            extraKnownMarketplaces: {
-              [marketplaceName]: {
-                autoUpdate: true,
-                source: {
-                  source: "git",
-                  url: marketplaceUrl,
-                },
-              },
-            },
-            enabledPlugins: {
-              [`${resolvedPluginSlug}@${marketplaceName}`]: true,
-            },
-          },
-          null,
-          2,
-        )
-      : null;
+  if (!marketplaceUrl) {
+    return (
+      <p className="text-muted-foreground text-sm italic">
+        Re-publish to mint a marketplace install URL.
+      </p>
+    );
+  }
 
   return (
     <div className="min-w-0 space-y-6">
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">
-          Install in your Claude Code instance
-        </h3>
-        <p className="text-muted-foreground mb-3 text-sm">
-          Run this command from inside Claude Code to register the marketplace
-          for your user account:
+      <ClaudeCodeSettingsInstall
+        marketplaceName={marketplaceName}
+        marketplaceUrl={marketplaceUrl}
+        plugins={[pluginSlug ?? "<plugin-slug>"]}
+        secretUrl
+      />
+      {!pluginSlug && (
+        <p className="text-muted-foreground text-xs">
+          Replace{" "}
+          <code className="bg-muted px-1 py-0.5">&lt;plugin-slug&gt;</code> with
+          the plugin to enable.
         </p>
-        {installCommand ? (
-          <CodeBlock language="bash" className="bg-background">
-            {installCommand}
-          </CodeBlock>
-        ) : (
-          <p className="text-muted-foreground text-sm italic">
-            Re-publish to mint a marketplace install URL.
-          </p>
-        )}
-        {pluginInstallCommand && (
-          <div className="mt-3">
-            <CodeBlock language="bash" className="bg-background">
-              {pluginInstallCommand}
-            </CodeBlock>
-            {!pluginSlug && (
-              <p className="text-muted-foreground mt-2 text-xs">
-                Replace{" "}
-                <code className="bg-muted px-1 py-0.5">
-                  &lt;plugin-slug&gt;
-                </code>{" "}
-                with the slug of the plugin you want to install.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">
-          Roll out to your team via Managed Settings
-        </h3>
-        <p className="text-muted-foreground mb-4 text-sm">
-          Push the marketplace to every Claude Code installation in your
-          organization through Claude.ai's Managed Settings — no per-user
-          install command required.
-        </p>
-
-        <InstallSteps
-          steps={[
-            {
-              title: "Open Managed Settings on Claude.ai",
-              description: (
-                <>
-                  Sign in to{" "}
-                  <ExternalTextLink href="https://claude.ai/">
-                    claude.ai
-                  </ExternalTextLink>{" "}
-                  as an organization admin, navigate to{" "}
-                  <code className="bg-muted px-1 py-0.5 text-xs">
-                    Organization settings → Claude Code
-                  </code>
-                  , then click{" "}
-                  <code className="bg-muted px-1 py-0.5 text-xs">Manage</code>{" "}
-                  under{" "}
-                  <code className="bg-muted px-1 py-0.5 text-xs">
-                    Managed Settings
-                  </code>
-                  .
-                </>
-              ),
-            },
-            {
-              title: "Register the marketplace and enable the plugin",
-              description: (
-                <>
-                  Merge this entry into the org's managed{" "}
-                  <code className="bg-muted px-1 py-0.5 text-xs">
-                    settings.json
-                  </code>{" "}
-                  — this registers the marketplace and enables{" "}
-                  {pluginSlug ? "this specific plugin" : "a plugin"} for every
-                  developer in one step:
-                </>
-              ),
-              code: managedSettingsJson ?? undefined,
-              language: "json",
-              children: managedSettingsJson ? (
-                <p className="text-muted-foreground mt-3 flex items-start gap-1.5 text-xs leading-relaxed">
-                  <Info className="mt-0.5 size-3.5 shrink-0" />
-                  <span>
-                    {!pluginSlug && (
-                      <>
-                        Replace{" "}
-                        <code className="bg-muted px-1 py-0.5 text-xs">
-                          &lt;plugin-slug&gt;
-                        </code>{" "}
-                        with the slug of the plugin you want to enable. Use{" "}
-                      </>
-                    )}
-                    {pluginSlug && "Use "}
-                    <code className="bg-muted px-1 py-0.5 text-xs">
-                      strictKnownMarketplaces
-                    </code>{" "}
-                    instead of{" "}
-                    <code className="bg-muted px-1 py-0.5 text-xs">
-                      extraKnownMarketplaces
-                    </code>{" "}
-                    to lock the org to this marketplace and reject all others.
-                  </span>
-                </p>
-              ) : (
-                <p className="text-muted-foreground text-sm italic">
-                  Re-publish to mint a marketplace install URL.
-                </p>
-              ),
-            },
-          ]}
-        />
-
-        <RelatedLinks
-          links={[
-            {
-              href: CLAUDE_CODE_SETTINGS_DOCS_URL,
-              label: "Claude Code settings docs",
-            },
-          ]}
-        />
-      </div>
+      )}
+      <RelatedLinks
+        links={[
+          {
+            href: CLAUDE_CODE_SETTINGS_DOCS_URL,
+            label: "Claude Code settings and precedence",
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -359,9 +213,10 @@ function ClaudeCoworkInstallContent({
           Roll out to your organization
         </h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          Cowork admins register the underlying GitHub repository as a plugin
-          source on Claude.ai. Members get the marketplace automatically — no
-          per-user install command.
+          On Team or Enterprise, an Owner or Primary Owner registers the private
+          GitHub repository as an organization marketplace. Set installation
+          preferences to control member rollout; importing alone does not
+          require every plugin.
         </p>
 
         <InstallSteps
@@ -374,13 +229,13 @@ function ClaudeCoworkInstallContent({
                   <ExternalTextLink href="https://claude.ai/">
                     claude.ai
                   </ExternalTextLink>{" "}
-                  as an organization admin and navigate to{" "}
+                  as an Owner or Primary Owner and navigate to{" "}
                   <code className="bg-muted px-1 py-0.5 text-xs">
-                    Organization settings → Plugins
+                    Organization settings → Plugins &amp; skills → Marketplaces
                   </code>
                   , then click{" "}
                   <code className="bg-muted px-1 py-0.5 text-xs">
-                    Add plugin
+                    Add plugins → Sync from GitHub
                   </code>
                   .
                 </>
@@ -390,9 +245,9 @@ function ClaudeCoworkInstallContent({
               title: "Add the GitHub source",
               description: (
                 <>
-                  Select{" "}
-                  <code className="bg-muted px-1 py-0.5 text-xs">GitHub</code>{" "}
-                  as the source and enter your repo:
+                  Enter your private or internal GitHub repository. The importer
+                  needs repository access; members receiving the organization
+                  plugin do not each need a GitHub invitation:
                 </>
               ),
               code: repoSlug,
@@ -403,11 +258,79 @@ function ClaudeCoworkInstallContent({
               description:
                 "The Claude GitHub App must be installed on this repository so Cowork can sync from it. If the repo doesn't appear in the picker, install the app and retry.",
             },
+            {
+              title: "Set installation preferences and verify",
+              description:
+                "Choose Required to pre-install the plugin without allowing members to remove it, or Installed by default to allow opting out. Start a new Cowork session and verify expected components. Required installation does not guarantee hook execution or telemetry delivery. Native Cowork monitoring is a separate Team/Enterprise feature.",
+            },
           ]}
         />
 
         <RelatedLinks
           links={[{ href: COWORK_DOCS_URL, label: "Cowork setup guide" }]}
+        />
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          Using a personal Claude account
+        </h3>
+        <p className="text-muted-foreground mb-4 text-sm">
+          On Pro or Max, add a personal marketplace (including a private GitHub
+          repository) or upload a plugin ZIP. For a private marketplace, connect
+          GitHub and give the Claude GitHub App repository access when prompted.
+          These are personal installations, not organization-required rollout.
+          The ZIP alternative is shown below.
+        </p>
+
+        <InstallSteps
+          steps={[
+            {
+              title: "Download the plugin",
+              description: (
+                <>
+                  Close this dialog, open the plugin's Install menu, and choose{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    Download as zip — Claude
+                  </code>
+                  .
+                </>
+              ),
+            },
+            {
+              title: "Upload it in Claude",
+              description: (
+                <>
+                  In Claude, open{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    Customize → Plugins → Add → Upload plugin
+                  </code>
+                  , then select the ZIP. For updates, download a fresh ZIP after
+                  publishing and upload the replacement with the same plugin
+                  name. Start a new Cowork session and verify the expected
+                  components; a successful upload does not prove hooks execute.
+                  Marketplace installs update from their source instead.
+                </>
+              ),
+            },
+          ]}
+        />
+        <p className="text-muted-foreground mt-3 flex items-start gap-1.5 text-xs leading-relaxed">
+          <Info className="mt-0.5 size-3.5 shrink-0" />
+          <span>{PERSONAL_ACCOUNT_GOVERNANCE_NOTE}</span>
+        </p>
+
+        <RelatedLinks
+          links={[
+            {
+              href: CLAUDE_PLUGINS_DOCS_URL,
+              label: "Add a marketplace or ZIP",
+            },
+            {
+              href: "https://claude.com/docs/plugins/platform-support",
+              label: "Plugin component support",
+            },
+          ]}
         />
       </div>
     </div>
@@ -426,8 +349,18 @@ function CursorInstallContent({
   repoOwner,
   repoName,
   pluginName,
-}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginName">) {
+  pluginSlug,
+}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginName" | "pluginSlug">) {
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
+  // Generic plugin ZIPs need a manifest, but do not necessarily contain hooks.
+  // The per-plugin ZIP (generateCursorPluginFlat) names its manifest with the
+  // raw slug; only the team marketplace repo uses the `<slug>-cursor` name.
+  const localInstallCommand = pluginSlug
+    ? getCursorInstallCommand({
+        pluginName: pluginSlug,
+        archiveName: `${pluginSlug}.zip`,
+      })
+    : undefined;
 
   return (
     <div className="min-w-0 space-y-6">
@@ -461,7 +394,8 @@ function CursorInstallContent({
                 <>
                   Navigate to{" "}
                   <code className="bg-muted px-1 py-0.5 text-xs">
-                    Settings → Plugins → Import
+                    Dashboard → Plugins &amp; MCPs → Team Marketplaces → Add
+                    Marketplace → Import from Repo
                   </code>{" "}
                   and paste the repository URL:
                 </>
@@ -487,9 +421,85 @@ function CursorInstallContent({
           ]}
         />
 
+        <p className="text-muted-foreground mt-3 text-sm">
+          Required prevents uninstalling; Default On allows opting out and
+          Default Off requires members to install. For updates, enable Auto
+          Refresh with the Cursor GitHub App installed on the repository, or
+          click Refresh manually. Verify runtime behavior separately from
+          installation.
+        </p>
+
         <RelatedLinks
           links={[
             { href: CURSOR_DASHBOARD_URL, label: "Open Cursor dashboard" },
+            { href: CURSOR_PLUGINS_DOCS_URL, label: "Team marketplace setup" },
+          ]}
+        />
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          Using a personal Cursor account
+        </h3>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Team marketplaces need a Cursor Teams or Enterprise plan. On an
+          individual plan, install the plugin as a local plugin instead.
+        </p>
+
+        <InstallSteps
+          steps={[
+            {
+              title: "Download the plugin",
+              description: (
+                <>
+                  Close this dialog, open the plugin's Install menu, and choose{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    Download as zip — Cursor
+                  </code>
+                  .
+                </>
+              ),
+            },
+            {
+              title: "Unzip it into Cursor's local plugins folder",
+              description:
+                "Run in Bash on macOS or Linux with unzip and Python 3 installed. Check the ZIP filename and Downloads location first (your browser may add a suffix). This is not a native PowerShell command; Windows hook runtime compatibility must be verified separately.",
+              code: localInstallCommand,
+              language: "bash",
+              children: !pluginSlug ? (
+                <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
+                  Open the Install menu on a specific plugin to generate its
+                  validated installation command.
+                </p>
+              ) : undefined,
+            },
+            {
+              title: "Reload Cursor",
+              description: (
+                <>
+                  Run{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    Developer: Reload Window
+                  </code>{" "}
+                  and check expected components in the sidebar's Customize. For
+                  a team-managed account, ask an admin to enable Allow Local
+                  Plugin Imports at Dashboard → Settings → Security &amp;
+                  Identity → Marketplace and Plugins (off by default on
+                  Enterprise). An installed marketplace plugin with the same
+                  name takes precedence over the local copy. For updates,
+                  download a fresh ZIP after publishing, replace it with the
+                  command above, then reload. Rerunning the same ZIP does not
+                  fetch updates. Local copies are user-modifiable, not enforced
+                  organization rollout.
+                </>
+              ),
+            },
+          ]}
+        />
+
+        <RelatedLinks
+          links={[
+            { href: CURSOR_PLUGINS_DOCS_URL, label: "Cursor plugins docs" },
           ]}
         />
       </div>
@@ -558,13 +568,15 @@ function CodexInstallContent({
         <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
         <p className="text-muted-foreground mb-3 text-sm">
           Download a one-command install script that registers the marketplace,
-          enables hooks in{" "}
+          enables hooks, and configures compatible Codex OpenTelemetry logs,
+          traces, and metrics in{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">
             ~/.codex/config.toml
           </code>
-          , and pre-approves all hook events — no manual Settings → Hooks step
-          required. Suitable for MDM deployment. This script sets up Speakeasy's
-          observability plugin specifically.
+          . Existing exporters are preserved and may require manual Speakeasy
+          setup. The script also pre-approves all hook events, so no manual
+          Settings → Hooks step is required. Suitable for MDM deployment. This
+          script sets up Speakeasy's observability plugin specifically.
         </p>
         <Button
           variant="secondary"
@@ -594,6 +606,13 @@ function CodexInstallContent({
 
         <InstallSteps
           steps={[
+            {
+              // The manual path reads the private repo with the user's own git
+              // credentials, so they must be a collaborator first.
+              title: "Accept the GitHub invite",
+              description:
+                "Ask an admin to add your GitHub username as a collaborator on this marketplace. GitHub emails an invite to the address on your GitHub account. Accept it before continuing.",
+            },
             {
               title: "Register the marketplace",
               code: addCommand,
@@ -665,56 +684,142 @@ function CodexInstallContent({
   );
 }
 
+function MarketplaceRepoAccess(): JSX.Element {
+  const canWritePlugin = usePluginWriteAccess();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const publish = usePublishPluginsMutation({
+    onSuccess: () => {
+      setOpen(false);
+      void invalidateAllPublishStatus(queryClient);
+      toast.success("Collaborators added");
+    },
+    onError: () => {
+      toast.error("Failed to add collaborators");
+    },
+  });
+
+  if (!canWritePlugin) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        No access? Ask an org admin, or someone with the{" "}
+        <code className="bg-muted px-1 py-0.5 text-xs">plugin:write</code> scope
+        on this project, to add your GitHub username as a collaborator from the
+        Plugins page.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-2"
+      >
+        <Users className="size-4" />
+        Add collaborators
+      </Button>
+      <PublishDialog
+        mode="manage"
+        open={open}
+        onOpenChange={setOpen}
+        isPending={publish.isPending}
+        onPublish={(githubUsernames) =>
+          publish.mutate({
+            security: { sessionHeaderGramSession: "" },
+            request: { publishPluginsRequestBody: { githubUsernames } },
+          })
+        }
+      />
+    </>
+  );
+}
+
 /**
- * opencode install. opencode has no plugin-marketplace or deep-link concept
- * (unlike Claude Code / Cursor / Codex), so the primary path is the
- * server-generated observability ZIP (plugins.downloadObservabilityPlugin) —
- * a self-contained `.opencode` plugin (`plugin/agenthooks.ts` + `speakeasy.json`
- * + bootstrappers) with a freshly-minted hooks-scoped key already embedded,
- * extracted straight into a repo's `.opencode/`. The manual CLI path
- * (speakeasy-hooks install --provider=opencode) is kept as a fallback, plus
- * connecting an MCP server through opencode's own `mcp` config block. The MCP
- * snippet uses placeholders — grab the real name/URL from that server's own
- * hosted install page.
+ * OpenCode install. OpenCode has no marketplace importer, so the plugin's
+ * self-contained package (opencode-plugins/<slug>/ in the published repo:
+ * a loader under plugin/ plus the MCP servers and skills) is copied into an
+ * OpenCode config directory. Observability is a separate ZIP that only adds
+ * hooks, so it is offered after the plugin and labelled as such.
  */
-function OpencodeInstallContent(): JSX.Element {
+function OpencodeInstallContent({
+  repoOwner,
+  repoName,
+  pluginSlug,
+}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginSlug">): JSX.Element {
   const { isDownloading, download: handleDownloadPlugin } =
     useObservabilityPluginDownload("opencode", "observability-opencode.zip");
 
-  const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
+  const slug = pluginSlug ?? "<plugin-slug>";
+  const cloneCommand = `git clone https://github.com/${repoOwner}/${repoName}.git speakeasy-marketplace`;
+  const copyCommand = `# All projects
+cp -R speakeasy-marketplace/opencode-plugins/${slug}/. ~/.config/opencode/
 
-  const installCommand = `GRAM_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
-speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`;
-
-  const mcpConfig = `{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "<server-name>": {
-      "type": "remote",
-      "enabled": true,
-      "url": "<mcp-server-url>",
-      "headers": {
-        "Authorization": "Bearer {env:MCP_SERVER_API_KEY}"
-      }
-    }
-  }
-}`;
+# One project
+cp -R speakeasy-marketplace/opencode-plugins/${slug}/. .opencode/`;
 
   return (
     <div className="min-w-0 space-y-6">
-      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      <InstallSteps
+        steps={[
+          {
+            title: "Clone your Speakeasy marketplace repository",
+            description:
+              "OpenCode has no marketplace importer, so the plugin is copied out of the repository Speakeasy publishes to. Your GitHub account must be a collaborator on it.",
+            code: cloneCommand,
+            children: <MarketplaceRepoAccess />,
+          },
+          {
+            title: "Copy the plugin into your OpenCode config",
+            description: (
+              <>
+                This adds the plugin's MCP servers and skills. Copy into{" "}
+                <code className="bg-muted px-1 py-0.5 text-xs">
+                  ~/.config/opencode/
+                </code>{" "}
+                for every project, or into a repo's{" "}
+                <code className="bg-muted px-1 py-0.5 text-xs">.opencode/</code>{" "}
+                for that project only.
+              </>
+            ),
+            code: copyCommand,
+          },
+          {
+            title: "Restart OpenCode",
+            description: (
+              <>
+                OpenCode loads the plugin on its next start. If a server needs
+                credentials, export the environment variables named in{" "}
+                <code className="bg-muted px-1 py-0.5 text-xs">
+                  {slug}/mcp.json
+                </code>{" "}
+                first. To uninstall, delete the copied files.
+              </>
+            ),
+          },
+        ]}
+      />
+      {!pluginSlug && (
+        <p className="text-muted-foreground text-xs">
+          Replace{" "}
+          <code className="bg-muted px-1 py-0.5">&lt;plugin-slug&gt;</code> with
+          the plugin to install.
+        </p>
+      )}
+
+      <div className="border-t" />
+
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <h3 className="mb-2 text-sm font-semibold">
+          Optional: add observability
+        </h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          Download the Gram observability plugin as a ZIP — a self-contained{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">.opencode</code> plugin
-          with a hooks-scoped API key already embedded (no CLI, no key to
-          export). Extract it into your repo's{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">.opencode/</code> (or{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">
-            ~/.config/opencode/
-          </code>{" "}
-          for every repo) and opencode auto-discovers it on next start.
+          The Speakeasy observability plugin is separate. It only adds hooks
+          that report sessions and tool calls, and does not configure any MCP
+          servers. The ZIP has a hooks-scoped API key embedded; extract it into
+          the same config directory.
         </p>
         <Button
           variant="secondary"
@@ -724,59 +829,22 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
           className="inline-flex items-center gap-2"
         >
           <Download className="size-4" />
-          {isDownloading ? "Downloading…" : "Download Plugin"}
+          {isDownloading ? "Downloading…" : "Download observability plugin"}
         </Button>
         <p className="text-muted-foreground mt-2 text-xs">
           Then extract:{" "}
           <code className="bg-muted px-1 py-0.5">
-            unzip observability-opencode.zip -d .opencode
+            unzip observability-opencode.zip -d ~/.config/opencode
           </code>
         </p>
       </div>
 
-      <div className="border-t" />
-
-      {/* ── Manual setup ──────────────────────────────────────────────────── */}
-      <div className="space-y-4">
-        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-          Manual setup
-        </p>
-        <p className="text-muted-foreground text-sm">
-          Prefer the CLI? Install the{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">speakeasy-hooks</code>{" "}
-          binary:
-        </p>
-        <CodeBlock language="bash" className="bg-background">
-          {installBinary}
-        </CodeBlock>
-        <p className="text-muted-foreground text-sm">
-          Then run it from your repo to render the same plugin into{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">
-            .opencode/plugin/
-          </code>
-          :
-        </p>
-        <CodeBlock language="bash" className="bg-background">
-          {installCommand}
-        </CodeBlock>
-      </div>
-
-      {/* ── Connect an MCP server ─────────────────────────────────────────── */}
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
-        <p className="text-muted-foreground mb-3 text-sm">
-          Merge an entry into the{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">mcp</code> block of
-          your project's{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">opencode.json</code>.
-          Replace the placeholders with the name, URL, and auth token from that
-          server's own install page — that token is separate from the Gram hooks
-          credential.
-        </p>
-        <CodeBlock language="json" className="bg-background">
-          {mcpConfig}
-        </CodeBlock>
-      </div>
+      <RelatedLinks
+        links={[
+          { href: "https://opencode.ai/docs/plugins/", label: "Plugin Docs" },
+          { href: "https://opencode.ai/docs/mcp-servers/", label: "MCP Docs" },
+        ]}
+      />
     </div>
   );
 }
@@ -792,43 +860,38 @@ export function CopilotInstallContent(): JSX.Element {
   const { isDownloading, download: handleDownloadPlugin } =
     useObservabilityPluginDownload("copilot", "observability-copilot.zip");
   const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
-  const isDeviceAgentEnabled =
-    useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
 
   return (
     <div className="min-w-0 space-y-6">
-      {isDeviceAgentEnabled && (
-        <>
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">
-              GitHub Copilot in VS Code
-            </h3>
-            <p className="text-muted-foreground mb-3 text-sm">
-              Install the Speakeasy Device Agent to sync your assigned Copilot
-              plugin and create the VS Code hook registration automatically.
-            </p>
-            <Button variant="secondary" size="sm" asChild>
-              <Link to={deviceAgentUrl}>Go to Device Agent setup</Link>
-            </Button>
-            <p className="text-muted-foreground mt-2 text-xs">
-              Launch Copilot once so its configuration directory exists. The
-              agent reconciles within 60 seconds; reload VS Code after{" "}
-              <code className="bg-muted px-1 py-0.5">
-                ~/.copilot/hooks/agenthooks-vscode.json
-              </code>{" "}
-              appears.
-            </p>
-          </div>
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          GitHub Copilot in VS Code
+        </h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Install the Speakeasy Device Agent to sync your assigned Copilot
+          plugin and create the VS Code hook registration automatically.
+        </p>
+        <Button variant="secondary" size="sm" asChild>
+          <Link to={deviceAgentUrl}>Go to Device Agent setup</Link>
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Launch Copilot once so its configuration directory exists. The agent
+          reconciles within 60 seconds; reload VS Code after{" "}
+          <code className="bg-muted px-1 py-0.5">
+            ~/.copilot/hooks/agenthooks-vscode.json
+          </code>{" "}
+          appears.
+        </p>
+      </div>
 
-          <div className="border-t" />
-        </>
-      )}
+      <div className="border-t" />
 
       <div>
         <h3 className="mb-2 text-sm font-semibold">Copilot CLI</h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          To use the same observability plugin with Copilot CLI, download the
-          ZIP, extract it, and load the plugin directory explicitly.
+          Download the Speakeasy observability plugin as a ZIP — a
+          self-contained Copilot plugin with a hooks-scoped API key already
+          embedded — then extract it and load the plugin directory explicitly.
         </p>
         <Button
           variant="secondary"
@@ -871,8 +934,8 @@ export function CopilotInstallContent(): JSX.Element {
         </p>
         <p className="text-muted-foreground text-sm">
           Copilot stops running a tool's hook chain at the first deny. If
-          another plugin denies a tool call before Gram's entry runs, that call
-          is never reported.
+          another plugin denies a tool call before Speakeasy's entry runs, that
+          call is never reported.
         </p>
       </div>
 
@@ -885,6 +948,340 @@ export function CopilotInstallContent(): JSX.Element {
           {
             href: "https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference",
             label: "Plugin Reference",
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+/**
+ * Pi install. Pi has no plugin marketplace, no hook configuration, and no MCP
+ * client of its own — every integration point is a TypeScript extension loaded
+ * into the Pi process — so the primary path is the server-generated
+ * observability ZIP (plugins.downloadObservabilityPlugin?platform=pi): the
+ * generated extension plus speakeasy.json and bootstrappers, with a
+ * freshly-minted hooks-scoped key already embedded. The CLI path
+ * (speakeasy-hooks install --provider=pi) renders the same extension. The MCP
+ * snippet is the config a Pi MCP extension reads; Speakeasy reads the same
+ * file to report which servers a workspace can reach.
+ */
+function PiInstallContent(): JSX.Element {
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("pi", "observability-pi.zip");
+
+  const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
+
+  const installCommand = `SPEAKEASY_AI_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
+speakeasy-hooks install --provider=pi --dir=. --project=your-project-slug`;
+
+  const mcpConfig = `{
+  "mcpServers": {
+    "<server-name>": {
+      "transport": "streamable-http",
+      "url": "<mcp-server-url>"
+    }
+  }
+}`;
+
+  return (
+    <div className="min-w-0 space-y-6">
+      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Download the Speakeasy observability plugin as a ZIP — a
+          self-contained Pi extension with a hooks-scoped API key already
+          embedded (no CLI, no key to export). Extract it into your repo&apos;s{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/</code> (or{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">~/.pi/agent/</code> for
+          every repo) and Pi loads it on next start.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isDownloading}
+          onClick={() => void handleDownloadPlugin()}
+          className="inline-flex items-center gap-2"
+        >
+          <Download className="size-4" />
+          {isDownloading ? "Downloading…" : "Download Plugin"}
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Then extract:{" "}
+          <code className="bg-muted px-1 py-0.5">
+            unzip observability-pi.zip -d .pi
+          </code>
+          , or for every repo:{" "}
+          <code className="bg-muted px-1 py-0.5">
+            unzip observability-pi.zip -d ~/.pi/agent
+          </code>
+        </p>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Project-local extensions load only after you trust the project, so
+          answer Pi&apos;s trust prompt on first start.
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Manual setup ──────────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Manual setup
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Prefer the CLI? Install the{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">speakeasy-hooks</code>{" "}
+          binary:
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {installBinary}
+        </CodeBlock>
+        <p className="text-muted-foreground text-sm">
+          Then run it from your repo to render the same extension into{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/extensions/</code>:
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {installCommand}
+        </CodeBlock>
+      </div>
+
+      {/* ── Connect an MCP server ─────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Pi ships no MCP client. Install an MCP extension for Pi, then declare
+          servers in{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/mcp.json</code> (or{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">
+            ~/.pi/agent/mcp.json
+          </code>
+          ). Speakeasy reads the same file, so every server a Pi workspace can
+          reach shows up in your MCP inventory and its tool calls are attributed
+          to it. Replace the placeholders with the name and URL from that
+          server&apos;s own install page.
+        </p>
+        <CodeBlock language="json" className="bg-background">
+          {mcpConfig}
+        </CodeBlock>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Mistral Vibe install. Vibe has no plugin marketplace: every plugin is a
+ * portable Agent Plugins 1.0 package that Vibe discovers in
+ * ~/.vibe/plugins/<slug>/ (all projects) or a repository's
+ * .vibe/plugins/<slug>/ (that project only, once the folder is trusted). The
+ * marketplace repository carries the observability plugin as
+ * <org>-observability-vibe/ at its root, and the server-generated ZIP
+ * (plugins.downloadObservabilityPlugin?platform=vibe) packages the same files
+ * with a freshly-minted hooks-scoped key already embedded. Vibe picks the
+ * plugin up on next start or /reload-plugins, and the package's
+ * ai.mistral.vibe/hooks.toml runs automatically — no per-event approval.
+ * Uninstall by removing the directory.
+ */
+function VibeInstallContent({
+  repoOwner,
+  repoName,
+  pluginSlug,
+  agentPluginsV1Compatible,
+  observabilityPluginSlug,
+  observabilityAvailable,
+}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginSlug"> & {
+  /** Whether the selected feature plugin is published as a portable Agent Plugins 1.0 package (a `<slug>-vibe/` directory exists for it). */
+  agentPluginsV1Compatible?: boolean;
+  /** Real install name of the org's observability plugin from the publish status, when the published repo carries it. */
+  observabilityPluginSlug?: string;
+  /** Whether the observability ZIP can be downloaded right now (pin carries vibe + name fits the schema) — independent of the marketplace repo. */
+  observabilityAvailable?: boolean;
+}): JSX.Element {
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("vibe", "observability-vibe.zip");
+
+  // The dialog installs either the org's observability plugin (no specific
+  // plugin selected) or one feature plugin. The Quick install (server-generated
+  // ZIP) exists only for the observability package, and renders whenever the
+  // vibe package is available — the ZIP does not depend on the marketplace
+  // repo — while the real install name comes from the publish status when the
+  // published repo carries the package. Feature plugins publish as
+  // <slug>-vibe/ in the marketplace repo, but only when they are portable
+  // Agent Plugins 1.0 packages.
+  const showQuickInstall = Boolean(observabilityAvailable);
+  const observabilityName = observabilityPluginSlug ?? "<org>-observability";
+  const isObservability = !pluginSlug || pluginSlug === observabilityPluginSlug;
+  const installSlug = isObservability
+    ? (observabilityPluginSlug ?? "<org>-observability")
+    : pluginSlug;
+  const packageDir = `${installSlug}-vibe`;
+  const portable = agentPluginsV1Compatible !== false;
+
+  const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
+  // Clone into a fresh temp directory and chain with && inside a subshell, so
+  // the EXIT trap fires when the command ends (a bare trap replaces any trap
+  // the user's shell already has and only fires at shell exit). A second
+  // paste of the clone alone fails, and without the chaining the copy below
+  // would still replace the install from the stale checkout. Clear the
+  // destination first: cp -R into an existing directory nests the new files
+  // one level deeper and Vibe keeps loading the old plugin. The lines are
+  // built as an array and joined with a real backslash-newline: a backslash
+  // before a newline inside a template literal is a line continuation, which
+  // would render the whole block as one long line.
+  const manualLines = [
+    "tmp=$(mktemp -d)",
+    `trap 'rm -rf "$tmp"' EXIT`,
+    `git clone ${repoUrl} "$tmp/marketplace"`,
+    "mkdir -p ~/.vibe/plugins",
+    `rm -rf ~/.vibe/plugins/${installSlug}`,
+    `cp -R "$tmp/marketplace/${packageDir}" ~/.vibe/plugins/${installSlug}`,
+  ];
+  const manualCopy = `( ${manualLines.join(" && \\\n")} )`;
+
+  return (
+    <div className="min-w-0 space-y-6">
+      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      {showQuickInstall && (
+        <>
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+            <p className="text-muted-foreground mb-3 text-sm">
+              Download the Speakeasy observability plugin as a ZIP — a portable
+              Agent Plugins 1.0 package with a hooks-scoped API key already
+              embedded (no CLI, no key to export). Extract it into{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                ~/.vibe/plugins/{observabilityName}
+              </code>{" "}
+              and Vibe loads it on next start.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={isDownloading}
+              onClick={() => void handleDownloadPlugin()}
+              className="inline-flex items-center gap-2"
+            >
+              <Download className="size-4" />
+              {isDownloading ? "Downloading…" : "Download Plugin"}
+            </Button>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Then extract:{" "}
+              <code className="bg-muted px-1 py-0.5">
+                mkdir -p ~/.vibe/plugins/&quot;{observabilityName}&quot;
+                &amp;&amp; unzip observability-vibe.zip -d
+                ~/.vibe/plugins/&quot;{observabilityName}&quot;
+              </code>
+            </p>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Restart Vibe or run{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                /reload-plugins
+              </code>{" "}
+              to pick the plugin up; its{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                ai.mistral.vibe/hooks.toml
+              </code>{" "}
+              runs automatically. Coverage today is tool calls and turn end
+              (post_agent); prompt and session lifecycle hooks are a planned
+              follow-up.
+            </p>
+          </div>
+
+          <div className="border-t" />
+        </>
+      )}
+
+      {/* ── Manual setup ──────────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Manual setup
+        </p>
+        {portable ? (
+          <>
+            <p className="text-muted-foreground text-sm">
+              Prefer installing from the marketplace repository? Vibe has no
+              marketplace of its own, so copy the plugin&apos;s{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                {packageDir}/
+              </code>{" "}
+              directory into{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                ~/.vibe/plugins/{installSlug}
+              </code>
+              :
+            </p>
+            <CodeBlock language="bash" className="bg-background">
+              {manualCopy}
+            </CodeBlock>
+            <p className="text-muted-foreground text-sm">
+              Then restart Vibe or run{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                /reload-plugins
+              </code>
+              . User-scope plugins need no trust prompt. To uninstall, remove
+              the directory:{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                rm -rf ~/.vibe/plugins/{installSlug}
+              </code>
+              {isObservability && (
+                <>
+                  . The plugin&apos;s{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    ai.mistral.vibe/hooks.toml
+                  </code>{" "}
+                  ships with the package and runs automatically.
+                </>
+              )}
+            </p>
+          </>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            This plugin is not published as a portable Agent Plugins 1.0
+            package, so the marketplace repository has no{" "}
+            <code className="bg-muted px-1 py-0.5 text-xs">{packageDir}/</code>{" "}
+            directory to copy. Install it through the Speakeasy device agent
+            instead — assigned plugins are delivered to{" "}
+            <code className="bg-muted px-1 py-0.5 text-xs">
+              ~/.vibe/plugins/
+            </code>{" "}
+            automatically.
+          </p>
+        )}
+      </div>
+
+      {/* ── Connect an MCP server ─────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          To reach a Speakeasy-hosted server by hand, add it with the Vibe CLI —
+          it writes the{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">[[mcp_servers]]</code>{" "}
+          entry in{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">
+            ~/.vibe/config.toml
+          </code>{" "}
+          together with its OAuth auth table (a hand-written block has none, so
+          Vibe treats the server as static and sign-in never starts). Replace
+          the placeholders with the name and URL from that server&apos;s own
+          install page:
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {`vibe mcp add <server-name> --url <mcp-server-url>`}
+        </CodeBlock>
+        <p className="text-muted-foreground mt-2 text-sm">
+          Then sign in from inside Vibe:{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">
+            /mcp login &lt;server-name&gt;
+          </code>
+        </p>
+      </div>
+
+      <RelatedLinks
+        links={[
+          {
+            href: "https://github.com/mistralai/vibe",
+            label: "Mistral Vibe repository",
           },
         ]}
       />
@@ -912,6 +1309,8 @@ export function InstallInstructionsDialog({
   const [pluginConfirmed, setPluginConfirmed] = useState(false);
   const { data: marketplaceSettings } = useMarketplaceSettings();
   const { data: pluginsData } = usePlugins();
+  const scope = usePluginQueryScope();
+  const { data: publishStatus } = usePublishStatus(scope);
   const marketplaceName = marketplaceSettings?.effectiveName;
 
   // Restrict to the plugins this context actually cares about (e.g. the ones
@@ -924,6 +1323,7 @@ export function InstallInstructionsDialog({
       name: p.name,
       slug: p.slug,
       description: p.description,
+      agentPluginsV1Compatible: p.agentPluginsV1Compatible,
     }));
   const needsPluginPicker = candidatePlugins.length > 1;
   const singleCandidate =
@@ -932,12 +1332,14 @@ export function InstallInstructionsDialog({
   const matchedPlugin = candidatePlugins.find(
     (p) => p.slug === selectedPluginSlug,
   );
-  const effectivePluginName = needsPluginPicker
-    ? (matchedPlugin?.name ?? content.pluginName)
-    : (singleCandidate?.name ?? content.pluginName);
-  const effectivePluginSlug = needsPluginPicker
-    ? (matchedPlugin?.slug ?? selectedPluginSlug ?? undefined)
-    : (singleCandidate?.slug ?? content.pluginSlug);
+  const effectiveCandidate = needsPluginPicker
+    ? (matchedPlugin ?? singleCandidate)
+    : singleCandidate;
+  const effectivePluginName = effectiveCandidate?.name ?? content.pluginName;
+  const effectivePluginSlug =
+    effectiveCandidate?.slug ?? selectedPluginSlug ?? content.pluginSlug;
+  const effectiveAgentPluginsV1Compatible =
+    effectiveCandidate?.agentPluginsV1Compatible;
 
   const totalSteps = needsPluginPicker ? 3 : 2;
   const stepIndex = needsPluginPicker
@@ -1146,6 +1548,7 @@ export function InstallInstructionsDialog({
                   repoOwner={content.repoOwner}
                   repoName={content.repoName}
                   pluginName={effectivePluginName}
+                  pluginSlug={effectivePluginSlug}
                 />
               )}
               {selected === "codex" && (
@@ -1156,8 +1559,29 @@ export function InstallInstructionsDialog({
                   pluginSlug={effectivePluginSlug}
                 />
               )}
-              {selected === "opencode" && <OpencodeInstallContent />}
+              {selected === "opencode" && (
+                <OpencodeInstallContent
+                  repoOwner={content.repoOwner}
+                  repoName={content.repoName}
+                  pluginSlug={effectivePluginSlug}
+                />
+              )}
               {selected === "copilot" && <CopilotInstallContent />}
+              {selected === "pi" && <PiInstallContent />}
+              {selected === "vibe" && (
+                <VibeInstallContent
+                  repoOwner={content.repoOwner}
+                  repoName={content.repoName}
+                  pluginSlug={effectivePluginSlug}
+                  agentPluginsV1Compatible={effectiveAgentPluginsV1Compatible}
+                  observabilityPluginSlug={
+                    publishStatus?.vibeObservabilityPlugin
+                  }
+                  observabilityAvailable={
+                    publishStatus?.vibeObservabilityAvailable
+                  }
+                />
+              )}
             </div>
           </div>
         </div>

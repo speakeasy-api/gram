@@ -7,16 +7,21 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/partition"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
 
@@ -66,8 +71,9 @@ func TestProvisionAPIKey_ConcurrentFirstProvision(t *testing.T) {
 	require.NoError(t, err)
 
 	enc := testenv.NewEncryptionClient(t)
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, enc)
-	provisioner.baseURL = upstream.URL
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", partition.US, "provisioning-key", nil, nil, enc, staff.Organization{})
+	provisioner.inferenceURL = upstream.URL
+	provisioner.managementURL = upstream.URL
 
 	const workers = 8
 	keys := make([]string, workers)
@@ -94,12 +100,92 @@ func TestProvisionAPIKey_ConcurrentFirstProvision(t *testing.T) {
 		KeyType:        string(KeyTypeInternal),
 	})
 	require.NoError(t, err)
-	require.False(t, row.Key.Valid, "plaintext column must stay NULL")
 	require.True(t, row.KeyEncrypted.Valid)
 	decrypted, err := enc.Decrypt(row.KeyEncrypted.String)
 	require.NoError(t, err)
 	require.Equal(t, "sk-or-race-1", decrypted)
 	require.Equal(t, "hash-1", row.KeyHash)
+}
+
+// TestProvisionAPIKey_WaitsForBillingLock pins the mint/billing race fix: a
+// first-time mint that starts while a billing writer holds the org's billing
+// lock must wait for it, then size the key from the committed billing state.
+func TestProvisionAPIKey_WaitsForBillingLock(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "orprovisionbilling")
+	require.NoError(t, err)
+
+	orgID := "org-" + uuid.NewString()[:8]
+	orgQueries := orgRepo.New(conn)
+	_, err = orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        "Provision Billing Org",
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{String: "", Valid: false},
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+	require.NoError(t, orgQueries.SetAccountType(ctx, orgRepo.SetAccountTypeParams{GramAccountType: string(billing.TierBase), ID: orgID}))
+
+	baseLimit, ok := DefaultCreditLimit(staff.Organization{}, orgID, billing.TierBase, false)
+	require.True(t, ok)
+	proLimit, ok := DefaultCreditLimit(staff.Organization{}, orgID, billing.TierPro, false)
+	require.True(t, ok)
+	require.NotEqual(t, baseLimit, proLimit)
+
+	limits := make(chan float64, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body createKeyRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Limit == nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		limits <- *body.Limit
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"limit": *body.Limit, "hash": "hash-billing"},
+			"key":  "sk-or-billing",
+		})
+	}))
+	t.Cleanup(upstream.Close)
+
+	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", partition.US, "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{})
+	provisioner.inferenceURL = upstream.URL
+	provisioner.managementURL = upstream.URL
+
+	billingConn, err := conn.Acquire(ctx)
+	require.NoError(t, err)
+	defer billingConn.Release()
+	billingLock := repo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)}
+	require.NoError(t, repo.New(billingConn).AcquireOpenRouterKeyBillingLock(ctx, billingLock))
+
+	minted := make(chan error, 1)
+	go func() {
+		_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		minted <- err
+	}()
+
+	billingLockKey := "openrouter-" + string(KeyTypeChat) + "-billing:" + orgID
+	require.Eventually(t, func() bool {
+		waiting, err := testrepo.New(conn).CountAdvisoryLockWaitersFixture(ctx, billingLockKey)
+		return err == nil && waiting > 0
+	}, 10*time.Second, 20*time.Millisecond, "mint must wait on the billing lock")
+
+	require.NoError(t, orgRepo.New(billingConn).SetAccountType(ctx, orgRepo.SetAccountTypeParams{GramAccountType: string(billing.TierPro), ID: orgID}))
+	unlocked, err := repo.New(billingConn).ReleaseOpenRouterKeyBillingLock(ctx, repo.ReleaseOpenRouterKeyBillingLockParams(billingLock))
+	require.NoError(t, err)
+	require.True(t, unlocked)
+
+	require.NoError(t, <-minted)
+	require.InDelta(t, float64(proLimit), <-limits, 0)
+
+	row, err := repo.New(conn).GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, int64(proLimit), row.MonthlyCredits)
 }
 
 // TestProvisionAPIKey_MissingCiphertextErrors pins the failure mode for a key
@@ -142,8 +228,9 @@ func TestProvisionAPIKey_MissingCiphertextErrors(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, testenv.NewEncryptionClient(t))
-	provisioner.baseURL = upstream.URL
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", partition.US, "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{})
+	provisioner.inferenceURL = upstream.URL
+	provisioner.managementURL = upstream.URL
 
 	_, err = provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
 	require.Error(t, err)

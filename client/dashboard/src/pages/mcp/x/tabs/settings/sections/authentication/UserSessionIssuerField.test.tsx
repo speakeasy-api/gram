@@ -1,0 +1,339 @@
+import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AuthTarget } from "./authTarget";
+import { UserSessionIssuerField } from "./UserSessionIssuerField";
+
+const testState = vi.hoisted(() => ({
+  impact: {
+    data: undefined as
+      | {
+          authorizationServerChanges: boolean;
+          candidateIssuer?: { issuerUrl?: string };
+        }
+      | undefined,
+    isFetching: false,
+    isError: false,
+  },
+  impactRequests: [] as unknown[],
+}));
+
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({
+    children,
+  }: {
+    children: ReactNode | ((props: { disabled: boolean }) => ReactNode);
+  }) => (
+    <>
+      {typeof children === "function"
+        ? children({ disabled: false })
+        : children}
+    </>
+  ),
+}));
+
+// The real select is a Radix popover; a native one keeps the test on the
+// field's save flow.
+vi.mock("@/components/user-session-issuer-select", () => ({
+  UserSessionIssuerSelect: ({
+    issuers,
+    value,
+    onValueChange,
+    ariaLabel,
+  }: {
+    issuers: UserSessionIssuer[];
+    value: string;
+    onValueChange: (value: string) => void;
+    ariaLabel?: string;
+  }) => (
+    <select
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+    >
+      <option value="">None</option>
+      {issuers.map((issuer) => (
+        <option key={issuer.id} value={issuer.id}>
+          {issuer.slug}
+        </option>
+      ))}
+    </select>
+  ),
+}));
+
+vi.mock("@gram/client/react-query/userSessionIssuerAttachImpact.js", () => ({
+  useUserSessionIssuerAttachImpact: (request: unknown) => {
+    testState.impactRequests.push(request);
+    return testState.impact;
+  },
+}));
+
+vi.mock("@gram/client/react-query/mcpServerUsageImpact.js", () => ({
+  useMcpServerUsageImpact: (
+    _request: unknown,
+    _security: unknown,
+    options?: { enabled?: boolean },
+  ) =>
+    options?.enabled === false
+      ? {
+          data: undefined,
+          isFetching: false,
+          isPending: true,
+          isError: false,
+          fetchStatus: "idle",
+        }
+      : {
+          data: {
+            serverName: "Example server",
+            signInRequired: true,
+            sharedSignIn: true,
+            activeConnectionCount: 3,
+            activeSubjectCount: 2,
+            sharedConnectionCount: 1,
+            subjects: [
+              {
+                subjectUrn: "user:alice",
+                subjectType: "user",
+                displayName: "Alice",
+                connectionCount: 2,
+                clientNames: ["Cursor"],
+                sharedSignIn: false,
+              },
+              {
+                subjectUrn: "user:bob",
+                subjectType: "user",
+                email: "bob@example.com",
+                connectionCount: 1,
+                clientNames: [],
+                sharedSignIn: true,
+              },
+            ],
+            subjectsTruncated: false,
+          },
+          isFetching: false,
+          isPending: false,
+          isError: false,
+          fetchStatus: "idle",
+        },
+}));
+
+vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
+  invalidateAllUserSessionIssuer: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/userSessionIssuers.js", () => ({
+  invalidateAllUserSessionIssuers: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// The settings link beside the picker needs only an address.
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    mcpSessions: {
+      provider: { settings: { href: (id: string) => `/sessions/${id}` } },
+    },
+  }),
+}));
+
+function issuer(id: string): UserSessionIssuer {
+  return {
+    id,
+    slug: id,
+    authnChallengeMode: "interactive",
+    authorizationServerMode: "endpoint",
+    clientIdMetadataAdmissionMode: "open",
+    sessionDurationHours: 24,
+    useAuthenticationHost: false,
+    issuerUrlPinned: false,
+    organizationId: "org-1",
+    projectId: "project-1",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
+}
+
+const link = vi.fn<(userSessionIssuerId: string) => Promise<void>>();
+
+function renderField(
+  currentIssuerId: string | null,
+  mcpServerId?: string,
+  label?: string,
+): void {
+  const target: AuthTarget = {
+    mcpServerId,
+    slug: "server",
+    projectId: "project-1",
+    permissionResourceId: "toolset-1",
+    attachImpactTarget: { toolsetId: "toolset-1" },
+    supportsOrganizationIssuers: true,
+    userSessionIssuerId: currentIssuerId,
+    linkUserSessionIssuer: link,
+    invalidate: vi.fn(async () => {}),
+  };
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <UserSessionIssuerField
+          target={target}
+          issuers={[issuer("current"), issuer("candidate")]}
+          isLoading={false}
+          isError={false}
+          label={label}
+        />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+function chooseCandidateAndSave(): void {
+  fireEvent.change(screen.getByRole("combobox", { name: "MCP sign-in" }), {
+    target: { value: "candidate" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+}
+
+beforeEach(() => {
+  link.mockReset();
+  link.mockResolvedValue(undefined);
+  testState.impact = { data: undefined, isFetching: false, isError: false };
+  testState.impactRequests = [];
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe("UserSessionIssuerField", () => {
+  it.each([
+    [undefined, "MCP sign-in"],
+    ["Used by this server", "Used by this server"],
+  ])("names the picker after its row (%s)", (label, name) => {
+    renderField("current", undefined, label);
+    expect(screen.getByText(name)).toBeTruthy();
+    expect(screen.getByRole("combobox", { name })).toBeTruthy();
+  });
+
+  it("confirms before replacing an issuer and names the new authorization server", async () => {
+    testState.impact.data = {
+      authorizationServerChanges: true,
+      candidateIssuer: { issuerUrl: "https://app.example.com/oauth/usi/x" },
+    };
+    renderField("current");
+
+    chooseCandidateAndSave();
+
+    expect(screen.getByText("Change MCP sign-in?")).toBeDefined();
+    expect(link).not.toHaveBeenCalled();
+    expect(testState.impactRequests).toContainEqual({
+      toolsetId: "toolset-1",
+      userSessionIssuerId: "candidate",
+    });
+    expect(
+      screen.getByText(
+        /different authorization server, https:\/\/app\.example\.com\/oauth\/usi\/x/,
+      ),
+    ).toBeDefined();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Change MCP sign-in",
+      }),
+    );
+    await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
+  });
+
+  it("says when clients keep the same authorization server", () => {
+    testState.impact.data = { authorizationServerChanges: false };
+    renderField("current");
+
+    chooseCandidateAndSave();
+
+    expect(
+      screen.getByText("Clients keep using the same authorization server."),
+    ).toBeDefined();
+  });
+
+  it("still lets the change through when the impact check fails", async () => {
+    testState.impact.isError = true;
+    renderField("current");
+
+    chooseCandidateAndSave();
+
+    expect(screen.getByText(/Couldn't check whether/)).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Change MCP sign-in",
+      }),
+    );
+    await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
+  });
+
+  it("confirms before a first issuer starts requiring sign-in", async () => {
+    testState.impact.data = {
+      authorizationServerChanges: true,
+      candidateIssuer: { issuerUrl: "https://app.example.com/oauth/usi/x" },
+    };
+    renderField(null);
+
+    chooseCandidateAndSave();
+
+    expect(screen.getByText("Require sign-in for this server?")).toBeDefined();
+    expect(
+      screen.getByText(
+        "Clients will sign in through the shared authorization server, https://app.example.com/oauth/usi/x.",
+      ),
+    ).toBeDefined();
+    expect(link).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Require sign-in" }));
+    await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
+  });
+
+  it("waits for a refreshed preview before confirming", () => {
+    testState.impact.data = { authorizationServerChanges: false };
+    testState.impact.isFetching = true;
+    renderField("current");
+
+    chooseCandidateAndSave();
+
+    expect(
+      screen
+        .getByRole("button", { name: "Change MCP sign-in" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("lists who is connected to an MCP server and waits for its name", async () => {
+    testState.impact.data = { authorizationServerChanges: false };
+    renderField("current", "mcp-server-1");
+
+    chooseCandidateAndSave();
+
+    expect(
+      screen.getByText(/3 active connections from 2 callers/),
+    ).toBeDefined();
+    expect(screen.getByText("Alice")).toBeDefined();
+    expect(screen.getByText("bob@example.com")).toBeDefined();
+    // The row badge, and the note explaining it.
+    expect(screen.getAllByText("Shared sign-in")).toHaveLength(2);
+    const confirm = screen.getByRole("button", {
+      name: "Change MCP sign-in",
+    });
+    expect(confirm.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Type the server name to confirm"), {
+      target: { value: "Example server" },
+    });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
+  });
+});

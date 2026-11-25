@@ -17,6 +17,12 @@ import (
 
 // Manage distributable plugin bundles of MCP servers and hooks.
 type Service interface {
+	// List minimal distribution targets for a skill the caller can read. Requires
+	// skill:read, not org:read.
+	ListDistributionPlugins(context.Context, *ListDistributionPluginsPayload) (res *ListDistributionPluginsResult, err error)
+	// Get minimal distribution target metadata for a skill the caller can read.
+	// Requires skill:read, not org:read.
+	GetDistributionPlugin(context.Context, *GetDistributionPluginPayload) (res *DistributionPlugin, err error)
 	// List all plugins for the current project.
 	ListPlugins(context.Context, *ListPluginsPayload) (res *ListPluginsResult, err error)
 	// Get a plugin with its servers and assignments.
@@ -43,8 +49,13 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	DownloadPluginPackage(context.Context, *DownloadPluginPackagePayload) (res *DownloadPluginPackageResult, body io.ReadCloser, err error)
-	// Download a ZIP of the per-org observability plugin (Gram hooks). Mints a
-	// fresh hooks-scoped API key on each download and embeds it in the plugin's
+	// Rotate the observability plugin's hooks-scoped ingest credential. Mints a
+	// replacement key, republishes the marketplace when possible so installs pick
+	// it up, and either revokes previous plugin hooks keys immediately or keeps
+	// them valid for a grace window.
+	RotateObservabilityCredential(context.Context, *RotateObservabilityCredentialPayload) (res *RotateObservabilityCredentialResult, err error)
+	// Download a ZIP of the per-org observability plugin (Speakeasy hooks). Mints
+	// a fresh hooks-scoped API key on each download and embeds it in the plugin's
 	// hook script.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
@@ -92,7 +103,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "listAudiences", "downloadPluginPackage", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
+var MethodNames = [20]string{"listDistributionPlugins", "getDistributionPlugin", "listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "listAudiences", "downloadPluginPackage", "rotateObservabilityCredential", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -100,14 +111,17 @@ type AddPluginServerPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	PluginID         string
-	// Gram toolset ID for a toolset-backed MCP server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
+	// meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may
+	// both be sent when equal.
 	ToolsetID *string
-	// Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Speakeasy MCP server ID. Provide exactly one backend ID; a hosted MCP
+	// server's toolset_id and mcp_server_id may both be sent when equal.
 	McpServerID *string
-	// Display name for the server. Defaults to the backing toolset or mcp_server
-	// name when omitted.
+	// MCP gateway ID. Provide exactly one backend ID.
+	MetaMcpServerID *string
+	// Display name for the server. Defaults to the backing server name when
+	// omitted.
 	DisplayName *string
 	Policy      string
 	SortOrder   int32
@@ -124,6 +138,13 @@ type CreatePluginPayload struct {
 	Slug *string
 	// Optional description.
 	Description *string
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Defaults to true. When false, the plugin stays out of the marketplace until
+	// someone syncs it by hand.
+	AutoSyncEnabled *bool
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Defaults to false.
+	AutoAddServersEnabled *bool
 }
 
 // DeletePluginPayload is the payload type of the plugins service deletePlugin
@@ -132,6 +153,18 @@ type DeletePluginPayload struct {
 	ID               string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// DistributionPlugin is the result type of the plugins service
+// getDistributionPlugin method.
+type DistributionPlugin struct {
+	ID          string
+	Name        string
+	Description *string
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool
+	IsDefault   bool
 }
 
 // DownloadCodexInstallScriptPayload is the payload type of the plugins service
@@ -182,6 +215,15 @@ type DownloadPluginPackageResult struct {
 	ContentDisposition string
 }
 
+// GetDistributionPluginPayload is the payload type of the plugins service
+// getDistributionPlugin method.
+type GetDistributionPluginPayload struct {
+	SkillID          string
+	ID               string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // GetMarketplaceSettingsPayload is the payload type of the plugins service
 // getMarketplaceSettings method.
 type GetMarketplaceSettingsPayload struct {
@@ -217,6 +259,20 @@ type ListAudiencesResult struct {
 	Audiences []*PluginAudience
 }
 
+// ListDistributionPluginsPayload is the payload type of the plugins service
+// listDistributionPlugins method.
+type ListDistributionPluginsPayload struct {
+	SkillID          string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListDistributionPluginsResult is the result type of the plugins service
+// listDistributionPlugins method.
+type ListDistributionPluginsResult struct {
+	Plugins []*DistributionPlugin
+}
+
 // ListPluginsPayload is the payload type of the plugins service listPlugins
 // method.
 type ListPluginsPayload struct {
@@ -242,6 +298,9 @@ type MarketplaceSettingsResult struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName string
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled bool
 }
 
 // Plugin is the result type of the plugins service getPlugin method.
@@ -256,6 +315,16 @@ type Plugin struct {
 	Description *string
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled bool
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled bool
 	// Number of active servers in this plugin.
 	ServerCount *int64
 	// Number of active skills in this plugin.
@@ -278,7 +347,11 @@ type PluginAssignment struct {
 	ID string
 	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn string
-	CreatedAt    string
+	// How the device agent installs the plugin for this audience. `required`:
+	// installed, and the user can't turn it off. `default`: installed, and the
+	// user can turn it off. `available`: not installed until the user turns it on.
+	InstallMode string
+	CreatedAt   string
 }
 
 type PluginAudience struct {
@@ -292,17 +365,34 @@ type PluginAudience struct {
 	PrincipalUrn string
 }
 
+type PluginPublishStatus struct {
+	// The plugin's slug.
+	Slug string
+	// Whether the plugin's published package is current. With auto sync on: an
+	// automatic publish would push nothing new for it, its package and the
+	// marketplace manifests alike. With auto sync off: its package matches what it
+	// was last published with.
+	UpToDate bool
+	// Whether the plugin's auto sync is off and it has changes, or has never been
+	// published, so only a manual sync publishes it.
+	AwaitingManualSync bool
+}
+
 // PluginServer is the result type of the plugins service addPluginServer
 // method.
 type PluginServer struct {
 	// Unique plugin server identifier.
 	ID string
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server
+	// sets toolset_id and mcp_server_id to the same id; otherwise exactly one
+	// backend ID is set.
 	ToolsetID *string
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP
+	// server sets toolset_id and mcp_server_id to the same id; otherwise exactly
+	// one backend ID is set.
 	McpServerID *string
+	// MCP gateway ID. When set, no other backend ID is set.
+	MetaMcpServerID *string
 	// Display name shown in generated plugin config.
 	DisplayName string
 	// Whether this server is required or optional.
@@ -352,14 +442,37 @@ type PublishStatusResult struct {
 	// Slug of the generated Codex observability plugin in the published
 	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
 	CodexObservabilityPlugin *string
+	// Slug of the generated Cursor observability plugin in the published
+	// marketplace — the value to mark required in Cursor's team marketplace.
+	// Present when connected.
+	CursorObservabilityPlugin *string
+	// Whether the Mistral Vibe observability plugin ZIP can be downloaded right
+	// now: the pinned hooks release's relay carries the vibe provider and the org
+	// name satisfies the Agent Plugins 1.0 name schema. Present (true or false)
+	// when connected and observability is enabled for the project.
+	VibeObservabilityAvailable *bool
+	// Slug of the generated Mistral Vibe observability plugin's install directory
+	// (`~/.vibe/plugins/<slug>`) — present only when connected, observability is
+	// enabled, the vibe package is available, and the stored published hooks
+	// version equals the current generator version, i.e. the published marketplace
+	// repo actually carries the package. The marketplace repo directory is
+	// `<slug>-vibe`.
+	VibeObservabilityPlugin *string
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
 	HasCollaborators *bool
 	// Whether the project's current plugin state matches what was last published
-	// to GitHub. Absent when the project is not connected, or when the connection
-	// predates content fingerprinting (freshness can't be determined).
+	// to GitHub, including changes of plugins whose auto sync is off that wait for
+	// a manual sync. Absent when the project is not connected, or when the
+	// connection predates content fingerprinting (freshness can't be determined).
 	UpToDate *bool
+	// Whether an automatic publish would change the published marketplace. False
+	// while the only pending changes belong to plugins whose auto sync is off,
+	// which publish only on a manual sync. Absent when up_to_date is absent.
+	AutomaticSyncPending *bool
+	// Each live plugin's own freshness. Absent when up_to_date is absent.
+	Plugins []*PluginPublishStatus
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string
@@ -380,6 +493,58 @@ type RemovePluginServerPayload struct {
 	ProjectSlugInput *string
 }
 
+// RotateObservabilityCredentialPayload is the payload type of the plugins
+// service rotateObservabilityCredential method.
+type RotateObservabilityCredentialPayload struct {
+	// What happens to existing observability plugin hooks keys after the
+	// replacement is minted.
+	PreviousKeyFate  string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// RotateObservabilityCredentialResult is the result type of the plugins
+// service rotateObservabilityCredential method.
+type RotateObservabilityCredentialResult struct {
+	// The newly minted hooks-scoped API key. Returned only on this response.
+	Key string
+	// The recognizable prefix of the new key.
+	KeyPrefix string
+	// What happened to previous observability plugin hooks keys.
+	PreviousKeyFate string
+	// Previous observability plugin hooks keys that were revoked or scheduled to
+	// expire.
+	PreviousKeys []*RotatedObservabilityKey
+	// The latest deadline among previous keys when previous_key_fate is grace.
+	// Individual keys can expire earlier, so this is an upper bound rather than a
+	// shared deadline; per-key deadlines are on previous_keys.
+	PreviousKeysExpireAt *string
+	// Whether the chosen fate was applied to the previous keys. False means the
+	// replacement was created and published but retiring the previous keys failed,
+	// so they are still valid and the rotation should be retried.
+	PreviousKeysRetired bool
+	// Whether the published marketplace was updated with the new credential.
+	MarketplaceRepublished bool
+	// True when a marketplace exists but could not be updated yet (for example the
+	// organization is not approved for the latest hooks version, or GitHub
+	// publishing is unavailable). Existing marketplace installs keep the previous
+	// credential until the marketplace is republished.
+	MarketplaceUpdateDeferred *bool
+}
+
+type RotatedObservabilityKey struct {
+	// The API key ID.
+	ID string
+	// The API key name.
+	Name string
+	// The recognizable prefix of the previous key.
+	KeyPrefix string
+	// When this key stops authenticating. A key already inside a shorter grace
+	// window keeps its earlier deadline, so this can precede the rotation's own
+	// deadline. Absent when the key was revoked immediately.
+	ExpiresAt *string
+}
+
 // SetPluginAssignmentsPayload is the payload type of the plugins service
 // setPluginAssignments method.
 type SetPluginAssignmentsPayload struct {
@@ -388,6 +553,9 @@ type SetPluginAssignmentsPayload struct {
 	PluginID         string
 	// List of principal URNs to assign.
 	PrincipalUrns []string
+	// Install mode per principal URN in principal_urns. A principal missing from
+	// this map keeps its current mode, or gets `default` when it is newly assigned.
+	InstallModes map[string]string
 }
 
 // SetPluginAssignmentsResult is the result type of the plugins service
@@ -401,11 +569,15 @@ type SetPluginAssignmentsResult struct {
 // updateMarketplaceSettings method.
 type UpdateMarketplaceSettingsPayload struct {
 	// Override for the marketplace name (the identifier users type as
-	// `<plugin>@<marketplace>`). Pass an empty string or omit to clear the
-	// override and fall back to the default.
-	MarketplaceName  *string
-	SessionToken     *string
-	ProjectSlugInput *string
+	// `<plugin>@<marketplace>`). Pass an empty string to clear the override and
+	// fall back to the default. Omit to leave the current override unchanged.
+	MarketplaceName *string
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Omit to leave the current
+	// value unchanged.
+	ObservabilityEnabled *bool
+	SessionToken         *string
+	ProjectSlugInput     *string
 }
 
 // UpdateMarketplaceSettingsResult is the result type of the plugins service
@@ -435,6 +607,15 @@ type UpdatePluginPayload struct {
 	Slug string
 	// Updated description.
 	Description *string
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Omit to keep the current setting. Turning it off is refused while the plugin
+	// has changes that haven't been synced, and the slug can't change while it is
+	// off.
+	AutoSyncEnabled *bool
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Omit to keep the current setting. Turning it on adds the MCP
+	// servers its assigned roles can use now, except ones an admin removed before.
+	AutoAddServersEnabled *bool
 }
 
 // UpdatePluginServerPayload is the payload type of the plugins service
@@ -497,6 +678,11 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeUnavailable builds a goa.ServiceError from an error.
+func MakeUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unavailable", false, false, true)
 }
 
 // MakeFailedPrecondition builds a goa.ServiceError from an error.

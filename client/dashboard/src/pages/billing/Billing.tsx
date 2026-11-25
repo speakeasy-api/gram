@@ -1,3 +1,7 @@
+import { useBillingState } from "@/components/billing/use-billing-state";
+import { BillingTabs } from "@/components/billing/billing-tabs";
+import { Link, Navigate, useLocation } from "react-router";
+import { useSession } from "@/contexts/Auth";
 import { Page } from "@/components/page-layout";
 import { ProductTierBadge } from "@/components/product-tier-badge";
 import { productTierColors } from "@/components/product-tier-utils";
@@ -6,22 +10,20 @@ import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { ProductTier, useProductTier } from "@/hooks/useProductTier";
+import type { ProductTier } from "@/hooks/useProductTier";
+import { useProductTier } from "@/hooks/useProductTier";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { getServerURL } from "@/lib/utils";
-import { TierLimits } from "@gram/client/models/components/tierlimits.js";
+import type { TierLimits } from "@gram/client/models/components/tierlimits.js";
+import { useCreateCustomerSessionMutation } from "@gram/client/react-query/createCustomerSession.js";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage.js";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { useGetUsageTiers } from "@gram/client/react-query/getUsageTiers.js";
-import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
 import { BillingEmailSection } from "@/components/billing/billing-email-section";
@@ -30,14 +32,22 @@ import {
   PaygPaymentFailedBanner,
 } from "@/components/billing/billing-banners";
 import { InferenceCapsSection } from "@/components/billing/inference-caps-section";
-import { PaygCycleEstimate } from "@/components/billing/payg-cycle-estimate";
-import { PaygPlanSection } from "@/components/billing/payg-plan-section";
-import { PaygPriceList } from "@/components/billing/payg-price-list";
+import { Alert } from "@/components/ui/Alert";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
-import { TumAdminSection } from "@/components/billing/tum-admin-section";
-import { TumUsageSection } from "@/components/billing/tum-section";
+import { MeterUsageSection } from "@/components/billing/meter-usage-section";
+import { SpendBreakdownSection } from "@/components/billing/spend-breakdown-section";
 
 export default function Billing(): JSX.Element {
+  const location = useLocation();
+  const { organization } = useSession();
+  if (new URLSearchParams(location.search).has("session_id")) {
+    return (
+      <Navigate
+        to={`/${organization.slug}/billing/setup${location.search}`}
+        replace
+      />
+    );
+  }
   return (
     <Page>
       <Page.Header>
@@ -52,6 +62,13 @@ export default function Billing(): JSX.Element {
       </Page.Banner>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
+          <Page.Section>
+            <Page.Section.Title area="Organization">Billing</Page.Section.Title>
+            <Page.Section.Description>
+              Review your usage and spending, manage your plan, and update
+              payment details.
+            </Page.Section.Description>
+          </Page.Section>
           <BillingInner />
         </RequireScope>
       </Page.Body>
@@ -60,52 +77,79 @@ export default function Billing(): JSX.Element {
 }
 
 function BillingInner() {
+  const { organization } = useSession();
   const productTier = useProductTier();
-  const isPlatformAdmin = useIsPlatformAdmin();
+  const billing = useBillingState();
+  const activeTrial = billing.trialLifecycle === "active";
+  const needsSetup = billing.status === "needs-setup";
 
-  // Enterprise and pay as you go both bill on tokens under management, so they
-  // share one usage view: the TUM section, with the PAYG invoice estimate at
-  // its head for the tier Stripe is billing. Trials run on both tiers, so the
-  // pay-as-you-go price list and payment section sit on this shared path too —
-  // each owns its own trial rule.
+  const content = (
+    <Stack gap={6}>
+      {billing.status === "error" && (
+        <Alert variant="error">
+          <Text role="alert">Could not load your subscription.</Text>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={billing.subscription.isFetching}
+            onClick={() => void billing.subscription.refetch()}
+          >
+            Retry
+          </Button>
+        </Alert>
+      )}
+      {needsSetup && (
+        <Alert
+          variant="warning"
+          iconName="credit-card"
+          className="px-6 py-4 [&>div]:flex-1 [&>div>div:last-child]:min-w-0 [&>div>div:last-child]:flex-1"
+        >
+          <Stack
+            direction="horizontal"
+            align="center"
+            justify="space-between"
+            gap={3}
+          >
+            <Text>
+              {activeTrial
+                ? "Keep using Speakeasy after your trial ends. Add a payment method to avoid interruption."
+                : "Add a payment method to start using Speakeasy."}
+            </Text>
+            <Button asChild variant="primary" size="sm" className="shrink-0">
+              <Link to={`/${organization.slug}/billing/setup`}>
+                Add payment method
+              </Link>
+            </Button>
+          </Stack>
+        </Alert>
+      )}
+      <BillingUsage productTier={productTier} />
+      {/* Enterprise contracts handle notifications through their contract. */}
+      {productTier === "payg" && <BillingEmailSection />}
+    </Stack>
+  );
+  return <BillingTabs value="overview">{content}</BillingTabs>;
+}
+
+function BillingUsage({ productTier }: { productTier: ProductTier }) {
   if (productTier === "enterprise" || productTier === "payg") {
     return (
       <>
-        {/* The PAYG invoice estimate renders at the section's head; the
-            estimate owns its own tier rule and renders nothing elsewhere. */}
-        <TumUsageSection estimate={<PaygCycleEstimate />} />
-        {/* Renders for pay as you go, and for enterprise only during an
-            active trial — the section owns that rule. */}
+        <SpendBreakdownSection />
+        <MeterUsageSection />
+        {/* Enterprise inference caps render only during an active trial. */}
         <InferenceCapsSection />
-        {/* Renders only during an active trial — the section owns that rule. */}
-        <PaygPriceList />
-        {/* The checkout CTA during the trial, the subscription controls once
-            it has converted — the section owns that split. */}
-        <PaygPlanSection />
-        {/* Only pay-as-you-go organizations get product billing notifications;
-            enterprise contracts are billed through their contract terms. */}
-        {productTier === "payg" && <BillingEmailSection />}
-        {/* Contract settings (allowance, anchor day) are platform-staff
-            controls for enterprise contracts; Stripe owns them on PAYG. */}
-        {isPlatformAdmin && productTier === "enterprise" && <TumAdminSection />}
       </>
     );
   }
 
   return (
     <>
-      {/* The remaining self-serve tiers still meter against Polar period
-          usage, which says nothing about a Stripe invoice. */}
+      {/* Legacy self-serve tiers still meter against Polar period usage. */}
       <UsageSection />
-      {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
       {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (
         <UsageTiers />
       )}
-      {/* Trials run on the self-serve tiers too: a trialing admin gets the
-          same rates and payment section the shared path shows, and both
-          render nothing outside a trial here. */}
-      <PaygPriceList />
-      <PaygPlanSection />
     </>
   );
 }
@@ -155,7 +199,7 @@ const UsageSection = () => {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Usage</Page.Section.Title>
+      <Page.Section.Title area="">Usage</Page.Section.Title>
       <Page.Section.Description>
         A summary of your organization's usage this period. Please visit the
         billing portal to see complete details or manage your account.
@@ -230,125 +274,40 @@ const UsageSection = () => {
 const UsageTiers = () => {
   const productTier = useProductTier();
   const { data: usageTiers, isLoading } = useGetUsageTiers();
-  const client = useSdkClient();
   const telemetry = useTelemetry();
-  const [checkoutLink, setCheckoutLink] = useState("");
-  const [checkoutError, setCheckoutError] = useState(false);
-  const [isLoadingCheckout, setIsLoadingCheckout] = useState(true);
+  const customerSession = useCreateCustomerSessionMutation();
 
-  useEffect(() => {
-    const fetchCheckoutLink = async () => {
-      try {
-        const link = await client.usage.createCheckout();
-        if (!link) {
-          console.error("Failed to create checkout link: received empty link");
-          telemetry.capture("checkout_link_error", {
-            error: "Received empty checkout link",
-            accountType: productTier,
-          });
-          setCheckoutError(true);
-          return;
-        }
-        setCheckoutLink(link);
-        PolarEmbedCheckout.init();
-      } catch (error) {
-        console.error("Error creating checkout link:", error);
-        telemetry.capture("checkout_link_error", {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to create checkout link",
-          accountType: productTier,
-        });
-        setCheckoutError(true);
-      } finally {
-        setIsLoadingCheckout(false);
-      }
-    };
-
-    void fetchCheckoutLink();
-  }, [client, telemetry, productTier]);
-
-  const handleFallbackClick = useCallback(() => {
-    telemetry.capture("checkout_fallback_clicked", {
+  const reportCustomerSessionError = (error: string) => {
+    console.error("Error creating customer session:", error);
+    telemetry.capture("customer_session_error", {
+      error,
       accountType: productTier,
     });
-  }, [telemetry, productTier]);
+  };
 
-  const UpgradeCTA = useMemo(() => {
-    if (checkoutError) {
-      return (
-        <Page.Section.CTA>
-          <div className="isolate">
-            <Button asChild variant="primary">
-              <a
-                href="mailto:gram@speakeasyapi.dev?subject=Upgrade%20Account"
-                className="inline-flex"
-                onClick={handleFallbackClick}
-              >
-                ADD CARD
-              </a>
-            </Button>
-          </div>
-        </Page.Section.CTA>
-      );
-    }
-
-    return (
-      <Page.Section.CTA>
-        {/* Isolate is needed to get the rainbow working */}
-        <div className="isolate">
-          <Button disabled={isLoadingCheckout} asChild variant="primary">
-            <a
-              href={checkoutLink}
-              data-polar-checkout
-              data-polar-checkout-theme={"light"}
-              className="inline-flex"
-            >
-              ADD CARD
-            </a>
-          </Button>
-        </div>
-      </Page.Section.CTA>
+  const openPolarPortal = () => {
+    customerSession.mutate(
+      {},
+      {
+        onSuccess: (link) => {
+          if (!link) {
+            reportCustomerSessionError("Received empty customer session link");
+            return;
+          }
+          if (!openSafeExternalUrl(link)) {
+            reportCustomerSessionError(
+              "Customer session link was rejected or its tab was blocked",
+            );
+          }
+        },
+        onError: (error) => {
+          reportCustomerSessionError(
+            error.message || "Failed to create customer session",
+          );
+        },
+      },
     );
-  }, [checkoutLink, checkoutError, isLoadingCheckout, handleFallbackClick]);
-
-  const polarPortalCTA = (
-    <Page.Section.CTA>
-      <Button
-        onClick={() => {
-          void (async () => {
-            try {
-              const link = await client.usage.createCustomerSession();
-              if (!link) {
-                console.error(
-                  "Failed to create customer session: received empty link",
-                );
-                telemetry.capture("customer_session_error", {
-                  error: "Received empty customer session link",
-                  accountType: productTier,
-                });
-                return;
-              }
-              openSafeExternalUrl(link);
-            } catch (error) {
-              console.error("Error creating customer session:", error);
-              telemetry.capture("customer_session_error", {
-                error:
-                  error instanceof Error
-                    ? error.message
-                    : "Failed to create customer session",
-                accountType: productTier,
-              });
-            }
-          })();
-        }}
-        disabled={productTier === "enterprise"}
-      >
-        MANAGE BILLING
-      </Button>
-    </Page.Section.CTA>
-  );
+  };
 
   if (!usageTiers) {
     return <Cards isLoading={true} />;
@@ -461,7 +420,14 @@ const UsageTiers = () => {
         A breakdown of our pricing tiers.
       </Page.Section.Description>
       <RequireScope scope="org:admin" level="section">
-        {productTier === "base" ? UpgradeCTA : polarPortalCTA}
+        <Page.Section.CTA>
+          <Button
+            onClick={openPolarPortal}
+            disabled={customerSession.isPending}
+          >
+            Manage billing
+          </Button>
+        </Page.Section.CTA>
       </RequireScope>
       <Page.Section.Body>
         <Stack direction={"horizontal"} gap={4}>

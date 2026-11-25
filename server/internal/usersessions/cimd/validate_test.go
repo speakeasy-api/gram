@@ -11,7 +11,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
 // testDocument returns a document that passes every validateDocument check
@@ -575,4 +575,40 @@ func TestValidateDocument_UnknownExtensionFieldsAccepted(t *testing.T) {
 	require.NoError(t, err)
 	_, err = validateDocument(&doc, testClientID, parsed)
 	require.NoError(t, err)
+}
+
+// publicJWKSWithOps is testPublicJWKS with an explicit key_ops on its one key.
+func publicJWKSWithOps(t *testing.T, ops string) json.RawMessage {
+	t.Helper()
+
+	var set struct {
+		Keys []map[string]json.RawMessage `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(testPublicJWKS(t), &set))
+	require.Len(t, set.Keys, 1)
+	set.Keys[0]["key_ops"] = json.RawMessage(ops)
+	raw, err := json.Marshal(set)
+	require.NoError(t, err)
+	return raw
+}
+
+// An explicit key_ops naming verify keeps the key a usable signing key; one
+// that leaves verify out leaves the document with none.
+func TestValidateDocument_JWKSKeyOpsMustIncludeVerify(t *testing.T) {
+	t.Parallel()
+
+	parsed, err := ValidateClientIDURL(testClientID)
+	require.NoError(t, err)
+
+	verifies := testDocument(testClientID)
+	verifies.TokenEndpointAuthMethod = "private_key_jwt"
+	verifies.JWKS = publicJWKSWithOps(t, `["verify","encrypt"]`)
+	_, err = validateDocument(verifies, testClientID, parsed)
+	require.NoError(t, err)
+
+	signOnly := testDocument(testClientID)
+	signOnly.TokenEndpointAuthMethod = "private_key_jwt"
+	signOnly.JWKS = publicJWKSWithOps(t, `["sign"]`)
+	_, err = validateDocument(signOnly, testClientID, parsed)
+	requireValidationError(t, err, "invalid_client_metadata", reasonJWKSNoSigningKey)
 }

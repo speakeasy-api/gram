@@ -1,49 +1,81 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
-import { RankedBarList } from "@/components/chart/RankedBarList";
-import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
-import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Text } from "@/components/ui/Text";
-import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
-import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
-import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
-import { useGramContext } from "@gram/client/react-query/_context";
-import { unwrapAsync } from "@gram/client/types/fp";
-import { Stack } from "@/components/ui/Stack";
+import {
+  ObservabilityDisabledState,
+  ObservabilitySummaryTiles,
+} from "@/components/observe/ObservabilitySummaryTiles";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { PluginStatusBanner } from "./PluginStatusBanner";
-import { TopUsersTable } from "./TopUsersTable";
+import { Link } from "react-router";
 
-// Both toolset-backed and remote-MCP-backed servers render through this same
-// dashboard — the telemetry/plugin-membership backends already key off
-// either id generically (see PluginServer.toolsetId/mcpServerId and
-// GetObservabilityOverviewPayload.toolsetSlug's dual-purpose doc comment), so
-// this ref is the minimal shared shape both variants can produce.
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta";
+import { RankedBarList } from "@/components/chart/RankedBarList";
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Stack } from "@/components/ui/Stack";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
+import { TopUsersTable } from "./TopUsersTable";
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
+import { overviewScope } from "./overview-scope";
+import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
+import { getPresetRange } from "@/elements";
+import { useGramContext } from "@gram/client/react-query/_context";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
+import { useProject } from "@/contexts/Auth";
+import { useObserveLogsLink } from "@/components/observe/observeDeepLink";
+import type { ParsedTargetFilter } from "@/components/observe/observeTargetFilters";
+
+// Both variants share the dashboard, but overview telemetry must use the
+// variant's own scope: toolset slug or remote MCP server ID.
 export type HostedServerRef =
   | { kind: "toolset"; id: string; slug: string; name: string }
   | { kind: "mcp-server"; id: string; slug: string; name: string };
+
+// Thin rows where the top-tools bars will land, instead of an empty-state
+// message that would claim there were no calls before the data arrives.
+function RankedBarListSkeleton(): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-3" aria-hidden="true">
+      {["w-[90%]", "w-[70%]", "w-1/2", "w-[35%]"].map((width) => (
+        <Skeleton key={width} className={`h-4 ${width}`} />
+      ))}
+    </div>
+  );
+}
+
+export const OVERVIEW_STALE_TIME_MS = 5 * 60_000;
+
+/**
+ * A preset ("last 7 days") is keyed by its name, not its timestamps, so
+ * coming back to the tab reuses the cached result however long ago it was
+ * fetched. The window itself is resolved when the request is sent.
+ */
+export type OverviewRange = {
+  key: readonly string[];
+  resolve: () => { from: Date; to: Date };
+};
 
 function toolLabelFromUrn(urn: string): string {
   const parts = urn.split(":");
   return parts[parts.length - 1] || urn;
 }
 
-function errorRate(summary: ObservabilitySummary): number {
-  return summary.totalToolCalls > 0
-    ? (summary.failedToolCalls / summary.totalToolCalls) * 100
-    : 0;
-}
-
 export function MCPOverviewTab({
   server,
+  logsTarget,
+  toolbarStart,
 }: {
   server: HostedServerRef;
+  logsTarget?: ParsedTargetFilter | null;
+  /** Shown at the start of the row that holds View logs and the range. */
+  toolbarStart?: React.ReactNode;
 }): React.JSX.Element {
   const client = useGramContext();
+  const project = useProject();
+  const observeLogsLink = useObserveLogsLink();
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
   const {
@@ -57,27 +89,47 @@ export function MCPOverviewTab({
     clearCustomRange,
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
+  const range = useMemo<OverviewRange>(
+    () =>
+      customRange
+        ? {
+            key: [customRange.from.toISOString(), customRange.to.toISOString()],
+            resolve: () => customRange,
+          }
+        : { key: [dateRange], resolve: () => getPresetRange(dateRange) },
+    [customRange, dateRange],
+  );
 
-  const { data, isLoading, isError, isLogsDisabled } = useLogsEnabledErrorCheck(
+  const {
+    data,
+    isLoading,
+    isPlaceholderData,
+    isError,
+    isLogsDisabled,
+    refetch,
+  } = useLogsEnabledErrorCheck(
     useQuery<GetObservabilityOverviewResult>({
       queryKey: [
         "mcp-detail-overview",
+        server.kind,
+        server.id,
         server.slug,
-        from.toISOString(),
-        to.toISOString(),
+        ...range.key,
       ],
       queryFn: () =>
         unwrapAsync(
           telemetryGetObservabilityOverview(client, {
             getObservabilityOverviewPayload: {
-              from,
-              to,
-              toolsetSlug: server.slug,
+              ...range.resolve(),
+              ...overviewScope(server),
               includeTimeSeries: true,
             },
           }),
         ),
       placeholderData: keepPreviousData,
+      // Usage moves slowly; coming back within a few minutes shows the
+      // cached figures at once and refreshes them in the background.
+      staleTime: OVERVIEW_STALE_TIME_MS,
       throwOnError: false,
     }),
   );
@@ -85,41 +137,72 @@ export function MCPOverviewTab({
   // With keepPreviousData a failed refetch still has stale data to show, so
   // only fall back to the error state when there is nothing to render at all.
   const showQueryError = isError && !data;
+  // Placeholder data is the previous range's result, and its bars would link
+  // to the new range, so the lists wait for the selected range to arrive.
+  const toolsLoading = isLoading || isPlaceholderData;
 
   const summary = data?.summary;
   const comparison = data?.comparison;
   const timeSeries = useMemo(() => data?.timeSeries ?? [], [data]);
+  const toolLogsTarget =
+    server.kind === "toolset"
+      ? ({ type: "hosted", id: server.slug } satisfies ParsedTargetFilter)
+      : logsTarget;
+  // Carries the selected time range, so the logs open on the same window.
+  const serverLogsHref = toolLogsTarget
+    ? observeLogsLink({ target: toolLogsTarget })
+    : undefined;
 
-  const topByCount = useMemo(
-    () =>
-      (data?.topToolsByCount ?? []).map((tool) => ({
+  const topByCount = (data?.topToolsByCount ?? []).map((tool) => {
+    const toolName = toolLabelFromUrn(tool.gramUrn);
+    return {
+      key: tool.gramUrn,
+      label: toolName,
+      value: tool.callCount,
+      href: toolLogsTarget
+        ? observeLogsLink({ target: toolLogsTarget, toolName })
+        : undefined,
+    };
+  });
+
+  const topByFailureRate = (data?.topToolsByFailureRate ?? [])
+    .filter((tool) => tool.failureCount > 0)
+    .map((tool) => {
+      const toolName = toolLabelFromUrn(tool.gramUrn);
+      return {
         key: tool.gramUrn,
-        label: toolLabelFromUrn(tool.gramUrn),
-        value: tool.callCount,
-      })),
-    [data],
-  );
-
-  const topByFailureRate = useMemo(
-    () =>
-      (data?.topToolsByFailureRate ?? [])
-        .filter((tool) => tool.failureCount > 0)
-        .map((tool) => ({
-          key: tool.gramUrn,
-          label: toolLabelFromUrn(tool.gramUrn),
-          value: tool.failureRate * 100,
-          valueLabel: `${(tool.failureRate * 100).toFixed(1)}%`,
-        })),
-    [data],
-  );
+        label: toolName,
+        value: tool.failureRate * 100,
+        valueLabel: `${(tool.failureRate * 100).toFixed(1)}%`,
+        href: toolLogsTarget
+          ? observeLogsLink({ target: toolLogsTarget, toolName })
+          : undefined,
+      };
+    });
 
   return (
     // Container queries, not viewport ones: the side panel narrows this column
     // without narrowing the window, and `lg:`/`xl:` would not notice.
     <Stack gap={6} className="@container mb-4">
-      <PluginStatusBanner server={server} />
+      {!isLoading && !isLogsDisabled && (
+        <MemberWorkflowCTA
+          workflow="mcp_diagnostics"
+          label="Troubleshoot in your agent"
+          description="Investigate this server's recent failures with Platform MCP."
+          scope="project:read"
+          resourceId={project.id}
+          projectSlug={project.slug}
+          prompt={`Using Platform MCP, investigate recent failures for the MCP server ${JSON.stringify(server.name)} in project ${JSON.stringify(project.slug)}. Start with the project overview, then inspect this server's diagnostics and recent call summaries. Explain what the evidence supports and suggest next steps. Do not change configuration.`}
+        />
+      )}
 
-      <div className="flex justify-end">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">{toolbarStart}</div>
+        {serverLogsHref && (
+          <Button asChild variant="secondary">
+            <Link to={serverLogsHref}>View logs</Link>
+          </Button>
+        )}
         <TimeRangePicker
           preset={customRange ? null : dateRange}
           customRange={customRange}
@@ -131,77 +214,34 @@ export function MCPOverviewTab({
       </div>
 
       {isLogsDisabled && (
-        <div className="flex flex-col items-center justify-center border p-12 text-center">
-          <Text muted className="mb-1 block">
-            Observability is not enabled
-          </Text>
-          <Text muted small>
-            Enable logs for this organization to see usage for this MCP server.
-          </Text>
-        </div>
+        <ObservabilityDisabledState subject="this MCP server" />
       )}
       {!isLogsDisabled && showQueryError && (
-        <div className="flex flex-col items-center justify-center border p-12 text-center">
-          <Text muted className="mb-1 block">
-            Could not load usage data
-          </Text>
-          <Text muted small>
-            Something went wrong loading metrics for this MCP server. Try
-            refreshing the page or changing the time range.
-          </Text>
+        <div role="alert">
+          <InlineEmptyState
+            icon="triangle-alert"
+            heading="Couldn't load usage"
+            description="Check your connection, then try again."
+            action={
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refetch()}
+              >
+                <Button.Text>Retry</Button.Text>
+              </Button>
+            }
+          />
         </div>
       )}
       {!isLogsDisabled && !showQueryError && (
         <>
-          <StatTileGroup>
-            {isLoading && !summary ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-[116px] flex-1" />
-              ))
-            ) : (
-              <>
-                <StatTile
-                  title="Tool calls"
-                  value={summary?.totalToolCalls ?? 0}
-                  tone="information"
-                  previousValue={comparison?.totalToolCalls}
-                  format="compact"
-                  comparisonLabel="vs previous period"
-                />
-                <StatTile
-                  title="Failed calls"
-                  value={summary?.failedToolCalls ?? 0}
-                  tone={
-                    (summary?.failedToolCalls ?? 0) > 0
-                      ? "destructive"
-                      : "neutral"
-                  }
-                  previousValue={comparison?.failedToolCalls}
-                  format="compact"
-                  invertDelta
-                  comparisonLabel="vs previous period"
-                />
-                <StatTile
-                  title="Error rate"
-                  value={summary ? errorRate(summary) : 0}
-                  previousValue={comparison ? errorRate(comparison) : undefined}
-                  format="percent"
-                  invertDelta
-                  thresholds={{ red: 10, amber: 5, inverted: true }}
-                  comparisonLabel="vs previous period"
-                />
-                <StatTile
-                  title="Avg latency"
-                  value={summary?.avgLatencyMs ?? 0}
-                  tone="information"
-                  previousValue={comparison?.avgLatencyMs}
-                  format="ms"
-                  invertDelta
-                  comparisonLabel="vs previous period"
-                />
-              </>
-            )}
-          </StatTileGroup>
+          <ObservabilitySummaryTiles
+            summary={summary}
+            comparison={comparison}
+            isLoading={isLoading}
+            callsTitle="Tool calls"
+          />
 
           <ToolCallsTimeSeriesChart
             title="Tool calls over time"
@@ -210,12 +250,15 @@ export function MCPOverviewTab({
             timeRangeMs={timeRangeMs}
             expandedChart={expandedChart}
             onExpand={setExpandedChart}
+            isLoading={isLoading}
           />
 
           <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
             <div className="border p-5">
               <h3 className="text-eyebrow mb-3">Top tools by call count</h3>
-              {topByCount.length > 0 ? (
+              {toolsLoading ? (
+                <RankedBarListSkeleton />
+              ) : topByCount.length > 0 ? (
                 <RankedBarList items={topByCount} />
               ) : (
                 <WidgetEmptyState message="No tool calls in the selected range." />
@@ -223,7 +266,9 @@ export function MCPOverviewTab({
             </div>
             <div className="border p-5">
               <h3 className="text-eyebrow mb-3">Top tools by failure rate</h3>
-              {topByFailureRate.length > 0 ? (
+              {toolsLoading ? (
+                <RankedBarListSkeleton />
+              ) : topByFailureRate.length > 0 ? (
                 <RankedBarList items={topByFailureRate} />
               ) : (
                 <WidgetEmptyState message="No failed tool calls in the selected range." />
@@ -231,7 +276,7 @@ export function MCPOverviewTab({
             </div>
           </div>
 
-          <TopUsersTable toolsetSlug={server.slug} from={from} to={to} />
+          <TopUsersTable server={server} range={range} />
         </>
       )}
     </Stack>

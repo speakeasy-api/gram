@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -148,6 +147,9 @@ func TestRiskMutationAdmissionConnectionlessAssistantUsesOrganizationBudget(t *t
 
 	require.NoError(t, err)
 	require.Equal(t, project, resolved)
+	require.Empty(t, organization.keys, "admission alone never charges: a replay must stay free")
+
+	require.NoError(t, controls.Charge(principal)(t.Context()))
 	require.Equal(t, []string{"organization"}, organization.keys)
 }
 
@@ -188,6 +190,49 @@ func TestPrepareRiskExclusionCreateRejectsWhitespaceOnlyExactValue(t *testing.T)
 	var mutation *RiskMutationError
 	require.ErrorAs(t, err, &mutation)
 	require.Equal(t, "invalid_request", mutation.Code)
+}
+
+func TestPrepareRiskExclusionCreateEnforcesMatchTypeRules(t *testing.T) {
+	t.Parallel()
+
+	catalog, err := policycatalog.Build()
+	require.NoError(t, err)
+	service := newRiskExclusionMutationService(nil, nil, catalog)
+	rule, source, entity := catalog.DisabledRules[0], catalog.Sources[0], catalog.PresidioEntities[0]
+	for name, test := range map[string]struct {
+		input   createRiskExclusionInput
+		refusal string
+	}{
+		"exact with filters":            {input: createRiskExclusionInput{MatchType: "exact", MatchValue: "sk_test_EXAMPLE", RuleIDFilter: rule, SourceFilter: source}},
+		"rule_id":                       {input: createRiskExclusionInput{MatchType: "rule_id", MatchValue: rule, SourceFilter: source}},
+		"source":                        {input: createRiskExclusionInput{MatchType: "source", MatchValue: source, RuleIDFilter: rule}},
+		"entity_type":                   {input: createRiskExclusionInput{MatchType: "entity_type", MatchValue: entity}},
+		"unknown match type":            {input: createRiskExclusionInput{MatchType: "glob", MatchValue: "x"}, refusal: "match_type must be exact, rule_id, source or entity_type."},
+		"exact with unknown rule":       {input: createRiskExclusionInput{MatchType: "exact", MatchValue: "x", RuleIDFilter: "not-a-rule"}, refusal: "rule_id_filter is not a known detector rule."},
+		"rule_id with unknown rule":     {input: createRiskExclusionInput{MatchType: "rule_id", MatchValue: "not-a-rule"}, refusal: "match_value must be a known detector rule"},
+		"rule_id with rule filter":      {input: createRiskExclusionInput{MatchType: "rule_id", MatchValue: rule, RuleIDFilter: rule}, refusal: "match_type rule_id takes no rule_id_filter."},
+		"source with unknown source":    {input: createRiskExclusionInput{MatchType: "source", MatchValue: "not-a-source"}, refusal: "match_value must be a known detector source"},
+		"source with source filter":     {input: createRiskExclusionInput{MatchType: "source", MatchValue: source, SourceFilter: source}, refusal: "match_type source takes no source_filter."},
+		"entity_type with unknown":      {input: createRiskExclusionInput{MatchType: "entity_type", MatchValue: "NOT_AN_ENTITY"}, refusal: "known Presidio entity type"},
+		"entity_type with rule filter":  {input: createRiskExclusionInput{MatchType: "entity_type", MatchValue: entity, RuleIDFilter: rule}, refusal: "takes no rule_id_filter"},
+		"entity_type with other source": {input: createRiskExclusionInput{MatchType: "entity_type", MatchValue: entity, SourceFilter: "gitleaks"}, refusal: "source_filter presidio or none"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			input := test.input
+			input.ProjectSlug, input.Enabled, input.IdempotencyKey = "project", true, "key"
+			_, err := service.prepareCreate(Principal{OrganizationID: "<ORG_ID>"}, ResolvedProject{ID: uuid.New(), Slug: "project"}, input)
+			if test.refusal == "" {
+				require.NoError(t, err)
+				return
+			}
+			var mutation *RiskMutationError
+			require.ErrorAs(t, err, &mutation)
+			require.Equal(t, "invalid_request", mutation.Code)
+			require.Contains(t, mutation.Message, test.refusal)
+			require.Contains(t, mutation.Message, "No exclusion was created.")
+		})
+	}
 }
 
 func TestRiskMutationInputHashIsCanonicalAndOperationSeparated(t *testing.T) {
@@ -252,13 +297,6 @@ func TestRiskVersionTokensAreOpaqueAndStateSensitive(t *testing.T) {
 	require.Equal(t, token, canonical, "canonical ordering must include the complete detection scope state")
 	require.NotContains(t, token, prompt)
 	require.True(t, codec.ValidPolicyVersion(state, token))
-	pending, total := int64(3), int64(10)
-	progressOnly := state
-	progressOnly.Policy.PendingMessages = &pending
-	progressOnly.Policy.TotalMessages = &total
-	progressToken, err := codec.PolicyVersion(progressOnly)
-	require.NoError(t, err)
-	require.Equal(t, token, progressToken, "read-time analysis progress is not policy concurrency state")
 	policy.Enabled = true
 	require.False(t, codec.ValidPolicyVersion(RiskPolicyVersionState{Policy: policy, AnalyzerConfig: state.AnalyzerConfig, AllowedURLGrants: state.AllowedURLGrants, BlockedURLGrants: state.BlockedURLGrants, StandingDecisionState: state.StandingDecisionState}, token))
 	grantChanged := state
@@ -437,20 +475,25 @@ func TestRiskMutationHandlerSelectionDefaultsEveryWriteToStableRefusal(t *testin
 	require.NoError(t, err)
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
+	bindExternalTestPrincipal(server)
 	registrar := newRegistrar(server)
+	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerRiskMutationHandlers(registrar, catalog, true, &RiskMutationHandlers{})
-	for _, name := range []string{operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion} {
+	for _, name := range []string{operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion, operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {
 		require.Contains(t, descriptorByName(t, registrar, name).Description, "not enabled")
 	}
 	arguments := map[string]json.RawMessage{
-		"create_risk_policy":    json.RawMessage(`{"project_slug":"default","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`),
-		"update_risk_policy":    json.RawMessage(`{"project_slug":"default","policy_id":"11111111-1111-4111-8111-111111111111","expected_version":"version","idempotency_key":"key","patch":{"enabled":true}}`),
-		"create_risk_exclusion": json.RawMessage(`{"project_slug":"default","match_type":"source","match_value":"gitleaks","enabled":true,"idempotency_key":"key"}`),
-		"update_risk_exclusion": json.RawMessage(`{"project_slug":"default","exclusion_id":"11111111-1111-4111-8111-111111111111","enabled":true,"expected_version":"version","idempotency_key":"key"}`),
+		"create_risk_policy":                     json.RawMessage(`{"project_slug":"default","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`),
+		"update_risk_policy":                     json.RawMessage(`{"project_slug":"default","policy_id":"11111111-1111-4111-8111-111111111111","expected_version":"version","idempotency_key":"key","patch":{"enabled":true}}`),
+		"create_risk_exclusion":                  json.RawMessage(`{"project_slug":"default","match_type":"source","match_value":"gitleaks","enabled":true,"idempotency_key":"key"}`),
+		"update_risk_exclusion":                  json.RawMessage(`{"project_slug":"default","exclusion_id":"11111111-1111-4111-8111-111111111111","enabled":true,"expected_version":"version","idempotency_key":"key"}`),
+		operationMarkRiskFindingsFalsePositive:   json.RawMessage(`{"project_slug":"default","finding_ids":["11111111-1111-4111-8111-111111111111"],"confirmed":true,"idempotency_key":"key"}`),
+		operationUnmarkRiskFindingsFalsePositive: json.RawMessage(`{"project_slug":"default","finding_ids":["11111111-1111-4111-8111-111111111111"],"confirmed":true,"idempotency_key":"key"}`),
 	}
+	require.Len(t, arguments, 6, "every risk write must be exercised against its stub")
 	for _, descriptor := range registrar.Descriptors() {
 		input, ok := arguments[descriptor.Name]
-		if !ok || (!strings.HasPrefix(descriptor.Name, "create_risk_") && !strings.HasPrefix(descriptor.Name, "update_risk_")) {
+		if !ok {
 			continue
 		}
 		_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), input)

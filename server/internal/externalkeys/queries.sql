@@ -7,14 +7,18 @@
 -- row lock would leave a TOCTOU window where a concurrent soft delete commits
 -- between this read and the key write, producing a live key against a deleted
 -- credential. FOR SHARE holds the credential row until the key write commits.
+-- skip_project_verification lets the caller refuse an exempted credential.
 -- name: GetExternalCredentialProviderForKey :one
-SELECT provider
-FROM external_credentials
-WHERE id = @external_credential_id
-  AND organization_id = @organization_id
-  AND deleted IS FALSE
-  AND project_id IS NULL
-FOR SHARE;
+SELECT
+  ec.provider,
+  COALESCE(gic.skip_project_verification, FALSE)::boolean AS skip_project_verification
+FROM external_credentials AS ec
+LEFT JOIN gcp_iam_credentials AS gic ON gic.external_credential_id = ec.id
+WHERE ec.id = @external_credential_id
+  AND ec.organization_id = @organization_id
+  AND ec.deleted IS FALSE
+  AND ec.project_id IS NULL
+FOR SHARE OF ec;
 
 -- name: CreateExternalKey :one
 INSERT INTO external_keys (
@@ -23,14 +27,16 @@ INSERT INTO external_keys (
   provider,
   algorithm,
   name,
-  customer_grant_reference
+  customer_grant_reference,
+  identity_provider_connection_id
 ) VALUES (
   @organization_id,
   @external_credential_id,
   @provider,
   @algorithm,
   @name,
-  sqlc.narg('customer_grant_reference')
+  sqlc.narg('customer_grant_reference'),
+  sqlc.narg('identity_provider_connection_id')
 )
 RETURNING *;
 
@@ -51,6 +57,7 @@ JOIN aws_kms_keys AS aws ON aws.external_key_id = ek.id
 WHERE ek.id = @id
   AND ek.organization_id = @organization_id
   AND ek.provider = 'aws_kms'
+  AND ek.purpose = 'sign'
   AND ek.deleted IS FALSE;
 
 -- name: GetGcpKmsKey :one
@@ -60,6 +67,8 @@ JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
 WHERE ek.id = @id
   AND ek.organization_id = @organization_id
   AND ek.provider = 'gcp_kms'
+  AND ek.purpose = 'sign'
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE;
 
 -- Loads everything the verify probe needs in one read: the key, its provider
@@ -104,15 +113,31 @@ LEFT JOIN gcp_iam_credentials AS gic
 WHERE ek.id = @id
   AND ek.organization_id = @organization_id
   AND ek.provider = 'gcp_kms'
+  AND ek.purpose = 'sign'
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE;
 
+-- Keys left behind by a tombstoned identity provider connection are hidden;
+-- they stay reachable by id so the organization can delete them. Like every
+-- external_keys read and write in this file, it is scoped to purpose 'sign':
+-- encryption keys protect organization data and are managed only through the
+-- organization encryption service, which refuses to drop one still in use.
 -- name: ListExternalKeys :many
 SELECT *
-FROM external_keys
-WHERE organization_id = @organization_id
-  AND deleted IS FALSE
-  AND (sqlc.narg('provider')::text IS NULL OR provider = sqlc.narg('provider')::text)
-ORDER BY id DESC;
+FROM external_keys AS ek
+WHERE ek.organization_id = @organization_id
+  AND ek.purpose = 'sign'
+  AND ek.deleted IS FALSE
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
+  AND (sqlc.narg('provider')::text IS NULL OR ek.provider = sqlc.narg('provider')::text)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM identity_provider_connections AS ipc
+    WHERE ipc.id = ek.identity_provider_connection_id
+      AND ipc.organization_id = ek.organization_id
+      AND ipc.deleted IS TRUE
+  )
+ORDER BY ek.id DESC;
 
 -- Updates only the mutable columns. algorithm is absent on purpose, alongside
 -- the subtype identity columns (aws_kms_keys.key_arn, gcp_kms_keys.resource_name)
@@ -127,9 +152,11 @@ SET external_credential_id = @external_credential_id,
     name = @name,
     customer_grant_reference = sqlc.narg('customer_grant_reference'),
     updated_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND deleted IS FALSE
+WHERE external_keys.id = @id
+  AND external_keys.organization_id = @organization_id
+  AND external_keys.purpose = 'sign'
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
+  AND external_keys.deleted IS FALSE
 RETURNING *;
 
 -- Locks the external key row so the JWKS reference check below cannot be raced
@@ -141,13 +168,15 @@ RETURNING *;
 -- check and the soft delete. The JWKS create path takes the counterpart
 -- FOR SHARE on this row (AIS-240).
 -- name: LockExternalKeyForDelete :one
-SELECT id
+SELECT external_keys.id, external_keys.identity_provider_connection_id
 FROM external_keys
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND provider = @provider
-  AND deleted IS FALSE
-FOR UPDATE;
+WHERE external_keys.id = @id
+  AND external_keys.organization_id = @organization_id
+  AND external_keys.provider = @provider
+  AND external_keys.purpose = 'sign'
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
+  AND external_keys.deleted IS FALSE
+FOR UPDATE OF external_keys;
 
 -- Reports whether any live JSON Web Key Set or published JSON Web Key still
 -- references the external key. Run inside the delete transaction, after
@@ -192,8 +221,10 @@ SELECT EXISTS (
 -- name: SoftDeleteExternalKey :one
 UPDATE external_keys
 SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND provider = @provider
-  AND deleted IS FALSE
+WHERE external_keys.id = @id
+  AND external_keys.organization_id = @organization_id
+  AND external_keys.provider = @provider
+  AND external_keys.purpose = 'sign'
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
+  AND external_keys.deleted IS FALSE
 RETURNING *;

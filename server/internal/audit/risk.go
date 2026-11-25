@@ -14,6 +14,9 @@ import (
 )
 
 const (
+	ActionRiskPolicyApprovalApprove      Action = "risk_policy:approval_approve"
+	ActionRiskPolicyApprovalDeny         Action = "risk_policy:approval_deny"
+	ActionRiskPolicyApprovalRequest      Action = "risk_policy:approval_request"
 	ActionRiskPolicyBypassRequestApprove Action = "risk_policy:bypass_request_approve"
 	ActionRiskPolicyBypassRequestCreate  Action = "risk_policy:bypass_request_create"
 	ActionRiskPolicyBypassRequestDeny    Action = "risk_policy:bypass_request_deny"
@@ -71,13 +74,14 @@ type LogRiskPolicyCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 
 func (l *Logger) LogRiskPolicyCreate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyCreateEvent) error {
 	action := ActionRiskPolicyCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -109,7 +113,7 @@ type LogRiskPolicyUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 
 	SnapshotBefore *types.RiskPolicy
@@ -130,6 +134,7 @@ func (l *Logger) LogRiskPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -161,13 +166,14 @@ type LogRiskPolicyDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 
 func (l *Logger) LogRiskPolicyDelete(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyDeleteEvent) error {
 	action := ActionRiskPolicyDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -199,13 +205,14 @@ type LogRiskPolicyTriggerEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 
 func (l *Logger) LogRiskPolicyTrigger(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyTriggerEvent) error {
 	action := ActionRiskPolicyTrigger
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -237,7 +244,7 @@ type LogRiskPolicyEvalReviewEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 	Metadata       *RiskPolicyEvalReviewMetadata
 }
@@ -257,6 +264,7 @@ func (l *Logger) logRiskPolicyEvalReview(ctx context.Context, dbtx repo.DBTX, ac
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -288,7 +296,7 @@ type LogRiskPolicyBypassRequestEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 
 	PolicyBypassRequestSnapshotBefore *RiskPolicyBypassRequestSnapshot
@@ -329,6 +337,7 @@ func (l *Logger) logRiskPolicyBypassRequest(ctx context.Context, dbtx repo.DBTX,
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -360,7 +369,7 @@ type LogRiskPolicyChallengeAcknowledgeEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 
@@ -368,6 +377,7 @@ type LogRiskPolicyChallengeAcknowledgeEvent struct {
 // warn (challenge) policy. Log-safe fields only — never the matched value.
 func (l *Logger) LogRiskPolicyChallengeAcknowledge(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyChallengeAcknowledgeEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -385,6 +395,92 @@ func (l *Logger) LogRiskPolicyChallengeAcknowledge(ctx context.Context, dbtx rep
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RiskPolicyV1})
+}
+
+// RiskPolicyApprovalSnapshot is the audited state of one approval request. It
+// leaves out the request token and the call's arguments.
+type RiskPolicyApprovalSnapshot struct {
+	ID             string  `json:"id"`
+	PolicyID       string  `json:"policy_id"`
+	PolicyVersion  int64   `json:"policy_version"`
+	Status         string  `json:"status"`
+	RequesterURN   string  `json:"requester_urn"`
+	Surface        string  `json:"surface"`
+	ToolName       string  `json:"tool_name"`
+	Reason         *string `json:"reason,omitempty"`
+	RequestedScope *string `json:"requested_scope,omitempty"`
+	GrantedScope   *string `json:"granted_scope,omitempty"`
+	DecidedByURN   *string `json:"decided_by_urn,omitempty"`
+	DecidedVia     *string `json:"decided_via,omitempty"`
+	DecisionNote   *string `json:"decision_note,omitempty"`
+	RequestedAt    *string `json:"requested_at,omitempty"`
+	DecidedAt      *string `json:"decided_at,omitempty"`
+	ExpiresAt      *string `json:"expires_at,omitempty"`
+}
+
+// LogRiskPolicyApprovalEvent records one step of an approval request: the
+// agent filing it, or an approver deciding it.
+type LogRiskPolicyApprovalEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyName string
+
+	ApprovalSnapshotBefore *RiskPolicyApprovalSnapshot
+	ApprovalSnapshotAfter  *RiskPolicyApprovalSnapshot
+}
+
+func (l *Logger) LogRiskPolicyApprovalRequest(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyApprovalEvent) error {
+	return l.logRiskPolicyApproval(ctx, dbtx, ActionRiskPolicyApprovalRequest, event)
+}
+
+func (l *Logger) LogRiskPolicyApprovalApprove(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyApprovalEvent) error {
+	return l.logRiskPolicyApproval(ctx, dbtx, ActionRiskPolicyApprovalApprove, event)
+}
+
+func (l *Logger) LogRiskPolicyApprovalDeny(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyApprovalEvent) error {
+	return l.logRiskPolicyApproval(ctx, dbtx, ActionRiskPolicyApprovalDeny, event)
+}
+
+func (l *Logger) logRiskPolicyApproval(ctx context.Context, dbtx repo.DBTX, action Action, event LogRiskPolicyApprovalEvent) error {
+	beforeSnapshot, err := marshalAuditPayload(event.ApprovalSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(event.ApprovalSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.RiskPolicyID.String(),
+		SubjectType:        string(subjectTypeRiskPolicy),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.RiskPolicyName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 

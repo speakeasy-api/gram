@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	ActionUserSessionIssuerCreate Action = "user-session-issuer:create"
-	ActionUserSessionIssuerUpdate Action = "user-session-issuer:update"
-	ActionUserSessionIssuerDelete Action = "user-session-issuer:delete"
+	ActionUserSessionIssuerCreate  Action = "user-session-issuer:create"
+	ActionUserSessionIssuerUpdate  Action = "user-session-issuer:update"
+	ActionUserSessionIssuerDelete  Action = "user-session-issuer:delete"
+	ActionUserSessionIssuerMigrate Action = "user-session-issuer:migrate"
 )
 
 type LogUserSessionIssuerCreateEvent struct {
@@ -27,13 +28,19 @@ type LogUserSessionIssuerCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	UserSessionIssuerURN urn.UserSessionIssuer
-	Slug                 string
+	UserSessionIssuerURN           urn.UserSessionIssuer
+	Slug                           string
+	UserSessionIssuerSnapshotAfter *types.UserSessionIssuer
 }
 
 func (l *Logger) LogUserSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerCreateEvent) error {
 	action := ActionUserSessionIssuerCreate
+	afterSnapshot, err := marshalAuditPayload(event.UserSessionIssuerSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -50,7 +57,7 @@ func (l *Logger) LogUserSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX,
 		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),
 
 		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 
@@ -85,6 +92,7 @@ func (l *Logger) LogUserSessionIssuerUpdate(ctx context.Context, dbtx repo.DBTX,
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -108,6 +116,131 @@ func (l *Logger) LogUserSessionIssuerUpdate(ctx context.Context, dbtx repo.DBTX,
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionIssuerV1})
 }
 
+// LogUserSessionIssuerMigrateEvent records the source issuer as the subject
+// because it is the row that is retired by the consolidation.
+type LogUserSessionIssuerMigrateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SourceUserSessionIssuerURN urn.UserSessionIssuer
+	SourceSlug                 string
+	TargetUserSessionIssuerURN urn.UserSessionIssuer
+	TargetSlug                 string
+
+	ClientsMigrated        int64
+	SessionsMigrated       int64
+	ConsentsMigrated       int64
+	CimdClientsMigrated    int64
+	RemoteSessionsMigrated int64
+
+	// PinnedAssociations are the MCP server upstream client associations the
+	// consolidation wrote before moving the servers, because their current
+	// configuration proved them.
+	PinnedAssociations []UserSessionIssuerMigrationPin
+
+	// DroppedClientLinks are the remote session clients the source bound that
+	// the consolidation did not carry to the target.
+	DroppedClientLinks []uuid.UUID
+
+	// MergedClientIDs are the OAuth client_ids both issuers held whose source
+	// client was retired in favor of the target's client for the same id.
+	MergedClientIDs []string
+
+	// ServerImpacts summarize how the consolidation changed each affected MCP
+	// server's upstream clients.
+	ServerImpacts []UserSessionIssuerMigrationServerImpact
+
+	UserSessionIssuerSnapshotBefore *types.UserSessionIssuer
+	UserSessionIssuerSnapshotAfter  *types.UserSessionIssuer
+}
+
+// UserSessionIssuerMigrationPin is one association a consolidation wrote
+// before it moved the server.
+type UserSessionIssuerMigrationPin struct {
+	// MCPServerID is the server associated.
+	MCPServerID uuid.UUID `json:"mcp_server_id"`
+
+	// RemoteSessionClientID is the upstream client associated with it.
+	RemoteSessionClientID uuid.UUID `json:"remote_session_client_id"`
+}
+
+// UserSessionIssuerMigrationServerImpact is how a consolidation changed one
+// MCP server's upstream clients.
+type UserSessionIssuerMigrationServerImpact struct {
+	// MCPServerID is the server.
+	MCPServerID uuid.UUID `json:"mcp_server_id"`
+
+	// Severity is blocker, warning, or info.
+	Severity string `json:"severity"`
+
+	// Reasons say why the server was listed.
+	Reasons []string `json:"reasons"`
+
+	// ClientsBefore are the remote session clients it used before.
+	ClientsBefore []uuid.UUID `json:"clients_before"`
+
+	// ClientsAfter are the remote session clients it uses after.
+	ClientsAfter []uuid.UUID `json:"clients_after"`
+}
+
+func (l *Logger) LogUserSessionIssuerMigrate(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerMigrateEvent) error {
+	action := ActionUserSessionIssuerMigrate
+	metadata, err := marshalAuditPayload(map[string]any{
+		"source_user_session_issuer_urn": event.SourceUserSessionIssuerURN.String(),
+		"target_user_session_issuer_urn": event.TargetUserSessionIssuerURN.String(),
+		"target_slug":                    event.TargetSlug,
+		"clients_migrated":               event.ClientsMigrated,
+		"sessions_migrated":              event.SessionsMigrated,
+		"consents_migrated":              event.ConsentsMigrated,
+		"cimd_clients_migrated":          event.CimdClientsMigrated,
+		"remote_sessions_migrated":       event.RemoteSessionsMigrated,
+		"pinned_associations":            event.PinnedAssociations,
+		"dropped_client_links":           event.DroppedClientLinks,
+		"merged_client_ids":              event.MergedClientIDs,
+		"server_impacts":                 event.ServerImpacts,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	beforeSnapshot, err := marshalAuditPayload(event.UserSessionIssuerSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.UserSessionIssuerSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.SourceUserSessionIssuerURN.ID.String(),
+		SubjectType:        string(subjectTypeUserSessionIssuer),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.SourceSlug),
+		SubjectSlug:        conv.ToPGTextEmpty(event.SourceSlug),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionIssuerV1})
+}
+
 type LogUserSessionIssuerDeleteEvent struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
@@ -123,6 +256,7 @@ type LogUserSessionIssuerDeleteEvent struct {
 func (l *Logger) LogUserSessionIssuerDelete(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerDeleteEvent) error {
 	action := ActionUserSessionIssuerDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

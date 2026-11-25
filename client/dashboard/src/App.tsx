@@ -1,5 +1,6 @@
 import "./App.css";
 import NotFound from "@/pages/not-found/NotFound";
+import { legacyMcpRedirects, routesWithSubroutes } from "./route-elements";
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/Sonner";
@@ -15,9 +16,12 @@ import {
   useSearchParams,
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
-import { AppRouteContentErrorBoundary } from "./components/app-route-content-error-boundary.tsx";
 import { ModeSwitchProvider } from "./components/mode-switch-stage.tsx";
 import { CommandPalette } from "./components/command-palette";
+import {
+  orgRoutesToNavActions,
+  routeToNavAction,
+} from "./components/command-palette/navigation-actions";
 import { GuideEntryRedirect } from "./components/project-guide/GuideEntryRedirect";
 import {
   getRecentLabelOverride,
@@ -33,13 +37,16 @@ import { useRBAC } from "./hooks/useRBAC";
 import { useKillswitchAccess } from "./hooks/useKillswitchAccess";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
 import { useCommandPalette } from "./contexts/CommandPalette";
-import type { CommandAction } from "./contexts/CommandPalette";
 import { CommandPaletteProvider } from "./contexts/CommandPaletteProvider";
 import { useSlugs } from "./contexts/Sdk.tsx";
 import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
+import {
+  rememberPreservedStorageKey,
+  restorePreservedStorageBackup,
+} from "./lib/logout-storage";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
 import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
@@ -47,8 +54,17 @@ import { BlockPage } from "./pages/blocks/BlockDetail";
 import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
 import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
-import TalkToUs from "./pages/demo/TalkToUs";
-import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
+import TrialEnded from "./pages/demo/TrialEnded";
+import { pageHrefs, withOrgPages, withProjectPages } from "./route-pages";
+import { useRoutes, useOrgRoutes } from "./routes";
+import { isCliAuthFlowLocation } from "@/lib/cli-auth-flow";
+import { InspectOAuthCallback } from "@/pages/mcp/inspect/InspectOAuthCallback";
+import { INSPECT_OAUTH_CALLBACK } from "@/lib/inspect-oauth";
+
+// Logout may have navigated here after Clear-Site-Data emptied localStorage.
+// theme-init.ts already restores when it can; this covers the module path
+// (tests, and any load that skipped the classic script).
+restorePreservedStorageBackup();
 
 export default function App(): JSX.Element {
   // Initialize from storage so React/Moonshine match the theme the pre-paint
@@ -70,6 +86,7 @@ export default function App(): JSX.Element {
     root.classList.remove(theme === "dark" ? "light" : "dark");
 
     localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, theme);
+    rememberPreservedStorageKey(PREFERRED_THEME_STORAGE_KEY, theme);
 
     setTheme(theme);
   };
@@ -85,6 +102,12 @@ export default function App(): JSX.Element {
     const initialTheme = savedTheme || "light";
     applyTheme(initialTheme);
   }, []);
+
+  // Keep the authorization code out of analytics and session replay.
+  // The issuer always reaches this path by full-page navigation.
+  if (window.location.pathname === INSPECT_OAUTH_CALLBACK) {
+    return <InspectOAuthCallback />;
+  }
 
   return (
     <ConfigProvider theme={theme} setTheme={applyTheme}>
@@ -125,6 +148,7 @@ function AppContent() {
     return (
       <CliCallback
         keyScope={cliFlow.keyScope}
+        pkceKeyScope={cliFlow.pkceKeyScope}
         localCallbackUrl={cliFlow.cliCallbackUrl}
         projectSlug={cliFlow.projectSlug}
         organizationId={cliFlow.organizationId}
@@ -147,6 +171,8 @@ function AppContent() {
 const RouteProvider = () => {
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
+  const pagedRoutes = useMemo(() => withProjectPages(routes), [routes]);
+  const pagedOrgRoutes = useMemo(() => withOrgPages(orgRoutes), [orgRoutes]);
   const { addActions, removeActions } = useCommandPalette();
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
@@ -224,15 +250,21 @@ const RouteProvider = () => {
   // section. Stored client-side (localStorage), scoped per workspace.
   // matchesCurrent uses exact segment counts, so the active top-level route is
   // the real current page. We record the EXACT path (not the section base) so a
-  // detail page like /sources/externalmcp/notion is its own entry — labelled by
-  // the item slug ("notion") rather than the section ("Sources").
+  // detail page like /sources/openapi/petstore is its own entry — labelled by
+  // the item slug ("petstore") rather than the section ("Sources").
   useEffect(() => {
     // Wait until the user id resolves before recording — otherwise the early
     // write lands on the shared anonymous key instead of the per-user one.
     // recentsUserId is a dependency, so the effect re-runs (and records the
     // current page) as soon as the session loads.
     if (!recentsUserId) return;
-    if (orgRoutes.killswitch.active && !killswitchAccess.canAccess) return;
+    // The killswitch addresses only forward to the identity they belong to,
+    // so recording one would file a redirect under the reader's recent pages
+    // instead of the page they actually ended up on.
+    if (orgRoutes.killswitch.active) return;
+    // Channels is hidden from navigation, so a visit must not resurface it in
+    // Command K either.
+    if (routes.channels.active) return;
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
       Object.values(orgRoutes).find((r) => r.active && !r.external);
@@ -285,16 +317,19 @@ const RouteProvider = () => {
   // once a project is selected (their goTo() needs the :projectSlug); org pages
   // are always available.
   useEffect(() => {
+    // Nav routes come from their own useRoutes call, so they are matched to
+    // the page map by href. Nested nav routes (People, Agents) count too.
+    const projectPageHrefs = pageHrefs(Object.values(pagedRoutes));
     const projectActions = projectSlug
       ? projectNavRoutes
           .filter(
-            ({ route, scope, resourceId }) =>
+            ({ route, scope, resourceId, projectId }) =>
               !route.external &&
-              route.component &&
+              projectPageHrefs.has(route.href()) &&
               route.title &&
               // Mirror the sidebar's per-page scope gating so the palette never
               // offers (nor navigates to) pages the user can't access.
-              hasAnyScope(scope, resourceId),
+              (scope.length === 0 || hasAnyScope(scope, resourceId, projectId)),
           )
           .map(({ route }) =>
             routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),
@@ -304,17 +339,10 @@ const RouteProvider = () => {
     // follow the sidebar's audience rule: platform admins, or anyone in local
     // dev. Filtering here keeps them out of the palette for regular users.
     const showPlatformAdmin = import.meta.env.DEV || isPlatformAdmin;
-    const paletteOrgRoutes = Object.fromEntries(
-      Object.entries(orgRoutes).filter(
-        ([key, route]) =>
-          (showPlatformAdmin || !route.url.startsWith("platform-")) &&
-          (key !== "killswitch" || killswitchAccess.canAccess),
-      ),
-    );
-    const orgActions = routesToNavActions(
-      paletteOrgRoutes,
-      "Organization",
-      "nav-org",
+    const orgActions = orgRoutesToNavActions(
+      pagedOrgRoutes,
+      showPlatformAdmin,
+      hasAnyScope,
     );
 
     const allActions = [...projectActions, ...orgActions];
@@ -325,17 +353,17 @@ const RouteProvider = () => {
     };
   }, [
     projectNavRoutes,
-    orgRoutes,
+    pagedRoutes,
+    pagedOrgRoutes,
     projectSlug,
     hasAnyScope,
     isPlatformAdmin,
-    killswitchAccess.canAccess,
     addActions,
     removeActions,
   ]);
 
   const routeElements = useMemo(() => {
-    const allRoutes = Object.values(routes);
+    const allRoutes = Object.values(pagedRoutes);
     const unauthenticatedRoutes = allRoutes.filter(
       (route) => route.unauthenticated,
     );
@@ -347,7 +375,7 @@ const RouteProvider = () => {
         !outsideStructureRoutes.includes(route) && !route.unauthenticated,
     );
 
-    const orgRouteValues = Object.values(orgRoutes);
+    const orgRouteValues = Object.values(pagedOrgRoutes);
     const orgHomeRoute = orgRouteValues.find((r) => r.url === "");
     const outsideOrgLayoutRoutes = orgRouteValues.filter(
       (route) => route.outsideMainLayout,
@@ -366,8 +394,8 @@ const RouteProvider = () => {
         {/* Outside the app layout because it is a full-page gate, but behind
             LoginCheck: an expired trial still has a session, and a logged-out
             visitor has no trial to talk about. */}
-        <Route path="/talk-to-us" element={<LoginCheck />}>
-          <Route index element={<TalkToUs />} />
+        <Route path="/trial-ended" element={<LoginCheck />}>
+          <Route index element={<TrialEnded />} />
         </Route>
         <Route
           path="/shadow-mcp/request"
@@ -381,6 +409,9 @@ const RouteProvider = () => {
           path="/risk-policy-challenge/acknowledge"
           element={<RiskPolicyChallengeAcknowledge />}
         />
+        {/* Short form of the acknowledge link, /ack#<token>, for surfaces
+            that cut a hook message off after a line or two (Claude Cowork). */}
+        <Route path="/ack" element={<RiskPolicyChallengeAcknowledge />} />
         <Route path="/blocks/:id" element={<BlockPage />} />
         <Route
           path={`${SHARED_SKILL_BASE_PATH}/:token`}
@@ -393,6 +424,7 @@ const RouteProvider = () => {
           </Route>
           <Route path=":orgSlug/projects/:projectSlug" element={<AppLayout />}>
             {routesWithSubroutes(authenticatedRoutes)}
+            {legacyMcpRedirects}
             <Route path="*" element={<NotFound />} />
           </Route>
           {/* Org routes that render without OrgLayout (full-screen standalone pages) */}
@@ -408,100 +440,17 @@ const RouteProvider = () => {
         </Route>
       </Routes>
     );
-  }, [routes, orgRoutes]);
+  }, [pagedRoutes, pagedOrgRoutes]);
 
   // Above the router: the mode-switch animation spans the route swap between
   // its shrink and zoom beats, so its state has to outlive that navigation.
   return <ModeSwitchProvider>{routeElements}</ModeSwitchProvider>;
 };
 
-// Convert a single route into a command-palette navigation action.
-const routeToNavAction = (
-  route: AppRoute,
-  group: string,
-  id: string,
-): CommandAction => {
-  // AppRoute type-omits the raw `icon` string (exposing only the <Icon>
-  // component), but the builder spreads it through, so it's present at runtime.
-  // CommandAction renders the string name, so read it back here.
-  const iconName = (route as unknown as { icon?: string }).icon;
-  return {
-    id,
-    label: route.title,
-    icon: typeof iconName === "string" ? iconName : undefined,
-    onSelect: () => route.goTo(),
-    group,
-    stage: route.stage,
-  };
-};
-
-// Flatten a route map into command-palette navigation actions. Only top-level
-// pages a user can actually land on: external links, unauthenticated pages, and
-// full-screen pages outside the main layout are excluded.
-const routesToNavActions = (
-  routeMap: Record<string, AppRoute>,
-  group: string,
-  idPrefix: string,
-): CommandAction[] =>
-  Object.entries(routeMap)
-    .filter(
-      ([, route]) =>
-        !route.external &&
-        !route.unauthenticated &&
-        !route.outsideMainLayout &&
-        Boolean(route.component) &&
-        Boolean(route.title),
-    )
-    .map(([key, route]) =>
-      routeToNavAction(route, group, `${idPrefix}-${key}`),
-    );
-
-const routesWithSubroutes = (routes: AppRoute[]) => {
-  return routes
-    .filter((item) => !item.external)
-    .map((item) => (
-      <Route
-        key={item.title}
-        path={item.url}
-        element={
-          item.component ? (
-            <AppRouteContentErrorBoundary
-              fallback={<div className="p-8 text-sm">Loading…</div>}
-            >
-              <item.component />
-            </AppRouteContentErrorBoundary>
-          ) : null
-        }
-      >
-        {item.indexComponent && (
-          <Route
-            index
-            element={
-              <AppRouteContentErrorBoundary
-                fallback={<div className="p-8 text-sm">Loading…</div>}
-              >
-                <item.indexComponent />
-              </AppRouteContentErrorBoundary>
-            }
-          />
-        )}
-        {/* Check for any children routes stored on this item */}
-        {routesWithSubroutes(
-          Object.values(item).filter(
-            (value) =>
-              value &&
-              typeof value === "object" &&
-              "title" in value &&
-              "url" in value,
-          ) as unknown as AppRoute[],
-        )}
-      </Route>
-    ));
-};
-
 type LocalAuthFlow = {
   cliCallbackUrl: string;
   keyScope: "producer" | "hooks";
+  pkceKeyScope: "producer" | null;
   projectSlug: string | null;
   organizationId: string | null;
   codeChallenge: string | null;
@@ -513,7 +462,6 @@ function useCliAuthFlow(): LocalAuthFlow | null {
   const [searchParams] = useSearchParams();
   const location = useLocation();
 
-  const fromCli = searchParams.get("from_cli") === "true";
   const cliCallbackUrl = searchParams.get("cli_callback_url");
   const keyScope = searchParams.get("key_scope");
   const projectSlug = searchParams.get("project");
@@ -522,10 +470,16 @@ function useCliAuthFlow(): LocalAuthFlow | null {
   const codeChallengeMethod = searchParams.get("code_challenge_method");
   const callbackMethod = searchParams.get("callback_method");
 
-  if (location.pathname === "/" && fromCli && cliCallbackUrl) {
+  if (
+    cliCallbackUrl &&
+    isCliAuthFlowLocation(location.pathname, location.search)
+  ) {
     return {
       cliCallbackUrl,
       keyScope: keyScope === "hooks" ? "hooks" : "producer",
+      // PKCE codes mint device-agent keys unless the client asks for a
+      // producer key by name, so the producer default above never applies.
+      pkceKeyScope: keyScope === "producer" ? "producer" : null,
       projectSlug,
       organizationId,
       codeChallenge,

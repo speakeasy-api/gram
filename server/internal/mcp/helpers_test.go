@@ -130,14 +130,11 @@ func TestParseMcpEnvVariables(t *testing.T) {
 	})
 }
 
-// TestParseMcpEnvVariables_SkipsProtocolVersionHeader pins that the
-// MCP-Protocol-Version header — protocol metadata every conforming client
-// stamps on every request since 2025-06-18 — does not leak into tool
-// environment variables, while the remaining 2026-07-28 standard headers
-// (Mcp-Method, Mcp-Name, Mcp-Param-*) deliberately still pass through:
-// reserving them is deferred until Gram's 2026-07-28 support can reject an
-// actual-name collision visibly instead of dropping the value silently.
-func TestParseMcpEnvVariables_SkipsProtocolVersionHeader(t *testing.T) {
+// TestParseMcpEnvVariables_SkipsStandardRequestHeaders pins that the MCP
+// standard request headers (MCP-Protocol-Version, Mcp-Method, Mcp-Name,
+// Mcp-Param-*) are protocol metadata and never become tool variables, while
+// other Mcp-* headers still do.
+func TestParseMcpEnvVariables_SkipsStandardRequestHeaders(t *testing.T) {
 	t.Parallel()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
@@ -149,30 +146,28 @@ func TestParseMcpEnvVariables_SkipsProtocolVersionHeader(t *testing.T) {
 	req.Header.Set("MCP-API-Key", "secret-key")
 
 	result := parseMcpEnvVariables(req, nil)
-	require.NotContains(t, result, "protocol_version")
-	require.Equal(t, "tools/call", result["method"])
-	require.Equal(t, "get_weather", result["name"])
-	require.Equal(t, "us-west1", result["param_region"])
-	require.Equal(t, "secret-key", result["api_key"])
+	require.Equal(t, map[string]string{"api_key": "secret-key"}, result)
 }
 
-// TestParseMcpEnvVariables_DisplayNameAliasOverridesProtocolVersionSkip pins
-// the alias-aware exception: a toolset admin who configured a display name
-// colliding with the protocol-version header keeps receiving it as a
-// variable, exactly as before the skip existed.
-func TestParseMcpEnvVariables_DisplayNameAliasOverridesProtocolVersionSkip(t *testing.T) {
+// TestParseMcpEnvVariables_DisplayNameAliasDoesNotClaimStandardHeader pins
+// that a display name normalizing to a standard request header never
+// receives that header's value: Mcp-Name carries the tool name on every
+// MCP 2026-07-28 tools/call and must not overwrite a configured variable.
+func TestParseMcpEnvVariables_DisplayNameAliasDoesNotClaimStandardHeader(t *testing.T) {
 	t.Parallel()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
 	require.NoError(t, err)
-	req.Header.Set("MCP-Protocol-Version", "customer-supplied-value")
+	req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+	req.Header.Set("Mcp-Name", "get_weather")
 
 	headerDisplayNames := map[string]string{
 		"X-Version-Pin": "Protocol Version",
+		"X-Account":     "Name",
 	}
 
 	result := parseMcpEnvVariables(req, headerDisplayNames)
-	require.Equal(t, "customer-supplied-value", result["x_version_pin"])
+	require.Empty(t, result)
 }
 
 func TestIsBinaryMimeType(t *testing.T) {

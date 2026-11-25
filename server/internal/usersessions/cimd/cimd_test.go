@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 func TestIsClientIDURL(t *testing.T) {
@@ -160,7 +160,7 @@ func TestResolve_InvalidJSONRejected(t *testing.T) {
 
 	// Deliberately NOT an OAuthError: a distinguishable "reachable but not
 	// JSON" outcome would let unauthenticated callers probe external hosts
-	// through Gram, so it reports like any other fetch failure.
+	// through Speakeasy, so it reports like any other fetch failure.
 	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json", noCache)
 	require.ErrorContains(t, err, "parse client metadata document")
 	var oauthErr *oauthwire.Error

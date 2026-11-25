@@ -118,6 +118,31 @@ func BuildGetSetPayload(jsonWebKeySetsGetSetID string, jsonWebKeySetsGetSetSessi
 	return v, nil
 }
 
+// BuildGetSetDeletePreflightPayload builds the payload for the jsonWebKeySets
+// getSetDeletePreflight endpoint from CLI flags.
+func BuildGetSetDeletePreflightPayload(jsonWebKeySetsGetSetDeletePreflightID string, jsonWebKeySetsGetSetDeletePreflightSessionToken string) (*jsonwebkeysets.GetSetDeletePreflightPayload, error) {
+	var err error
+	var id string
+	{
+		id = jsonWebKeySetsGetSetDeletePreflightID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if jsonWebKeySetsGetSetDeletePreflightSessionToken != "" {
+			sessionToken = &jsonWebKeySetsGetSetDeletePreflightSessionToken
+		}
+	}
+	v := &jsonwebkeysets.GetSetDeletePreflightPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildDeleteSetPayload builds the payload for the jsonWebKeySets deleteSet
 // endpoint from CLI flags.
 func BuildDeleteSetPayload(jsonWebKeySetsDeleteSetID string, jsonWebKeySetsDeleteSetSessionToken string) (*jsonwebkeysets.DeleteSetPayload, error) {

@@ -36,22 +36,25 @@ func newMCPAuthTestService(t *testing.T, conn *pgxpool.Pool) *Service {
 		conn,
 		guardianPolicy,
 		testenv.NewEncryptionClient(t),
-		testRuntimeBackend{backend: runtimeBackendFlyIO},
+		testRuntimeBackend{backend: runtimeBackendGKE},
 		nil,
 		nil,
 		nil,
 		telemetry.NewStub(logger),
 		nil,
 		newTestAuditLogger(),
+		testIdentityService,
+		newTestAuthzEngine(t, conn),
 	)
 	return &Service{
-		tracer:           tracerProvider.Tracer("test"),
-		logger:           logger,
-		auth:             nil,
-		authz:            nil,
-		core:             core,
-		signaler:         nil,
-		bootstrapLimiter: nil,
+		tracer:                    tracerProvider.Tracer("test"),
+		logger:                    logger,
+		auth:                      nil,
+		authz:                     nil,
+		core:                      core,
+		signaler:                  nil,
+		bootstrapLimiter:          nil,
+		bootstrapAggregateLimiter: nil,
 	}
 }
 
@@ -84,11 +87,11 @@ func TestGetOrRegisterMCPAuthClientReusesRegistration(t *testing.T) {
 	service := newMCPAuthTestService(t, conn)
 	redirectURI := "https://gram.example.com/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"
 	first, err := service.getOrRegisterMCPAuthClient(
-		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 	)
 	require.NoError(t, err)
 	second, err := service.getOrRegisterMCPAuthClient(
-		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 	)
 	require.NoError(t, err)
 
@@ -99,7 +102,7 @@ func TestGetOrRegisterMCPAuthClientReusesRegistration(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "stable-secret", secret)
 	request := <-requests
-	require.Equal(t, "Gram Assistant "+assistantID.String(), request.ClientName)
+	require.Equal(t, "Speakeasy Assistant "+assistantID.String(), request.ClientName)
 	require.Equal(t, []string{redirectURI}, request.RedirectURIs)
 
 	deleteTx := testenv.BeginTx(t, t.Context(), conn)
@@ -149,12 +152,12 @@ func TestInvalidateMCPAuthClientForcesRegistration(t *testing.T) {
 	service := newMCPAuthTestService(t, conn)
 	redirectURI := "https://gram.example.com/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"
 	first, err := service.getOrRegisterMCPAuthClient(
-		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 	)
 	require.NoError(t, err)
 	service.invalidateMCPAuthClient(t.Context(), projectID, assistantID, registrationServer.URL, first.ClientID)
 	second, err := service.getOrRegisterMCPAuthClient(
-		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 	)
 	require.NoError(t, err)
 
@@ -184,7 +187,7 @@ func TestGetOrRegisterMCPAuthClientRejectsSoonExpiringRegistration(t *testing.T)
 	service := newMCPAuthTestService(t, conn)
 	redirectURI := "https://gram.example.com/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"
 	_, err = service.getOrRegisterMCPAuthClient(
-		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 	)
 	require.ErrorContains(t, err, "client secret expires before the authorization flow")
 	require.Equal(t, int32(1), registrations.Load())
@@ -223,7 +226,7 @@ func TestGetOrRegisterMCPAuthClientSerializesFirstRegistration(t *testing.T) {
 	var completed atomic.Int32
 	register := func() {
 		result, err := service.getOrRegisterMCPAuthClient(
-			t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+			t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 		)
 		results <- result
 		errs <- err
@@ -298,8 +301,7 @@ func TestAssistantDeletionSerializesWithOAuthRegistrationClaim(t *testing.T) {
 		claimDone <- claimResult{rows: rows, err: claimErr}
 	}()
 
-	require.Never(t, func() bool { return len(claimDone) > 0 }, 250*time.Millisecond, 25*time.Millisecond,
-		"registration claim did not wait for assistant deletion")
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), conn, testenv.BackendPID(deleteTx), 1)
 	require.NoError(t, deleteQueries.RetireAssistantMCPOAuthClients(
 		t.Context(),
 		assistantrepo.RetireAssistantMCPOAuthClientsParams{AssistantID: assistantID, ProjectID: projectID},

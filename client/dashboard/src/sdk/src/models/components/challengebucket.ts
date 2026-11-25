@@ -5,23 +5,28 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ChallengeTemporaryGrant,
+  ChallengeTemporaryGrant$inboundSchema,
+} from "./challengetemporarygrant.js";
 
 export const Operation = {
   Require: "require",
   RequireAny: "require_any",
   Filter: "filter",
 } as const;
-export type Operation = ClosedEnum<typeof Operation>;
+export type Operation = OpenEnum<typeof Operation>;
 
 export const Outcome = {
   Allow: "allow",
   Deny: "deny",
   Error: "error",
 } as const;
-export type Outcome = ClosedEnum<typeof Outcome>;
+export type Outcome = OpenEnum<typeof Outcome>;
 
 /**
  * Kind of principal.
@@ -30,13 +35,15 @@ export const PrincipalType = {
   User: "user",
   ApiKey: "api_key",
   Assistant: "assistant",
+  Agent: "agent",
+  Workload: "workload",
 } as const;
 /**
  * Kind of principal.
  */
-export type PrincipalType = ClosedEnum<typeof PrincipalType>;
+export type PrincipalType = OpenEnum<typeof PrincipalType>;
 
-export const Reason = {
+export const ChallengeBucketReason = {
   GrantMatched: "grant_matched",
   NoGrants: "no_grants",
   ScopeUnsatisfied: "scope_unsatisfied",
@@ -44,20 +51,22 @@ export const Reason = {
   InvalidCheck: "invalid_check",
   RbacSkippedApikey: "rbac_skipped_apikey",
   DevOverride: "dev_override",
+  ConnectionOwnerMismatch: "connection_owner_mismatch",
 } as const;
-export type Reason = ClosedEnum<typeof Reason>;
+export type ChallengeBucketReason = OpenEnum<typeof ChallengeBucketReason>;
 
 /**
  * How the bucket was resolved.
  */
 export const ResolutionType = {
   RoleAssigned: "role_assigned",
+  TemporaryGrant: "temporary_grant",
   Dismissed: "dismissed",
 } as const;
 /**
  * How the bucket was resolved.
  */
-export type ResolutionType = ClosedEnum<typeof ResolutionType>;
+export type ResolutionType = OpenEnum<typeof ResolutionType>;
 
 /**
  * A group of consecutive challenges with the same dimensions that occurred within a 10-minute window.
@@ -113,11 +122,12 @@ export type ChallengeBucket = {
    * Project scope (empty for org-level checks).
    */
   projectId?: string | undefined;
-  reason: Reason;
+  reason: ChallengeBucketReason;
   /**
    * Role slug assigned (when resolution_type=role_assigned).
    */
   resolutionRoleSlug?: string | undefined;
+  resolutionTemporaryGrant?: ChallengeTemporaryGrant | undefined;
   /**
    * How the bucket was resolved.
    */
@@ -153,28 +163,30 @@ export type ChallengeBucket = {
 };
 
 /** @internal */
-export const Operation$inboundSchema: z.ZodMiniEnum<typeof Operation> = z.enum(
-  Operation,
-);
+export const Operation$inboundSchema: z.ZodMiniType<Operation, unknown> =
+  openEnums.inboundSchema(Operation);
 
 /** @internal */
-export const Outcome$inboundSchema: z.ZodMiniEnum<typeof Outcome> = z.enum(
-  Outcome,
-);
+export const Outcome$inboundSchema: z.ZodMiniType<Outcome, unknown> = openEnums
+  .inboundSchema(Outcome);
 
 /** @internal */
-export const PrincipalType$inboundSchema: z.ZodMiniEnum<typeof PrincipalType> =
-  z.enum(PrincipalType);
+export const PrincipalType$inboundSchema: z.ZodMiniType<
+  PrincipalType,
+  unknown
+> = openEnums.inboundSchema(PrincipalType);
 
 /** @internal */
-export const Reason$inboundSchema: z.ZodMiniEnum<typeof Reason> = z.enum(
-  Reason,
-);
+export const ChallengeBucketReason$inboundSchema: z.ZodMiniType<
+  ChallengeBucketReason,
+  unknown
+> = openEnums.inboundSchema(ChallengeBucketReason);
 
 /** @internal */
-export const ResolutionType$inboundSchema: z.ZodMiniEnum<
-  typeof ResolutionType
-> = z.enum(ResolutionType);
+export const ResolutionType$inboundSchema: z.ZodMiniType<
+  ResolutionType,
+  unknown
+> = openEnums.inboundSchema(ResolutionType);
 
 /** @internal */
 export const ChallengeBucket$inboundSchema: z.ZodMiniType<
@@ -202,8 +214,11 @@ export const ChallengeBucket$inboundSchema: z.ZodMiniType<
     principal_type: PrincipalType$inboundSchema,
     principal_urn: z.string(),
     project_id: z.optional(z.string()),
-    reason: Reason$inboundSchema,
+    reason: ChallengeBucketReason$inboundSchema,
     resolution_role_slug: z.optional(z.string()),
+    resolution_temporary_grant: z.optional(
+      ChallengeTemporaryGrant$inboundSchema,
+    ),
     resolution_type: z.optional(ResolutionType$inboundSchema),
     resolved_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -229,6 +244,7 @@ export const ChallengeBucket$inboundSchema: z.ZodMiniType<
       "principal_urn": "principalUrn",
       "project_id": "projectId",
       "resolution_role_slug": "resolutionRoleSlug",
+      "resolution_temporary_grant": "resolutionTemporaryGrant",
       "resolution_type": "resolutionType",
       "resolved_at": "resolvedAt",
       "resolved_by": "resolvedBy",

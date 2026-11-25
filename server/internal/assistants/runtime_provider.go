@@ -1,102 +1,53 @@
 package assistants
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 
-	"github.com/superfly/fly-go/tokens"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
 const (
-	RuntimeProviderFlyIO = runtimeBackendFlyIO
-	RuntimeProviderGKE   = runtimeBackendGKE
+	// RuntimeProviderGKE launches new runtimes on the GKE Agent Sandbox cluster.
+	RuntimeProviderGKE = runtimeBackendGKE
+
+	// RuntimeProviderLocal launches new runtimes as Docker containers on the
+	// developer's machine.
 	RuntimeProviderLocal = runtimeBackendLocal
 
-	defaultFlyRuntimeRegion = "us"
-	defaultFlyRuntimePrefix = "gram-asst"
+	// RuntimeProviderDisabled turns assistants off for the deployment: no new
+	// runtime is ever admitted, and assistant APIs that need a runtime return
+	// ErrRuntimeDisabled. Backends that are still configured stay reachable so
+	// rows they own can drain.
+	RuntimeProviderDisabled = "disabled"
 )
+
+// ErrRuntimeDisabled reports that the deployment runs with the disabled
+// assistant runtime provider, so the requested work cannot run.
+var ErrRuntimeDisabled = errors.New("assistants are not available on this deployment")
 
 type RuntimeBackendConfig struct {
 	Provider string
-	Fly      FlyRuntimeConfig
 	GKE      GKERuntimeConfig
 	Local    LocalRuntimeConfig
 }
 
-type FlyRuntimeConfig struct {
-	ServiceName        string
-	ServiceVersion     string
-	FlyTokens          *tokens.Tokens
-	FlyAPIURL          string
-	FlyMachinesBaseURL string
-	DefaultFlyOrg      string
-	DefaultFlyRegion   string
-	OCIImage           string
-	ImageTag           string
-	AppNamePrefix      string
-	ServerURL          *url.URL
-
-	// OTLP exporter settings stamped into runtime machine env as standard
-	// OTEL_EXPORTER_OTLP_* variables so the runner exports agentkit spans.
-	// Trace export is disabled when OTLPEndpoint is empty.
-	OTLPEndpoint string
-	OTLPProtocol string
-	OTLPHeaders  string
-	// Environment is stamped into OTEL_RESOURCE_ATTRIBUTES as
-	// deployment.environment.name, matching the server's own resource tags.
-	Environment string
-}
-
-func (c FlyRuntimeConfig) Validate() error {
-	if c.FlyTokens == nil {
-		return fmt.Errorf("--assistant-runtime-flyio-api-token is required")
-	}
-	if c.DefaultFlyOrg == "" {
-		return fmt.Errorf("--assistant-runtime-flyio-org is required")
-	}
-	if c.OCIImage == "" {
-		return fmt.Errorf("--assistant-runtime-oci-image is required")
-	}
-	if c.ServerURL == nil {
-		return fmt.Errorf("assistant fly runtime server URL is not configured")
-	}
-	if c.ServerURL.Hostname() == "" {
-		return fmt.Errorf("assistant fly runtime requires a public --assistant-runtime-server-url or --server-url; got %q", c.ServerURL.String())
-	}
-	switch c.OTLPProtocol {
-	case "", "grpc", "http/protobuf", "http/json":
-	default:
-		return fmt.Errorf("invalid --assistant-runtime-otlp-protocol: %s (allowed: grpc, http/protobuf, http/json)", c.OTLPProtocol)
-	}
-	return nil
-}
-
-// NewRuntimeBackend assembles a runtimeRouter over every configured backend and
-// targets config.Provider for new admissions. A backend is constructed when its
-// config is present — Fly when an API token is set, GKE when an in-cluster
-// kubernetes client is injected, local when running in the local environment —
-// so several can run side by side (e.g. target GKE while still tearing down
-// Fly-backed rows). The target backend must be among those constructed.
+// NewRuntimeBackend assembles a runtimeRouter over configured GKE and local
+// backends and targets config.Provider for new admissions. The target backend
+// must be among those constructed, unless the target is
+// RuntimeProviderDisabled, which needs no backend at all.
 func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config RuntimeBackendConfig) (RuntimeBackend, error) {
 	backends := map[string]RuntimeBackend{}
-
-	if config.Fly.FlyTokens != nil {
-		if err := config.Fly.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
-		}
-		backends[runtimeBackendFlyIO] = NewFlyRuntimeBackend(logger, tracerProvider, httpPolicy, config.Fly)
-	}
 
 	if config.GKE.Dynamic != nil {
 		if err := config.GKE.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid gke assistant runtime config: %w", err)
 		}
-		// Reach the in-pod runner through the guardian egress policy, matching
-		// the Fly backend, but allowlist the runner pod CIDR: the server dials
+		// Reach the in-pod runner through the guardian egress policy and
+		// allowlist the runner pod CIDR: the server dials
 		// runners by their RFC1918 pod IP (resolved from the Kubernetes API),
 		// which the default policy would otherwise reject as SSRF.
 		gkeClient := httpPolicy.PooledClient(
@@ -120,9 +71,26 @@ func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider,
 		backends[runtimeBackendLocal] = NewLocalRuntimeBackend(logger, tracerProvider, localClient, newDockerCLIEngine(config.Local.GuestPort), config.Local)
 	}
 
+	if config.Provider == RuntimeProviderDisabled {
+		return newDisabledRuntimeBackend(backends)
+	}
 	router, err := newRuntimeRouter(config.Provider, backends)
 	if err != nil {
 		return nil, fmt.Errorf("assemble assistant runtime backends: %w", err)
 	}
 	return router, nil
+}
+
+// newDisabledRuntimeBackend routes rows to the backends that are still
+// configured so they can drain, without the Kit runtime. Kit is never
+// installed with the disabled provider, and Kit rows carry the same backend
+// name as legacy GKE rows, so a plain router would hand them to the legacy
+// GKE backend, which cannot tear down Kit resources. Routing by runtime
+// version instead leaves Kit rows refused and unreaped.
+func newDisabledRuntimeBackend(backends map[string]RuntimeBackend) (RuntimeBackend, error) {
+	router, err := newRuntimeRouter(RuntimeProviderDisabled, backends)
+	if err != nil {
+		return nil, fmt.Errorf("assemble assistant runtime backends: %w", err)
+	}
+	return &versionedRuntimeBackend{legacy: router, kit: nil}, nil
 }

@@ -2,16 +2,10 @@ import type { Selector } from "@gram/client/models/components/selector.js";
 import type { AnnotationHint, CustomTab, ResourceType } from "./types";
 import {
   DISPOSITION_TO_ANNOTATION,
+  isProjectFilteredResourceType,
+  isProjectScopedResourceType,
   isProjectSelectableResourceType,
 } from "./types";
-
-// --- Collection group shape (minimal interface for computation) ---
-
-export interface CollectionGroup {
-  id: string;
-  name: string;
-  servers: { id: string; tools: { name: string }[] }[];
-}
 
 // --- Discriminated union for panel state ---
 
@@ -20,8 +14,7 @@ export type PanelState =
   | ProjectsPanel
   | ServersPanel
   | ToolsSelectPanel
-  | ToolsAnnotationPanel
-  | CollectionPanel;
+  | ToolsAnnotationPanel;
 
 interface AllPanel {
   activePanel: "all";
@@ -54,23 +47,46 @@ interface ToolsAnnotationPanel {
   label: string;
 }
 
-interface CollectionPanel {
-  activePanel: "collection";
-  selectedCollectionCount: number;
-  label: string;
-}
-
 // --- Pure computation ---
+
+/**
+ * Whether a selector reaches a whole project: it names the project and no
+ * single resource, tool or disposition inside it. A "*" tool constrains
+ * nothing. Reads only the fields a role selector and an agent policy
+ * selector share, so both editors apply the same rule.
+ */
+export function isProjectWideSelector(
+  selector: Pick<Selector, "projectId" | "tool" | "resourceId"> & {
+    resourceKind?: string;
+    disposition?: string | undefined;
+  },
+): boolean {
+  if (!selector.projectId) return false;
+  if (selector.tool && selector.tool !== "*") return false;
+  if (selector.disposition) return false;
+  return !selector.resourceId || selector.resourceId === "*";
+}
 
 export function computePanelState(
   selectors: Selector[] | null,
-  collectionGroups: CollectionGroup[],
   resourceType: ResourceType,
   customTab?: CustomTab,
 ): PanelState {
   const projectSelectable = isProjectSelectableResourceType(resourceType);
-  const noun = projectSelectable ? "project" : "server";
-  const allLabel = projectSelectable ? "All projects" : "All servers";
+  const projectFiltered = isProjectFilteredResourceType(resourceType);
+  const noun = projectSelectable
+    ? "project"
+    : projectFiltered
+      ? resourceType
+      : "server";
+  const allLabel =
+    resourceType === "inference"
+      ? "All projects"
+      : projectFiltered
+        ? "All assistants"
+        : isProjectScopedResourceType(resourceType)
+          ? "All projects"
+          : "All servers";
 
   // Unrestricted
   if (selectors === null) {
@@ -81,6 +97,13 @@ export function computePanelState(
   }
 
   // Empty — user switched mode but hasn't selected anything yet
+  if (selectors.length === 0 && resourceType === "inference") {
+    return {
+      activePanel: "projects",
+      selectedProjectIds: [],
+      label: "Select...",
+    };
+  }
   if (selectors.length === 0) {
     return {
       activePanel: "servers",
@@ -89,12 +112,12 @@ export function computePanelState(
     };
   }
 
-  // Project-scoped selectors (resource_kind=mcp, resource_id=*, projectId set)
-  const hasProjectId = selectors.some((s) => s.projectId);
-  if (hasProjectId) {
-    const selectedProjectIds = selectors
-      .filter((s) => s.projectId)
-      .map((s) => s.projectId!);
+  // Project-scoped selectors (resource_kind=mcp, resource_id=*, projectId set).
+  // A selector naming one resource can carry its project too, as an agent's
+  // server grants do; that selector is the resource's, not the project's.
+  const projectWide = selectors.filter(isProjectWideSelector);
+  if (projectWide.length > 0) {
+    const selectedProjectIds = projectWide.map((s) => s.projectId!);
     const count = selectedProjectIds.length;
     return {
       activePanel: "projects",
@@ -114,7 +137,9 @@ export function computePanelState(
         s.disposition ? DISPOSITION_TO_ANNOTATION[s.disposition] : undefined,
       )
       .filter((a): a is AnnotationHint => !!a);
-    const count = annotations.length;
+    // A disposition the panel has no annotation for, such as unannotated,
+    // is still a rule the role holds, so it counts.
+    const count = selectors.filter((s) => s.disposition).length;
     return {
       activePanel: "tools",
       tab: "auto-groups",
@@ -129,19 +154,6 @@ export function computePanelState(
   // Tool-level selectors
   const hasTools = selectors.some((s) => s.tool);
   if (hasTools) {
-    // Check if selectors match collection groups
-    const collectionCount = getSelectedCollectionCount(
-      selectors,
-      collectionGroups,
-    );
-    if (collectionCount > 0) {
-      return {
-        activePanel: "collection",
-        selectedCollectionCount: collectionCount,
-        label: `${collectionCount} collection${collectionCount === 1 ? "" : "s"} selected`,
-      };
-    }
-
     // Individual tool selection
     const selectedTools = selectors
       .filter((s) => s.tool && s.resourceId)
@@ -172,25 +184,4 @@ export function computePanelState(
         ? "Select..."
         : `${count} ${noun}${count === 1 ? "" : "s"} selected`,
   };
-}
-
-/**
- * Counts how many collection groups are fully selected (all their tools
- * present in selectors).
- */
-export function getSelectedCollectionCount(
-  selectors: Selector[],
-  collectionGroups: CollectionGroup[],
-): number {
-  return collectionGroups.filter((group) => {
-    const allToolSelectors = group.servers.flatMap((s) =>
-      s.tools.map((t) => ({ resourceId: s.id, tool: t.name })),
-    );
-    if (allToolSelectors.length === 0) return false;
-    return allToolSelectors.every((ts) =>
-      selectors.some(
-        (s) => s.resourceId === ts.resourceId && s.tool === ts.tool,
-      ),
-    );
-  }).length;
 }

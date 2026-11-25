@@ -1,8 +1,12 @@
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { RequireScope } from "@/components/require-scope";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { Label } from "@/components/ui/Label";
+import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
-import { useOrgRoutes } from "@/routes";
+import { ScopeMultiSelect } from "@/lib/remote-identity";
+import { useRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
@@ -10,7 +14,7 @@ import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram
 import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Link } from "react-router";
+import { ExistingIssuerLink } from "../../ExistingIssuerLink";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -25,13 +29,14 @@ import { DeleteIssuerDialog } from "../../RemoteIdentityProviders";
 import { issuerDisplayName } from "../../issuerDisplay";
 import { SettingsField, SettingsSection } from "../../issuerSettingsFields";
 import { buildUpdateIssuerForm } from "../../issuerSettingsForm";
+import { IssuerTunnelSelector } from "./IssuerTunnelSelector";
 
 export function SettingsTab({
   issuer,
 }: {
   issuer: RemoteSessionIssuer;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const queryClient = useQueryClient();
   const [name, setName] = useState(issuer.name ?? "");
   // Seeded from the saved issuer like name: buildUpdateIssuerForm always sends
@@ -44,7 +49,25 @@ export function SettingsTab({
   const [slug, setSlug] = useState(issuer.slug);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState(issuer.clientSetupDocumentationUrl ?? "");
+  const [tunneledMcpServerId, setTunneledMcpServerId] = useState(
+    issuer.tunneledMcpServerId ?? "",
+  );
+  // Seeded from the saved override: buildUpdateIssuerForm always sends it and
+  // reads a blank field as "clear", so any other seed would drop the override
+  // on the next unrelated save.
+  const [scopeOverride, setScopeOverride] = useState<string[]>(
+    issuer.scopeOverride ?? [],
+  );
+  // Undefined until the operator flips the switch, so it tracks the saved
+  // value and a save only sends the flag when it was deliberately changed:
+  // an unrelated save must not write false over a NULL the issuer never set.
+  const [omitScopeFallback, setOmitScopeFallback] = useState<
+    boolean | undefined
+  >(undefined);
+  const omitScopeFallbackChecked =
+    omitScopeFallback ?? issuer.omitScopeFallback ?? false;
   const [showDelete, setShowDelete] = useState(false);
+  const isPlatformAdmin = useIsPlatformAdmin();
   const { hasAnyScope } = useRBAC();
   const hasOrgAdminScope = hasAnyScope(["org:admin"]);
 
@@ -80,6 +103,8 @@ export function SettingsTab({
       jwksUri: issuer.jwksUri ?? "",
       scopesSupported: issuer.scopesSupported ?? [],
       grantTypesSupported: issuer.grantTypesSupported ?? [],
+      authorizationGrantProfilesSupported:
+        issuer.authorizationGrantProfilesSupported ?? [],
       responseTypesSupported: issuer.responseTypesSupported ?? [],
       tokenEndpointAuthMethodsSupported:
         issuer.tokenEndpointAuthMethodsSupported ?? [],
@@ -93,6 +118,16 @@ export function SettingsTab({
       serviceDocumentation: issuer.serviceDocumentation ?? "",
       opPolicyUri: issuer.opPolicyUri ?? "",
       opTosUri: issuer.opTosUri ?? "",
+      userinfoEndpoint: issuer.userinfoEndpoint ?? "",
+      introspectionEndpoint: issuer.introspectionEndpoint ?? "",
+      introspectionEndpointAuthMethodsSupported:
+        issuer.introspectionEndpointAuthMethodsSupported ?? null,
+      idTokenSigningAlgValuesSupported:
+        issuer.idTokenSigningAlgValuesSupported ?? null,
+      claimsSupported: issuer.claimsSupported ?? null,
+      backchannelLogoutSupported: issuer.backchannelLogoutSupported ?? null,
+      authorizationResponseIssParameterSupported:
+        issuer.authorizationResponseIssParameterSupported ?? null,
     },
     // Seed the saved values into the fields but not a discovery snapshot, so the
     // Discover control is available against the existing issuer URL. This tab
@@ -106,10 +141,11 @@ export function SettingsTab({
       await invalidateAllOrganizationRemoteSessionIssuer(queryClient, {
         refetchType: "all",
       });
-      toast.success("Provider updated");
+      setOmitScopeFallback(undefined);
+      toast.success("Authorization server updated");
     },
     onError: (error) => {
-      console.error("Update remote identity provider failed", error);
+      console.error("Update authorization server failed", error);
     },
   });
 
@@ -203,6 +239,17 @@ export function SettingsTab({
           registrationEndpoint,
           jwksUri,
           discoveredSnapshot,
+          savedIssuerUrl: issuer.issuer,
+          scopeOverride,
+          omitScopeFallback:
+            omitScopeFallback !== undefined &&
+            omitScopeFallback !== (issuer.omitScopeFallback ?? false)
+              ? omitScopeFallback
+              : undefined,
+          tunneledMcpServerId:
+            isPlatformAdmin && issuer.projectId
+              ? tunneledMcpServerId
+              : undefined,
         }),
       },
     });
@@ -211,8 +258,8 @@ export function SettingsTab({
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <SettingsSection
-        title="Provider"
-        description="How this identity provider is labelled in the dashboard."
+        title="Authorization server"
+        description="How this authorization server is labelled in the dashboard."
       >
         <SettingsField label="Display name" value={name} onChange={setName} />
         <SettingsField label="Slug" value={slug} onChange={setSlug} />
@@ -222,13 +269,19 @@ export function SettingsTab({
           onChange={setLogoAssetId}
           onUploadingChange={setLogoUploading}
           canEdit={hasOrgAdminScope}
-          description="Shown beside this provider in the dashboard and on the connect consent page. Saved with your other changes."
+          description="Shown beside this authorization server in the dashboard and on the connect consent page. Saved with your other changes."
         />
       </SettingsSection>
 
+      <IssuerTunnelSelector
+        projectId={issuer.projectId}
+        value={tunneledMcpServerId}
+        onChange={setTunneledMcpServerId}
+      />
+
       <SettingsSection
         title="Issuer configuration"
-        description="The upstream Authorization Server. Refresh to re-read its RFC 8414 metadata, or change the issuer URL and run discovery to point this provider somewhere else."
+        description="The upstream Authorization Server. Refresh to re-read its RFC 8414 metadata, or change the issuer URL and run discovery to point it somewhere else."
       >
         <IssuerUrlField
           issuerUrl={issuerUrl}
@@ -237,17 +290,7 @@ export function SettingsTab({
             <IssuerDuplicateWarning
               viewerScope="organization"
               matches={duplicateMatches}
-              renderLink={(match) => (
-                <Button asChild variant="secondary">
-                  <Link
-                    to={orgRoutes.remoteIdentityProviders.issuerDetail.href(
-                      match.id,
-                    )}
-                  >
-                    View existing provider
-                  </Link>
-                </Button>
-              )}
+              renderLink={(match) => <ExistingIssuerLink match={match} />}
             />
           }
           onIssuerUrlChange={(value) => {
@@ -318,17 +361,61 @@ export function SettingsTab({
               </Button>
             </div>
             <Text small muted>
-              Re-reads this provider's RFC 8414 metadata and saves the endpoints
-              and advertised capabilities immediately. Your other changes on
-              this page are not saved.
+              Re-reads this authorization server's RFC 8414 metadata and saves
+              the endpoints and advertised capabilities immediately. Your other
+              changes on this page are not saved.
             </Text>
           </div>
         )}
       </SettingsSection>
 
       <SettingsSection
+        title="Scopes"
+        description="Requested exactly as chosen when neither the client nor the MCP server names scopes, in place of this authorization server's supported scopes."
+      >
+        <div className="flex flex-col gap-1.5">
+          <Label id="scope-override-label" htmlFor="scope-override">
+            Scope override
+          </Label>
+          <ScopeMultiSelect
+            id="scope-override"
+            labelId="scope-override-label"
+            options={issuer.scopesSupported ?? []}
+            value={scopeOverride}
+            onValueChange={setScopeOverride}
+            placeholder="No override"
+            disabled={!hasOrgAdminScope}
+          />
+          <Text small muted>
+            Choose from the scopes this authorization server advertises, or type
+            one to add it.
+          </Text>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-3">
+            <Switch
+              aria-labelledby="omit-scope-fallback-label"
+              checked={omitScopeFallbackChecked}
+              onCheckedChange={setOmitScopeFallback}
+            />
+            <Label id="omit-scope-fallback-label">
+              Request default scopes when the MCP server advertises none
+            </Label>
+          </div>
+          <Text small muted>
+            When the MCP server names no scopes (none advertised, pinned, or
+            demanded in its challenge) and no client scope or override is set,
+            every scope the authorization server lists is requested. Turn this
+            on to send no scope parameter instead so the authorization server
+            applies its defaults. Some authorization servers reject a request
+            without a scope.
+          </Text>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
         title="Client setup"
-        description="Documentation linked from the New Client sheet so operators can set up an OAuth client with this provider themselves."
+        description="Documentation linked from the New Client sheet so operators can set up an OAuth client with this authorization server themselves."
       >
         <SettingsField
           label="Client setup documentation URL"
@@ -359,10 +446,10 @@ export function SettingsTab({
       </div>
 
       <div className="border-destructive/30 flex flex-col gap-2 border p-4">
-        <Text className="font-medium">Danger Zone</Text>
+        <Text className="font-medium">Danger zone</Text>
         <Text small muted>
-          Deleting this provider is permanent. All clients must be deleted
-          first.
+          Deleting this authorization server is permanent. All clients must be
+          deleted first.
         </Text>
         <div>
           <RequireScope scope="org:admin" level="component">
@@ -370,7 +457,7 @@ export function SettingsTab({
               variant="destructive-primary"
               onClick={() => setShowDelete(true)}
             >
-              <Button.Text>Delete provider</Button.Text>
+              <Button.Text>Delete authorization server</Button.Text>
             </Button>
           </RequireScope>
         </div>
@@ -381,7 +468,7 @@ export function SettingsTab({
           issuerId={issuer.id}
           issuerLabel={issuerDisplayName(issuer)}
           onClose={() => setShowDelete(false)}
-          onDeleted={() => orgRoutes.remoteIdentityProviders.goTo()}
+          onDeleted={() => routes.remoteIdentityProviders.goTo()}
         />
       )}
     </div>

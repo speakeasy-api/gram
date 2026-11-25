@@ -85,6 +85,11 @@ type CompletionRequest struct {
 	Model       string
 	Stream      bool
 
+	// MaxTokens caps generated tokens, reasoning included. Nil leaves the
+	// provider default: the model's full output ceiling, which OpenRouter
+	// reserves against the key's remaining limit before routing.
+	MaxTokens *int
+
 	// ToolChoice, when set, is forwarded verbatim as OpenAI tool_choice —
 	// raw because the spec admits strings and function-naming objects, and
 	// the chat proxy forwards whatever the client sent. Internal callers use
@@ -165,6 +170,11 @@ type ObjectCompletionRequest struct {
 	UserEmail      string
 	HTTPMetadata   *HTTPMetadata
 	JSONSchema     *or.ChatJSONSchemaConfig // For structured output mode
+
+	// MaxTokens caps generated tokens, reasoning included; nil leaves the
+	// provider default.
+	MaxTokens *int
+
 	// KeyType selects which of the org's OpenRouter keys pays for the call;
 	// the zero value resolves to the chat key.
 	KeyType KeyType
@@ -187,10 +197,13 @@ type ObjectCompletionRequest struct {
 
 // CompletionResponse encapsulates the result of a completion call.
 type CompletionResponse struct {
-	StartTime    time.Time
-	Message      *or.ChatMessages
-	MessageID    string
-	Model        string
+	StartTime time.Time
+	Message   *or.ChatMessages
+	MessageID string
+	Model     string
+
+	// Provider is the exact provider identity reported by the completion gateway.
+	Provider     string
 	Usage        Usage
 	FinishReason *string
 	ToolCalls    []ToolCall

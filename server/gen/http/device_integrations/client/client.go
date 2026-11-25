@@ -57,6 +57,14 @@ type Client struct {
 	// endpoint.
 	GetCoverageDoer goahttp.Doer
 
+	// ListFleetDevices Doer is the HTTP client used to make requests to the
+	// listFleetDevices endpoint.
+	ListFleetDevicesDoer goahttp.Doer
+
+	// GetFleetCoverage Doer is the HTTP client used to make requests to the
+	// getFleetCoverage endpoint.
+	GetFleetCoverageDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -88,6 +96,8 @@ func NewClient(
 		RetryScheduleDoer:      doer,
 		ListManagedDevicesDoer: doer,
 		GetCoverageDoer:        doer,
+		ListFleetDevicesDoer:   doer,
+		GetFleetCoverageDoer:   doer,
 		RestoreResponseBody:    restoreBody,
 		scheme:                 scheme,
 		host:                   host,
@@ -331,6 +341,54 @@ func (c *Client) GetCoverage() goa.Endpoint {
 		resp, err := c.GetCoverageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("deviceIntegrations", "getCoverage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListFleetDevices returns an endpoint that makes HTTP requests to the
+// deviceIntegrations service listFleetDevices server.
+func (c *Client) ListFleetDevices() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListFleetDevicesRequest(c.encoder)
+		decodeResponse = DecodeListFleetDevicesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListFleetDevicesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListFleetDevicesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("deviceIntegrations", "listFleetDevices", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetFleetCoverage returns an endpoint that makes HTTP requests to the
+// deviceIntegrations service getFleetCoverage server.
+func (c *Client) GetFleetCoverage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetFleetCoverageRequest(c.encoder)
+		decodeResponse = DecodeGetFleetCoverageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetFleetCoverageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetFleetCoverageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("deviceIntegrations", "getFleetCoverage", err)
 		}
 		return decodeResponse(resp)
 	}

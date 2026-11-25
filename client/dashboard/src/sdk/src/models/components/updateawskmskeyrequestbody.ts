@@ -11,7 +11,7 @@ export type UpdateAwsKmsKeyRequestBody = {
    */
   customerGrantReference?: string | undefined;
   /**
-   * The external credential Gram uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.
+   * The external credential Speakeasy uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.
    */
   externalCredentialId: string;
   /**

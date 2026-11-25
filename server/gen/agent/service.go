@@ -9,7 +9,9 @@ package agent
 
 import (
 	"context"
+	"io"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -18,15 +20,47 @@ import (
 // machines. Authenticates via an API key carrying the 'agent_user' scope — the
 // per-user credential minted by token-exchange. An org key with the broader
 // 'agent' scope also satisfies most of these endpoints (it implies
-// 'agent_user'), so existing installs keep working during the transition. The
-// content-bearing session-portability endpoints — getSessionMeta and
-// createSessionHandoff — refuse it and require a per-user key.
+// 'agent_user'), so existing installs keep working during the transition. A
+// headless device enrolled as a workload may call getPlugins with a
+// device-agent token instead. The content-bearing session-portability
+// endpoints — getSessionMeta and createSessionHandoff — refuse it and require
+// a per-user key.
 type Service interface {
 	// Resolve the marketplaces, plugins, and optional organization configuration
 	// assigned to the enrolled user. The device agent reconciles these into the AI
 	// developer tools it manages. Organization configuration is delivered on this
 	// existing poll so agents do not need a second control-plane request.
 	GetPlugins(context.Context, *GetPluginsPayload) (res *GetPluginsResult, err error)
+	// Report the enrolled user's sign-in state for each MCP server in the plugins
+	// delivered to them, with the page that signs in to each. Sign-in belongs to
+	// the server, so one sign-in covers every plugin that contains it. Accepts a
+	// per-user key, or an org install key with the user's email vouched in the
+	// Gram-User-Email header, the same way getPlugins resolves the polling user.
+	GetMyConnections(context.Context, *GetMyConnectionsPayload) (res *GetMyConnectionsResult, err error)
+	// Download the organization's Claude observability plugin as a ZIP for the
+	// enrolled user to upload to claude.ai (Customize > Plugins), so sessions in
+	// Claude's cloud environment are recorded. The plugin carries a hooks-only key
+	// attributed to the enrolled user; each download replaces that user's previous
+	// key. Requires a per-user key, whose owner is the enrolled user. The org
+	// install key is refused: it is shared by every device in the organization, so
+	// it cannot prove which member is asking, and accepting it would let any
+	// holder mint a key attributed to any member and revoke theirs.
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	GetClaudeObservabilityPlugin(context.Context, *GetClaudeObservabilityPluginPayload) (res *GetClaudeObservabilityPluginResult, body io.ReadCloser, err error)
+	// Hide an MCP server for the enrolled user, the same preference the gateway
+	// consent page's Hide sets. Gateways leave a hidden server out of the user's
+	// tools, and getMyConnections reports it as hidden. Only servers
+	// getMyConnections reports to the user can be hidden; anything else is not
+	// found. Hiding a hidden server changes nothing. Accepts a per-user key, or an
+	// org install key with the user's email vouched in the Gram-User-Email header,
+	// the same way getMyConnections resolves the user.
+	HideMcpServer(context.Context, *HideMcpServerPayload) (err error)
+	// Show a hidden MCP server again for the enrolled user. Unhiding a server that
+	// is not hidden changes nothing. Authenticates like hideMcpServer.
+	UnhideMcpServer(context.Context, *UnhideMcpServerPayload) (err error)
 	// List users in the current organization who are actively running the
 	// Speakeasy device agent, attributed by the email each agent reports on sync.
 	// Dashboard-only; requires an org admin session.
@@ -42,12 +76,37 @@ type Service interface {
 	// server does not recognize are preserved for forward compatibility; identity
 	// and credential keys are rejected.
 	UpdateConfiguration(context.Context, *UpdateConfigurationPayload) (res *DeviceAgentConfiguration, err error)
-	// Resolve display metadata (Gram chat id, generated title, last activity) for
-	// captured agent sessions the calling user owns. Used by the device agent's
-	// session picker to overlay server-generated titles on locally discovered
-	// transcripts; unknown or non-owned session ids are silently omitted, so the
-	// picker degrades gracefully. Requires a per-user key: the fleet-shared org
-	// install key is refused because session metadata is per-user data.
+	// List the Shadow AI scan targets this organization's device agents probe for:
+	// the Speakeasy built-ins plus the organization's own additions, with the
+	// catalog version agents echo on scan receipts. Everything listed is probed
+	// for; a built-in leaves the list by leaving Speakeasy's catalog, an
+	// organization target by being deleted. Requires a session with the org:admin
+	// scope.
+	ListAiScanTargets(context.Context, *ListAiScanTargetsPayload) (res *ListAiScanTargetsResult, err error)
+	// Add a scan target for this organization or replace one it added earlier.
+	// Built-in targets are system-supplied and read-only: a write under a
+	// built-in's id is accepted only when it carries that built-in's definition
+	// unchanged. Every field is a full replacement except gateway_client, which an
+	// existing target keeps when the field is omitted, so a write need not restate
+	// the target's matchers; sending gateway_client with empty lists still clears
+	// them. Clearing a target's last verifiable matcher also clears any access
+	// decision recorded about it, since nothing could enforce it any more; the
+	// organization decides again once the target can be recognized at the gateway.
+	// Agents pick the change up on their next policy poll. Requires a session with
+	// the org:admin scope.
+	UpsertAiScanTarget(context.Context, *UpsertAiScanTargetPayload) (res *AiScanTargetMutationResult, err error)
+	// Remove a target the organization added, or clear the row a built-in carries
+	// so it returns to having no recorded decision. A built-in itself cannot be
+	// removed here; it leaves the list only by leaving Speakeasy's catalog.
+	// Requires a session with the org:admin scope.
+	DeleteAiScanTarget(context.Context, *DeleteAiScanTargetPayload) (res *DeleteAiScanTargetResult, err error)
+	// Resolve display metadata (Speakeasy chat id, generated title, last activity)
+	// for captured agent sessions the calling user owns. Used by the device
+	// agent's session picker to overlay server-generated titles on locally
+	// discovered transcripts; unknown or non-owned session ids are silently
+	// omitted, so the picker degrades gracefully. Requires a per-user key: the
+	// fleet-shared org install key is refused because session metadata is per-user
+	// data.
 	GetSessionMeta(context.Context, *GetSessionMetaPayload) (res *GetSessionMetaResult, err error)
 	// Record that a captured agent session was moved to another harness on a
 	// device (session portability). Carries no session content — only the session
@@ -58,6 +117,32 @@ type Service interface {
 	// be able to report moves. Fire-and-forget from the agent's perspective: the
 	// daemon must never fail a move because this call failed.
 	ReportSessionMoved(context.Context, *ReportSessionMovedPayload) (err error)
+	// Report the result of a device-agent AI scan: which AI tools from the served
+	// scan target catalog (or the list embedded in the agent as a fallback) were
+	// found installed or running on the device. A scan with zero matches still
+	// reports, so organizations can prove a device was scanned and came back
+	// clean. Accepts both the per-user key and the org install key (with a vouched
+	// email), mirroring getPlugins, because fleet devices must be able to report
+	// scans. Fire-and-forget from the agent's perspective: the daemon must never
+	// block on this call.
+	ReportAIScan(context.Context, *ReportAIScanPayload) (err error)
+	// Record the device agent's applied state: the policy etag it enforces, each
+	// tool's enforcement outcome, its versions and update posture. A snapshot: the
+	// latest report per enrolled user per machine replaces the previous one.
+	// Accepts the per-user key and the org install key (with a vouched email),
+	// mirroring reportAIScan; agent keys and device-agent tokens are refused. A
+	// report from a non-endpoint environment is accepted and not stored, because
+	// device coverage matches managed endpoints only. Contract: device-agent
+	// ADR-0029.
+	ReportState(context.Context, *ReportStatePayload) (res *ReportStateResult, err error)
+	// Report device agent crashes: fatal crashes, recovered panics and
+	// self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring
+	// and not stored. Accepts the credentials getPlugins accepts: the per-user
+	// key, the org install key (with a vouched email), and, with the device-sync
+	// grant, agent keys and device-agent tokens. The agent scrubs every report
+	// before sending it; the server accepts only reports shaped like a Go crash
+	// and scrubs them again.
+	ReportCrash(context.Context, *ReportCrashPayload) (res *ReportCrashResult, err error)
 	// Mint a short-lived capability URL for a rendered session-handoff document
 	// (session portability). The device agent uploads the handoff it rendered from
 	// the local transcript; the returned URL serves the markdown exactly once
@@ -68,10 +153,20 @@ type Service interface {
 	// a fetch-by-token URL for uploaded content is a per-user, content-bearing
 	// surface (the same DNO-383 blast-radius rule as getSessionMeta).
 	CreateSessionHandoff(context.Context, *CreateSessionHandoffPayload) (res *CreateSessionHandoffResult, err error)
+	// List the organization's pending access requests for an organization
+	// administrator, newest first, at most 50, each with a link that opens it in
+	// the dashboard to decide. Decisions are made in the dashboard or Slack, never
+	// from the device agent. A user who is not an administrator gets an empty
+	// list. Requires a per-user key; the org install key, device-agent tokens and
+	// agent identities are refused. Answers not found while access requests are
+	// off for the organization.
+	ListPendingAccessRequests(context.Context, *ListPendingAccessRequestsPayload) (res *ListPendingAccessRequestsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
 type Auther interface {
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
@@ -90,7 +185,107 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "getSessionMeta", "reportSessionMoved", "createSessionHandoff"}
+var MethodNames = [18]string{"getPlugins", "getMyConnections", "getClaudeObservabilityPlugin", "hideMcpServer", "unhideMcpServer", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "reportState", "reportCrash", "createSessionHandoff", "listPendingAccessRequests"}
+
+// One AI detection target a device-agent scan matched.
+type AIScanMatch struct {
+	// Identifier of the matched target from the agent's compiled-in list (e.g.
+	// claude-code, ollama). Stored as reported: an agent binary can ship a newer
+	// target list than the server catalog knows.
+	TargetID string
+	// Target category the agent scanned under: harness, assistant, or local_model.
+	// The server catalog's category wins for targets it knows; this is what gets
+	// stored for the rest.
+	Category string
+	// What the scan observed: installed or running.
+	Signal string
+	// Installed version, when the scan could read one statically (e.g. from the
+	// app bundle's Info.plist).
+	Version *string
+}
+
+type AgentCrashBuild struct {
+	// speakeasyd or speakeasy-ui.
+	Binary  string
+	Version string
+	// Release channel.
+	Channel *string
+	Os      *string
+	Arch    *string
+	// OS release, e.g. 15.4 on macOS or the kernel release on Linux.
+	OsVersion *string
+}
+
+type AgentCrashFrame struct {
+	// Fully qualified function name.
+	Function string
+	// Module-relative source file.
+	File *string
+	Line *int
+}
+
+// One device agent crash: a fatal crash, a recovered panic, or a self-rollback.
+type AgentCrashReport struct {
+	// Report schema version.
+	SchemaVersion int
+	// Random report id; repeats of the same id are one report.
+	ID string
+	// fatal, recovered or rollback.
+	Kind string
+	// Where it happened: ipc, policy_scheduler, update_scheduler, aiscan,
+	// sessions, ui or runtime.
+	Component string
+	// When it happened, by the device clock.
+	OccurredAt string
+	// Times this crash recurred in one process before it was reported.
+	Count int
+	// The build that crashed, which is not always the build that reports it.
+	Build *AgentCrashBuild
+	// Go runtime error text, when the panic was one. Other panics send panic_type
+	// instead.
+	Message *string
+	// Go type of a non-runtime panic value.
+	PanicType *string
+	// Frames of the crashing goroutine, innermost first.
+	Stack []*AgentCrashFrame
+	// Goroutines in a fatal dump besides the crashing one. Their stacks are not
+	// sent.
+	OtherGoroutines *int
+	// For a rollback: the version that failed and the one restored.
+	Rollback *AgentCrashRollback
+}
+
+type AgentCrashRollback struct {
+	// Version that failed to stabilize.
+	From *string
+	// Version restored.
+	To *string
+}
+
+type AgentMCPServer struct {
+	// Stable key the agent writes the server under in each tool's MCP
+	// configuration: `speakeasy-` followed by the server's slug, using only
+	// lowercase letters, digits and `-`. Unique within the response; a second
+	// server with the same name gets a numeric suffix such as `speakeasy-linear-2`.
+	Name string
+	// The server's streamable-HTTP URL.
+	URL string
+	// Stable IDs of the managed tools this server applies to. Absent or empty
+	// means every managed tool.
+	Tools []string
+	// Token endpoint where a workload exchanges an identity assertion (RFC 7523
+	// JWT bearer grant) for a session that reaches this server. Absent when the
+	// server's authorization server offers no workload grant, so the server cannot
+	// be reached without a person.
+	TokenEndpoint *string
+	// The exact `aud` the identity assertion must carry for token_endpoint.
+	// Present exactly when token_endpoint is.
+	Audience *string
+	// Resource indicator (RFC 8707) to send with the grant. Present only when
+	// token_endpoint mints sessions for this one server; absent when it mints one
+	// session for every server of its issuer.
+	Resource *string
+}
 
 type AgentMarketplace struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -103,20 +298,103 @@ type AgentMarketplace struct {
 	URL string
 }
 
+// A pending access request an organization administrator can decide in the
+// dashboard.
+type AgentPendingAccessRequest struct {
+	// Access request ID.
+	ID string
+	// The requester's display name, or their email when they have none.
+	RequesterDisplayName string
+	// The scope asked for.
+	Scope string
+	// The scope's name as the role editor shows it.
+	PermissionLabel string
+	// The resource's name, as it was when the request was made.
+	ResourceName *string
+	// The requester's note to the administrators.
+	Message *string
+	// How long the requester asked to have the access, in seconds counted from
+	// approval.
+	RequestedDurationSeconds *int
+	// When the requester asked to have the access until.
+	RequestedUntil *string
+	CreatedAt      string
+	// When the request lapses.
+	ExpiresAt string
+	// Dashboard page that opens the request to approve or deny it.
+	DecideURL string
+}
+
 type AgentPlugin struct {
-	// Plugin slug. Combined with marketplace_name, this identifies the plugin the
-	// agent enables in the managed tool.
+	// Plugin slug. Combined with marketplace_name, this identifies the plugin in
+	// the managed tool.
 	Slug string
 	// Name of the marketplace this plugin lives in. Always equals the `name` of
 	// one of the marketplaces in the same response.
 	MarketplaceName string
+	// How the agent installs the plugin. `required`: installed, and the user can't
+	// turn it off. `default`: installed, and the user can turn it off.
+	// `available`: not installed until the user turns it on. Agents that predate
+	// this field install every listed plugin.
+	InstallMode string
+	// Display name of the plugin. Absent for the synthesized observability plugin.
+	Name *string
+	// Short description of the plugin, when one is set.
+	Description *string
+	// MCP servers the plugin contains, in display order, possibly none.
+	// Display-only: the agent installs the plugin, not these entries. Absent for
+	// the synthesized observability plugin, which carries hooks rather than
+	// servers.
+	Servers []*AgentPluginServer `json:"servers,omitzero"`
+}
+
+type AgentPluginServer struct {
+	// Stable identifier of the server, the same in every plugin that contains it.
+	// Matches the id getMyConnections reports the server's sign-in state under.
+	// Absent from servers predating the field.
+	ID *string
+	// Display name of the server within its plugin.
+	Name string
+	// Link to the server's page in the Speakeasy dashboard. Present only when the
+	// enrolled user holds mcp:read on the server; the agent tells the user that
+	// links need that scope when it is absent.
+	DashboardURL *string
+}
+
+type AgentPollingPrincipal struct {
+	// Principal URN of the agent identity, for example `agent:<uuid>`.
+	Urn string
+	// Human-readable name of the agent identity.
+	DisplayName string
+}
+
+type AgentServerConnection struct {
+	// The server's id, as getPlugins reports it on each plugin server.
+	ID string
+	// `connected`: the user is signed in. `not_connected`: the user has not signed
+	// in. `reauthorization_required`: a sign-in exists but must be renewed.
+	// `not_required`: the server needs no sign-in from the user. `setup_required`:
+	// an administrator must finish the server's sign-in setup first. `no_access`:
+	// the user lacks permission to connect to the server. `unknown`: the state
+	// can't be determined, for example for a gateway.
+	State string
+	// Page that signs the user in to this server in the browser. Present when
+	// state is not_connected or reauthorization_required.
+	ConnectURL *string
+	// Page where the user can ask an administrator for access to this server.
+	// Present only when state is no_access and the organization accepts access
+	// requests.
+	RequestAccessURL *string
+	// True when the user hid this server, from the gateway consent page or the
+	// device agent. Absent when not hidden.
+	Hidden *bool
 }
 
 type AgentSessionMeta struct {
 	// The native harness session identifier this entry resolves, echoed from the
 	// request.
 	SessionID string
-	// Gram chat id for the captured session.
+	// Speakeasy chat id for the captured session.
 	ChatID string
 	// Generated (or manually set) chat title. Absent when no title has been
 	// generated yet.
@@ -125,11 +403,186 @@ type AgentSessionMeta struct {
 	UpdatedAt string
 }
 
+// The policy the agent's last reconcile applied.
+type AgentStatePolicy struct {
+	// Etag of the getPlugins snapshot the last reconcile applied. Omitted before
+	// the agent has applied one.
+	AppliedEtag *string
+	// When the agent first applied this etag. Later reconciles of the same etag
+	// keep this time.
+	AppliedAt *string
+	// Optional plugins the agent left out of the applied set because of a user
+	// choice. Required plugins are never withheld.
+	WithheldPlugins []*AgentStateWithheldPlugin
+	// Etag of the remote configuration the agent applied.
+	RemoteConfigEtag *string
+	// True when the agent could not apply the remote configuration it last
+	// received and kept its previous settings.
+	RemoteConfigFailed *bool
+}
+
+// A self-rollback: the daemon reverted an update that did not stabilize.
+type AgentStateRollback struct {
+	// When the rollback happened.
+	At string
+	// Version that failed to stabilize.
+	From *string
+	// Version the daemon reverted to.
+	To *string
+}
+
+// One managed tool's outcome from the agent's last reconcile. Carries no error
+// text or user-facing message: those can name paths and entries the agent does
+// not own.
+type AgentStateTool struct {
+	// Stable tool id, e.g. claude_code.
+	Tool string
+	// Resolved enforcement layer: user, managed, or off.
+	Layer string
+	// Reconcile outcome: armed, pending, skipped (tool not installed), error, or
+	// unmanaged.
+	Outcome string
+	// Why a pending tool is not yet enforcing: privileged_writer_not_ready or
+	// plugin_bundle_not_cloned.
+	PendingReason *string
+	// Class of a reconcile error: permission_denied, not_found, invalid_config, or
+	// unknown.
+	ErrorKind *string
+	// True when the agent wrote configuration the tool loads only after it
+	// restarts.
+	RestartRequired *bool
+	// True when a problem the user can fix is blocking this tool.
+	ActionRequired *bool
+	// Times since drift_counting_since the agent rewrote what it owns in this tool
+	// although the applied policy had not changed. Omitted when this tool's syncer
+	// does not measure drift.
+	DriftCorrections *int
+}
+
+// The device agent's update posture.
+type AgentStateUpdate struct {
+	// Auto-update mode: disabled, notify, or automatic.
+	AutoUpdate *string
+	// Release channel the agent resolved to.
+	Channel *string
+	// Version the organization pinned the fleet to, when set.
+	PinnedTarget *string
+	// True when the running build is in blocked_versions.
+	CurrentBlocked *bool
+	// The most recent time the daemon reverted a failed update, when it has.
+	LastRollback *AgentStateRollback
+}
+
+// Versions of the device agent's binaries and the platform they run on.
+type AgentStateVersions struct {
+	// Version of the speakeasyd daemon.
+	Speakeasyd string
+	// Version of the speakeasy CLI, when the agent could read it.
+	Speakeasy *string
+	// Version of the menu bar app, when the agent could read it.
+	SpeakeasyUI *string
+	// Operating system (Go GOOS), e.g. darwin.
+	Os *string
+	// CPU architecture (Go GOARCH), e.g. arm64.
+	Arch *string
+}
+
+// One optional plugin the agent left out of the applied set.
+type AgentStateWithheldPlugin struct {
+	// Marketplace the plugin belongs to.
+	Marketplace *string
+	// The plugin's slug.
+	Slug string
+	// Why it was withheld: user_disabled for a default-on plugin the user turned
+	// off, not_opted_in for an opt-in plugin the user has not turned on.
+	Reason string
+}
+
+// One Shadow AI scan target in an organization's list: a Speakeasy built-in,
+// or a target the organization added.
+type AiScanTarget struct {
+	// Stable id agents report and detections key on.
+	ID string
+	// Name shown in the dashboard.
+	DisplayName string
+	// Target category: harness (an AI coding tool), assistant (a general-purpose
+	// AI assistant or agent), or local_model (an open model run locally).
+	Category   string
+	Signatures *AiScanTargetSignatures
+	// Info.plist key the installed version is read from on a bundle match;
+	// defaults to CFBundleShortVersionString when omitted.
+	VersionPlistKey *string
+	GatewayClient   *AiScanTargetGatewayClient
+	// Where the target comes from: default (a Speakeasy built-in, whose definition
+	// is read-only) or organization (added by the organization, fully editable).
+	// Every target listed here is probed for; a built-in leaves the list by being
+	// removed from Speakeasy's catalog, an organization target by being deleted.
+	Origin string
+	// For a built-in, whether the organization has recorded an access decision
+	// about it. Always false for organization targets.
+	Customized bool
+	// The organization's access decision for the target, computed with the same
+	// rules the AI detections carry: unreviewed when nothing is recorded, and
+	// never enforceable without a verifiable gateway matcher. Absent only from a
+	// server that predates it; read a missing summary as unreviewed.
+	Access *types.AIToolAccessSummary
+	// When the organization's row was created; absent for an untouched default.
+	CreatedAt *string
+	// When the organization's row last changed; absent for an untouched default.
+	UpdatedAt *string
+}
+
+// How a target detected on a device is recognized again when the same tool
+// calls Speakeasy's MCP gateway. A device signature and a registered OAuth
+// client share no natural join key, so the link is declared here. The three
+// lists are not interchangeable: the first two name credentials Speakeasy
+// verified and can be enforced on, the third names what a client said about
+// itself and is used only to attribute traffic.
+type AiScanTargetGatewayClient struct {
+	// Vendor keys from Speakeasy's CIMD client catalog. Vendor-grained: no two
+	// targets may claim the same key, or a block on either would silently cover
+	// the other.
+	CimdVendorKeys []string
+	// Client ids matched literally against the caller's verified client_id, or
+	// CIMD catalog URLs — including the wildcard patterns — matched against the
+	// catalog entry that admitted it. Naming the catalog URL is how a vendor that
+	// mints one document per MCP server is still named exactly. No two targets may
+	// claim the same entry.
+	OauthClientIds []string
+	// Names an MCP client reports at initialize. Detection only, never
+	// authorization: the value is self-reported and any client can claim any name.
+	ClientInfoNames []string
+}
+
+// AiScanTargetMutationResult is the result type of the agent service
+// upsertAiScanTarget method.
+type AiScanTargetMutationResult struct {
+	// Version of the served list after the change.
+	ListVersion int
+	Target      *AiScanTarget
+}
+
+// On-device signals the scan checks for one target.
+type AiScanTargetSignatures struct {
+	// macOS CFBundleIdentifier values matched against app bundles under
+	// /Applications and ~/Applications.
+	BundleIds []string
+	// Bare command names resolved on the device PATH; never a path.
+	Binaries []string
+	// Directories whose existence marks the tool as installed, taken as
+	// home-relative unless they start with /. A `*` is a wildcard matching any run
+	// of characters within ONE path segment, never crossing a `/`, for tools
+	// installed under a version-stamped directory name such as an editor extension.
+	ConfigDirs []string
+	// Exact process names checked for the running signal.
+	ProcessNames []string
+}
+
 // CreateSessionHandoffPayload is the payload type of the agent service
 // createSessionHandoff method.
 type CreateSessionHandoffPayload struct {
 	ApikeyToken *string
-	// Native harness session identifier the handoff was rendered from. Gram
+	// Native harness session identifier the handoff was rendered from. Speakeasy
 	// derives its chat id from this the same way hook ingest does; a
 	// not-yet-captured session can still mint a link.
 	SessionID string
@@ -160,6 +613,21 @@ type CreateSessionHandoffResult struct {
 	ExpiresAt string
 }
 
+// DeleteAiScanTargetPayload is the payload type of the agent service
+// deleteAiScanTarget method.
+type DeleteAiScanTargetPayload struct {
+	SessionToken *string
+	// Id of the target to remove.
+	ID string
+}
+
+// DeleteAiScanTargetResult is the result type of the agent service
+// deleteAiScanTarget method.
+type DeleteAiScanTargetResult struct {
+	// Version of the served list after the change.
+	ListVersion int
+}
+
 // DeviceAgentConfiguration is the result type of the agent service
 // getConfiguration method.
 type DeviceAgentConfiguration struct {
@@ -178,15 +646,48 @@ type DeviceAgentConfiguration struct {
 	UpdatedAt *string
 }
 
+// GetClaudeObservabilityPluginPayload is the payload type of the agent service
+// getClaudeObservabilityPlugin method.
+type GetClaudeObservabilityPluginPayload struct {
+	ApikeyToken *string
+}
+
+// GetClaudeObservabilityPluginResult is the result type of the agent service
+// getClaudeObservabilityPlugin method.
+type GetClaudeObservabilityPluginResult struct {
+	ContentType        string
+	ContentDisposition string
+}
+
 // GetConfigurationPayload is the payload type of the agent service
 // getConfiguration method.
 type GetConfigurationPayload struct {
 	SessionToken *string
 }
 
+// GetMyConnectionsPayload is the payload type of the agent service
+// getMyConnections method.
+type GetMyConnectionsPayload struct {
+	ApikeyToken *string
+	// Email address of the enrolled user, sent in the Gram-User-Email header.
+	// Required when authenticating with an org-scoped agent install key; ignored
+	// for a per-user key, whose owner is the enrolled user.
+	Email *string
+}
+
+// GetMyConnectionsResult is the result type of the agent service
+// getMyConnections method.
+type GetMyConnectionsResult struct {
+	// One entry per distinct MCP server in the plugins delivered to the user, in
+	// plugin order. Servers the user can neither read nor connect to are omitted;
+	// a server the user can read but not connect to is reported as no_access.
+	Servers []*AgentServerConnection
+}
+
 // GetPluginsPayload is the payload type of the agent service getPlugins method.
 type GetPluginsPayload struct {
-	ApikeyToken *string
+	DeviceAgentToken *string
+	ApikeyToken      *string
 	// Email address of the enrolled user, sent in the Gram-User-Email header.
 	// Required when authenticating with an org-scoped agent install key (the MDM
 	// zero-touch path); ignored for a per-user key, whose owner is the enrolled
@@ -202,24 +703,49 @@ type GetPluginsPayload struct {
 	SerialNumber *string
 	// Hostname of the machine the agent runs on, when it can be read.
 	Hostname *string
+	// What kind of machine the agent runs on: `endpoint` (the default when
+	// omitted) for an end-user device of any form factor, `ephemeral` for a
+	// short-lived cloud sandbox or container, or `server` for a long-running
+	// shared host. Lets coverage distinguish a developer's machine from a cloud
+	// session, which reports no hardware serial and a generic hostname. An
+	// unrecognized value is treated as `endpoint`.
+	Environment *string
 }
 
 // GetPluginsResult is the result type of the agent service getPlugins method.
 type GetPluginsResult struct {
-	// Opaque revision identifier covering the marketplace, plugin, and
-	// remote-configuration set. The agent stores this to detect changes between
-	// polls.
+	// Opaque revision identifier covering the marketplace, plugin, MCP server
+	// (including each server's token endpoint, audience and resource),
+	// remote-configuration, and organization-gateway set. The agent stores this to
+	// detect changes between polls.
 	Etag string
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
 	Marketplaces []*AgentMarketplace
-	// Plugins the agent should enable. Each entry references one of the
-	// marketplaces above by name.
+	// Plugins for the caller: the observability plugin of each listed marketplace,
+	// when enabled, and the plugins assigned to the caller. Each entry's
+	// install_mode says whether the agent installs it (`required`, `default`) or
+	// only offers it for the user to turn on (`available`). Each entry references
+	// one of the marketplaces above by name.
 	Plugins []*AgentPlugin
 	// Organization-wide remote configuration. Absent until an administrator saves
 	// a configuration, allowing an agent with no cached remote layer to keep using
 	// its local configuration.
 	Configuration *DeviceAgentConfiguration
+	// URL of the active organization's gateway. Absent when the organization
+	// gateway is unavailable.
+	OrganizationGatewayURL *string
+	// The non-human principal the plugin set was resolved for. Present only when
+	// the caller authenticated with an agent API key.
+	Principal *AgentPollingPrincipal
+	// Speakeasy-hosted MCP servers the agent registers directly in each managed
+	// tool's configuration, authorized by the device's own mcp:connect credential.
+	// Populated only when the caller polls as an agent (an agent API key, or a
+	// workload acting for its assigned agent), from the MCP servers in the plugins
+	// assigned to that agent; always empty for people, who reach these servers
+	// through their plugins. Always present: an empty list tells the agent to
+	// remove the entries it wrote earlier.
+	McpServers []*AgentMCPServer
 }
 
 // GetSessionMetaPayload is the payload type of the agent service
@@ -227,8 +753,8 @@ type GetPluginsResult struct {
 type GetSessionMetaPayload struct {
 	ApikeyToken *string
 	// Native harness session identifiers (e.g. Claude Code session UUIDs, Codex
-	// rollout ids) to resolve. Gram derives its chat ids from these the same way
-	// hook ingest does.
+	// rollout ids) to resolve. Speakeasy derives its chat ids from these the same
+	// way hook ingest does.
 	SessionIds []string
 }
 
@@ -238,6 +764,51 @@ type GetSessionMetaResult struct {
 	// Metadata for the requested sessions that exist and are owned by the calling
 	// user. Requested ids with no captured chat or another owner are omitted.
 	Sessions []*AgentSessionMeta
+}
+
+// HideMcpServerPayload is the payload type of the agent service hideMcpServer
+// method.
+type HideMcpServerPayload struct {
+	ApikeyToken *string
+	// The MCP server, as getMyConnections reports it.
+	McpServerID string
+	// Email address of the enrolled user, sent in the Gram-User-Email header.
+	// Required when authenticating with an org-scoped agent install key; ignored
+	// for a per-user key, whose owner is the enrolled user.
+	Email *string
+}
+
+// ListAiScanTargetsPayload is the payload type of the agent service
+// listAiScanTargets method.
+type ListAiScanTargetsPayload struct {
+	SessionToken *string
+}
+
+// ListAiScanTargetsResult is the result type of the agent service
+// listAiScanTargets method.
+type ListAiScanTargetsResult struct {
+	// Version of the served catalog; the value agents echo as target_list_version
+	// once they receive it.
+	ListVersion int
+	// Fingerprint of the served list; changes whenever the targets or their
+	// definitions change.
+	Etag string
+	// Every target in the organization's list, ordered by id.
+	Targets []*AiScanTarget
+}
+
+// ListPendingAccessRequestsPayload is the payload type of the agent service
+// listPendingAccessRequests method.
+type ListPendingAccessRequestsPayload struct {
+	ApikeyToken *string
+}
+
+// ListPendingAccessRequestsResult is the result type of the agent service
+// listPendingAccessRequests method.
+type ListPendingAccessRequestsResult struct {
+	// Pending requests, newest first. At most 50. Empty for a user who is not an
+	// organization administrator.
+	Requests []*AgentPendingAccessRequest
 }
 
 // ListSyncedUsersPayload is the payload type of the agent service
@@ -253,19 +824,72 @@ type ListSyncedUsersResult struct {
 	Users []*SyncedAgentUser
 }
 
+// ReportAIScanPayload is the payload type of the agent service reportAIScan
+// method.
+type ReportAIScanPayload struct {
+	ApikeyToken *string
+	// When the agent started the scan.
+	ScanStartedAt string
+	// When the agent completed the scan.
+	ScanCompletedAt string
+	// Revision of the scan target catalog the agent scanned with: the list_version
+	// it last received from getPlugins, or 0 when it fell back to the list
+	// embedded in its binary. Echoed into the scan receipt as reported.
+	TargetListVersion int
+	// Detection targets the scan matched. Empty when the device came back clean;
+	// the report still lands as a scan receipt.
+	Matches []*AIScanMatch
+	// Email of the enrolled user, sent in the Gram-User-Email header.
+	// Authoritative when authenticating with an org-scoped agent install key (the
+	// MDM zero-touch path); ignored for a per-user key, whose owner is the
+	// enrolled user.
+	Email *string
+	// Hardware serial number of the machine that was scanned, when the agent can
+	// read it.
+	SerialNumber *string
+	// Hostname of the machine that was scanned, when the agent can read it.
+	Hostname *string
+}
+
+// ReportCrashPayload is the payload type of the agent service reportCrash
+// method.
+type ReportCrashPayload struct {
+	DeviceAgentToken *string
+	ApikeyToken      *string
+	// Queued crash reports, oldest first.
+	Reports []*AgentCrashReport
+	// Email of the enrolled user, sent in the Gram-User-Email header.
+	// Authoritative when authenticating with an org-scoped agent install key;
+	// ignored for a per-user key, whose owner is the enrolled user.
+	Email *string
+	// Hardware serial number of the machine that crashed, when the agent can read
+	// it.
+	SerialNumber *string
+	// Kind of machine the agent runs on (endpoint, server or ephemeral), sent in
+	// the Gram-Device-Environment header.
+	Environment *string
+}
+
+// ReportCrashResult is the result type of the agent service reportCrash method.
+type ReportCrashResult struct {
+	// Reports accepted. A report not shaped like a device agent crash is dropped
+	// and not counted. The agent removes every report in the batch on success.
+	Accepted int
+}
+
 // ReportSessionMovedPayload is the payload type of the agent service
 // reportSessionMoved method.
 type ReportSessionMovedPayload struct {
 	ApikeyToken *string
-	// Native harness session identifier of the moved session. Gram derives its
-	// chat id from this the same way hook ingest does; the move is recorded even
-	// if the session has not been captured yet.
+	// Native harness session identifier of the moved session. Speakeasy derives
+	// its chat id from this the same way hook ingest does; the move is recorded
+	// even if the session has not been captured yet.
 	SessionID string
 	// Harness the session was moved to (e.g. cursor, codex, claude-code).
 	TargetHarness string
 	// Native session id minted for the continuation, when the daemon knows it at
 	// launch time (claude-code targets today; Cursor mints ids server-side so
-	// moves there omit it). Lets Gram link the original session and its
+	// moves there omit it). Lets Speakeasy link the original session and its
 	// continuation.
 	TargetSessionID *string
 	// Harness the session originated in, as detected by the agent (e.g.
@@ -282,6 +906,56 @@ type ReportSessionMovedPayload struct {
 	Hostname *string
 }
 
+// ReportStatePayload is the payload type of the agent service reportState
+// method.
+type ReportStatePayload struct {
+	ApikeyToken *string
+	// Report envelope version. Fields are added within a version; a change of
+	// meaning bumps it. Newer versions are accepted and stored as far as this
+	// server understands them.
+	SchemaVersion int
+	// When the agent assembled the report, by its own clock.
+	GeneratedAt string
+	// Versions of the agent binaries and the platform they run on.
+	Agent *AgentStateVersions
+	// True when the kill switch has halted policy enforcement because the running
+	// build is in blocked_versions. The tool outcomes are then those of the last
+	// reconcile before the halt.
+	EnforcementHalted bool
+	// The policy the agent's last reconcile applied.
+	Policy *AgentStatePolicy
+	// Each managed tool's outcome from the last reconcile.
+	Tools []*AgentStateTool
+	// Start of the window tools[].drift_corrections counts over (the daemon's
+	// start).
+	DriftCountingSince *string
+	// The agent's update posture.
+	Update *AgentStateUpdate
+	// Email of the enrolled user, sent in the Gram-User-Email header.
+	// Authoritative when authenticating with an org-scoped agent install key (the
+	// MDM zero-touch path); ignored for a per-user key, whose owner is the
+	// enrolled user.
+	Email *string
+	// Hardware serial number of the reporting machine, when the agent can read it.
+	SerialNumber *string
+	// Hostname of the reporting machine, when the agent can read it.
+	Hostname *string
+	// What kind of machine the agent runs on, as in getPlugins: endpoint (the
+	// default when omitted), ephemeral, or server.
+	Environment *string
+}
+
+// ReportStateResult is the result type of the agent service reportState method.
+type ReportStateResult struct {
+	// False when the report was accepted but not stored because it came from a
+	// non-endpoint environment.
+	Stored bool
+	// The applied etag the server now holds for this device.
+	AppliedEtag *string
+	// When the server received the report.
+	ReceivedAt string
+}
+
 type SyncedAgentUser struct {
 	// Email the device agent reported on sync. Resolve against org members for
 	// display.
@@ -292,16 +966,49 @@ type SyncedAgentUser struct {
 	LastSeenAt string
 }
 
+// UnhideMcpServerPayload is the payload type of the agent service
+// unhideMcpServer method.
+type UnhideMcpServerPayload struct {
+	ApikeyToken *string
+	// The MCP server, as getMyConnections reports it.
+	McpServerID string
+	// Email address of the enrolled user, sent in the Gram-User-Email header.
+	// Required when authenticating with an org-scoped agent install key; ignored
+	// for a per-user key, whose owner is the enrolled user.
+	Email *string
+}
+
 // UpdateConfigurationPayload is the payload type of the agent service
 // updateConfiguration method.
 type UpdateConfigurationPayload struct {
 	SessionToken *string
 	// Shareable device-agent settings. Supported keys include platforms,
-	// update_channel, auto_update, pinned_target, blocked_versions, and
-	// sync_interval_seconds. update_channel and blocked_versions can only be set
+	// update_channel, auto_update, pinned_target, blocked_versions,
+	// sync_interval_seconds, ai_scan_interval_seconds, disable_ai_scan, and
+	// disable_crash_reports. update_channel and blocked_versions can only be set
 	// by Speakeasy platform administrators; per-device identity and secret keys
-	// are forbidden.
+	// are forbidden, as is ai_scan, which Speakeasy injects from the
+	// organization's scan target list when serving agents.
 	Config map[string]any
+}
+
+// UpsertAiScanTargetPayload is the payload type of the agent service
+// upsertAiScanTarget method.
+type UpsertAiScanTargetPayload struct {
+	SessionToken *string
+	// Stable id agents report and detections key on. Never reused for a different
+	// tool.
+	ID string
+	// Name shown in the dashboard.
+	DisplayName string
+	// Target category: harness (an AI coding tool), assistant (a general-purpose
+	// AI assistant or agent), or local_model (an open model run locally).
+	Category      string
+	Signatures    *AiScanTargetSignatures
+	GatewayClient *AiScanTargetGatewayClient
+	// Info.plist key to read the installed version from on a bundle match;
+	// defaults to CFBundleShortVersionString when omitted.
+	VersionPlistKey *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -1,0 +1,115 @@
+import { MemoryRouter, useLocation } from "react-router";
+import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { GramCore } from "@gram/client/core.js";
+import { HTTPClient } from "@gram/client/lib/http.js";
+import { GramProvider } from "@gram/client/react-query/_context.js";
+import type { ReactNode } from "react";
+import { afterEach, expect, it, vi } from "vitest";
+
+import { McpServersTab } from "./McpServersTab";
+
+// LocationProbe publishes the router location so a navigating action can be
+// asserted on its destination rather than on the click alone.
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <span data-testid="location">{`${location.pathname}${location.hash}`}</span>
+  );
+}
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasAnyScope: () => true }),
+}));
+vi.mock("@/contexts/Sdk", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "proj" }),
+}));
+
+const queryClients: QueryClient[] = [];
+afterEach(() => {
+  cleanup();
+  queryClients.forEach((client) => client.clear());
+  queryClients.length = 0;
+});
+
+function setup(url = "https://upstream.example.test/mcp") {
+  const requests: Request[] = [];
+  const client = new GramCore({
+    serverURL: "https://api.example.test",
+    retryConfig: { strategy: "none" },
+    httpClient: new HTTPClient({
+      fetcher: async (request) => {
+        const req = request as Request;
+        requests.push(req);
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "11111111-1111-4111-8111-111111111111",
+                project_id: "22222222-2222-4222-8222-222222222222",
+                project_slug: "proj",
+                name: "Example server",
+                slug: "example-server",
+                url,
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      },
+    }),
+  });
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  queryClients.push(queryClient);
+  const view = render(<McpServersTab clientId="client-a" />, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>
+        <GramProvider client={client}>
+          <MemoryRouter>
+            {children}
+            <LocationProbe />
+          </MemoryRouter>
+        </GramProvider>
+      </QueryClientProvider>
+    ),
+  });
+  return { ...view, requests, user: userEvent.setup() };
+}
+
+async function openRowMenu(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByText("Example server");
+  const trigger = screen
+    .getAllByRole("button")
+    .find((button) => button.querySelector("svg"));
+  if (trigger) await user.click(trigger);
+}
+
+it("links to the server's own Sign-in", async () => {
+  const { user } = setup();
+  await openRowMenu(user);
+  expect(
+    screen.queryByText("Remove from server"),
+    "never offers the legacy binding control",
+  ).toBeNull();
+
+  await user.click(await screen.findByText("Manage in Sign-in"));
+  expect(screen.getByTestId("location").textContent).toBe(
+    "/org/projects/proj/mcp/example-server/settings#authentication",
+  );
+});
+
+it("opens settings without guessing an Identity anchor when usage has no remote URL", async () => {
+  const { user } = setup("");
+  await openRowMenu(user);
+  expect(screen.queryByText("Manage in Sign-in")).toBeNull();
+  await user.click(await screen.findByText("Open server settings"));
+  expect(screen.getByTestId("location").textContent).toBe(
+    "/org/projects/proj/mcp/example-server/settings",
+  );
+});

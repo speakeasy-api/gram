@@ -1,6 +1,17 @@
 package telemetry
 
-import "context"
+import (
+	"context"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// LogSyncForTest uses the normal logger pipeline but commits the insert before
+// returning, so query fixtures do not depend on the shared async insert queue.
+func (l *Logger) LogSyncForTest(ctx context.Context, params LogParams) error {
+	_, err := l.logBulk(ctx, ctx, []LogParams{params}, true)
+	return err
+}
 
 // InvalidateForTest drops the cached snapshot for the user so tests can
 // simulate TTL expiry deterministically.
@@ -16,4 +27,10 @@ func (r *UserInfoResolver) InvalidateForTest(ctx context.Context, organizationID
 // drain they await, so the WaitGroup Add happens-before this Wait.
 func (p *LogPublisher) WaitForPublishDrains() {
 	p.drains.Wait()
+}
+
+// NewGatewayOwnersForTest is the per-request cache of an organization's
+// gateway owners that the matchers and labels share.
+func NewGatewayOwnersForTest(db *pgxpool.Pool, organizationID string) *gatewayOwners {
+	return newGatewayOwners(db, organizationID)
 }

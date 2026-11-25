@@ -1,3 +1,7 @@
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { useProject } from "@/contexts/Auth";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { Page } from "@/components/page-layout";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -8,17 +12,28 @@ import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";
+import { useLinkSkillMutation } from "@gram/client/react-query/linkSkill.js";
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
+import {
+  type SkillLinkTarget,
+  skillLinkTargetFields,
+  skillLinkTargetKey,
+} from "./skill-links";
 import { filterSkills, prioritizeAddableSkills } from "./skills-list-helpers";
 
+/**
+ * Where the picked skills go: an assistant or plugin distribution, or a link
+ * that serves them over MCP from a server or gateway.
+ */
 type SkillDistributionTarget =
-  | { assistantId: string; pluginId?: never }
-  | { assistantId?: never; pluginId: string };
+  | { assistantId: string; pluginId?: never; linkTarget?: never }
+  | { assistantId?: never; pluginId: string; linkTarget?: never }
+  | { assistantId?: never; pluginId?: never; linkTarget: SkillLinkTarget };
 
 export type SkillPickerResult = {
   addedCount: number;
@@ -48,28 +63,67 @@ export function SkillPickerDialog({
   renderSelectionNotice?: (selectedCount: number) => ReactNode;
   onBatchComplete: (result: SkillPickerResult) => void | Promise<void>;
 }): JSX.Element {
+  const canWritePlugin = usePluginWriteAccess();
+  const project = useProject();
+  const scope = usePluginQueryScope();
+  const { grants, isLoading: isLoadingPermissions } = useRBAC();
+  const canReadSkills =
+    !isLoadingPermissions &&
+    hasScopeInGrants(grants ?? [], "skill:read", project.id, project.id);
+  // Plugin and link targets list every project skill and recheck per skill
+  // grants; an MCP link's own write check is made by the caller, which only
+  // opens the picker for writers of the target.
+  const checksSkillGrants = !!target.pluginId || !!target.linkTarget;
+  const canLoadSkills = target.pluginId
+    ? canWritePlugin && canReadSkills
+    : target.linkTarget
+      ? canReadSkills
+      : true;
   const [search, setSearch] = useState("");
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const [isBatchAdding, setIsBatchAdding] = useState(false);
+  // Callers build the target inline, so the reset keys on its value.
+  const linkTargetKey = target.linkTarget
+    ? skillLinkTargetKey(target.linkTarget)
+    : undefined;
   useEffect(() => {
     if (!open) return;
     setSearch("");
     setSelectedSkillIds([]);
-  }, [open, target.assistantId, target.pluginId]);
-  const skillsQuery = useSkillsInfinite({ limit: 200 }, undefined, {
+  }, [open, target.assistantId, target.pluginId, linkTargetKey]);
+  const skillsQuery = useSkillsInfinite({ ...scope, limit: 200 }, undefined, {
     throwOnError: false,
-    enabled: open,
+    enabled: open && canLoadSkills,
   });
-  useDrainInfiniteQuery(skillsQuery, open);
-  const isLoading = skillsQuery.isPending || skillsQuery.hasNextPage;
+  useDrainInfiniteQuery(skillsQuery, open && canLoadSkills);
+  const isLoading =
+    canLoadSkills && (skillsQuery.isPending || skillsQuery.hasNextPage);
   const availableSkills = useMemo(() => {
     const excluded = new Set(excludedSkillIds);
     return prioritizeAddableSkills(
       (
         skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
-      ).filter((skill) => !excluded.has(skill.id)),
+      ).filter(
+        (skill) =>
+          !excluded.has(skill.id) &&
+          (!checksSkillGrants ||
+            (canLoadSkills &&
+              hasScopeInGrants(
+                grants ?? [],
+                "skill:read",
+                [skill.id, project.id],
+                project.id,
+              ))),
+      ),
     );
-  }, [excludedSkillIds, skillsQuery.data?.pages]);
+  }, [
+    excludedSkillIds,
+    skillsQuery.data?.pages,
+    checksSkillGrants,
+    canLoadSkills,
+    grants,
+    project.id,
+  ]);
   const visibleSkills = useMemo(
     () => filterSkills(availableSkills, search, [], []),
     [availableSkills, search],
@@ -89,6 +143,7 @@ export function SkillPickerDialog({
     .filter(Boolean)
     .join(" · ");
   const distribute = useDistributeSkillMutation();
+  const link = useLinkSkillMutation();
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && isBatchAdding) return;
@@ -105,16 +160,44 @@ export function SkillPickerDialog({
 
   const handleSubmit = async () => {
     if (selectedSkillIds.length === 0 || isBatchAdding) return;
+    if (
+      checksSkillGrants &&
+      (!canLoadSkills ||
+        selectedSkillIds.some(
+          (id) =>
+            !hasScopeInGrants(
+              grants ?? [],
+              "skill:read",
+              [id, project.id],
+              project.id,
+            ),
+        ))
+    )
+      return;
     setIsBatchAdding(true);
     try {
       const results = await Promise.allSettled(
-        selectedSkillIds.map((skillId) =>
-          distribute.mutateAsync({
+        selectedSkillIds.map((skillId) => {
+          const { linkTarget, ...distributionTarget } = target;
+          if (linkTarget) {
+            return link.mutateAsync({
+              request: {
+                linkSkillRequestBody: {
+                  id: skillId,
+                  ...skillLinkTargetFields(linkTarget),
+                },
+              },
+            });
+          }
+          return distribute.mutateAsync({
             request: {
-              distributeSkillRequestBody: { id: skillId, ...target },
+              distributeSkillRequestBody: {
+                id: skillId,
+                ...distributionTarget,
+              },
             },
-          }),
-        ),
+          });
+        }),
       );
       const failedIds = selectedSkillIds.filter(
         (_, index) => results[index]?.status === "rejected",

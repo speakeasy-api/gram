@@ -1,3 +1,4 @@
+import { useMcpDiscoveryAccess } from "./useMcpDiscoveryAccess";
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
@@ -32,7 +33,9 @@ export function useObservabilityMcpConfig({
   const { projectSlug } = useSlugs();
   const client = useGramContext();
   const { session } = useSession();
-  const enabled = Boolean(projectSlug);
+  const { canReadServers, canReadEndpoints } =
+    useMcpDiscoveryAccess(projectSlug);
+  const enabled = canReadServers;
   const request = projectSlug ? { gramProject: projectSlug } : undefined;
   const { data: toolsetsData, isLoading: toolsetsLoading } = useListToolsets(
     request,
@@ -47,7 +50,7 @@ export function useObservabilityMcpConfig({
   const { data: endpointsData, isLoading: endpointsLoading } = useMcpEndpoints(
     request,
     undefined,
-    { enabled },
+    { enabled: canReadEndpoints },
   );
 
   const getSession = useCallback(async (): Promise<string> => {
@@ -76,16 +79,18 @@ export function useObservabilityMcpConfig({
         ? observabilityMcpEntries({
             projectSlug,
             serverURL: getServerURL(),
-            toolsetsLoading,
-            toolsets: toolsetsData?.toolsets,
-            mcpServersLoading,
-            mcpServers: mcpServersData?.mcpServers,
-            endpointsLoading,
-            endpoints: endpointsData?.mcpEndpoints,
+            toolsetsLoading: canReadServers && toolsetsLoading,
+            toolsets: canReadServers ? toolsetsData?.toolsets : [],
+            mcpServersLoading: canReadServers && mcpServersLoading,
+            mcpServers: canReadServers ? mcpServersData?.mcpServers : [],
+            endpointsLoading: canReadEndpoints && endpointsLoading,
+            endpoints: canReadEndpoints ? endpointsData?.mcpEndpoints : [],
           })
         : undefined,
     [
       projectSlug,
+      canReadServers,
+      canReadEndpoints,
       toolsetsLoading,
       toolsetsData?.toolsets,
       mcpServersLoading,
@@ -130,7 +135,7 @@ export function useObservabilityMcpConfig({
  * Used to show a setup prompt in the AI Insights sidebar.
  */
 export function useNoToolsetsConfigured(projectSlug?: string): boolean {
-  const enabled = Boolean(projectSlug);
+  const { canReadServers: enabled } = useMcpDiscoveryAccess(projectSlug);
   const request = projectSlug ? { gramProject: projectSlug } : undefined;
   const {
     data: toolsetsData,
@@ -143,16 +148,19 @@ export function useNoToolsetsConfigured(projectSlug?: string): boolean {
     isError: mcpServersFailed,
   } = useMcpServers(request, undefined, { enabled });
 
-  return isNoMcpAccessConfigured({
-    projectSlug,
-    toolsetsLoading,
-    toolsetCount: settledListCount(toolsetsData, toolsetsData?.toolsets),
-    mcpServersLoading,
-    mcpServerCount: settledListCount(
-      mcpServersData,
-      mcpServersData?.mcpServers,
-    ),
-    toolsetsFailed,
-    mcpServersFailed,
-  });
+  return (
+    enabled &&
+    isNoMcpAccessConfigured({
+      projectSlug,
+      toolsetsLoading,
+      toolsetCount: settledListCount(toolsetsData, toolsetsData?.toolsets),
+      mcpServersLoading,
+      mcpServerCount: settledListCount(
+        mcpServersData,
+        mcpServersData?.mcpServers,
+      ),
+      toolsetsFailed,
+      mcpServersFailed,
+    })
+  );
 }

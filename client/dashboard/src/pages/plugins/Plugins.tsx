@@ -1,16 +1,25 @@
-import { CreateResourceCard } from "@/components/create-resource-card";
+import { McpEntityCard } from "@/components/mcp/McpEntityCard";
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { useOrganization } from "@/contexts/Auth";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
+import { Page } from "@/components/page-layout";
+import { Icon } from "@/components/ui/Icon";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
-import { Card } from "@/components/ui/Card";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { Text } from "@/components/ui/Text";
-import { RequireScope } from "@/components/require-scope";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
-import { Plugin } from "@gram/client/models/components/plugin.js";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { useCreatePluginMutation } from "@gram/client/react-query/createPlugin";
 import {
   invalidateAllPlugins,
@@ -35,10 +44,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
+import { MoreActions } from "@/components/ui/MoreActions";
 import { Stack } from "@/components/ui/Stack";
+import { Label } from "@/components/ui/Label";
+import { Switch } from "@/components/ui/Switch";
+import { useRBAC } from "@/hooks/useRBAC";
 import { Activity, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlatformInstrumentationSheet } from "../setup/components/platform-instrumentation-sheet";
@@ -49,6 +62,9 @@ import {
 } from "./MarketplaceCard";
 import { PluginCard } from "./PluginCard";
 import { PluginInstallButton } from "./PluginInstallButton";
+import type { ObservabilityDownloadPlatform } from "./observability-platforms";
+import { OBSERVABILITY_DOWNLOAD_PLATFORMS } from "./observability-platforms";
+import { RotateObservabilityCredentialDialog } from "./RotateObservabilityCredentialDialog";
 import { downloadResponse } from "./downloadPluginPackage";
 import {
   matchesPluginFilters,
@@ -61,8 +77,40 @@ export function PluginsRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function Plugins(): JSX.Element {
+export default function Plugins(): JSX.Element | null {
+  const { hasScope, isLoading } = useRBAC();
+  const organization = useOrganization();
+  const canWritePlugin = usePluginWriteAccess();
+  if (isLoading) return <SplashScreen />;
+  if (!canWritePlugin && !hasScope("org:read", organization.id)) return null;
+  return hasScope("org:admin", organization.id) ? (
+    <PluginsWithMarketplaceSettings />
+  ) : (
+    <PluginsContent />
+  );
+}
+
+function PluginsWithMarketplaceSettings(): JSX.Element {
+  const scope = usePluginQueryScope();
+  const { data } = useMarketplaceSettingsSuspense(scope);
+  return <PluginsContent marketplaceSettings={data} />;
+}
+
+function PluginsContent({
+  marketplaceSettings = {
+    defaultName: "",
+    effectiveName: "",
+    observabilityEnabled: false,
+  },
+}: {
+  marketplaceSettings?: ReturnType<
+    typeof useMarketplaceSettingsSuspense
+  >["data"];
+}): JSX.Element {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [createAutoSyncEnabled, setCreateAutoSyncEnabled] = useState(false);
+  const [createAutoAddServersEnabled, setCreateAutoAddServersEnabled] =
+    useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isManageCollaboratorsOpen, setIsManageCollaboratorsOpen] =
     useState(false);
@@ -71,24 +119,25 @@ export default function Plugins(): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
 
-  const { data } = usePluginsSuspense();
+  const scope = usePluginQueryScope();
+  const { data } = usePluginsSuspense(scope);
   // Polled so the marketplace card and per-plugin sync badges pick up the
   // Temporal generator-rollout schedule's auto-sync without a manual refresh.
-  const { data: publishStatus } = usePublishStatusSuspense(
-    undefined,
-    undefined,
-    { refetchInterval: 5_000 },
-  );
-  const { data: marketplaceSettings } = useMarketplaceSettingsSuspense();
+  const { data: publishStatus } = usePublishStatusSuspense(scope, undefined, {
+    refetchInterval: 5_000,
+  });
+  const { hasScope } = useRBAC();
+  const canWritePlugin = usePluginWriteAccess();
+  const organization = useOrganization();
+  const canManageMarketplace = hasScope("org:admin", organization.id);
   const { fetch: authFetch } = useFetcher();
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
-  const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | "codex" | "opencode" | "openclaw" | null
-  >(null);
+  const [isDownloadingObservability, setIsDownloadingObservability] =
+    useState<ObservabilityDownloadPlatform | null>(null);
 
   const handleObservabilityDownload = async (
-    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw",
+    platform: ObservabilityDownloadPlatform,
   ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
@@ -110,23 +159,36 @@ export default function Plugins(): JSX.Element {
     }
   };
 
+  // Ref, not state: onSuccess/onError read the mode from a detached mutation
+  // callback, where a state capture would be stale; it also avoids re-rendering
+  // the memoized dialogs on mode switch.
+  const publishModeRef = useRef<"publish" | "manage">("publish");
+
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
+      const managing = publishModeRef.current === "manage";
       setIsPublishDialogOpen(false);
       setIsManageCollaboratorsOpen(false);
       void invalidateAllPublishStatus(queryClient);
-      toast.success("Plugins published to GitHub", {
-        description: data.repoUrl,
-        action: {
-          label: "Open",
-          onClick: () => {
-            openSafeExternalUrl(data.repoUrl);
+      toast.success(
+        managing ? "Collaborators added" : "Plugins published to GitHub",
+        {
+          description: data.repoUrl,
+          action: {
+            label: "Open",
+            onClick: () => {
+              openSafeExternalUrl(data.repoUrl);
+            },
           },
         },
-      });
+      );
     },
     onError: () => {
-      toast.error("Failed to publish plugins to GitHub");
+      toast.error(
+        publishModeRef.current === "manage"
+          ? "Failed to add collaborators"
+          : "Failed to publish plugins to GitHub",
+      );
     },
   });
 
@@ -160,6 +222,7 @@ export default function Plugins(): JSX.Element {
 
   const handleCreate: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
+    if (!canWritePlugin) return;
     const formData = new FormData(e.currentTarget);
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
@@ -170,10 +233,28 @@ export default function Plugins(): JSX.Element {
         createPluginForm: {
           name,
           description: description || undefined,
+          autoSyncEnabled: createAutoSyncEnabled,
+          autoAddServersEnabled: createAutoAddServersEnabled,
         },
       },
     });
   };
+
+  const openCreateDialog = () => {
+    setCreateAutoSyncEnabled(false);
+    setCreateAutoAddServersEnabled(false);
+    setIsCreateDialogOpen(true);
+  };
+
+  // Plugins whose auto sync is off only publish their changes on a manual
+  // sync, so the marketplace card says so.
+  const pausedPluginNames = useMemo(
+    () =>
+      (data?.plugins ?? [])
+        .filter((plugin) => plugin.autoSyncEnabled === false)
+        .map((plugin) => plugin.name),
+    [data?.plugins],
+  );
 
   // Destructure mutate so the dep array references the stable function
   // directly (TanStack Query keeps mutate referentially stable, but the
@@ -182,6 +263,8 @@ export default function Plugins(): JSX.Element {
   const { mutate: publishMutate } = publishMutation;
   const handlePublish = useCallback(
     (githubUsernames: string[]) => {
+      if (!canWritePlugin) return;
+      publishModeRef.current = "publish";
       publishMutate({
         security: { sessionHeaderGramSession: "" },
         request: {
@@ -189,7 +272,20 @@ export default function Plugins(): JSX.Element {
         },
       });
     },
-    [publishMutate],
+    [canWritePlugin, publishMutate],
+  );
+  const handleAddCollaborators = useCallback(
+    (githubUsernames: string[]) => {
+      if (!canManageMarketplace) return;
+      publishModeRef.current = "manage";
+      publishMutate({
+        security: { sessionHeaderGramSession: "" },
+        request: {
+          publishPluginsRequestBody: { githubUsernames },
+        },
+      });
+    },
+    [canManageMarketplace, publishMutate],
   );
 
   const [marketplaceNameInput, setMarketplaceNameInput] = useState(
@@ -197,26 +293,14 @@ export default function Plugins(): JSX.Element {
   );
   const updateMarketplaceSettingsMutation =
     useUpdateMarketplaceSettingsMutation({
-      onSuccess: async (data) => {
+      onSuccess: async () => {
         await Promise.all([
           invalidateAllMarketplaceSettings(queryClient),
           invalidateAllPublishStatus(queryClient),
         ]);
-        setMarketplaceNameInput(data.settings.marketplaceName ?? "");
-        if (data.hooksUpdateDeferred) {
-          toast.warning(
-            "Marketplace name updated, but the observability hooks plugin can't be updated yet: your organization isn't approved for the latest hooks version. It will update automatically once your org is rolled forward.",
-          );
-        } else {
-          toast.success(
-            data.republished
-              ? "Marketplace name updated and republished"
-              : "Marketplace name saved",
-          );
-        }
       },
       onError: () => {
-        toast.error("Failed to update marketplace name");
+        toast.error("Failed to update marketplace settings");
       },
     });
 
@@ -234,6 +318,7 @@ export default function Plugins(): JSX.Element {
     trimmedMarketplaceName !== currentMarketplaceName.trim();
 
   const handleOpenMarketplaceSettings = () => {
+    if (!canManageMarketplace) return;
     // Reset the input to the persisted value so reopening discards unsaved
     // edits. Falls back to the computed default name (not "") when unset —
     // otherwise the field shows only ghost placeholder text with nothing to
@@ -250,17 +335,30 @@ export default function Plugins(): JSX.Element {
   };
 
   const handleSaveMarketplaceName = () => {
+    if (!canManageMarketplace) return;
     updateMarketplaceSettingsMutation.mutate(
       {
         security: { sessionHeaderGramSession: "" },
         request: {
           updateMarketplaceSettingsRequestBody: {
-            marketplaceName: trimmedMarketplaceName || undefined,
+            marketplaceName: trimmedMarketplaceName,
           },
         },
       },
       {
-        onSuccess: () => {
+        onSuccess: (data) => {
+          setMarketplaceNameInput(data.settings.marketplaceName ?? "");
+          if (data.hooksUpdateDeferred) {
+            toast.warning(
+              "Marketplace name updated, but the observability hooks plugin can't be updated yet: your organization isn't approved for the latest hooks version. It will update automatically once your org is rolled forward.",
+            );
+          } else {
+            toast.success(
+              data.republished
+                ? "Marketplace name updated and republished"
+                : "Marketplace name saved",
+            );
+          }
           setIsMarketplaceSettingsDialogOpen(false);
           if (chainToPublishAfterSave) {
             setChainToPublishAfterSave(false);
@@ -271,18 +369,41 @@ export default function Plugins(): JSX.Element {
     );
   };
 
-  const createCard = (
-    <CreateResourceCard
-      title="New Plugin"
-      description="Bundle MCP servers and hooks for distribution to supported coding agents."
-      onClick={() => setIsCreateDialogOpen(true)}
-    />
-  );
+  const handleObservabilityEnabledChange = (enabled: boolean) => {
+    updateMarketplaceSettingsMutation.mutate(
+      {
+        security: { sessionHeaderGramSession: "" },
+        request: {
+          updateMarketplaceSettingsRequestBody: {
+            observabilityEnabled: enabled,
+          },
+        },
+      },
+      {
+        onSuccess: (data) => {
+          if (data.republished) {
+            toast.success(
+              enabled
+                ? "Observability plugin enabled and republished"
+                : "Observability plugin disabled and removed from the marketplace",
+            );
+            return;
+          }
+          toast.success(
+            enabled
+              ? "Observability plugin enabled"
+              : "Observability plugin disabled",
+          );
+        },
+      },
+    );
+  };
 
   return (
     <>
       <ResourceListPage
         title="Plugins"
+        bodyClassName="-mt-6"
         description={
           <span className={hasPlugins ? "block w-3/4" : undefined}>
             Create distributable plugin bundles that package MCP servers and
@@ -290,26 +411,20 @@ export default function Plugins(): JSX.Element {
             supported agent marketplaces via GitHub.
           </span>
         }
-        hideToolbar={!hasPlugins}
-        search={{
-          value: search,
-          onChange: setSearch,
-          placeholder: "Search plugins",
-        }}
-        filters={{
-          schema: PLUGINS_FILTERS,
-          values: pluginFilters.values,
-          optionsById: pluginFilterOptions,
-          onChange: pluginFilters.setValue as (
-            id: string,
-            value: FilterValue,
-          ) => void,
-          onClear: pluginFilters.clearValue as (id: string) => void,
-          onClearAll: pluginFilters.clearAll,
-        }}
+        primaryAction={
+          canWritePlugin ? (
+            <Button onClick={openCreateDialog}>
+              <Button.LeftIcon>
+                <Icon name="plus" />
+              </Button.LeftIcon>
+              <Button.Text>Create plugin</Button.Text>
+            </Button>
+          ) : undefined
+        }
       >
         <Stack direction="vertical" gap={8}>
-          {publishStatus?.configured &&
+          {canManageMarketplace &&
+            publishStatus?.configured &&
             (publishStatus.connected && publishStatus.repoUrl ? (
               publishStatus.hasCollaborators === false ? (
                 <>
@@ -319,25 +434,42 @@ export default function Plugins(): JSX.Element {
                       marketplaceSettings.marketplaceName ??
                       marketplaceSettings.defaultName
                     }
-                    onSetup={handleStartSetup}
-                    onAddCollaborators={() =>
-                      setIsManageCollaboratorsOpen(true)
+                    onSetup={
+                      canManageMarketplace ? handleStartSetup : undefined
+                    }
+                    onAddCollaborators={
+                      canManageMarketplace
+                        ? () => setIsManageCollaboratorsOpen(true)
+                        : undefined
+                    }
+                    observabilityEnabled={
+                      marketplaceSettings.observabilityEnabled
                     }
                   />
-                  <div className="border-border border-t" />
                 </>
               ) : (
                 <>
                   <MarketplaceCard
                     publishStatus={publishStatus}
-                    onManageCollaborators={() =>
-                      setIsManageCollaboratorsOpen(true)
+                    onManageCollaborators={
+                      canManageMarketplace
+                        ? () => setIsManageCollaboratorsOpen(true)
+                        : undefined
                     }
-                    onRename={handleOpenMarketplaceSettings}
-                    onSync={() => handlePublish([])}
+                    onRename={
+                      canManageMarketplace
+                        ? handleOpenMarketplaceSettings
+                        : undefined
+                    }
+                    onSync={
+                      canWritePlugin ? () => handlePublish([]) : undefined
+                    }
                     isSyncing={publishMutation.isPending}
+                    observabilityEnabled={
+                      marketplaceSettings.observabilityEnabled
+                    }
+                    pausedPluginNames={pausedPluginNames}
                   />
-                  <div className="border-border border-t" />
                 </>
               )
             ) : (
@@ -348,49 +480,92 @@ export default function Plugins(): JSX.Element {
                     marketplaceSettings.marketplaceName ??
                     marketplaceSettings.defaultName
                   }
-                  onSetup={handleStartSetup}
-                  onAddCollaborators={() => setIsManageCollaboratorsOpen(true)}
+                  onSetup={canManageMarketplace ? handleStartSetup : undefined}
+                  onAddCollaborators={
+                    canManageMarketplace
+                      ? () => setIsManageCollaboratorsOpen(true)
+                      : undefined
+                  }
+                  observabilityEnabled={
+                    marketplaceSettings.observabilityEnabled
+                  }
                 />
-                <div className="border-border border-t" />
               </>
             ))}
+          {hasPlugins && (
+            <Page.Toolbar>
+              <Page.Toolbar.Search
+                value={search}
+                onChange={setSearch}
+                placeholder="Search plugins"
+              />
+              <Page.Toolbar.Filters
+                schema={PLUGINS_FILTERS}
+                values={pluginFilters.values}
+                optionsById={pluginFilterOptions}
+                onChange={
+                  pluginFilters.setValue as (
+                    id: string,
+                    value: FilterValue,
+                  ) => void
+                }
+                onClear={pluginFilters.clearValue as (id: string) => void}
+                onClearAll={pluginFilters.clearAll}
+              />
+            </Page.Toolbar>
+          )}
           <Text small muted>
             The default plugin is where all newly created MCP servers will be
             automatically published to. If you have the default plugin installed
             in your coding agent, then any new MCP servers will become instantly
             available for installation.
           </Text>
+          {!canManageMarketplace &&
+            canWritePlugin &&
+            publishStatus?.connected && (
+              <Button
+                onClick={() => handlePublish([])}
+                disabled={publishMutation.isPending}
+              >
+                Sync plugins
+              </Button>
+            )}
           <PluginGrid
             plugins={filteredPlugins}
-            publishStatus={publishStatus}
+            publishStatus={canManageMarketplace ? publishStatus : undefined}
             searchQuery={hasPlugins ? search : ""}
-            createCard={createCard}
           />
-          <div className="flex items-center gap-3">
-            <div className="border-border flex-1 border-t" />
-            <Text
-              small
-              muted
-              className="shrink-0 font-mono text-xs tracking-wide uppercase"
-            >
-              Platform Plugins
-            </Text>
-            <div className="border-border flex-1 border-t" />
-          </div>
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <ObservabilityPluginCard
-              publishStatus={publishStatus}
-              isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
-              onDownloadMenuOpenChange={setIsObservabilityDownloadMenuOpen}
-              isDownloading={isDownloadingObservability !== null}
-              onDownload={(platform) => {
-                void handleObservabilityDownload(platform);
-              }}
-            />
-            <RequireScope scope="org:admin" level="section">
-              <PlatformMCPPluginCard />
-            </RequireScope>
-          </div>
+          {canManageMarketplace && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="border-border flex-1 border-t" />
+                <Text
+                  small
+                  muted
+                  className="shrink-0 font-mono text-xs tracking-wide uppercase"
+                >
+                  Platform Plugins
+                </Text>
+                <div className="border-border flex-1 border-t" />
+              </div>
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <ObservabilityPluginCard
+                  publishStatus={publishStatus}
+                  enabled={marketplaceSettings.observabilityEnabled}
+                  canToggle={canManageMarketplace}
+                  isToggling={updateMarketplaceSettingsMutation.isPending}
+                  onEnabledChange={handleObservabilityEnabledChange}
+                  isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
+                  onDownloadMenuOpenChange={setIsObservabilityDownloadMenuOpen}
+                  isDownloading={isDownloadingObservability !== null}
+                  onDownload={(platform) => {
+                    void handleObservabilityDownload(platform);
+                  }}
+                />
+                <PlatformMCPPluginCard />
+              </div>
+            </>
+          )}
         </Stack>
       </ResourceListPage>
 
@@ -406,6 +581,52 @@ export default function Plugins(): JSX.Element {
           <form onSubmit={handleCreate} className="flex flex-col gap-4">
             <InputField label="Name" name="name" required autoFocus />
             <InputField label="Description" name="description" />
+            <Collapsible>
+              <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
+                <Icon
+                  name="chevron-right"
+                  className="h-4 w-4 transition-transform"
+                />
+                Advanced settings
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <Stack gap={4} className="pt-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label id="create-plugin-auto-sync-label">
+                        Sync changes automatically
+                      </Label>
+                      <Text small muted>
+                        When off, the plugin reaches your marketplace only when
+                        someone clicks Sync changes.
+                      </Text>
+                    </div>
+                    <Switch
+                      aria-labelledby="create-plugin-auto-sync-label"
+                      checked={createAutoSyncEnabled}
+                      onCheckedChange={setCreateAutoSyncEnabled}
+                    />
+                  </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label id="create-plugin-auto-add-servers-label">
+                        Add MCP servers automatically
+                      </Label>
+                      <Text small muted>
+                        When on, role and access changes add or remove this
+                        plugin's MCP servers. When off, only people who edit
+                        this plugin change its servers.
+                      </Text>
+                    </div>
+                    <Switch
+                      aria-labelledby="create-plugin-auto-add-servers-label"
+                      checked={createAutoAddServersEnabled}
+                      onCheckedChange={setCreateAutoAddServersEnabled}
+                    />
+                  </div>
+                </Stack>
+              </CollapsibleContent>
+            </Collapsible>
             <Dialog.Footer>
               <Button
                 variant="secondary"
@@ -432,7 +653,7 @@ export default function Plugins(): JSX.Element {
         mode="manage"
         open={isManageCollaboratorsOpen}
         onOpenChange={setIsManageCollaboratorsOpen}
-        onPublish={handlePublish}
+        onPublish={handleAddCollaborators}
         isPending={publishMutation.isPending}
       />
 
@@ -521,20 +742,31 @@ export default function Plugins(): JSX.Element {
 // affordance" distinguishing it from user-created plugins in the grid.
 function ObservabilityPluginCard({
   publishStatus,
+  enabled,
+  canToggle,
+  isToggling,
+  onEnabledChange,
   isDownloadMenuOpen,
   onDownloadMenuOpenChange,
   isDownloading,
   onDownload,
 }: {
   publishStatus: PublishStatusResult | undefined;
+  enabled: boolean;
+  canToggle: boolean;
+  isToggling: boolean;
+  onEnabledChange: (enabled: boolean) => void;
   isDownloadMenuOpen: boolean;
   onDownloadMenuOpenChange: (open: boolean) => void;
   isDownloading: boolean;
-  onDownload: (
-    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw",
-  ) => void;
+  onDownload: (platform: ObservabilityDownloadPlatform) => void;
 }) {
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
+  const [isRotateDialogOpen, setIsRotateDialogOpen] = useState(false);
+  const { hasScope } = useRBAC();
+  // Rotation mints an org-wide ingest credential, so it matches the plugin
+  // download's org:admin gate rather than the page's read access.
+  const canRotateCredential = hasScope("org:admin");
   const isConnected = !!publishStatus?.connected;
   const installTarget =
     isConnected && publishStatus?.repoOwner && publishStatus.repoName
@@ -546,105 +778,126 @@ function ObservabilityPluginCard({
       : undefined;
 
   return (
-    <Card.Entity
+    <McpEntityCard
       className="border-primary/30 bg-primary/[0.02]"
       icon={<Activity className="text-primary h-10 w-10 opacity-80" />}
     >
-      <div className="mb-2 flex items-center gap-1.5">
-        <Text
-          variant="subheading"
-          as="div"
-          className="text-md truncate"
-          title="Observability"
-        >
-          Observability
-        </Text>
-        <Badge variant="information">
-          <Badge.Text>Platform</Badge.Text>
-        </Badge>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Text
+            variant="subheading"
+            as="div"
+            className="text-md truncate"
+            title="Observability"
+          >
+            Observability
+          </Text>
+          <Badge variant="information">
+            <Badge.Text>Platform</Badge.Text>
+          </Badge>
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={onEnabledChange}
+          disabled={!canToggle || isToggling}
+          aria-label={
+            enabled
+              ? "Disable observability plugin"
+              : "Enable observability plugin"
+          }
+        />
       </div>
 
       <Text small muted className="mb-3 line-clamp-3">
-        Forwards tool events from your team&apos;s coding agent installs to your
-        project dashboard. Ships first in your marketplace, marked Required.
+        {enabled
+          ? "Forwards tool events from your team's coding agent installs to your project dashboard. Ships first in your marketplace, marked Required."
+          : "Disabled for this project. It is not listed in the marketplace and the device agent will not install it."}
       </Text>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         <Text small muted>
-          {isConnected
-            ? "Included in your marketplace"
-            : "Available as a direct download"}
+          {observabilityInstallHint(enabled, isConnected)}
         </Text>
-        <DropdownMenu
-          open={isDownloadMenuOpen}
-          onOpenChange={onDownloadMenuOpenChange}
-        >
-          <DropdownMenuTrigger asChild>
-            <PluginInstallButton size="sm" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              disabled={!installTarget}
-              onClick={() => {
-                // Defer until after the dropdown has fully closed to avoid a
-                // Radix focus-trap/body-lock conflict between the closing
-                // menu and the opening sheet (same pattern as MCPDetails.tsx).
-                setTimeout(() => setIsInstallSheetOpen(true), 0);
-              }}
+        {enabled ? (
+          // The icon-only MoreActions trigger carries mx-[-4px] to sit flush
+          // with a container edge, which here eats the gap against Install and
+          // leaves the two hit boxes touching. gap-3 nets the usual 8px.
+          <div className="flex items-center gap-3">
+            <MoreActions
+              triggerAriaLabel="Observability plugin actions"
+              triggerDisabled={!canRotateCredential}
+              actions={[
+                {
+                  label: "Rotate credential",
+                  icon: "rotate-ccw-key",
+                  disabled: !canRotateCredential,
+                  description: canRotateCredential
+                    ? undefined
+                    : "Requires an organization admin",
+                  onClick: () => {
+                    // Defer until after the menu has fully closed to avoid a
+                    // Radix focus-trap/body-lock conflict between the closing
+                    // menu and the opening dialog (same pattern as the install
+                    // sheet above).
+                    setTimeout(() => setIsRotateDialogOpen(true), 0);
+                  },
+                },
+              ]}
+            />
+            <DropdownMenu
+              open={isDownloadMenuOpen}
+              onOpenChange={onDownloadMenuOpenChange}
             >
-              <div className="flex flex-col">
-                <span>GitHub installation (preferred)</span>
-                {!installTarget && (
-                  <span className="text-muted-foreground text-xs">
-                    Requires marketplace setup
-                  </span>
-                )}
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("claude");
-              }}
-            >
-              Download as zip — Claude
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("cursor");
-              }}
-            >
-              Download as zip — Cursor
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("codex");
-              }}
-            >
-              Download as zip — Codex
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("opencode");
-              }}
-            >
-              Download as zip — OpenCode
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("openclaw");
-              }}
-            >
-              Download as zip — OpenClaw
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <PluginInstallButton size="sm" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={!installTarget}
+                  onClick={() => {
+                    // Defer until after the dropdown has fully closed to avoid a
+                    // Radix focus-trap/body-lock conflict between the closing
+                    // menu and the opening sheet (same pattern as MCPDetails.tsx).
+                    setTimeout(() => setIsInstallSheetOpen(true), 0);
+                  }}
+                >
+                  <div className="flex flex-col">
+                    <span>GitHub installation (preferred)</span>
+                    {!installTarget && (
+                      <span className="text-muted-foreground text-xs">
+                        Requires marketplace setup
+                      </span>
+                    )}
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {OBSERVABILITY_DOWNLOAD_PLATFORMS.map(({ platform, label }) => (
+                  <DropdownMenuItem
+                    key={platform}
+                    disabled={isDownloading}
+                    onClick={() => {
+                      onDownload(platform);
+                    }}
+                  >
+                    Download as zip — {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : null}
       </div>
+
+      {/* Mounted only while open so the rotation mutation is not instantiated
+          for every render of this card. */}
+      {isRotateDialogOpen && (
+        <RotateObservabilityCredentialDialog
+          open
+          onOpenChange={setIsRotateDialogOpen}
+          isDownloading={isDownloading}
+          onDownload={onDownload}
+        />
+      )}
 
       {/* Reuses the onboarding wizard's platform-by-platform setup sheet
           (real per-platform slugs, API key minting, full instructions)
@@ -655,15 +908,30 @@ function ObservabilityPluginCard({
         open={isInstallSheetOpen}
         onOpenChange={setIsInstallSheetOpen}
       />
-    </Card.Entity>
+    </McpEntityCard>
   );
 }
 
-function PlatformMCPPluginCard(): JSX.Element {
+function observabilityInstallHint(
+  enabled: boolean,
+  isConnected: boolean,
+): string {
+  if (!enabled) {
+    return "Not included in your marketplace";
+  }
+  if (isConnected) {
+    return "Included in your marketplace";
+  }
+  return "Available as a direct download";
+}
+
+function PlatformMCPPluginCard(): JSX.Element | null {
   const [installOpen, setInstallOpen] = useState(false);
+  const { hasScope } = useRBAC();
+  if (!hasScope("org:admin")) return null;
 
   return (
-    <Card.Entity
+    <McpEntityCard
       className="border-primary/30 bg-primary/[0.02]"
       icon={<Network className="text-primary h-10 w-10 opacity-80" />}
     >
@@ -697,7 +965,7 @@ function PlatformMCPPluginCard(): JSX.Element {
         setupOpen={installOpen}
         onSetupOpenChange={setInstallOpen}
       />
-    </Card.Entity>
+    </McpEntityCard>
   );
 }
 
@@ -705,12 +973,10 @@ function PluginGrid({
   plugins,
   publishStatus,
   searchQuery,
-  createCard,
 }: {
   plugins: Plugin[];
   publishStatus: PublishStatusResult | undefined;
   searchQuery: string;
-  createCard: React.ReactNode;
 }) {
   if (plugins.length === 0) {
     return (
@@ -718,9 +984,6 @@ function PluginGrid({
         {searchQuery ? (
           <Text muted>No plugins matching &ldquo;{searchQuery}&rdquo;</Text>
         ) : null}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {createCard}
-        </div>
       </div>
     );
   }
@@ -734,7 +997,6 @@ function PluginGrid({
           publishStatus={publishStatus}
         />
       ))}
-      {createCard}
     </div>
   );
 }

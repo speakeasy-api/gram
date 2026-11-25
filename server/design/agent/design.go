@@ -10,7 +10,7 @@ import (
 // --- Service ---
 
 var _ = Service("agent", func() {
-	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.")
+	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. A headless device enrolled as a workload may call getPlugins with a device-agent token instead. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.")
 	Security(security.ByKey, func() {
 		Scope("agent_user")
 	})
@@ -24,11 +24,16 @@ var _ = Service("agent", func() {
 		// owner and the org derives from the key. An org `agent` install key also
 		// passes (it implies `agent_user`; see auth.Authorize); the MDM profile
 		// then vouches the enrolled user's email via the Gram-User-Email header.
+		//
+		// A headless device presents a device-agent token instead, tried first so a
+		// request without one falls through to the API key and keeps its errors.
+		Security(security.DeviceAgentToken)
 		Security(security.ByKey, func() {
 			Scope("agent_user")
 		})
 
 		Payload(func() {
+			security.DeviceAgentTokenPayload()
 			security.ByKeyPayload()
 			// Authoritative when authenticating with an org install key (`agent`
 			// scope): that key's owner is an admin, not the enrolled developer, so
@@ -57,12 +62,35 @@ var _ = Service("agent", func() {
 			Attribute("hostname", String, "Hostname of the machine the agent runs on, when it can be read.", func() {
 				Example("dev-macbook-pro")
 			})
+			// What KIND of machine this is. Optional and must stay that way, for
+			// the same reason as the two above: agents predating the header omit
+			// it, and Goa rejects a request missing a Required attribute.
+			//
+			// Absent means "endpoint", which is why the agent does not send that
+			// value — an absent header and an endpoint header describe the same
+			// device, so every deployed agent's poll is unchanged.
+			//
+			// Not cosmetic. A cloud sandbox reports no serial, so its heartbeat
+			// lands on the email-matched fallback that device coverage also
+			// reads; without this, a session polling under a real person's
+			// address marks that person's laptop covered whether or not the
+			// laptop runs the agent.
+			//
+			// Deliberately NOT an Enum. Goa rejects an out-of-set value with a
+			// 400, and a rejected poll means that device syncs no plugins at
+			// all — an outage caused by an attribution hint. The value is
+			// normalized in the handler instead, where an unrecognized one
+			// degrades to "endpoint" and the sync proceeds.
+			Attribute("environment", String, "What kind of machine the agent runs on: `endpoint` (the default when omitted) for an end-user device of any form factor, `ephemeral` for a short-lived cloud sandbox or container, or `server` for a long-running shared host. Lets coverage distinguish a developer's machine from a cloud session, which reports no hardware serial and a generic hostname. An unrecognized value is treated as `endpoint`.", func() {
+				Example("ephemeral")
+			})
 		})
 
 		Result(GetPluginsResult)
 
 		HTTP(func() {
 			GET("/rpc/agent.getPlugins")
+			security.DeviceAgentTokenHeader()
 			security.ByKeyHeader()
 			// Headers rather than query params: all three identify a person or
 			// a machine, and the request logger records URLs but not headers.
@@ -72,12 +100,144 @@ var _ = Service("agent", func() {
 			Param("legacy_email:email")
 			Header("serial_number:Gram-Device-Serial")
 			Header("hostname:Gram-Device-Hostname")
+			Header("environment:Gram-Device-Environment")
 			Response(StatusOK)
 		})
 
 		Meta("openapi:operationId", "getAgentPlugins")
 		Meta("openapi:extension:x-speakeasy-name-override", "getPlugins")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentPlugins"}`)
+	})
+
+	Method("getMyConnections", func() {
+		Description("Report the enrolled user's sign-in state for each MCP server in the plugins delivered to them, with the page that signs in to each. Sign-in belongs to the server, so one sign-in covers every plugin that contains it. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.")
+
+		// The org install key is accepted with a vouched email, unlike
+		// getSessionMeta: this exposes only whether a member has signed in to
+		// each server and whether they may connect to it (getPlugins already
+		// reveals mcp:read through dashboard links), never a credential or any
+		// content. MDM fleets that cannot mint per-user keys would otherwise
+		// show no sign-in state.
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.", func() {
+				Example("dev@acme.corp")
+			})
+		})
+
+		Result(GetMyConnectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/agent.getMyConnections")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getAgentMyConnections")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMyConnections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentMyConnections"}`)
+	})
+
+	Method("getClaudeObservabilityPlugin", func() {
+		Description("Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.")
+
+		// agent_user admits the org install key too (agent implies agent_user);
+		// the handler refuses it, since minting and revoking a member's key
+		// must be bound to that member's own credential.
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+		})
+
+		Result(func() {
+			Attribute("content_type", String)
+			Attribute("content_disposition", String)
+			Required("content_type", "content_disposition")
+		})
+
+		HTTP(func() {
+			GET("/rpc/agent.getClaudeObservabilityPlugin")
+			security.ByKeyHeader()
+			Response(StatusOK, func() {
+				ContentType("application/zip")
+				Header("content_type:Content-Type")
+				Header("content_disposition:Content-Disposition")
+			})
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "getAgentClaudeObservabilityPlugin")
+		Meta("openapi:extension:x-speakeasy-name-override", "getClaudeObservabilityPlugin")
+	})
+
+	Method("hideMcpServer", func() {
+		Description("Hide an MCP server for the enrolled user, the same preference the gateway consent page's Hide sets. Gateways leave a hidden server out of the user's tools, and getMyConnections reports it as hidden. Only servers getMyConnections reports to the user can be hidden; anything else is not found. Hiding a hidden server changes nothing. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getMyConnections resolves the user.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Meta("openapi:typename", "HideAgentMcpServerRequestBody")
+			Attribute("mcp_server_id", String, "The MCP server, as getMyConnections reports it.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.", func() {
+				Example("dev@acme.corp")
+			})
+			Required("mcp_server_id")
+		})
+
+		HTTP(func() {
+			POST("/rpc/agent.hideMcpServer")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "hideAgentMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "hideMcpServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "HideAgentMcpServer"}`)
+	})
+
+	Method("unhideMcpServer", func() {
+		Description("Show a hidden MCP server again for the enrolled user. Unhiding a server that is not hidden changes nothing. Authenticates like hideMcpServer.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Meta("openapi:typename", "UnhideAgentMcpServerRequestBody")
+			Attribute("mcp_server_id", String, "The MCP server, as getMyConnections reports it.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.", func() {
+				Example("dev@acme.corp")
+			})
+			Required("mcp_server_id")
+		})
+
+		HTTP(func() {
+			POST("/rpc/agent.unhideMcpServer")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "unhideAgentMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "unhideMcpServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UnhideAgentMcpServer"}`)
 	})
 
 	Method("listSyncedUsers", func() {
@@ -131,7 +291,7 @@ var _ = Service("agent", func() {
 
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("config", MapOf(String, Any), "Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, and sync_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden.")
+			Attribute("config", MapOf(String, Any), "Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, ai_scan_interval_seconds, disable_ai_scan, and disable_crash_reports. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Speakeasy injects from the organization's scan target list when serving agents.")
 			Required("config")
 		})
 
@@ -148,8 +308,94 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateDeviceAgentConfiguration"}`)
 	})
 
+	Method("listAiScanTargets", func() {
+		Description("List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins plus the organization's own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy's catalog, an organization target by being deleted. Requires a session with the org:admin scope.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListAiScanTargetsResult)
+
+		HTTP(func() {
+			GET("/rpc/agent.listAiScanTargets")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAiScanTargets")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAiScanTargets")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AiScanTargets"}`)
+	})
+
+	Method("upsertAiScanTarget", func() {
+		Description("Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a write need not restate the target's matchers; sending gateway_client with empty lists still clears them. Clearing a target's last verifiable matcher also clears any access decision recorded about it, since nothing could enforce it any more; the organization decides again once the target can be recognized at the gateway. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, "Stable id agents report and detections key on. Never reused for a different tool.", func() {
+				Pattern(aiScanTargetIDPattern)
+			})
+			Attribute("display_name", String, "Name shown in the dashboard.", func() {
+				MinLength(1)
+				MaxLength(128)
+			})
+			Attribute("category", String, "Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).", func() {
+				Enum("harness", "assistant", "local_model")
+			})
+			Attribute("signatures", AiScanTargetSignaturesModel)
+			Attribute("gateway_client", AiScanTargetGatewayClientModel)
+			Attribute("version_plist_key", String, "Info.plist key to read the installed version from on a bundle match; defaults to CFBundleShortVersionString when omitted.", func() {
+				Pattern(aiScanPlistKeyPattern)
+			})
+			Required("id", "display_name", "category", "signatures")
+		})
+
+		Result(AiScanTargetMutationResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.upsertAiScanTarget")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "upsertAiScanTarget")
+		Meta("openapi:extension:x-speakeasy-name-override", "upsertAiScanTarget")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertAiScanTarget"}`)
+	})
+
+	Method("deleteAiScanTarget", func() {
+		Description("Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, "Id of the target to remove.", func() {
+				Pattern(aiScanTargetIDPattern)
+			})
+			Required("id")
+		})
+
+		Result(DeleteAiScanTargetResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.deleteAiScanTarget")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteAiScanTarget")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteAiScanTarget")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteAiScanTarget"}`)
+	})
+
 	Method("getSessionMeta", func() {
-		Description("Resolve display metadata (Gram chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.")
+		Description("Resolve display metadata (Speakeasy chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.")
 
 		// Deliberately NOT reachable with the org install key (`agent` scope):
 		// unlike getPlugins, this returns per-user chat data, and the org key +
@@ -162,7 +408,7 @@ var _ = Service("agent", func() {
 
 		Payload(func() {
 			security.ByKeyPayload()
-			Attribute("session_ids", ArrayOf(String), "Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Gram derives its chat ids from these the same way hook ingest does.", func() {
+			Attribute("session_ids", ArrayOf(String), "Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Speakeasy derives its chat ids from these the same way hook ingest does.", func() {
 				MaxLength(50)
 			})
 			Required("session_ids")
@@ -191,13 +437,13 @@ var _ = Service("agent", func() {
 
 		Payload(func() {
 			security.ByKeyPayload()
-			Attribute("session_id", String, "Native harness session identifier of the moved session. Gram derives its chat id from this the same way hook ingest does; the move is recorded even if the session has not been captured yet.", func() {
+			Attribute("session_id", String, "Native harness session identifier of the moved session. Speakeasy derives its chat id from this the same way hook ingest does; the move is recorded even if the session has not been captured yet.", func() {
 				MaxLength(256)
 			})
 			Attribute("target_harness", String, "Harness the session was moved to (e.g. cursor, codex, claude-code).", func() {
 				MaxLength(64)
 			})
-			Attribute("target_session_id", String, "Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Gram link the original session and its continuation.", func() {
+			Attribute("target_session_id", String, "Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Speakeasy link the original session and its continuation.", func() {
 				MaxLength(256)
 			})
 			Attribute("source_surface", String, "Harness the session originated in, as detected by the agent (e.g. claude-code, codex).", func() {
@@ -224,6 +470,148 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReportAgentSessionMoved"}`)
 	})
 
+	Method("reportAIScan", func() {
+		Description("Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("scan_started_at", String, "When the agent started the scan.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("scan_completed_at", String, "When the agent completed the scan.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("target_list_version", Int, "Revision of the scan target catalog the agent scanned with: the list_version it last received from getPlugins, or 0 when it fell back to the list embedded in its binary. Echoed into the scan receipt as reported.", func() {
+				Minimum(0)
+				Maximum(2147483647)
+			})
+			Attribute("matches", ArrayOf(AIScanMatchModel), "Detection targets the scan matched. Empty when the device came back clean; the report still lands as a scan receipt.", func() {
+				MaxLength(100)
+			})
+			// Identity attributes mirror getPlugins: all three ride in headers
+			// (see the HTTP mapping) for the access-log hygiene reason
+			// getPlugins documents.
+			Attribute("email", String, "Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.")
+			Attribute("serial_number", String, "Hardware serial number of the machine that was scanned, when the agent can read it.")
+			Attribute("hostname", String, "Hostname of the machine that was scanned, when the agent can read it.")
+			Required("scan_started_at", "scan_completed_at", "target_list_version", "matches")
+		})
+
+		HTTP(func() {
+			POST("/rpc/agent.reportAIScan")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Header("serial_number:Gram-Device-Serial")
+			Header("hostname:Gram-Device-Hostname")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "reportAgentAIScan")
+		Meta("openapi:extension:x-speakeasy-name-override", "reportAIScan")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReportAgentAIScan"}`)
+	})
+
+	Method("reportState", func() {
+		Description("Record the device agent's applied state: the policy etag it enforces, each tool's enforcement outcome, its versions and update posture. A snapshot: the latest report per enrolled user per machine replaces the previous one. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan; agent keys and device-agent tokens are refused. A report from a non-endpoint environment is accepted and not stored, because device coverage matches managed endpoints only. Contract: device-agent ADR-0029.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("schema_version", Int, "Report envelope version. Fields are added within a version; a change of meaning bumps it. Newer versions are accepted and stored as far as this server understands them.", func() {
+				Minimum(1)
+				Maximum(2147483647)
+			})
+			Attribute("generated_at", String, "When the agent assembled the report, by its own clock.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("agent", AgentStateVersionsModel, "Versions of the agent binaries and the platform they run on.")
+			Attribute("enforcement_halted", Boolean, "True when the kill switch has halted policy enforcement because the running build is in blocked_versions. The tool outcomes are then those of the last reconcile before the halt.")
+			Attribute("policy", AgentStatePolicyModel, "The policy the agent's last reconcile applied.")
+			Attribute("tools", ArrayOf(AgentStateToolModel), "Each managed tool's outcome from the last reconcile.", func() {
+				MaxLength(32)
+			})
+			Attribute("drift_counting_since", String, "Start of the window tools[].drift_corrections counts over (the daemon's start).", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("update", AgentStateUpdateModel, "The agent's update posture.")
+			// Identity attributes mirror getPlugins: they ride in headers (see
+			// the HTTP mapping) for the access-log hygiene reason getPlugins
+			// documents, and stay optional for the same compatibility reason.
+			Attribute("email", String, "Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.")
+			Attribute("serial_number", String, "Hardware serial number of the reporting machine, when the agent can read it.")
+			Attribute("hostname", String, "Hostname of the reporting machine, when the agent can read it.")
+			// Not an Enum, for the reason getPlugins gives: an unrecognized
+			// value degrades to endpoint instead of failing the request.
+			Attribute("environment", String, "What kind of machine the agent runs on, as in getPlugins: endpoint (the default when omitted), ephemeral, or server.")
+			Required("schema_version", "generated_at", "agent", "enforcement_halted", "policy", "tools")
+		})
+
+		Result(ReportStateResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.reportState")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Header("serial_number:Gram-Device-Serial")
+			Header("hostname:Gram-Device-Hostname")
+			Header("environment:Gram-Device-Environment")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "reportAgentState")
+		Meta("openapi:extension:x-speakeasy-name-override", "reportState")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReportAgentState"}`)
+	})
+
+	Method("reportCrash", func() {
+		Description("Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring and not stored. Accepts the credentials getPlugins accepts: the per-user key, the org install key (with a vouched email), and, with the device-sync grant, agent keys and device-agent tokens. The agent scrubs every report before sending it; the server accepts only reports shaped like a Go crash and scrubs them again.")
+
+		// A headless device presents a device-agent token, as on getPlugins.
+		Security(security.DeviceAgentToken)
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.DeviceAgentTokenPayload()
+			security.ByKeyPayload()
+			Attribute("reports", ArrayOf(AgentCrashReportModel), "Queued crash reports, oldest first.", func() {
+				MinLength(1)
+				MaxLength(10)
+			})
+			// Identity attributes mirror reportAIScan and ride in headers.
+			Attribute("email", String, "Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.")
+			Attribute("serial_number", String, "Hardware serial number of the machine that crashed, when the agent can read it.")
+			// No hostname: the agent leaves Gram-Device-Hostname off crash reports,
+			// since hostnames often name a person (device-agent ADR-0030).
+			Attribute("environment", String, "Kind of machine the agent runs on (endpoint, server or ephemeral), sent in the Gram-Device-Environment header.")
+			Required("reports")
+		})
+
+		Result(ReportCrashResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.reportCrash")
+			security.DeviceAgentTokenHeader()
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Header("serial_number:Gram-Device-Serial")
+			Header("environment:Gram-Device-Environment")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "reportAgentCrash")
+		Meta("openapi:extension:x-speakeasy-name-override", "reportCrash")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReportAgentCrash"}`)
+	})
+
 	Method("createSessionHandoff", func() {
 		Description("Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).")
 
@@ -236,7 +624,7 @@ var _ = Service("agent", func() {
 
 		Payload(func() {
 			security.ByKeyPayload()
-			Attribute("session_id", String, "Native harness session identifier the handoff was rendered from. Gram derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.", func() {
+			Attribute("session_id", String, "Native harness session identifier the handoff was rendered from. Speakeasy derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.", func() {
 				MaxLength(256)
 			})
 			Attribute("content", String, "The rendered handoff document (markdown). Size-capped; the daemon renders deterministically from the local transcript.", func() {
@@ -269,16 +657,63 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "createSessionHandoff")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateAgentSessionHandoff"}`)
 	})
+
+	Method("listPendingAccessRequests", func() {
+		Description("List the organization's pending access requests for an organization administrator, newest first, at most 50, each with a link that opens it in the dashboard to decide. Decisions are made in the dashboard or Slack, never from the device agent. A user who is not an administrator gets an empty list. Requires a per-user key; the org install key, device-agent tokens and agent identities are refused. Answers not found while access requests are off for the organization.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+		})
+
+		Result(ListPendingAccessRequestsResult)
+
+		HTTP(func() {
+			GET("/rpc/agent.listPendingAccessRequests")
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAgentPendingAccessRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "listPendingAccessRequests")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentPendingAccessRequests"}`)
+	})
 })
 
 // --- Types ---
 
 var GetPluginsResult = Type("GetPluginsResult", func() {
-	Required("etag", "marketplaces", "plugins")
-	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.")
+	Required("etag", "marketplaces", "plugins", "mcp_servers")
+	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.")
 	Attribute("marketplaces", ArrayOf(AgentMarketplaceModel), "Plugin marketplaces the agent should register with the tools it manages. Sorted by name.")
-	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins the agent should enable. Each entry references one of the marketplaces above by name.")
+	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.")
 	Attribute("configuration", DeviceAgentConfigurationModel, "Organization-wide remote configuration. Absent until an administrator saves a configuration, allowing an agent with no cached remote layer to keep using its local configuration.")
+	Attribute("organization_gateway_url", String, "URL of the active organization's gateway. Absent when the organization gateway is unavailable.", func() {
+		Format(FormatURI)
+	})
+	Attribute("principal", AgentPollingPrincipalModel, "The non-human principal the plugin set was resolved for. Present only when the caller authenticated with an agent API key.")
+	Attribute("mcp_servers", ArrayOf(AgentMCPServerModel), "Speakeasy-hosted MCP servers the agent registers directly in each managed tool's configuration, authorized by the device's own mcp:connect credential. Populated only when the caller polls as an agent (an agent API key, or a workload acting for its assigned agent), from the MCP servers in the plugins assigned to that agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.")
+})
+
+var AgentMCPServerModel = Type("AgentMCPServer", func() {
+	Required("name", "url")
+	Attribute("name", String, "Stable key the agent writes the server under in each tool's MCP configuration: `speakeasy-` followed by the server's slug, using only lowercase letters, digits and `-`. Unique within the response; a second server with the same name gets a numeric suffix such as `speakeasy-linear-2`.", func() {
+		Pattern(`^speakeasy-[a-z0-9-]+$`)
+	})
+	Attribute("url", String, "The server's streamable-HTTP URL.")
+	Attribute("tools", ArrayOf(String), "Stable IDs of the managed tools this server applies to. Absent or empty means every managed tool.")
+	Attribute("token_endpoint", String, "Token endpoint where a workload exchanges an identity assertion (RFC 7523 JWT bearer grant) for a session that reaches this server. Absent when the server's authorization server offers no workload grant, so the server cannot be reached without a person.")
+	Attribute("audience", String, "The exact `aud` the identity assertion must carry for token_endpoint. Present exactly when token_endpoint is.")
+	Attribute("resource", String, "Resource indicator (RFC 8707) to send with the grant. Present only when token_endpoint mints sessions for this one server; absent when it mints one session for every server of its issuer.")
+})
+
+var AgentPollingPrincipalModel = Type("AgentPollingPrincipal", func() {
+	Required("urn", "display_name")
+	Attribute("urn", String, "Principal URN of the agent identity, for example `agent:<uuid>`.")
+	Attribute("display_name", String, "Human-readable name of the agent identity.")
 })
 
 var DeviceAgentConfigurationModel = Type("DeviceAgentConfiguration", func() {
@@ -303,9 +738,30 @@ var AgentMarketplaceModel = Type("AgentMarketplace", func() {
 })
 
 var AgentPluginModel = Type("AgentPlugin", func() {
-	Required("slug", "marketplace_name")
-	Attribute("slug", String, "Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.")
+	Required("slug", "marketplace_name", "install_mode")
+	Attribute("slug", String, "Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.")
 	Attribute("marketplace_name", String, "Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.")
+	Attribute("install_mode", String, func() {
+		Description("How the agent installs the plugin. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on. Agents that predate this field install every listed plugin.")
+		shared.InstallModeEnum()
+	})
+	Attribute("name", String, "Display name of the plugin. Absent for the synthesized observability plugin.")
+	Attribute("description", String, "Short description of the plugin, when one is set.")
+	// omitzero rather than Goa's default omitempty: an empty list must reach
+	// the agent, which shows "No servers" for it, while the observability
+	// plugin leaves the field out entirely.
+	Attribute("servers", ArrayOf(AgentPluginServerModel), "MCP servers the plugin contains, in display order, possibly none. Display-only: the agent installs the plugin, not these entries. Absent for the synthesized observability plugin, which carries hooks rather than servers.", func() {
+		Meta("struct:tag:json", "servers,omitzero")
+	})
+})
+
+var AgentPluginServerModel = Type("AgentPluginServer", func() {
+	Required("name")
+	Attribute("id", String, "Stable identifier of the server, the same in every plugin that contains it. Matches the id getMyConnections reports the server's sign-in state under. Absent from servers predating the field.")
+	Attribute("name", String, "Display name of the server within its plugin.")
+	Attribute("dashboard_url", String, "Link to the server's page in the Speakeasy dashboard. Present only when the enrolled user holds mcp:read on the server; the agent tells the user that links need that scope when it is absent.", func() {
+		Format(FormatURI)
+	})
 })
 
 var SyncedAgentUserModel = Type("SyncedAgentUser", func() {
@@ -331,7 +787,7 @@ var ListSyncedUsersResult = Type("ListSyncedUsersResult", func() {
 var AgentSessionMetaModel = Type("AgentSessionMeta", func() {
 	Required("session_id", "chat_id", "updated_at")
 	Attribute("session_id", String, "The native harness session identifier this entry resolves, echoed from the request.")
-	Attribute("chat_id", String, "Gram chat id for the captured session.", func() {
+	Attribute("chat_id", String, "Speakeasy chat id for the captured session.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("title", String, "Generated (or manually set) chat title. Absent when no title has been generated yet.")
@@ -346,6 +802,210 @@ var GetSessionMetaResult = Type("GetSessionMetaResult", func() {
 	Attribute("sessions", ArrayOf(AgentSessionMetaModel), "Metadata for the requested sessions that exist and are owned by the calling user. Requested ids with no captured chat or another owner are omitted.")
 })
 
+var AIScanMatchModel = Type("AIScanMatch", func() {
+	Description("One AI detection target a device-agent scan matched.")
+	Required("target_id", "category", "signal")
+	Attribute("target_id", String, "Identifier of the matched target from the agent's compiled-in list (e.g. claude-code, ollama). Stored as reported: an agent binary can ship a newer target list than the server catalog knows.", func() {
+		MinLength(1)
+		MaxLength(64)
+	})
+	Attribute("category", String, "Target category the agent scanned under: harness, assistant, or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.", func() {
+		Enum("harness", "assistant", "local_model")
+		MaxLength(32)
+	})
+	Attribute("signal", String, "What the scan observed: installed or running.", func() {
+		Enum("installed", "running")
+		MaxLength(16)
+	})
+	Attribute("version", String, "Installed version, when the scan could read one statically (e.g. from the app bundle's Info.plist).", func() {
+		MaxLength(64)
+	})
+})
+
+// Enumerated report fields (kind, component) are validated in the handler, not
+// as Goa enums: a newer agent may send a value this server does not know, and
+// it is logged as "unknown" rather than losing the report.
+var AgentCrashReportModel = Type("AgentCrashReport", func() {
+	Description("One device agent crash: a fatal crash, a recovered panic, or a self-rollback.")
+	Required("schema_version", "id", "kind", "component", "occurred_at", "count", "build")
+	Attribute("schema_version", Int, "Report schema version.", func() {
+		Minimum(1)
+	})
+	Attribute("id", String, "Random report id; repeats of the same id are one report.", func() {
+		MinLength(1)
+		MaxLength(64)
+	})
+	Attribute("kind", String, "fatal, recovered or rollback.", func() {
+		MaxLength(32)
+	})
+	Attribute("component", String, "Where it happened: ipc, policy_scheduler, update_scheduler, aiscan, sessions, ui or runtime.", func() {
+		MaxLength(32)
+	})
+	Attribute("occurred_at", String, "When it happened, by the device clock.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("count", Int, "Times this crash recurred in one process before it was reported.", func() {
+		Minimum(1)
+		Maximum(1000000)
+	})
+	Attribute("build", AgentCrashBuildModel, "The build that crashed, which is not always the build that reports it.")
+	Attribute("message", String, "Go runtime error text, when the panic was one. Other panics send panic_type instead.", func() {
+		MaxLength(512)
+	})
+	Attribute("panic_type", String, "Go type of a non-runtime panic value.", func() {
+		MaxLength(256)
+	})
+	Attribute("stack", ArrayOf(AgentCrashFrameModel), "Frames of the crashing goroutine, innermost first.", func() {
+		MaxLength(50)
+	})
+	Attribute("other_goroutines", Int, "Goroutines in a fatal dump besides the crashing one. Their stacks are not sent.", func() {
+		Minimum(0)
+		Maximum(1000000)
+	})
+	Attribute("rollback", AgentCrashRollbackModel, "For a rollback: the version that failed and the one restored.")
+})
+
+var AgentCrashBuildModel = Type("AgentCrashBuild", func() {
+	Required("binary", "version")
+	Attribute("binary", String, "speakeasyd or speakeasy-ui.", func() {
+		MaxLength(32)
+	})
+	Attribute("version", String, func() {
+		MaxLength(64)
+	})
+	Attribute("channel", String, "Release channel.", func() {
+		MaxLength(32)
+	})
+	Attribute("os", String, func() {
+		MaxLength(16)
+	})
+	Attribute("arch", String, func() {
+		MaxLength(16)
+	})
+	Attribute("os_version", String, "OS release, e.g. 15.4 on macOS or the kernel release on Linux.", func() {
+		MaxLength(64)
+	})
+})
+
+var AgentCrashFrameModel = Type("AgentCrashFrame", func() {
+	Required("function")
+	Attribute("function", String, "Fully qualified function name.", func() {
+		MaxLength(512)
+	})
+	Attribute("file", String, "Module-relative source file.", func() {
+		MaxLength(512)
+	})
+	Attribute("line", Int, func() {
+		Minimum(0)
+		Maximum(10000000)
+	})
+})
+
+var AgentCrashRollbackModel = Type("AgentCrashRollback", func() {
+	Attribute("from", String, "Version that failed to stabilize.", func() {
+		MaxLength(64)
+	})
+	Attribute("to", String, "Version restored.", func() {
+		MaxLength(64)
+	})
+})
+
+var ReportCrashResult = Type("ReportCrashResult", func() {
+	Required("accepted")
+	Attribute("accepted", Int, "Reports accepted. A report not shaped like a device agent crash is dropped and not counted. The agent removes every report in the batch on success.")
+})
+
+// Mirrors aitargets.Validate and the device agent's validator.
+const (
+	aiScanMaxSignatureEntries = 16
+	// Mirrors aitargets.MaxGatewayClientEntries.
+	aiScanMaxGatewayClientEntries = 16
+	aiScanTargetIDPattern         = `^[a-z0-9][a-z0-9-]{0,63}$`
+	aiScanBundleIDPattern         = `^[A-Za-z0-9._-]{1,128}$`
+	aiScanBinaryPattern           = `^[A-Za-z0-9._-]{1,64}$`
+	aiScanProcessNamePattern      = `^[A-Za-z0-9 ._-]{1,64}$`
+	aiScanPlistKeyPattern         = `^[A-Za-z0-9]{1,64}$`
+	aiScanVendorKeyPattern        = `^[a-z0-9][a-z0-9-]{0,63}$`
+)
+
+var AiScanTargetSignaturesModel = Type("AiScanTargetSignatures", func() {
+	Description("On-device signals the scan checks for one target.")
+	Attribute("bundle_ids", ArrayOf(String, func() { Pattern(aiScanBundleIDPattern) }), "macOS CFBundleIdentifier values matched against app bundles under /Applications and ~/Applications.", func() {
+		MaxLength(aiScanMaxSignatureEntries)
+	})
+	Attribute("binaries", ArrayOf(String, func() { Pattern(aiScanBinaryPattern) }), "Bare command names resolved on the device PATH; never a path.", func() {
+		MaxLength(aiScanMaxSignatureEntries)
+	})
+	Attribute("config_dirs", ArrayOf(String), "Directories whose existence marks the tool as installed, taken as home-relative unless they start with /. A `*` is a wildcard matching any run of characters within ONE path segment, never crossing a `/`, for tools installed under a version-stamped directory name such as an editor extension.", func() {
+		MaxLength(aiScanMaxSignatureEntries)
+	})
+	Attribute("process_names", ArrayOf(String, func() { Pattern(aiScanProcessNamePattern) }), "Exact process names checked for the running signal.", func() {
+		MaxLength(aiScanMaxSignatureEntries)
+	})
+	Required("bundle_ids", "binaries", "config_dirs", "process_names")
+})
+
+var AiScanTargetGatewayClientModel = Type("AiScanTargetGatewayClient", func() {
+	Description("How a target detected on a device is recognized again when the same tool calls Speakeasy's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Speakeasy verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.")
+	Attribute("cimd_vendor_keys", ArrayOf(String, func() { Pattern(aiScanVendorKeyPattern) }), "Vendor keys from Speakeasy's CIMD client catalog. Vendor-grained: no two targets may claim the same key, or a block on either would silently cover the other.", func() {
+		MaxLength(aiScanMaxGatewayClientEntries)
+	})
+	Attribute("oauth_client_ids", ArrayOf(String, func() { MaxLength(512) }), "Client ids matched literally against the caller's verified client_id, or CIMD catalog URLs — including the wildcard patterns — matched against the catalog entry that admitted it. Naming the catalog URL is how a vendor that mints one document per MCP server is still named exactly. No two targets may claim the same entry.", func() {
+		MaxLength(aiScanMaxGatewayClientEntries)
+	})
+	Attribute("client_info_names", ArrayOf(String, func() { MaxLength(128) }), "Names an MCP client reports at initialize. Detection only, never authorization: the value is self-reported and any client can claim any name.", func() {
+		MaxLength(aiScanMaxGatewayClientEntries)
+	})
+	Required("cimd_vendor_keys", "oauth_client_ids", "client_info_names")
+})
+
+var AiScanTargetModel = Type("AiScanTarget", func() {
+	Description("One Shadow AI scan target in an organization's list: a Speakeasy built-in, or a target the organization added.")
+	Attribute("id", String, "Stable id agents report and detections key on.", func() {
+		Pattern(aiScanTargetIDPattern)
+	})
+	Attribute("display_name", String, "Name shown in the dashboard.", func() {
+		MaxLength(128)
+	})
+	Attribute("category", String, "Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).", func() {
+		Enum("harness", "assistant", "local_model")
+	})
+	Attribute("signatures", AiScanTargetSignaturesModel)
+	Attribute("version_plist_key", String, "Info.plist key the installed version is read from on a bundle match; defaults to CFBundleShortVersionString when omitted.", func() {
+		Pattern(aiScanPlistKeyPattern)
+	})
+	Attribute("gateway_client", AiScanTargetGatewayClientModel)
+	Attribute("origin", String, "Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.", func() {
+		Enum("default", "organization")
+	})
+	Attribute("customized", Boolean, "For a built-in, whether the organization has recorded an access decision about it. Always false for organization targets.")
+	// Optional for one release, like the detection's access summary: a
+	// dashboard that meets an older or rolling-back server must still load
+	// the library, reading a missing summary as unreviewed.
+	Attribute("access", shared.AIToolAccessSummaryModel, "The organization's access decision for the target, computed with the same rules the AI detections carry: unreviewed when nothing is recorded, and never enforceable without a verifiable gateway matcher. Absent only from a server that predates it; read a missing summary as unreviewed.")
+	Attribute("created_at", String, "When the organization's row was created; absent for an untouched default.", func() { Format(FormatDateTime) })
+	Attribute("updated_at", String, "When the organization's row last changed; absent for an untouched default.", func() { Format(FormatDateTime) })
+	Required("id", "display_name", "category", "signatures", "gateway_client", "origin", "customized")
+})
+
+var ListAiScanTargetsResult = Type("ListAiScanTargetsResult", func() {
+	Attribute("list_version", Int, "Version of the served catalog; the value agents echo as target_list_version once they receive it.")
+	Attribute("etag", String, "Fingerprint of the served list; changes whenever the targets or their definitions change.")
+	Attribute("targets", ArrayOf(AiScanTargetModel), "Every target in the organization's list, ordered by id.")
+	Required("list_version", "etag", "targets")
+})
+
+var AiScanTargetMutationResult = Type("AiScanTargetMutationResult", func() {
+	Attribute("list_version", Int, "Version of the served list after the change.")
+	Attribute("target", AiScanTargetModel)
+	Required("list_version", "target")
+})
+
+var DeleteAiScanTargetResult = Type("DeleteAiScanTargetResult", func() {
+	Attribute("list_version", Int, "Version of the served list after the change.")
+	Required("list_version")
+})
+
 var CreateSessionHandoffResult = Type("CreateSessionHandoffResult", func() {
 	Required("url", "expires_at")
 	Attribute("url", String, "Capability URL serving the uploaded handoff markdown. Unauthenticated by design — the unguessable token is the credential — and dead after the first read or expiry.")
@@ -353,4 +1013,180 @@ var CreateSessionHandoffResult = Type("CreateSessionHandoffResult", func() {
 		Description("When the link stops being served regardless of reads.")
 		Format(FormatDateTime)
 	})
+})
+
+var GetMyConnectionsResult = Type("GetMyConnectionsResult", func() {
+	Required("servers")
+	Attribute("servers", ArrayOf(AgentServerConnectionModel), "One entry per distinct MCP server in the plugins delivered to the user, in plugin order. Servers the user can neither read nor connect to are omitted; a server the user can read but not connect to is reported as no_access.")
+})
+
+var AgentServerConnectionModel = Type("AgentServerConnection", func() {
+	Required("id", "state")
+	Attribute("id", String, "The server's id, as getPlugins reports it on each plugin server.")
+	Attribute("state", String, func() {
+		Description("`connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can't be determined, for example for a gateway.")
+		Enum("connected", "not_connected", "reauthorization_required", "not_required", "setup_required", "no_access", "unknown")
+	})
+	Attribute("connect_url", String, "Page that signs the user in to this server in the browser. Present when state is not_connected or reauthorization_required.", func() {
+		Format(FormatURI)
+	})
+	Attribute("request_access_url", String, "Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.", func() {
+		Format(FormatURI)
+	})
+	Attribute("hidden", Boolean, "True when the user hid this server, from the gateway consent page or the device agent. Absent when not hidden.")
+})
+
+var ListPendingAccessRequestsResult = Type("ListPendingAccessRequestsResult", func() {
+	Required("requests")
+	Attribute("requests", ArrayOf(AgentPendingAccessRequestModel), "Pending requests, newest first. At most 50. Empty for a user who is not an organization administrator.")
+})
+
+var AgentPendingAccessRequestModel = Type("AgentPendingAccessRequest", func() {
+	Description("A pending access request an organization administrator can decide in the dashboard.")
+	Required("id", "requester_display_name", "scope", "permission_label", "created_at", "expires_at", "decide_url")
+	Attribute("id", String, "Access request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("requester_display_name", String, "The requester's display name, or their email when they have none.")
+	Attribute("scope", String, "The scope asked for.")
+	Attribute("permission_label", String, "The scope's name as the role editor shows it.")
+	Attribute("resource_name", String, "The resource's name, as it was when the request was made.")
+	Attribute("message", String, "The requester's note to the administrators.")
+	Attribute("requested_duration_seconds", Int, "How long the requester asked to have the access, in seconds counted from approval.")
+	Attribute("requested_until", String, "When the requester asked to have the access until.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("expires_at", String, "When the request lapses.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("decide_url", String, "Dashboard page that opens the request to approve or deny it.", func() {
+		Format(FormatURI)
+	})
+})
+
+// Enumerated report values (layer, outcome, pending_reason, error_kind,
+// withheld reason) are plain strings rather than Enums: a newer agent can
+// send a value this server does not know, and Goa would reject the whole
+// report with a 400. The handler stores unrecognized values as "unknown".
+
+var AgentStateVersionsModel = Type("AgentStateVersions", func() {
+	Description("Versions of the device agent's binaries and the platform they run on.")
+	Attribute("speakeasyd", String, "Version of the speakeasyd daemon.", func() {
+		MaxLength(64)
+	})
+	Attribute("speakeasy", String, "Version of the speakeasy CLI, when the agent could read it.", func() {
+		MaxLength(64)
+	})
+	Attribute("speakeasy_ui", String, "Version of the menu bar app, when the agent could read it.", func() {
+		MaxLength(64)
+	})
+	Attribute("os", String, "Operating system (Go GOOS), e.g. darwin.", func() {
+		MaxLength(32)
+	})
+	Attribute("arch", String, "CPU architecture (Go GOARCH), e.g. arm64.", func() {
+		MaxLength(32)
+	})
+	Required("speakeasyd")
+})
+
+var AgentStatePolicyModel = Type("AgentStatePolicy", func() {
+	Description("The policy the agent's last reconcile applied.")
+	Attribute("applied_etag", String, "Etag of the getPlugins snapshot the last reconcile applied. Omitted before the agent has applied one.", func() {
+		MaxLength(128)
+	})
+	Attribute("applied_at", String, "When the agent first applied this etag. Later reconciles of the same etag keep this time.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("withheld_plugins", ArrayOf(AgentStateWithheldPluginModel), "Optional plugins the agent left out of the applied set because of a user choice. Required plugins are never withheld.", func() {
+		MaxLength(500)
+	})
+	Attribute("remote_config_etag", String, "Etag of the remote configuration the agent applied.", func() {
+		MaxLength(128)
+	})
+	Attribute("remote_config_failed", Boolean, "True when the agent could not apply the remote configuration it last received and kept its previous settings.")
+	Required("withheld_plugins")
+})
+
+var AgentStateWithheldPluginModel = Type("AgentStateWithheldPlugin", func() {
+	Description("One optional plugin the agent left out of the applied set.")
+	Attribute("marketplace", String, "Marketplace the plugin belongs to.", func() {
+		MaxLength(128)
+	})
+	Attribute("slug", String, "The plugin's slug.", func() {
+		MinLength(1)
+		MaxLength(128)
+	})
+	Attribute("reason", String, "Why it was withheld: user_disabled for a default-on plugin the user turned off, not_opted_in for an opt-in plugin the user has not turned on.", func() {
+		MaxLength(32)
+	})
+	Required("slug", "reason")
+})
+
+var AgentStateToolModel = Type("AgentStateTool", func() {
+	Description("One managed tool's outcome from the agent's last reconcile. Carries no error text or user-facing message: those can name paths and entries the agent does not own.")
+	Attribute("tool", String, "Stable tool id, e.g. claude_code.", func() {
+		MinLength(1)
+		MaxLength(64)
+	})
+	Attribute("layer", String, "Resolved enforcement layer: user, managed, or off.", func() {
+		MaxLength(16)
+	})
+	Attribute("outcome", String, "Reconcile outcome: armed, pending, skipped (tool not installed), error, or unmanaged.", func() {
+		MaxLength(16)
+	})
+	Attribute("pending_reason", String, "Why a pending tool is not yet enforcing: privileged_writer_not_ready or plugin_bundle_not_cloned.", func() {
+		MaxLength(64)
+	})
+	Attribute("error_kind", String, "Class of a reconcile error: permission_denied, not_found, invalid_config, or unknown.", func() {
+		MaxLength(32)
+	})
+	Attribute("restart_required", Boolean, "True when the agent wrote configuration the tool loads only after it restarts.")
+	Attribute("action_required", Boolean, "True when a problem the user can fix is blocking this tool.")
+	Attribute("drift_corrections", Int, "Times since drift_counting_since the agent rewrote what it owns in this tool although the applied policy had not changed. Omitted when this tool's syncer does not measure drift.", func() {
+		Minimum(0)
+		Maximum(2147483647)
+	})
+	Required("tool", "layer", "outcome")
+})
+
+var AgentStateUpdateModel = Type("AgentStateUpdate", func() {
+	Description("The device agent's update posture.")
+	Attribute("auto_update", String, "Auto-update mode: disabled, notify, or automatic.", func() {
+		MaxLength(16)
+	})
+	Attribute("channel", String, "Release channel the agent resolved to.", func() {
+		MaxLength(32)
+	})
+	Attribute("pinned_target", String, "Version the organization pinned the fleet to, when set.", func() {
+		MaxLength(64)
+	})
+	Attribute("current_blocked", Boolean, "True when the running build is in blocked_versions.")
+	Attribute("last_rollback", AgentStateRollbackModel, "The most recent time the daemon reverted a failed update, when it has.")
+})
+
+var AgentStateRollbackModel = Type("AgentStateRollback", func() {
+	Description("A self-rollback: the daemon reverted an update that did not stabilize.")
+	Attribute("at", String, "When the rollback happened.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("from", String, "Version that failed to stabilize.", func() {
+		MaxLength(64)
+	})
+	Attribute("to", String, "Version the daemon reverted to.", func() {
+		MaxLength(64)
+	})
+	Required("at")
+})
+
+var ReportStateResult = Type("ReportStateResult", func() {
+	Description("Acknowledgement of a state report.")
+	Attribute("stored", Boolean, "False when the report was accepted but not stored because it came from a non-endpoint environment.")
+	Attribute("applied_etag", String, "The applied etag the server now holds for this device.")
+	Attribute("received_at", String, "When the server received the report.", func() {
+		Format(FormatDateTime)
+	})
+	Required("stored", "received_at")
 })

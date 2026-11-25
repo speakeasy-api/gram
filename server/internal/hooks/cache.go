@@ -18,17 +18,24 @@ func sessionNativeHooksCacheKey(projectID, sessionID string) string {
 	return fmt.Sprintf("session:native-prompt:v1:%s:%s", projectID, sessionID)
 }
 
-// hookPendingCacheKey returns the Redis key for buffered hooks for a session
-func hookPendingCacheKey(sessionID string) string {
-	return fmt.Sprintf("hook:pending:%s", sessionID)
+// hookPendingCacheKey returns the Redis key for hooks buffered until OTEL
+// attributes their session. Authenticated hooks buffer under their project;
+// unauthenticated hooks (projectID "") buffer by session id alone.
+func hookPendingCacheKey(projectID, sessionID string) string {
+	if projectID == "" {
+		return fmt.Sprintf("hook:pending:%s", sessionID)
+	}
+	return fmt.Sprintf("hook:pending:v2:%s:%s", projectID, sessionID)
 }
 
 // sessionMCPListCacheKey returns the Redis key for the parsed `claude mcp list`
 // snapshot of a session. Stored on SessionStart, TTL refreshed on every
 // subsequent hook for the same session so we don't lose the mapping while
 // the user is actively working but garbage-collect dead sessions.
-func sessionMCPListCacheKey(sessionID string) string {
-	return fmt.Sprintf("session:mcp-list:%s", sessionID)
+// Scoped by project, like the read status, agent variant and owner keys,
+// because the session id is client-reported.
+func sessionMCPListCacheKey(projectID, sessionID string) string {
+	return fmt.Sprintf("session:mcp-list:v2:%s:%s", projectID, sessionID)
 }
 
 // sessionMCPInventoryReadCacheKey returns the Redis key recording whether a
@@ -36,8 +43,8 @@ func sessionMCPListCacheKey(sessionID string) string {
 // snapshot rather than inside it because an empty-but-read list has no entries
 // to carry the fact, and that is exactly the case the guard has to tell apart
 // from an unread one.
-func sessionMCPInventoryReadCacheKey(sessionID string) string {
-	return fmt.Sprintf("session:mcp-list-read:%s", sessionID)
+func sessionMCPInventoryReadCacheKey(projectID, sessionID string) string {
+	return fmt.Sprintf("session:mcp-list-read:v2:%s:%s", projectID, sessionID)
 }
 
 // hookIdempotencyCacheKey returns the Redis key marking a hook invocation as
@@ -62,8 +69,8 @@ func blockedPromptTelemetryCacheKey(provider, sessionID, prompt string) string {
 // TTL. Absence means SessionStart hasn't been processed for this session
 // yet — callers should treat that as an ambiguous Claude session rather
 // than assuming claude-code.
-func sessionAgentVariantCacheKey(sessionID string) string {
-	return fmt.Sprintf("session:agent-variant:%s", sessionID)
+func sessionAgentVariantCacheKey(projectID, sessionID string) string {
+	return fmt.Sprintf("session:agent-variant:v2:%s:%s", projectID, sessionID)
 }
 
 const (
@@ -82,6 +89,10 @@ const (
 	// separates cowork from CCD.
 	surfaceClaudeCodeDesktop = "claude-code-desktop"
 )
+
+// sessionMetadataTTL is how long a session's cached identity and attribution
+// survive without being rewritten.
+const sessionMetadataTTL = 24 * time.Hour
 
 // sessionMCPListTTL is how long the parsed MCP list survives without any
 // hook activity for its session id. Each hook received refreshes it.

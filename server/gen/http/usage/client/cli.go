@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	usage "github.com/speakeasy-api/gram/server/gen/usage"
 	goa "goa.design/goa/v3/pkg"
@@ -25,6 +26,100 @@ func BuildGetPeriodUsagePayload(usageGetPeriodUsageSessionToken string) (*usage.
 		}
 	}
 	v := &usage.GetPeriodUsagePayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetMeterUsagePayload builds the payload for the usage getMeterUsage
+// endpoint from CLI flags.
+func BuildGetMeterUsagePayload(usageGetMeterUsageFamily string, usageGetMeterUsageFrom string, usageGetMeterUsageTo string, usageGetMeterUsageBreakdown string, usageGetMeterUsageSessionToken string) (*usage.GetMeterUsagePayload, error) {
+	var err error
+	var family string
+	{
+		family = usageGetMeterUsageFamily
+		if !(family == "agent_session_storage" || family == "mcp_bandwidth" || family == "risk_content_scans") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("family", family, []any{"agent_session_storage", "mcp_bandwidth", "risk_content_scans"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var from *string
+	{
+		if usageGetMeterUsageFrom != "" {
+			from = &usageGetMeterUsageFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if usageGetMeterUsageTo != "" {
+			to = &usageGetMeterUsageTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var breakdown *string
+	{
+		if usageGetMeterUsageBreakdown != "" {
+			breakdown = &usageGetMeterUsageBreakdown
+		}
+	}
+	var sessionToken *string
+	{
+		if usageGetMeterUsageSessionToken != "" {
+			sessionToken = &usageGetMeterUsageSessionToken
+		}
+	}
+	v := &usage.GetMeterUsagePayload{}
+	v.Family = family
+	v.From = from
+	v.To = to
+	v.Breakdown = breakdown
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetSpendBreakdownPayload builds the payload for the usage
+// getSpendBreakdown endpoint from CLI flags.
+func BuildGetSpendBreakdownPayload(usageGetSpendBreakdownFrom string, usageGetSpendBreakdownTo string, usageGetSpendBreakdownSessionToken string) (*usage.GetSpendBreakdownPayload, error) {
+	var err error
+	var from *string
+	{
+		if usageGetSpendBreakdownFrom != "" {
+			from = &usageGetSpendBreakdownFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if usageGetSpendBreakdownTo != "" {
+			to = &usageGetSpendBreakdownTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if usageGetSpendBreakdownSessionToken != "" {
+			sessionToken = &usageGetSpendBreakdownSessionToken
+		}
+	}
+	v := &usage.GetSpendBreakdownPayload{}
+	v.From = from
+	v.To = to
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -205,16 +300,29 @@ func BuildCreateCustomerSessionPayload(usageCreateCustomerSessionSessionToken st
 	return v, nil
 }
 
-// BuildCreateCheckoutPayload builds the payload for the usage createCheckout
-// endpoint from CLI flags.
-func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string) (*usage.CreateCheckoutPayload, error) {
-	var sessionToken *string
+// BuildGetStripeCheckoutStatusPayload builds the payload for the usage
+// getStripeCheckoutStatus endpoint from CLI flags.
+func BuildGetStripeCheckoutStatusPayload(usageGetStripeCheckoutStatusSessionID string, usageGetStripeCheckoutStatusSessionToken string) (*usage.GetStripeCheckoutStatusPayload, error) {
+	var err error
+	var sessionID string
 	{
-		if usageCreateCheckoutSessionToken != "" {
-			sessionToken = &usageCreateCheckoutSessionToken
+		sessionID = usageGetStripeCheckoutStatusSessionID
+		err = goa.MergeErrors(err, goa.ValidatePattern("session_id", sessionID, "^cs_[A-Za-z0-9_]+$"))
+		if utf8.RuneCountInString(sessionID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("session_id", sessionID, utf8.RuneCountInString(sessionID), 255, false))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
-	v := &usage.CreateCheckoutPayload{}
+	var sessionToken *string
+	{
+		if usageGetStripeCheckoutStatusSessionToken != "" {
+			sessionToken = &usageGetStripeCheckoutStatusSessionToken
+		}
+	}
+	v := &usage.GetStripeCheckoutStatusPayload{}
+	v.SessionID = sessionID
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -222,7 +330,20 @@ func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string) (*usage.
 
 // BuildCreateStripeCheckoutPayload builds the payload for the usage
 // createStripeCheckout endpoint from CLI flags.
-func BuildCreateStripeCheckoutPayload(usageCreateStripeCheckoutSessionToken string) (*usage.CreateStripeCheckoutPayload, error) {
+func BuildCreateStripeCheckoutPayload(usageCreateStripeCheckoutTheme string, usageCreateStripeCheckoutSessionToken string) (*usage.CreateStripeCheckoutPayload, error) {
+	var err error
+	var theme string
+	{
+		if usageCreateStripeCheckoutTheme != "" {
+			theme = usageCreateStripeCheckoutTheme
+			if !(theme == "light" || theme == "dark") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("theme", theme, []any{"light", "dark"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if usageCreateStripeCheckoutSessionToken != "" {
@@ -230,6 +351,7 @@ func BuildCreateStripeCheckoutPayload(usageCreateStripeCheckoutSessionToken stri
 		}
 	}
 	v := &usage.CreateStripeCheckoutPayload{}
+	v.Theme = theme
 	v.SessionToken = sessionToken
 
 	return v, nil

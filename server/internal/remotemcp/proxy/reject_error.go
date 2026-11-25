@@ -1,9 +1,11 @@
 package proxy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -91,6 +93,22 @@ func (e *RejectError) Error() string {
 	return fmt.Sprintf("jsonrpc reject %d: %s", e.Code, e.Message)
 }
 
+// ToolResultError is how an interceptor answers a tools/call itself with a
+// tool result marked isError, instead of a JSON-RPC error. Agents read a tool
+// result as something to act on, so a call held for approval returns its
+// instructions this way rather than as a protocol failure.
+type ToolResultError struct {
+	// Message is the text the agent reads. It is user-facing, so the same
+	// sanitization rules as RejectError.Message apply.
+	Message string
+}
+
+// Error implements [error] for logs and spans. It leaves out Message, which
+// can carry an approval request token. The agent sees Message.
+func (e *ToolResultError) Error() string {
+	return "tool error result"
+}
+
 // RejectErrorFromCause coerces an arbitrary error into a *RejectError so
 // the proxy can always synthesize a spec-shaped rejection event when an
 // interceptor returns an error. Walks the error chain via [errors.As] so a
@@ -101,7 +119,10 @@ func (e *RejectError) Error() string {
 //     common path for interceptors that opt into typed rejection: the
 //     interceptor's RejectError survives the run-helper's oops.E wrap and
 //     its Code/Message/Data flow through to the JSON-RPC envelope.
-//   - An [oops.ShareableError] is mapped to a JSON-RPC code by Gram's
+//   - A *ToolResultError keeps its message as a forbidden rejection. This
+//     happens only for a tools/call sent without an id, which has no result
+//     to carry the message.
+//   - An [oops.ShareableError] is mapped to a JSON-RPC code by Speakeasy's
 //     domain-error class, mirroring the table used by the /mcp endpoint's
 //     own error-shape conversion.
 //   - Anything else falls back to RejectCodeInternalError with a generic
@@ -110,6 +131,14 @@ func (e *RejectError) Error() string {
 func RejectErrorFromCause(err error) *RejectError {
 	if reject, ok := errors.AsType[*RejectError](err); ok {
 		return reject
+	}
+
+	if toolResult, ok := errors.AsType[*ToolResultError](err); ok {
+		return &RejectError{
+			Code:    RejectCodeForbidden,
+			Message: toolResult.Message,
+			Data:    nil,
+		}
 	}
 
 	if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok {
@@ -130,7 +159,7 @@ func RejectErrorFromCause(err error) *RejectError {
 // rejectCodeForOops mirrors the mapping used by the /mcp endpoint's
 // NewErrorFromCause so an oops.ShareableError leaving an interceptor
 // produces the same JSON-RPC code regardless of which surface (the public
-// /mcp server or the /x/mcp proxy) it traversed.
+// /mcp server or the remote MCP proxy) it traversed.
 func rejectCodeForOops(code oops.Code) int {
 	switch code {
 	case oops.CodeBadRequest:
@@ -148,4 +177,17 @@ func rejectCodeForOops(code oops.Code) int {
 	default:
 		return RejectCodeInternalError
 	}
+}
+
+// withConnectionReference adds the reference of the row this refusal wrote. A kill-switch
+// note is shown exactly as set. It copies, since a rejection can be a shared value.
+func withConnectionReference(ctx context.Context, reject *RejectError) *RejectError {
+	if _, exact := reject.Data.(KillswitchRejectionData); exact {
+		return reject
+	}
+	message := contextvalues.AppendConnectionReference(ctx, reject.Message)
+	if message == reject.Message {
+		return reject
+	}
+	return &RejectError{Code: reject.Code, Message: message, Data: reject.Data}
 }

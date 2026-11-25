@@ -20,28 +20,38 @@ var WorkosCurrentUser = Type("WorkosCurrentUser", func() {
 	Required("workos_sub")
 })
 
+// CurrentUserProvenance identifies the running local IdP and its opened storage.
+var CurrentUserProvenance = Type("CurrentUserProvenance", func() {
+	Attribute("backend", String, "Parsed running backend (local).")
+	Attribute("worktree_root", String, "Canonical absolute process worktree root.")
+	Attribute("database_path", String, "Canonical absolute opened SQLite main database path.")
+	Required("backend", "worktree_root", "database_path")
+})
+
 // CurrentUser is the discriminated payload returned by devIdp.getCurrentUser.
-// `mode` tells the consumer which mode was read. Local modes populate
-// `user`; the workos mode populates `workos`.
+// `mode` names the identity slot that was read. The oauth2-1 slot
+// populates `user`; the workos slot populates `workos`.
 var CurrentUser = Type("CurrentUser", func() {
 	Attribute("mode", String, "Mode whose currentUser is being reported.", func() {
-		Enum("mock-workos", "oauth2-1", "oauth2", "workos")
+		Enum("oauth2-1", "workos")
 	})
-	Attribute("user", User, "Local user record. Populated for mock-workos / oauth2-1 / oauth2.")
+	Attribute("user", User, "Local user record. Populated for the oauth2-1 slot.")
 	Attribute("workos", WorkosCurrentUser, "Live WorkOS profile. Populated for workos mode only.")
+
+	Attribute("provenance", CurrentUserProvenance, "Best-effort local provenance, only on getCurrentUser for the oauth2-1 slot with a local backend and verifiable disk storage and worktree origin.")
 
 	Required("mode")
 })
 
 var _ = Service("devIdp", func() {
-	Description("Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set (idp-design.md §3, §6.2). Permanently unauthenticated.")
+	Description("Dev-only RPCs for the dev-idp itself. Per-slot currentUser get/set. Permanently unauthenticated.")
 
 	Method("getCurrentUser", func() {
 		Description("Read the per-mode currentUser. 404s when no row exists yet for that mode.")
 
 		Payload(func() {
 			Attribute("mode", String, "Which mode's currentUser to read.", func() {
-				Enum("mock-workos", "oauth2-1", "oauth2", "workos")
+				Enum("oauth2-1", "workos")
 			})
 			Required("mode")
 		})
@@ -59,7 +69,7 @@ var _ = Service("devIdp", func() {
 
 		Payload(func() {
 			Attribute("mode", String, "Which mode's currentUser to write.", func() {
-				Enum("mock-workos", "oauth2-1", "oauth2", "workos")
+				Enum("oauth2-1", "workos")
 			})
 			Attribute("user_id", String, "Local user UUID. Required for non-workos modes.", func() {
 				Format(FormatUUID)
@@ -81,7 +91,7 @@ var _ = Service("devIdp", func() {
 
 		Payload(func() {
 			Attribute("mode", String, "Which mode's currentUser to clear.", func() {
-				Enum("mock-workos", "oauth2-1", "oauth2", "workos")
+				Enum("oauth2-1", "workos")
 			})
 			Required("mode")
 		})

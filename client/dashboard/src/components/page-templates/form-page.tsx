@@ -24,19 +24,26 @@ export function FormPage({
   scopeAll,
   resourceId,
   breadcrumbSubstitutions,
+  breadcrumbUrlSubstitutions,
   title,
   description,
   stage,
   area,
   primaryAction,
   children,
-  /** Max column width. Default: a comfortable single-form measure. */
+  /**
+   * Max column width. Default: a comfortable single-form measure. "full"
+   * takes the page, for a form that is not a column — a wizard with a
+   * summary beside it has two.
+   */
   width = "narrow",
   className,
 }: TemplateFrameProps &
   TemplateHeaderProps & {
     children: ReactNode;
-    width?: "narrow" | "wide";
+    /** Where a crumb points, when its own path is not a page. */
+    breadcrumbUrlSubstitutions?: Record<string, string>;
+    width?: "narrow" | "wide" | "full";
     className?: string;
   }): JSX.Element {
   return (
@@ -45,8 +52,14 @@ export function FormPage({
       scopeAll={scopeAll}
       resourceId={resourceId}
       breadcrumbSubstitutions={breadcrumbSubstitutions}
+      breadcrumbUrlSubstitutions={breadcrumbUrlSubstitutions}
     >
-      <div className={cn(width === "narrow" ? "max-w-2xl" : "max-w-4xl")}>
+      <div
+        className={cn(
+          width === "narrow" && "max-w-2xl",
+          width === "wide" && "max-w-4xl",
+        )}
+      >
         <TemplateHeader
           title={title}
           description={description}

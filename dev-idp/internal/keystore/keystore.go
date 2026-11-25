@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"sync/atomic"
 )
 
 const rsaKeyBits = 2048
@@ -30,11 +31,21 @@ const rsaKeyBits = 2048
 // Keystore holds the dev-idp's RSA keypair plus a stable KID derived from
 // the public-key SPKI DER digest. The KID is published in JWKS responses
 // and embedded in every signed id_token's `kid` header.
+//
+// There is one keypair at a time. Rotate replaces it, and every accessor and
+// the JWKS handler read whichever keypair is current.
 type Keystore struct {
+	current atomic.Pointer[keyPair]
+	logger  *slog.Logger
+}
+
+// keyPair is one signing key with everything derived from it, swapped as a
+// unit so the published key set never disagrees with the kid.
+type keyPair struct {
 	private *rsa.PrivateKey
 	public  *rsa.PublicKey
 	kid     string
-	logger  *slog.Logger
+	jwks    []byte
 }
 
 // New parses a PEM-encoded RSA private key (PKCS#8 or PKCS#1) when
@@ -49,29 +60,52 @@ func New(pemBytes []byte, logger *slog.Logger) (*Keystore, error) {
 		return nil, err
 	}
 
-	pub, ok := priv.Public().(*rsa.PublicKey)
-	if !ok {
-		return nil, errors.New("dev-idp keypair: public key is not RSA")
-	}
-
-	kid, err := computeKID(pub)
+	pair, err := newKeyPair(priv)
 	if err != nil {
-		return nil, fmt.Errorf("derive kid: %w", err)
+		return nil, err
 	}
 
-	return &Keystore{private: priv, public: pub, kid: kid, logger: logger}, nil
+	ks := &Keystore{logger: logger}
+	ks.current.Store(pair)
+	return ks, nil
+}
+
+// Rotate replaces the signing key; the JWKS then publishes only the new key.
+// Signers read KID and PrivateKey separately, so rotate between requests, not
+// during them.
+func (k *Keystore) Rotate(priv *rsa.PrivateKey) error {
+	if priv == nil {
+		return errors.New("rotate dev-idp keypair: key is nil")
+	}
+
+	pair, err := newKeyPair(priv)
+	if err != nil {
+		return fmt.Errorf("rotate dev-idp keypair: %w", err)
+	}
+
+	k.current.Store(pair)
+	return nil
 }
 
 // PrivateKey returns the signing key. Used by OIDC modes to RS256-sign
 // id_tokens.
 func (k *Keystore) PrivateKey() *rsa.PrivateKey {
-	return k.private
+	return k.current.Load().private
+}
+
+// PublicKey returns the verification half of the keypair. Used where the
+// dev-idp verifies a token it signed itself -- the mint leg checking the
+// id_token it is handed, and a resource authorization server checking an
+// ID-JAG whose issuer is this same dev-idp -- so those paths do not have to
+// make an HTTP round trip to their own JWKS endpoint.
+func (k *Keystore) PublicKey() *rsa.PublicKey {
+	return k.current.Load().public
 }
 
 // KID is the JWK key id; it appears in every signed id_token's `kid`
 // header so verifiers can pick the right key from the JWKS response.
 func (k *Keystore) KID() string {
-	return k.kid
+	return k.current.Load().kid
 }
 
 // SigningMethod is RS256, the only algorithm the dev-idp signs with.
@@ -82,36 +116,55 @@ func (k *Keystore) SigningAlg() string {
 // Signer adapts the private key for callers that take a crypto.Signer
 // (e.g. JWT libraries).
 func (k *Keystore) Signer() crypto.Signer {
-	return k.private
+	return k.current.Load().private
 }
 
 // JWKSHandler returns an http.Handler that serves the RFC 7517 JWKS
 // document for the public half of the keypair. Each OIDC mode mounts
 // the same handler under its own /.well-known/jwks.json; the KID is
 // shared across modes by design.
+//
+// The document is read per request, so a handler mounted at boot serves the
+// key set that is current after a Rotate.
 func (k *Keystore) JWKSHandler() http.Handler {
-	doc := jwksDocument{
-		Keys: []jwk{{
-			Kty: "RSA",
-			Use: "sig",
-			Alg: k.SigningAlg(),
-			Kid: k.kid,
-			N:   base64URLBigInt(k.public.N),
-			E:   base64URLInt(k.public.E),
-		}},
-	}
-	body, _ := json.Marshal(doc)
-
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "public, max-age=300")
-		_, _ = w.Write(body)
+		_, _ = w.Write(k.current.Load().jwks)
 	})
 }
 
 // =============================================================================
 // Internals
 // =============================================================================
+
+func newKeyPair(priv *rsa.PrivateKey) (*keyPair, error) {
+	pub, ok := priv.Public().(*rsa.PublicKey)
+	if !ok {
+		return nil, errors.New("dev-idp keypair: public key is not RSA")
+	}
+
+	kid, err := computeKID(pub)
+	if err != nil {
+		return nil, fmt.Errorf("derive kid: %w", err)
+	}
+
+	body, err := json.Marshal(jwksDocument{
+		Keys: []jwk{{
+			Kty: "RSA",
+			Use: "sig",
+			Alg: "RS256",
+			Kid: kid,
+			N:   base64URLBigInt(pub.N),
+			E:   base64URLInt(pub.E),
+		}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("encode jwks: %w", err)
+	}
+
+	return &keyPair{private: priv, public: pub, kid: kid, jwks: body}, nil
+}
 
 func loadOrGenerate(pemBytes []byte) (*rsa.PrivateKey, error) {
 	if len(pemBytes) == 0 {

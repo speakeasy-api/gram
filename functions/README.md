@@ -1,3 +1,3 @@
-# Gram Functions Runner
+# Speakeasy Functions Runner
 
-This package contains the code that is deployed to run Gram functions.
+This package contains the code that is deployed to run Speakeasy functions.

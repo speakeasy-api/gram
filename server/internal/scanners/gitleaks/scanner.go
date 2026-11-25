@@ -24,6 +24,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
 // Source labels findings produced by this scanner. The shared Finding topic
@@ -33,14 +34,8 @@ const Source = "gitleaks"
 // prefixSecret is prepended to canonical gitleaks rule ids.
 const prefixSecret = "secret."
 
-// detectorInitMu serializes gitleaks detector creation process-wide. Gitleaks
-// uses viper internally which has global state that races on concurrent
-// initialization.
-var detectorInitMu sync.Mutex
-
-// newDetector creates a gitleaks detector using the default config extended with
-// our AWS credential rules (see awsRules), serialized by detectorInitMu to avoid
-// viper's init-time data race.
+// newDetector creates a gitleaks detector from the effective config: the
+// default config extended with our AWS credential rules (see awsRules).
 //
 // For speed, gitleaks does not run every rule's regex against every input: it
 // first does a single Aho-Corasick pass for all rules' keywords and only
@@ -51,9 +46,6 @@ var detectorInitMu sync.Mutex
 // and then construct the detector, rather than adding rules to an already-built
 // detector (which would leave the trie stale and skip our rules).
 func newDetector() (*detect.Detector, error) {
-	detectorInitMu.Lock()
-	defer detectorInitMu.Unlock()
-
 	cfg, err := effectiveConfig()
 	if err != nil {
 		return nil, err
@@ -62,10 +54,19 @@ func newDetector() (*detect.Detector, error) {
 }
 
 // effectiveConfig returns the exact configuration used by every scanner: the
-// pinned Gitleaks defaults plus Gram's AWS secret and session-token extensions.
-// Callers must hold detectorInitMu because Gitleaks uses process-global Viper
-// state while constructing its default configuration.
-func effectiveConfig() (config.Config, error) {
+// pinned Gitleaks defaults plus Speakeasy's AWS secret and session-token
+// extensions.
+//
+// It is built once per process and shared by every detector. Building it parses
+// the default TOML and compiles every rule's regex, which is far more expensive
+// than the detector itself. Detectors only read their config (rules are copied
+// by value per match, and the compiled regexes and allowlist tries are safe for
+// concurrent use), so sharing it is safe. sync.OnceValues also serializes the
+// build, which matters because Gitleaks constructs its default configuration
+// through process-global Viper state that races on concurrent use.
+var effectiveConfig = sync.OnceValues(buildEffectiveConfig)
+
+func buildEffectiveConfig() (config.Config, error) {
 	base, err := detect.NewDetectorDefaultConfig()
 	if err != nil {
 		return config.Config{}, fmt.Errorf("create gitleaks detector: %w", err)
@@ -101,13 +102,21 @@ func effectiveConfig() (config.Config, error) {
 }
 
 // ReportableRuleIDs returns the canonical rule IDs the effective scanner can
-// emit. It deliberately exposes only stable Gram identifiers, never Gitleaks
+// emit. It deliberately exposes only stable Speakeasy identifiers, never Gitleaks
 // configuration or detector types. Rules retained only as composite anchors are
 // excluded because SkipReport prevents them from producing findings.
 func ReportableRuleIDs() ([]string, error) {
-	detectorInitMu.Lock()
-	defer detectorInitMu.Unlock()
+	ruleIDs, err := reportableRuleIDs()
+	if err != nil {
+		return nil, err
+	}
+	// Callers own the returned slice; the memoized one stays immutable.
+	return slices.Clone(ruleIDs), nil
+}
 
+// reportableRuleIDs computes the sorted reportable rule ids once. Never hand
+// its slice to callers directly.
+var reportableRuleIDs = sync.OnceValues(func() ([]string, error) {
 	cfg, err := effectiveConfig()
 	if err != nil {
 		return nil, err
@@ -138,7 +147,7 @@ func ReportableRuleIDs() ([]string, error) {
 	}
 	slices.Sort(result)
 	return result, nil
-}
+})
 
 // Scanner is the single gitleaks scanner used across the codebase — batch
 // fan-out (the risk-analysis activity), the streams subscriber, and the
@@ -154,13 +163,17 @@ type Scanner struct {
 	// detectors is a fixed-capacity free list. A nil slot is one whose detector
 	// has not been created yet; a non-nil slot is a warm, reusable detector.
 	// Its capacity caps both the live detector count and Scan concurrency.
-	detectors chan *detect.Detector
+	detectors   chan *detect.Detector
+	stokenCodec *stokens.Codec
 }
 
 // NewScanner creates a new Scanner with a warm detector set sized to NumCPU.
 func NewScanner() *Scanner {
 	n := runtime.NumCPU()
-	s := &Scanner{detectors: make(chan *detect.Detector, n)}
+	s := &Scanner{
+		detectors:   make(chan *detect.Detector, n),
+		stokenCodec: stokens.NewCodec(),
+	}
 	for range n {
 		s.detectors <- nil
 	}
@@ -200,10 +213,11 @@ func (s *Scanner) Prime() error {
 // Scan scans a single message with a detector checked out from the warm set,
 // blocking until a slot is free. Safe for concurrent use: each call holds its
 // detector exclusively until it returns it.
-func (s *Scanner) Scan(ctx context.Context, content string) ([]scanners.Finding, error) {
+func (s *Scanner) Scan(ctx context.Context, content string) (scanners.Result, error) {
+	stokenCount, countErr := s.stokenCodec.Count(ctx, content)
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("abort: %w", ctx.Err())
+		return scanners.Result{Findings: nil, STokens: int64(stokenCount), Completed: false}, fmt.Errorf("abort: %w", ctx.Err())
 	default:
 		// carry on
 	}
@@ -216,7 +230,7 @@ func (s *Scanner) Scan(ctx context.Context, content string) ([]scanners.Finding,
 	var d *detect.Detector
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("abort: %w", ctx.Err())
+		return scanners.Result{Findings: nil, STokens: int64(stokenCount), Completed: false}, fmt.Errorf("abort: %w", ctx.Err())
 	case d = <-s.detectors:
 	}
 	if d == nil {
@@ -224,35 +238,39 @@ func (s *Scanner) Scan(ctx context.Context, content string) ([]scanners.Finding,
 		d, err = newDetector()
 		if err != nil {
 			s.detectors <- nil // leave the slot uncreated for a later retry
-			return nil, err
+			return scanners.Result{Findings: nil, STokens: int64(stokenCount), Completed: false}, err
 		}
 	}
 	defer func() { s.detectors <- d }()
 
-	return convertFindings(content, d.DetectString(content)), nil
+	return scanners.Result{
+		Findings:  convertFindings(content, d.DetectString(content)),
+		STokens:   int64(stokenCount),
+		Completed: countErr == nil,
+	}, nil
 }
 
-func (s *Scanner) ScanBatch(ctx context.Context, contents []string) ([][]scanners.Finding, error) {
+func (s *Scanner) ScanBatch(ctx context.Context, contents []string) ([]scanners.Result, error) {
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(runtime.NumCPU())
 
-	findings := make([][]scanners.Finding, len(contents))
+	results := make([]scanners.Result, len(contents))
 	for i, content := range contents {
 		g.Go(func() error {
-			f, err := s.Scan(ctx, content)
+			result, err := s.Scan(ctx, content)
+			results[i] = result
 			if err != nil {
 				return fmt.Errorf("scan content: %w", err)
 			}
-			findings[i] = f
 			return nil
 		})
 	}
 
 	if err := g.Wait(); err != nil {
-		return [][]scanners.Finding{}, fmt.Errorf("errgroup: %w", err)
+		return results, fmt.Errorf("errgroup: %w", err)
 	}
 
-	return findings, nil
+	return results, nil
 }
 
 // convertFindings converts raw gitleaks findings to domain Findings. Rule ids

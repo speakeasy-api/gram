@@ -55,7 +55,7 @@ export type VerifyUserSessionIssuerCimdClientURLMutationError =
  * verifyURL userSessionIssuersCimdClients
  *
  * @remarks
- * Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.
+ * Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Speakeasy fetch a caller-chosen URL.
  */
 export function useVerifyUserSessionIssuerCimdClientURLMutation(
   options?: MutationHookOptions<

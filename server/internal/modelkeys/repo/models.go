@@ -10,15 +10,28 @@ import (
 )
 
 type ModelProviderKey struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	Slot            string
-	Provider        string
-	ApiKeyEncrypted string
-	Enabled         bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Slot string
+	// @access: confidential
+	Provider string
+	// @access: secret-restricted
+	ApiKeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	ApiKeyOrgEncrypted pgtype.Text
+	// @access: confidential
+	Enabled bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

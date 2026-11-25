@@ -1,6 +1,6 @@
 # Judge Timeout Monitors
 
-Gram runs two OpenRouter-backed LLM judges inline on the message path:
+Speakeasy runs two OpenRouter-backed LLM judges inline on the message path:
 
 - **Prompt-injection judge** (`server/internal/scanners/promptinjection/openrouter`) —
   L1 prompt-attack detector, emits `risk.prompt_injection.*` metrics.

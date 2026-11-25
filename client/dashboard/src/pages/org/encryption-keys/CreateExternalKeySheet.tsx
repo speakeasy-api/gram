@@ -36,7 +36,7 @@ import {
 } from "./providers";
 
 // CreateExternalKeySheet registers a key that already exists in the customer's
-// KMS. Gram never creates the key material — this records where it is and how to
+// KMS. Speakeasy never creates the key material — this records where it is and how to
 // reach it.
 export function CreateExternalKeySheet({
   open,

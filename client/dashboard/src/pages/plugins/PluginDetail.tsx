@@ -1,3 +1,11 @@
+import { SourceMcpIcon } from "@/components/sources/SourceCard";
+import { McpEntityCard } from "@/components/mcp/McpEntityCard";
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
+import { usePluginServerQueries } from "./usePluginServerQueries";
+import { useRBAC } from "@/hooks/useRBAC";
+import { PluginDistributionDetail } from "./PluginDistributionDetail";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { useOrganization } from "@/contexts/Auth";
 import { InputField } from "@/components/moon/input-field";
@@ -9,7 +17,12 @@ import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button as UiButton } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
-import { Card } from "@/components/ui/Card";
+import { SplashScreen } from "@/components/ui/LogoLoader";
+import {
+  ServerPickerSheet,
+  type ServerPickerOption,
+  type ServerPickerResult,
+} from "@/components/mcp/ServerPickerSheet";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
@@ -34,15 +47,14 @@ import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
 import { useDeletePluginMutation } from "@gram/client/react-query/deletePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
-import { useListToolsets } from "@gram/client/react-query/listToolsets";
-import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
-import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import { useAudiences } from "@gram/client/react-query/audiences";
 import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { handleError } from "@/lib/errors";
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -53,10 +65,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
+import { Label } from "@/components/ui/Label";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Stack } from "@/components/ui/Stack";
+import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import { Network, Trash2 } from "lucide-react";
 import {
   Fragment,
@@ -88,7 +102,6 @@ import {
   pluginSectionHref,
   PLUGIN_ASSIGNMENTS_SECTION_ID,
   PLUGIN_OVERVIEW_SECTION_ID,
-  PLUGIN_SERVERS_SECTION_ID,
   PLUGIN_SETTINGS_SECTION_ID,
   PLUGIN_SKILLS_SECTION_ID,
 } from "./plugin-detail-sections";
@@ -99,33 +112,102 @@ import {
   memberMapByUrn,
   roleMapByUrn,
 } from "./principals";
+import { pluginUpToDate } from "./plugin-sync-state";
 import { PublishDialog } from "./PublishDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
 import { usePluginAssignmentsVisible } from "./use-plugin-assignments-visible";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
 // a Remote- or unproxied-MCP-backed mcp_server. The kind determines
-// whether it is submitted as a toolset_id or an mcp_server_id, mirroring the
-// collections picker.
+// whether it is submitted as a toolset_id or an mcp_server_id.
 type ServerOptionKind = "toolset" | "mcpServer";
 type ServerOption = {
   kind: ServerOptionKind;
   id: string;
   name: string;
-  isUnproxied?: boolean;
 };
-
-function serverOptionSuffix(option: ServerOption): string {
-  if (option.kind !== "mcpServer") return "";
-  return option.isUnproxied ? " (Unproxied MCP)" : " (Remote MCP)";
-}
 
 function serverOptionKey(kind: ServerOptionKind, id: string): string {
   return `${kind}:${id}`;
 }
 
 export default function PluginDetail(): JSX.Element | null {
+  const { hasScope, isLoading } = useRBAC();
+  const organization = useOrganization();
+  const canWritePlugin = usePluginWriteAccess();
+  if (isLoading) return <SplashScreen />;
+  // Keep privileged queries unmounted, rather than hiding their rendered UI.
+  return canWritePlugin || hasScope("org:read", organization.id) ? (
+    <AdminPluginDetail />
+  ) : (
+    <PluginDistributionDetail />
+  );
+}
+
+// Assignment metadata includes admin-only audiences and device reach. Keep its
+// queries unmounted for org readers, including when cached admin data exists.
+function AdminPluginDetail(): JSX.Element | null {
+  const { hasScope } = useRBAC();
+  const organization = useOrganization();
+  return hasScope("org:admin", organization.id) ? (
+    <PluginDetailWithAssignments />
+  ) : (
+    <PluginDetailContent />
+  );
+}
+
+type AssignmentDataProps = {
+  rolesData?: ReturnType<typeof useRoles>["data"];
+  membersData?: ReturnType<typeof useMembers>["data"];
+  audiencesData?: ReturnType<typeof useAudiences>["data"];
+  syncedUsersData?: ReturnType<typeof useSyncedAgentUsers>["data"];
+  isLoadingSynced?: boolean;
+  installsUnavailable?: boolean;
+};
+
+function PluginDetailWithAssignments(): JSX.Element | null {
+  const scope = usePluginQueryScope();
+  const { data: rolesData } = useRoles(scope, undefined, {
+    queryKeyHashFn: (key) => JSON.stringify([scope, key]),
+  });
+  const { data: membersData } = useMembers(scope, undefined, {
+    queryKeyHashFn: (key) => JSON.stringify([scope, key]),
+  });
+  const { data: audiencesData } = useAudiences(scope);
+  const showAssignments = usePluginAssignmentsVisible();
+  const {
+    data: syncedUsersData,
+    isLoading,
+    error,
+  } = useSyncedAgentUsers(scope, undefined, {
+    enabled: showAssignments,
+    throwOnError: false,
+  });
+  return (
+    <PluginDetailContent
+      rolesData={rolesData}
+      membersData={membersData}
+      audiencesData={audiencesData}
+      syncedUsersData={syncedUsersData}
+      isLoadingSynced={isLoading}
+      installsUnavailable={!isLoading && !!error}
+    />
+  );
+}
+
+function PluginDetailContent({
+  rolesData,
+  membersData,
+  audiencesData,
+  syncedUsersData,
+  isLoadingSynced = false,
+  installsUnavailable = false,
+}: AssignmentDataProps): JSX.Element | null {
   const { pluginId } = useParams<{ pluginId: string }>();
+  const { hasScope } = useRBAC();
+  const organization = useOrganization();
+  const canAdmin = hasScope("org:admin", organization.id);
+  const canPublish = usePluginWriteAccess();
   const location = useLocation();
   const project = useProject();
   const queryClient = useQueryClient();
@@ -135,6 +217,8 @@ export default function PluginDetail(): JSX.Element | null {
   // renders.
   const section = activePluginSection(location.pathname, pluginId);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  // The server's refusal to turn auto sync off, shown next to the switch.
+  const [autoSyncError, setAutoSyncError] = useState<string | null>(null);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
@@ -146,17 +230,20 @@ export default function PluginDetail(): JSX.Element | null {
   const [serverSearch, setServerSearch] = useState("");
   const [assignmentSearch, setAssignmentSearch] = useState("");
   // The component stays mounted when only :pluginId changes, so stale searches
-  // would filter the new plugin's lists.
+  // would filter the new plugin's lists and an auto sync refusal would show
+  // on a plugin it wasn't about.
   useEffect(() => {
     setServerSearch("");
     setAssignmentSearch("");
+    setAutoSyncError(null);
   }, [pluginId]);
 
-  const { data: plugin } = usePluginSuspense({ id: pluginId! });
+  const scope = usePluginQueryScope();
+  const { data: plugin } = usePluginSuspense({ ...scope, id: pluginId! });
   useRecentLabelOverride(location.pathname, plugin.name);
   // Polled so the publish-freshness badges/banner pick up the Temporal
   // generator-rollout schedule's auto-sync without a manual refresh.
-  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
+  const { data: publishStatus } = usePublishStatus(scope, undefined, {
     refetchInterval: 5_000,
   });
 
@@ -165,10 +252,12 @@ export default function PluginDetail(): JSX.Element | null {
     client,
     pluginId!,
     setIsDownloadMenuOpen,
+    scope,
   );
 
-  const { data: toolsetsData, isLoading: isLoadingToolsets } =
-    useListToolsets();
+  const { canReadServers, toolsetsQuery, serversQuery, endpointsQuery } =
+    usePluginServerQueries();
+  const { data: toolsetsData, isLoading: isLoadingToolsets } = toolsetsQuery;
   const toolsets = useMemo(
     () => toolsetsData?.toolsets ?? [],
     [toolsetsData?.toolsets],
@@ -177,13 +266,12 @@ export default function PluginDetail(): JSX.Element | null {
   // Remote MCP-backed mcp_servers for this project. All of them back the
   // cards of already-attached plugin servers (an attached server that's been
   // disabled or lost its endpoints must still resolve for display), while
-  // only non-disabled servers with at least one endpoint are publishable —
-  // mirroring the backend's AddPluginServer check, so the picker never
-  // offers a server the API would reject.
-  const { data: mcpServersData, isLoading: isLoadingMcpServers } =
-    useMcpServers({});
+  // only non-disabled servers with at least one endpoint are publishable,
+  // mirroring the backend's AddPluginServer check, so the picker never offers
+  // a server the API would reject.
+  const { data: mcpServersData, isLoading: isLoadingMcpServers } = serversQuery;
   const { data: mcpEndpointsData, isLoading: isLoadingMcpEndpoints } =
-    useMcpEndpoints({});
+    endpointsQuery;
   const mcpServers = useMemo(
     () =>
       (mcpServersData?.mcpServers ?? []).filter(
@@ -211,9 +299,6 @@ export default function PluginDetail(): JSX.Element | null {
   // Roles and members resolve the plugin's assignment principal URNs to human
   // names in the assignments section (and seed the assignment sheet). React
   // Query dedupes these with the sheet's own calls.
-  const { data: rolesData } = useRoles();
-  const { data: membersData } = useMembers();
-  const { data: audiencesData } = useAudiences();
   const roleByUrn = useMemo(
     () => roleMapByUrn(rolesData?.roles ?? []),
     [rolesData?.roles],
@@ -227,54 +312,49 @@ export default function PluginDetail(): JSX.Element | null {
     [audiencesData?.audiences],
   );
 
-  const showAssignments = usePluginAssignmentsVisible();
-  const organization = useOrganization();
-  const { data: productFeatures } = useProductFeatures({
-    organizationId: organization.id,
-  });
-
-  // Device-agent reach powers the Installs stat. It's an admin-only, org-scoped
-  // list, so it's fetched only for device-agent orgs and degrades quietly
-  // (throwOnError:false) when the viewer can't read it.
-  const {
-    data: syncedUsersData,
-    isLoading: isLoadingSynced,
-    error: syncedUsersError,
-  } = useSyncedAgentUsers(undefined, undefined, {
-    throwOnError: false,
-    enabled: showAssignments,
-  });
-  // The synced-users list is admin-only; a non-admin viewer's request is
-  // forbidden, leaving reach unknown. Distinguish that from a genuine zero so
-  // the Installs metric doesn't misreport "no data" as "no installs". Loading
-  // is a separate state, surfaced via the card's refreshing spinner.
-  const installsUnavailable = !isLoadingSynced && !!syncedUsersError;
+  const assignmentsVisible = usePluginAssignmentsVisible();
+  const showAssignments = canAdmin && assignmentsVisible;
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
   const invalidateAll = async () => {
     await invalidateAllPlugin(queryClient);
     await invalidateAllPlugins(queryClient);
+    await invalidateAllResourceAudience(queryClient);
     await invalidateAllPublishStatus(queryClient);
   };
 
+  // Ref, not state: onSuccess/onError read the mode from a detached mutation
+  // callback, where a state capture would be stale; it also avoids re-rendering
+  // the memoized dialogs on mode switch.
+  const publishModeRef = useRef<"publish" | "manage">("publish");
+
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
+      const managing = publishModeRef.current === "manage";
       setIsPublishDialogOpen(false);
       setIsManageCollaboratorsOpen(false);
+      setAutoSyncError(null);
       void invalidateAllPublishStatus(queryClient);
-      toast.success("Plugins published to GitHub", {
-        description: data.repoUrl,
-        action: {
-          label: "Open",
-          onClick: () => {
-            openSafeExternalUrl(data.repoUrl);
+      toast.success(
+        managing ? "Collaborators added" : "Plugins published to GitHub",
+        {
+          description: data.repoUrl,
+          action: {
+            label: "Open",
+            onClick: () => {
+              openSafeExternalUrl(data.repoUrl);
+            },
           },
         },
-      });
+      );
     },
     onError: () => {
-      toast.error("Failed to publish plugins to GitHub");
+      toast.error(
+        publishModeRef.current === "manage"
+          ? "Failed to add collaborators"
+          : "Failed to publish plugins to GitHub",
+      );
     },
   });
 
@@ -282,45 +362,67 @@ export default function PluginDetail(): JSX.Element | null {
   // the fresh-per-render wrapper object (mirrors Plugins.tsx).
   const { mutate: publishMutate } = publishMutation;
   // Mirror the in-flight flag into a ref so detached callbacks can gate on the
-  // current pending state. The "Publish now" toast action closure is created
-  // when offerPublish runs (before any publish starts), so it can't read a live
-  // isPending — without this guard, stacking edits into multiple toasts lets a
-  // user fire concurrent publishes that the disabled buttons prevent.
+  // current pending state: a callback captured before a publish started can't
+  // read a live isPending, and without this guard could fire a concurrent
+  // publish that the disabled buttons prevent.
   const isPublishingRef = useRef(publishMutation.isPending);
   isPublishingRef.current = publishMutation.isPending;
   const handlePublish = useCallback(
     (githubUsernames: string[]) => {
-      if (isPublishingRef.current) return;
+      if (!canPublish || isPublishingRef.current) return;
+      publishModeRef.current = "publish";
       publishMutate({
         security: { sessionHeaderGramSession: "" },
         request: { publishPluginsRequestBody: { githubUsernames } },
       });
     },
-    [publishMutate],
+    [canPublish, publishMutate],
+  );
+  const handleAddCollaborators = useCallback(
+    (githubUsernames: string[]) => {
+      if (!canPublish || isPublishingRef.current) return;
+      publishModeRef.current = "manage";
+      publishMutate({
+        security: { sessionHeaderGramSession: "" },
+        request: { publishPluginsRequestBody: { githubUsernames } },
+      });
+    },
+    [canPublish, publishMutate],
   );
 
-  // Nudge the user to publish straight after an edit instead of hunting for
-  // Sync on the marketplace banner. A connected project republishes in one
-  // click; a configured-but-unconnected project needs the first-publish dialog
-  // (it collects collaborators). Unconfigured projects get no nudge — there's
-  // nowhere to publish to.
+  // Undefined (an older cached record) reads as on, the server's default.
+  const autoSyncOff = plugin.autoSyncEnabled === false;
+
+  // A connected marketplace republishes on its own after every plugin change,
+  // so say so rather than asking for a manual sync — unless this plugin's auto
+  // sync is off, when its changes wait for Sync changes. A deletion is never
+  // held. A configured-but-unconnected project still needs the first-publish
+  // dialog (it collects collaborators). Unconfigured projects get no nudge —
+  // there's nowhere to publish to.
   const offerPublish = useCallback(
-    (message: string) => {
-      if (!publishStatus?.configured) return;
+    (message: string, held: boolean = autoSyncOff) => {
+      if (!canPublish || !publishStatus?.configured) return;
+      if (publishStatus.connected) {
+        toast.success(message, {
+          description: held
+            ? "Auto sync is off for this plugin, so changes publish when someone clicks Sync changes."
+            : "Changes sync to your marketplace automatically.",
+        });
+        return;
+      }
       toast.success(message, {
         action: {
           label: "Publish now",
-          onClick: () => {
-            if (publishStatus.connected) {
-              handlePublish([]);
-            } else {
-              setIsPublishDialogOpen(true);
-            }
-          },
+          onClick: () => setIsPublishDialogOpen(true),
         },
       });
     },
-    [publishStatus?.configured, publishStatus?.connected, handlePublish],
+    [
+      canPublish,
+      publishStatus?.configured,
+      publishStatus?.connected,
+      autoSyncOff,
+    ],
   );
 
   const updateMutation = useUpdatePluginMutation({
@@ -334,19 +436,18 @@ export default function PluginDetail(): JSX.Element | null {
   const deleteMutation = useDeletePluginMutation({
     onSuccess: async () => {
       setIsDeleteOpen(false);
-      await invalidateAll();
-      offerPublish("Plugin deleted");
+      // The detail and sidebar are still mounted until navigation completes.
+      // Mark their deleted record stale without issuing a guaranteed 404.
+      await invalidateAllPlugin(queryClient, { refetchType: "none" });
+      await invalidateAllPlugins(queryClient);
+      await invalidateAllResourceAudience(queryClient);
+      void invalidateAllPublishStatus(queryClient);
+      offerPublish("Plugin deleted", false);
       void navigate(routes.plugins.href());
     },
   });
 
-  const addServerMutation = useAddPluginServerMutation({
-    onSuccess: () => {
-      setIsAddServerOpen(false);
-      void invalidateAll();
-      offerPublish("Server added to plugin");
-    },
-  });
+  const addServerMutation = useAddPluginServerMutation();
 
   const removeServerMutation = useRemovePluginServerMutation({
     onSuccess: () => {
@@ -356,6 +457,7 @@ export default function PluginDetail(): JSX.Element | null {
   });
 
   const handleRemoveServer = (server: PluginServer) => {
+    if (!canPublish) return;
     removeServerMutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { id: server.id, pluginId: pluginId! },
@@ -364,6 +466,7 @@ export default function PluginDetail(): JSX.Element | null {
 
   const handleUpdate: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
+    if (!canPublish) return;
     const fd = new FormData(e.currentTarget);
     updateMutation.mutate({
       security: { sessionHeaderGramSession: "" },
@@ -378,37 +481,142 @@ export default function PluginDetail(): JSX.Element | null {
     });
   };
 
+  const autoSyncMutation = useUpdatePluginMutation({
+    onSuccess: (updated) => {
+      setAutoSyncError(null);
+      void invalidateAll();
+      toast.success(
+        updated.autoSyncEnabled
+          ? "Auto sync turned on"
+          : "Auto sync turned off",
+        {
+          description: updated.autoSyncEnabled
+            ? "Changes to this plugin, including any that were waiting, now publish automatically."
+            : "Changes to this plugin now wait until someone clicks Sync changes.",
+        },
+      );
+    },
+    onError: (error) => {
+      // A 412 is the server refusing while changes wait to sync, which Sync
+      // changes next to the switch fixes. Anything else, including a 400 a
+      // sync can't fix, is a toast.
+      if (error instanceof GramError && error.statusCode === 412) {
+        setAutoSyncError(error.message);
+        return;
+      }
+      handleError(error, { title: "Couldn't change auto sync" });
+    },
+  });
+
+  // Sends the plugin's current details back unchanged: the server refuses to
+  // turn auto sync off in the same update as an edit.
+  const handleAutoSyncChange = (enabled: boolean) => {
+    if (!canPublish) return;
+    setAutoSyncError(null);
+    autoSyncMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        updatePluginForm: {
+          id: pluginId!,
+          name: plugin.name,
+          slug: plugin.slug,
+          description: plugin.description || undefined,
+          autoSyncEnabled: enabled,
+        },
+      },
+    });
+  };
+
+  const autoAddServersMutation = useUpdatePluginMutation({
+    onSuccess: (updated) => {
+      void invalidateAll();
+      const enabled = updated.autoAddServersEnabled;
+      const message = enabled
+        ? "Automatic MCP servers turned on"
+        : "Automatic MCP servers turned off";
+      // Turning it on can add servers, so say where those changes go, like any
+      // other content edit. Turning it off changes no servers.
+      if (enabled && publishStatus?.configured) {
+        offerPublish(message);
+        return;
+      }
+      toast.success(message, {
+        description: enabled
+          ? "Added the MCP servers this plugin's roles can use. Access changes now update the list."
+          : "The server list now changes only when someone edits it.",
+      });
+    },
+    onError: (error) => {
+      handleError(error, { title: "Couldn't change automatic MCP servers" });
+    },
+  });
+
+  // Sends the plugin's current details back unchanged, like the auto sync
+  // switch, so only this setting changes.
+  const handleAutoAddServersChange = (enabled: boolean) => {
+    if (!canPublish) return;
+    autoAddServersMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        updatePluginForm: {
+          id: pluginId!,
+          name: plugin.name,
+          slug: plugin.slug,
+          description: plugin.description || undefined,
+          autoAddServersEnabled: enabled,
+        },
+      },
+    });
+  };
+
   const handleDelete = () => {
+    if (!canPublish) return;
     deleteMutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { id: pluginId! },
     });
   };
 
-  const handleAddServer: React.FormEventHandler<HTMLFormElement> = (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const key = fd.get("serverKey") as string;
-    if (!key) return;
-    const option = serverOptions.find(
-      (o) => serverOptionKey(o.kind, o.id) === key,
-    );
-    if (!option) return;
-    addServerMutation.mutate({
-      security: { sessionHeaderGramSession: "" },
-      request: {
-        addPluginServerForm: {
-          pluginId: pluginId!,
-          // Submit exactly one backend id per the toolset_id XOR mcp_server_id
-          // contract.
-          ...(option.kind === "mcpServer"
-            ? { mcpServerId: option.id }
-            : { toolsetId: option.id }),
-          displayName: option.name,
-          policy: "required",
-        },
-      },
-    });
+  // Adds one at a time so each failure is reported against its own row.
+  const handleAddServers = async (
+    keys: string[],
+  ): Promise<ServerPickerResult[]> => {
+    if (!canPublish) return [];
+    const results: ServerPickerResult[] = [];
+    for (const key of keys) {
+      const option = serverOptions.find(
+        (o) => serverOptionKey(o.kind, o.id) === key,
+      );
+      if (!option) continue;
+      try {
+        await addServerMutation.mutateAsync({
+          security: { sessionHeaderGramSession: "" },
+          request: {
+            addPluginServerForm: {
+              pluginId: pluginId!,
+              // Submit exactly one backend id per the toolset_id XOR
+              // mcp_server_id contract.
+              ...(option.kind === "mcpServer"
+                ? { mcpServerId: option.id }
+                : { toolsetId: option.id }),
+              displayName: option.name,
+              policy: "required",
+            },
+          },
+        });
+        results.push({ key });
+      } catch (error) {
+        results.push({
+          key,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Couldn't add this server. Try again.",
+        });
+      }
+    }
+    if (results.some((result) => !result.error)) await invalidateAll();
+    return results;
   };
 
   const toolsetById = useMemo(() => {
@@ -416,6 +624,16 @@ export default function PluginDetail(): JSX.Element | null {
     for (const t of toolsets) map.set(t.id, t);
     return map;
   }, [toolsets]);
+
+  // Hosted toolsets with a canonical MCP server (same id); undefined until servers load.
+  const canonicalToolsetIds = useMemo(() => {
+    if (!mcpServersData?.mcpServers) return undefined;
+    return new Set(
+      mcpServersData.mcpServers
+        .filter((s) => s.toolsetId === s.id)
+        .map((s) => s.id),
+    );
+  }, [mcpServersData]);
 
   const mcpServerById = useMemo(() => {
     const map = new Map<string, McpServer>();
@@ -436,7 +654,6 @@ export default function PluginDetail(): JSX.Element | null {
         kind: "mcpServer",
         id: s.id,
         name: s.name ?? s.slug ?? "Untitled server",
-        isUnproxied: !!s.unproxiedMcpServerId,
       });
     }
     return opts;
@@ -458,18 +675,70 @@ export default function PluginDetail(): JSX.Element | null {
     rolesData?.roles ?? [],
   );
 
-  // Exclude servers already added to the plugin, keyed per backend.
+  // Exclude added servers; a hosted server's canonical mcp_server id is its toolset id.
   const addedToolsetIds = new Set(
-    servers.map((s) => s.toolsetId).filter((id): id is string => !!id),
+    servers
+      .map((s) => s.toolsetId ?? s.mcpServerId)
+      .filter((id): id is string => !!id),
   );
   const addedMcpServerIds = new Set(
     servers.map((s) => s.mcpServerId).filter((id): id is string => !!id),
   );
-  const availableServerOptions = serverOptions.filter((o) =>
-    o.kind === "toolset"
-      ? !addedToolsetIds.has(o.id)
-      : !addedMcpServerIds.has(o.id),
-  );
+  const pickerOptions: ServerPickerOption[] = serverOptions
+    .filter((o) =>
+      o.kind === "toolset"
+        ? !addedToolsetIds.has(o.id)
+        : !addedMcpServerIds.has(o.id),
+    )
+    .map((o) => {
+      const toolset = o.kind === "toolset" ? toolsetById.get(o.id) : undefined;
+      const mcpServer =
+        o.kind === "mcpServer" ? mcpServerById.get(o.id) : undefined;
+      const kindLabel = toolset
+        ? "Hosted"
+        : mcpServer?.unproxiedMcpServerId
+          ? "Unproxied"
+          : "Remote";
+      const slug = toolset?.slug ?? mcpServer?.slug;
+      // Mirrors AddPluginServer: a hosted server needs MCP on and an MCP slug.
+      const mcpOff = !!toolset && !toolset.mcpEnabled;
+      const noMcpAddress = !!toolset && !mcpOff && !toolset.mcpSlug;
+      const noMcpServer =
+        !!toolset &&
+        !mcpOff &&
+        !noMcpAddress &&
+        !!canonicalToolsetIds &&
+        !canonicalToolsetIds.has(toolset.id);
+      return {
+        value: serverOptionKey(o.kind, o.id),
+        label: o.name,
+        icon: toolset ? (
+          <Network className="text-muted-foreground size-6 shrink-0" />
+        ) : (
+          <SourceMcpIcon
+            mcpServerId={o.id}
+            className="size-6 shrink-0 object-contain"
+          />
+        ),
+        slug,
+        kindLabel,
+        badge: mcpOff
+          ? "MCP off"
+          : noMcpAddress
+            ? "No MCP address"
+            : noMcpServer
+              ? "No MCP server"
+              : undefined,
+        description: mcpOff
+          ? "Turn on MCP for this server before adding it to a plugin."
+          : noMcpAddress
+            ? "Set an MCP address for this server before adding it to a plugin."
+            : noMcpServer
+              ? "This toolset has no MCP server yet, so it cannot be added to a plugin."
+              : `${slug ?? "No slug"} · ${kindLabel}`,
+        disabled: mcpOff || noMcpAddress || noMcpServer,
+      };
+    });
 
   // Client-side search over the server section, matching on the displayed name.
   const normalizedServerSearch = serverSearch.trim().toLowerCase();
@@ -492,16 +761,17 @@ export default function PluginDetail(): JSX.Element | null {
           <PluginServerCard
             key={server.id}
             server={server}
-            toolset={
-              server.toolsetId ? toolsetById.get(server.toolsetId) : undefined
-            }
+            toolset={toolsetById.get(
+              server.toolsetId ?? server.mcpServerId ?? "",
+            )}
             mcpServer={
               server.mcpServerId
                 ? mcpServerById.get(server.mcpServerId)
                 : undefined
             }
             isLoading={isLoadingServers}
-            onRemove={() => handleRemoveServer(server)}
+            metadataUnavailable={!canReadServers || !!toolsetsQuery.error}
+            onRemove={canPublish ? () => handleRemoveServer(server) : undefined}
             lastPublishedAt={publishStatus?.lastPublishedAt}
           />
         ))}
@@ -575,11 +845,13 @@ export default function PluginDetail(): JSX.Element | null {
                   align="center"
                   className="shrink-0"
                 >
-                  <MarketplaceSyncButton
-                    publishStatus={publishStatus}
-                    isPending={publishMutation.isPending}
-                    onSync={() => handlePublish([])}
-                  />
+                  {canPublish && (
+                    <MarketplaceSyncButton
+                      publishStatus={publishStatus}
+                      isPending={publishMutation.isPending}
+                      onSync={() => handlePublish([])}
+                    />
+                  )}
                   <PluginInstallControl
                     plugin={{
                       name: plugin.name,
@@ -587,7 +859,7 @@ export default function PluginDetail(): JSX.Element | null {
                       description: plugin.description,
                       agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
                     }}
-                    publishStatus={publishStatus}
+                    publishStatus={canAdmin ? publishStatus : undefined}
                     isDownloadMenuOpen={isDownloadMenuOpen}
                     onDownloadMenuOpenChange={setIsDownloadMenuOpen}
                     onDownload={(platform) => void download(platform)}
@@ -605,11 +877,6 @@ export default function PluginDetail(): JSX.Element | null {
                   tone="information"
                   format="number"
                   icon="network"
-                  link={pluginSectionHref(
-                    routes,
-                    pluginId!,
-                    PLUGIN_SERVERS_SECTION_ID,
-                  )}
                 />
                 <StatTile
                   title="Skills"
@@ -661,16 +928,19 @@ export default function PluginDetail(): JSX.Element | null {
                 )}
               </StatTileGroup>
 
-              <PublishFreshnessIndicator publishStatus={publishStatus} />
+              <PublishFreshnessIndicator
+                publishStatus={publishStatus}
+                pluginSlug={plugin?.slug}
+              />
             </section>
           )}
 
-          {section === PLUGIN_SERVERS_SECTION_ID && (
+          {section === PLUGIN_OVERVIEW_SECTION_ID && (
             <SettingsSection>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <SettingsSection.Header>
                   <div className="flex items-center gap-2">
-                    <SettingsSection.Title>MCP Servers</SettingsSection.Title>
+                    <SettingsSection.Title>MCP servers</SettingsSection.Title>
                     {servers.length > 0 && (
                       <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
                         {servers.length}
@@ -683,26 +953,29 @@ export default function PluginDetail(): JSX.Element | null {
                   </SettingsSection.Description>
                 </SettingsSection.Header>
                 <div className="flex items-center gap-2">
-                  {servers.length > 0 && (
-                    <SearchBar
-                      value={serverSearch}
-                      onChange={setServerSearch}
-                      placeholder="Search servers"
-                      className="h-9 w-56"
-                    />
+                  {canPublish && canReadServers && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setIsAddServerOpen(true)}
+                    >
+                      <Button.LeftIcon>
+                        <Icon name="plus" className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Add Server</Button.Text>
+                    </Button>
                   )}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setIsAddServerOpen(true)}
-                  >
-                    <Button.LeftIcon>
-                      <Icon name="plus" className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>Add Server</Button.Text>
-                  </Button>
                 </div>
               </div>
+              {servers.length > 0 && (
+                <Page.Toolbar>
+                  <Page.Toolbar.Search
+                    value={serverSearch}
+                    onChange={setServerSearch}
+                    placeholder="Search servers"
+                  />
+                </Page.Toolbar>
+              )}
               {serversContent}
             </SettingsSection>
           )}
@@ -716,35 +989,10 @@ export default function PluginDetail(): JSX.Element | null {
               <PluginSkillsSection
                 key={pluginId!}
                 pluginId={pluginId!}
-                viewMode="grid"
                 onMutated={(message) => offerPublish(message)}
               />
             </RequireScope>
           )}
-
-          {/* Assignments only affect device-agent delivery, so the section is
-              hidden for marketplace-only orgs (see usePluginAssignmentsVisible).
-              Now that it's a route, a bookmark can still land here — say why the
-              page is empty rather than rendering nothing. Wait for
-              productFeatures before doing so, since the visibility flag reads
-              false while it loads. */}
-          {section === PLUGIN_ASSIGNMENTS_SECTION_ID &&
-            !showAssignments &&
-            !!productFeatures && (
-              <SettingsSection>
-                <SettingsSection.Header>
-                  <SettingsSection.Title>Assignments</SettingsSection.Title>
-                  <SettingsSection.Description>
-                    Assignments control delivery to devices running the
-                    Speakeasy agent.
-                  </SettingsSection.Description>
-                </SettingsSection.Header>
-                <SectionEmptyState
-                  title="Assignments aren't available for this project"
-                  subtitle="Marketplace installs receive every published plugin, so there's nothing to assign."
-                />
-              </SettingsSection>
-            )}
 
           {section === PLUGIN_ASSIGNMENTS_SECTION_ID && showAssignments && (
             <SettingsSection>
@@ -789,7 +1037,7 @@ export default function PluginDetail(): JSX.Element | null {
             </SettingsSection>
           )}
 
-          {section === PLUGIN_SETTINGS_SECTION_ID && (
+          {section === PLUGIN_SETTINGS_SECTION_ID && canPublish && (
             <>
               <SettingsSection>
                 <SettingsSection.Header>
@@ -823,7 +1071,9 @@ export default function PluginDetail(): JSX.Element | null {
                   </SettingsSection.Body>
                   <SettingsSection.Footer>
                     <SettingsSection.FooterHint>
-                      Editing republishes the plugin on your next sync.
+                      {autoSyncOff
+                        ? "Edits wait until someone clicks Sync changes."
+                        : "Edits sync to your marketplace automatically."}
                     </SettingsSection.FooterHint>
                     <SettingsSection.FooterActions>
                       <Button size="sm" onClick={() => setIsEditOpen(true)}>
@@ -831,6 +1081,81 @@ export default function PluginDetail(): JSX.Element | null {
                       </Button>
                     </SettingsSection.FooterActions>
                   </SettingsSection.Footer>
+                </SettingsSection.Panel>
+              </SettingsSection>
+
+              <SettingsSection>
+                <SettingsSection.Header>
+                  <SettingsSection.Title>
+                    Marketplace sync
+                  </SettingsSection.Title>
+                </SettingsSection.Header>
+                <SettingsSection.Panel>
+                  <SettingsSection.Body className="space-y-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <Label id="plugin-auto-sync-label">
+                          Sync changes automatically
+                        </Label>
+                        <Text small muted className="max-w-xl">
+                          {autoSyncOff
+                            ? "Changes to this plugin wait until someone clicks Sync changes. Everyone keeps the version last published."
+                            : "Changes to this plugin publish to your marketplace on their own."}
+                        </Text>
+                      </div>
+                      <Switch
+                        aria-labelledby="plugin-auto-sync-label"
+                        checked={!autoSyncOff}
+                        onCheckedChange={handleAutoSyncChange}
+                        disabled={autoSyncMutation.isPending}
+                      />
+                    </div>
+                    {autoSyncError && (
+                      <Alert variant="warning" title={null}>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <span>{autoSyncError}</span>
+                          {publishStatus?.connected && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handlePublish([])}
+                              disabled={publishMutation.isPending}
+                            >
+                              Sync changes
+                            </Button>
+                          )}
+                        </div>
+                      </Alert>
+                    )}
+                  </SettingsSection.Body>
+                </SettingsSection.Panel>
+              </SettingsSection>
+
+              <SettingsSection>
+                <SettingsSection.Header>
+                  <SettingsSection.Title>MCP servers</SettingsSection.Title>
+                </SettingsSection.Header>
+                <SettingsSection.Panel>
+                  <SettingsSection.Body>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <Label id="plugin-auto-add-servers-label">
+                          Add MCP servers automatically
+                        </Label>
+                        <Text small muted className="max-w-xl">
+                          {plugin.autoAddServersEnabled
+                            ? "Role and access changes add or remove this plugin's MCP servers, including when you share it with a new role. Turning this off keeps the current list."
+                            : "Only people who edit this plugin change its MCP servers. Turning this on adds the servers this plugin's roles can use now, then keeps the list in step with role and access changes."}
+                        </Text>
+                      </div>
+                      <Switch
+                        aria-labelledby="plugin-auto-add-servers-label"
+                        checked={plugin.autoAddServersEnabled === true}
+                        onCheckedChange={handleAutoAddServersChange}
+                        disabled={autoAddServersMutation.isPending}
+                      />
+                    </div>
+                  </SettingsSection.Body>
                 </SettingsSection.Panel>
               </SettingsSection>
 
@@ -865,163 +1190,152 @@ export default function PluginDetail(): JSX.Element | null {
           )}
         </div>
 
-        {/* Edit Dialog */}
-        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Edit Plugin</Dialog.Title>
-            </Dialog.Header>
-            <form onSubmit={handleUpdate} className="flex flex-col gap-4">
-              <InputField
-                label="Name"
-                name="name"
-                defaultValue={plugin.name}
-                required
-              />
-              <InputField
-                label="Slug"
-                name="slug"
-                defaultValue={plugin.slug}
-                required
-              />
-              <InputField
-                label="Description"
-                name="description"
-                defaultValue={plugin.description ?? ""}
-              />
-              <Dialog.Footer>
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsEditOpen(false)}
-                  type="button"
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={updateMutation.isPending}>
-                  Save
-                </Button>
-              </Dialog.Footer>
-            </form>
-          </Dialog.Content>
-        </Dialog>
-
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Delete Plugin</Dialog.Title>
-              <Dialog.Description>
-                Are you sure you want to delete &quot;{plugin.name}&quot;? This
-                will remove it from all assigned users on the next publish.
-              </Dialog.Description>
-            </Dialog.Header>
-            <Dialog.Footer>
-              <Button
-                variant="secondary"
-                onClick={() => setIsDeleteOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive-primary"
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
-              >
-                Delete
-              </Button>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog>
-
-        {/* Add Server Dialog */}
-        <Dialog open={isAddServerOpen} onOpenChange={setIsAddServerOpen}>
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Add MCP Server</Dialog.Title>
-              <Dialog.Description>
-                Add an MCP server to this plugin bundle.
-              </Dialog.Description>
-            </Dialog.Header>
-            <form onSubmit={handleAddServer} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium">MCP Server</label>
-                {isLoadingServers ? (
-                  <Skeleton className="h-9 w-full" />
-                ) : availableServerOptions.length > 0 ? (
-                  <select
-                    name="serverKey"
-                    className="bg-background border px-3 py-2 text-sm"
+        {canPublish && (
+          <>
+            {/* Edit Dialog */}
+            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+              <Dialog.Content>
+                <Dialog.Header>
+                  <Dialog.Title>Edit Plugin</Dialog.Title>
+                </Dialog.Header>
+                <form onSubmit={handleUpdate} className="flex flex-col gap-4">
+                  <InputField
+                    label="Name"
+                    name="name"
+                    defaultValue={plugin.name}
                     required
+                  />
+                  <InputField
+                    label="Slug"
+                    name="slug"
+                    defaultValue={plugin.slug}
+                    required
+                    readOnly={autoSyncOff}
+                    hint={
+                      autoSyncOff
+                        ? "Turn on auto sync to change the slug."
+                        : undefined
+                    }
+                  />
+                  <InputField
+                    label="Description"
+                    name="description"
+                    defaultValue={plugin.description ?? ""}
+                  />
+                  <Dialog.Footer>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setIsEditOpen(false)}
+                      type="button"
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={updateMutation.isPending}>
+                      Save
+                    </Button>
+                  </Dialog.Footer>
+                </form>
+              </Dialog.Content>
+            </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+              <Dialog.Content>
+                <Dialog.Header>
+                  <Dialog.Title>Delete Plugin</Dialog.Title>
+                  <Dialog.Description>
+                    Are you sure you want to delete &quot;{plugin.name}&quot;?
+                    This will remove it from all assigned users on the next
+                    publish.
+                  </Dialog.Description>
+                </Dialog.Header>
+                <Dialog.Footer>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setIsDeleteOpen(false)}
                   >
-                    <option value="">Select an MCP server</option>
-                    {availableServerOptions.map((o) => (
-                      <option
-                        key={serverOptionKey(o.kind, o.id)}
-                        value={serverOptionKey(o.kind, o.id)}
-                      >
-                        {o.name}
-                        {serverOptionSuffix(o)}
-                      </option>
-                    ))}
-                  </select>
-                ) : serverOptions.length > 0 ? (
-                  <Text muted small>
-                    All available MCP servers have already been added to this
-                    plugin.
-                  </Text>
-                ) : (
-                  <Text muted small>
-                    No MCP servers available. Create an MCP server in this
-                    project first.
-                  </Text>
-                )}
-              </div>
-              <Dialog.Footer>
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsAddServerOpen(false)}
-                  type="button"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={
-                    addServerMutation.isPending ||
-                    isLoadingServers ||
-                    availableServerOptions.length === 0
-                  }
-                >
-                  Add
-                </Button>
-              </Dialog.Footer>
-            </form>
-          </Dialog.Content>
-        </Dialog>
-        <PublishDialog
-          open={isPublishDialogOpen}
-          onOpenChange={setIsPublishDialogOpen}
-          onPublish={handlePublish}
-          isPending={publishMutation.isPending}
-        />
-        <PublishDialog
-          mode="manage"
-          open={isManageCollaboratorsOpen}
-          onOpenChange={setIsManageCollaboratorsOpen}
-          onPublish={handlePublish}
-          isPending={publishMutation.isPending}
-        />
-        <PluginAssignmentsSheet
-          pluginId={pluginId!}
-          pluginName={plugin.name}
-          assignments={assignments}
-          open={isAssignmentsOpen}
-          onOpenChange={setIsAssignmentsOpen}
-          onSaved={() => {
-            void invalidateAll();
-            offerPublish("Assignments updated");
-          }}
-        />
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive-primary"
+                    onClick={handleDelete}
+                    disabled={deleteMutation.isPending}
+                  >
+                    Delete
+                  </Button>
+                </Dialog.Footer>
+              </Dialog.Content>
+            </Dialog>
+
+            <ServerPickerSheet
+              key={pluginId}
+              open={isAddServerOpen}
+              onOpenChange={setIsAddServerOpen}
+              title="Add servers to plugin"
+              description="Everyone who installs this plugin gets the servers you add."
+              options={pickerOptions}
+              isLoading={isLoadingServers}
+              loadFailed={
+                !!toolsetsQuery.error ||
+                !!serversQuery.error ||
+                !!endpointsQuery.error
+              }
+              onRetryLoad={() => {
+                // Only retry what failed; a refetch ignores `enabled`, so
+                // never touch a query the user can't read.
+                for (const query of [
+                  toolsetsQuery,
+                  serversQuery,
+                  endpointsQuery,
+                ]) {
+                  if (query.error) void query.refetch();
+                }
+              }}
+              emptyMessage={
+                serverOptions.length === 0
+                  ? "No MCP servers available. Create an MCP server in this project first."
+                  : "All available MCP servers have already been added to this plugin."
+              }
+              canWrite={canPublish}
+              permissionMessage="Only people who can edit this plugin can add servers."
+              onSubmit={handleAddServers}
+              announceAdded={(count) => {
+                const message = `${count} ${count === 1 ? "server" : "servers"} added to plugin`;
+                if (canPublish && publishStatus?.configured) {
+                  offerPublish(message);
+                } else {
+                  toast.success(message);
+                }
+              }}
+            />
+            <PublishDialog
+              open={isPublishDialogOpen}
+              onOpenChange={setIsPublishDialogOpen}
+              onPublish={handlePublish}
+              isPending={publishMutation.isPending}
+            />
+            <PublishDialog
+              mode="manage"
+              open={isManageCollaboratorsOpen}
+              onOpenChange={setIsManageCollaboratorsOpen}
+              onPublish={handleAddCollaborators}
+              isPending={publishMutation.isPending}
+            />
+            {showAssignments && (
+              <PluginAssignmentsSheet
+                pluginId={pluginId!}
+                pluginName={plugin.name}
+                assignments={assignments}
+                open={isAssignmentsOpen}
+                onOpenChange={setIsAssignmentsOpen}
+                onSaved={() => {
+                  void invalidateAll();
+                  offerPublish("Assignments updated");
+                }}
+              />
+            )}
+          </>
+        )}
       </Page.Body>
     </Page>
   );
@@ -1164,6 +1478,7 @@ export function PluginInstallControl({
               name: plugin.name,
               slug: plugin.slug,
               description: plugin.description,
+              agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
             },
           ]}
         />
@@ -1181,15 +1496,18 @@ export function PluginInstallControl({
 // freshness is unknown and there's nothing published to show.
 function PublishFreshnessIndicator({
   publishStatus,
+  pluginSlug,
 }: {
   publishStatus: PublishStatusResult | undefined;
+  pluginSlug: string | undefined;
 }): JSX.Element | null {
   if (!publishStatus?.connected) return null;
 
   // up_to_date is absent when freshness can't be determined (connection
   // predates fingerprinting) — treat only the explicit booleans as known.
-  const hasUnpublishedChanges = publishStatus.upToDate === false;
-  const isUpToDate = publishStatus.upToDate === true;
+  const upToDate = pluginUpToDate(publishStatus, pluginSlug);
+  const hasUnpublishedChanges = upToDate === false;
+  const isUpToDate = upToDate === true;
 
   // Each row is omitted when its value is unknown rather than guessed. The
   // live version is rendered in its own mono cell so the long timestamp-based
@@ -1262,6 +1580,7 @@ function PluginServerCard({
   toolset,
   mcpServer,
   isLoading,
+  metadataUnavailable,
   onRemove,
   lastPublishedAt,
 }: {
@@ -1269,15 +1588,18 @@ function PluginServerCard({
   toolset: ToolsetEntry | undefined;
   mcpServer: McpServer | undefined;
   isLoading: boolean;
-  onRemove: () => void;
+  metadataUnavailable: boolean;
+  onRemove?: () => void;
   /** Undefined when the marketplace has never been published. */
   lastPublishedAt: Date | undefined;
 }) {
   const routes = useRoutes();
 
-  // Remote MCP-backed servers reference an mcp_server; toolset-backed servers
-  // reference a toolset. Exactly one backend is set per row.
-  const isRemote = !!server.mcpServerId;
+  // Hosted rows resolve to their toolset; other MCP server rows are remote.
+  const isRemote =
+    !!server.mcpServerId &&
+    !toolset &&
+    (!!mcpServer || (!isLoading && !metadataUnavailable));
   // Approximates per-server publish freshness from the project-wide
   // fingerprint: publish itself isn't scoped to a single server, but a
   // server added after the last publish timestamp can't possibly be in the
@@ -1291,17 +1613,27 @@ function PluginServerCard({
     // Remote MCP servers live on the mcp_servers-backed details page (x/);
     // toolset-backed servers use the toolset details page.
     if (isRemote) {
-      if (mcpServer) routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+      if (mcpServer)
+        routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
     } else if (toolset) {
-      routes.mcp.details.goTo(toolset.slug);
+      routes.toolset.goTo(toolset.slug);
     }
   };
 
   return (
-    <Card.Entity
+    <McpEntityCard
       className={cn(isClickable && "cursor-pointer")}
       onClick={isClickable ? handleClick : undefined}
-      icon={<Network className="text-muted-foreground h-8 w-8" />}
+      icon={
+        toolset ? (
+          <Network className="text-muted-foreground h-8 w-8" />
+        ) : (
+          <SourceMcpIcon
+            mcpServerId={server.mcpServerId}
+            className="h-8 w-8 object-contain"
+          />
+        )
+      }
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <Text
@@ -1327,22 +1659,26 @@ function PluginServerCard({
             </Badge>
           )}
           {isRemote ? (
-            // Remote/unproxied MCP servers have no Gram-side tool
+            // Remote/unproxied MCP servers have no Speakeasy-side tool
             // catalog, so the tool-collection badge is omitted.
             <Badge variant="neutral" className="text-xs">
               {mcpServer?.unproxiedMcpServerId
                 ? "Unproxied MCP · Not proxied"
                 : "Remote MCP"}
             </Badge>
+          ) : server.metaMcpServerId ? (
+            <Badge variant="neutral" className="text-xs">
+              Gateway
+            </Badge>
+          ) : metadataUnavailable ? (
+            <Badge variant="neutral" className="text-xs">
+              Server metadata unavailable
+            </Badge>
           ) : toolset ? (
             <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
           ) : isLoading ? (
             <Skeleton className="h-5 w-16" />
-          ) : (
-            <Badge variant="destructive" className="text-xs">
-              Toolset missing
-            </Badge>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -1359,21 +1695,23 @@ function PluginServerCard({
         ) : (
           <span />
         )}
-        <UiButton
-          type="button"
-          variant="tertiary"
-          size="sm"
-          tooltip="Remove server"
-          aria-label="Remove server"
-          className="hover:text-destructive"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-        </UiButton>
+        {onRemove && (
+          <UiButton
+            type="button"
+            variant="tertiary"
+            size="sm"
+            tooltip="Remove server"
+            aria-label="Remove server"
+            className="hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </UiButton>
+        )}
       </div>
-    </Card.Entity>
+    </McpEntityCard>
   );
 }

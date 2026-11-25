@@ -2,6 +2,7 @@ package devidptest
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 
@@ -62,6 +63,8 @@ func CreateOrganization(t *testing.T, ctx context.Context, q *repo.Queries, opts
 		Slug:        slug,
 		AccountType: accountType,
 		WorkosID:    conv.StringOrNull(opts.WorkOSID),
+		ExternalID:  sql.NullString{String: "", Valid: false},
+		Domains:     nil,
 	})
 	require.NoError(t, err, "create dev-idp organization")
 	return OrganizationResult{Organization: org}

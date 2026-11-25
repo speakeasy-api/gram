@@ -12,6 +12,16 @@ func GetPeriodUsageUsagePath() string {
 	return "/rpc/usage.getPeriodUsage"
 }
 
+// GetMeterUsageUsagePath returns the URL path to the usage service getMeterUsage HTTP endpoint.
+func GetMeterUsageUsagePath() string {
+	return "/rpc/usage.getMeterUsage"
+}
+
+// GetSpendBreakdownUsagePath returns the URL path to the usage service getSpendBreakdown HTTP endpoint.
+func GetSpendBreakdownUsagePath() string {
+	return "/rpc/usage.getSpendBreakdown"
+}
+
 // GetTokensUnderManagementUsagePath returns the URL path to the usage service getTokensUnderManagement HTTP endpoint.
 func GetTokensUnderManagementUsagePath() string {
 	return "/rpc/usage.getTokensUnderManagement"
@@ -52,9 +62,9 @@ func CreateCustomerSessionUsagePath() string {
 	return "/rpc/usage.createCustomerSession"
 }
 
-// CreateCheckoutUsagePath returns the URL path to the usage service createCheckout HTTP endpoint.
-func CreateCheckoutUsagePath() string {
-	return "/rpc/usage.createCheckout"
+// GetStripeCheckoutStatusUsagePath returns the URL path to the usage service getStripeCheckoutStatus HTTP endpoint.
+func GetStripeCheckoutStatusUsagePath() string {
+	return "/rpc/usage.getStripeCheckoutStatus"
 }
 
 // CreateStripeCheckoutUsagePath returns the URL path to the usage service createStripeCheckout HTTP endpoint.

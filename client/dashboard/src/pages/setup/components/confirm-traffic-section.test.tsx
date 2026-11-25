@@ -1,0 +1,371 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ConfirmTrafficSection } from "./confirm-traffic-section";
+import { ConfirmTrafficStep } from "./steps/confirm-traffic-step";
+import { isAnthropicSource, isOtherPlatformSource } from "./hook-event-sources";
+
+const mocks = vi.hoisted(() => ({
+  query: {
+    data: undefined as
+      | undefined
+      | { events: Array<Record<string, unknown>>; latestUnixNano: string },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  },
+  detections: { data: undefined as undefined | { detections: unknown[] } },
+  access: {
+    available: true,
+    holdsRole: false,
+    canReadSessions: true,
+    scimManaged: false,
+    roleExists: true,
+    isPending: false,
+    grant: vi.fn(),
+    ensureRole: vi.fn(),
+    revoke: vi.fn(),
+  },
+  burst: vi.fn(),
+  onScreen: true,
+}));
+
+vi.mock("@gram/client/react-query/verifyOnboardingHooksSetup.js", () => ({
+  useVerifyOnboardingHooksSetup: () => mocks.query,
+}));
+vi.mock("@gram/client/react-query/aiDetections.js", () => ({
+  useAiDetections: () => mocks.detections,
+}));
+vi.mock("./enable-logging-section", () => ({
+  EnableLoggingSection: () => <p>Enable logging</p>,
+}));
+vi.mock("./session-audit-access", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./session-audit-access")>()),
+  useSessionAuditAccess: () => mocks.access,
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
+
+// Sections stay mounted while hidden, so the celebration has to know whether
+// this one is the step on screen.
+vi.mock("./journey-steps", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./journey-steps")>()),
+  useIsActiveJourneyStep: () => mocks.onScreen,
+}));
+
+vi.mock("@/components/icon-confetti", () => ({
+  useConfettiBurst: () => ({
+    canvasRef: { current: null },
+    burst: mocks.burst,
+  }),
+}));
+
+vi.mock("motion/react", () => ({
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
+  motion: { div: "div" },
+}));
+
+function nowNano(): string {
+  return String(BigInt(Date.now()) * 1_000_000n);
+}
+
+function poll(source: string) {
+  mocks.query.data = {
+    events: [{ source, timeUnixNano: nowNano(), eventName: "tool call" }],
+    latestUnixNano: nowNano(),
+  };
+}
+
+afterEach(cleanup);
+beforeEach(() => {
+  mocks.query.data = undefined;
+  mocks.query.isLoading = false;
+  mocks.query.isError = false;
+  mocks.query.refetch.mockReset();
+  mocks.detections.data = undefined;
+  mocks.burst.mockReset();
+  mocks.onScreen = true;
+  Object.assign(mocks.access, { holdsRole: false, scimManaged: false });
+  mocks.access.revoke.mockReset();
+});
+
+describe("ConfirmTrafficSection", () => {
+  it("flips from waiting to confirmed once a matching event arrives", () => {
+    const view = render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    expect(screen.getByText("Waiting")).toBeTruthy();
+
+    poll("codex");
+    view.rerender(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+    );
+
+    expect(screen.getByText("Confirmed")).toBeTruthy();
+  });
+
+  it("celebrates the first event once, and not the ones after it", () => {
+    const view = render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    expect(mocks.burst).not.toHaveBeenCalled();
+
+    poll("codex");
+    view.rerender(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+    );
+    expect(mocks.burst).toHaveBeenCalledOnce();
+
+    poll("cursor");
+    view.rerender(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+    );
+    expect(mocks.burst).toHaveBeenCalledOnce();
+  });
+
+  it("holds the celebration until its step is the one on screen", () => {
+    mocks.onScreen = false;
+    // A fresh element each time: re-rendering the same one lets React bail
+    // out, and the effect would never see the changed visibility.
+    const card = () => (
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />
+    );
+    const view = render(card(), { wrapper: MemoryRouter });
+
+    poll("codex");
+    view.rerender(card());
+    expect(mocks.burst).not.toHaveBeenCalled();
+
+    mocks.onScreen = true;
+    view.rerender(card());
+    expect(mocks.burst).toHaveBeenCalledOnce();
+  });
+
+  it("ignores events from sources the card is not about", () => {
+    const view = render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Start a Cowork session."
+        matchesSource={isAnthropicSource}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    poll("codex");
+    view.rerender(
+      <ConfirmTrafficSection
+        index={3}
+        description="Start a Cowork session."
+        matchesSource={isAnthropicSource}
+      />,
+    );
+
+    expect(screen.getByText("Waiting")).toBeTruthy();
+    expect(screen.queryByText("Confirmed")).toBeNull();
+  });
+
+  it("counts an event with no source towards neither card", () => {
+    const view = render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    poll("");
+    view.rerender(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+    );
+
+    expect(screen.getByText("Waiting")).toBeTruthy();
+  });
+
+  it("shows polling failures and retries them", () => {
+    mocks.query.isError = true;
+    render(<ConfirmTrafficSection index={3} description="Run a tool." />, {
+      wrapper: MemoryRouter,
+    });
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "We couldn't check for traffic. Try again.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.query.refetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe("ConfirmTrafficSection detected clients", () => {
+  function detection(targetId: string, displayName: string) {
+    return { targetId, displayName, category: "harness" };
+  }
+
+  it("names the clients the agent found, filtered to this card", () => {
+    mocks.detections.data = {
+      detections: [
+        detection("claude-code", "Claude Code"),
+        detection("cursor", "Cursor"),
+        detection("codex", "Codex"),
+      ],
+    };
+
+    render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isAnthropicSource}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(screen.getByText("Open one of these clients:")).toBeTruthy();
+    // Claude Code, Cowork and Chat share the one install, so the chip names
+    // the vendor rather than the harness the detector matched.
+    expect(screen.getByText("Claude")).toBeTruthy();
+    expect(screen.queryByText("Claude Code")).toBeNull();
+    expect(screen.queryByText("Cursor")).toBeNull();
+    expect(screen.queryByText("Codex")).toBeNull();
+  });
+
+  it("calls out the card's precondition under the client list", () => {
+    mocks.detections.data = {
+      detections: [detection("claude-code", "Claude Code")],
+    };
+
+    render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        callout={{ title: "Turn Cowork on", body: "Switch the toggle on." }}
+        matchesSource={isAnthropicSource}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Turn Cowork on");
+    expect(alert.textContent).toContain("Switch the toggle on.");
+  });
+
+  it("stands the callout up even when no client was detected", () => {
+    render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        callout={{ title: "Turn Cowork on", body: "Switch the toggle on." }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(screen.queryByText("Open one of these clients:")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("Turn Cowork on");
+  });
+
+  it("keeps the generic prompt when nothing has been detected", () => {
+    render(<ConfirmTrafficSection index={3} description="Run a tool." />, {
+      wrapper: MemoryRouter,
+    });
+
+    expect(screen.queryByText("Open one of these clients:")).toBeNull();
+  });
+});
+
+describe("ConfirmTrafficSection session audit hand-back", () => {
+  it("shares confirmation and access hand-back with the standalone board task", () => {
+    mocks.access.holdsRole = true;
+    const onComplete = vi.fn<() => void>();
+    const view = render(<ConfirmTrafficStep onComplete={onComplete} />, {
+      wrapper: MemoryRouter,
+    });
+    expect(
+      (screen.getByRole("button", { name: "Mark done" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: "Remove my access" }),
+    ).toBeNull();
+
+    poll("codex");
+    view.rerender(<ConfirmTrafficStep onComplete={onComplete} />);
+    expect(
+      (screen.getByRole("button", { name: "Mark done" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Remove my access" }));
+    expect(mocks.access.revoke).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  const card = () => (
+    <ConfirmTrafficSection
+      index={3}
+      description="Run a tool."
+      matchesSource={isOtherPlatformSource}
+    />
+  );
+
+  it("waits for confirmed traffic before asking for the permission back", () => {
+    mocks.access.holdsRole = true;
+
+    render(card(), { wrapper: MemoryRouter });
+
+    expect(
+      screen.queryByRole("button", { name: "Remove my access" }),
+    ).toBeNull();
+  });
+
+  it("offers the hand-back once traffic is confirmed", () => {
+    mocks.access.holdsRole = true;
+    const view = render(card(), { wrapper: MemoryRouter });
+
+    poll("codex");
+    view.rerender(card());
+
+    expect(screen.getByText(/still a Session Auditor/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove my access" }));
+    expect(mocks.access.revoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing to an admin who never took the role", () => {
+    const view = render(card(), { wrapper: MemoryRouter });
+
+    poll("codex");
+    view.rerender(card());
+
+    expect(screen.getByText("Confirmed")).toBeTruthy();
+    expect(screen.queryByText(/still a Session Auditor/)).toBeNull();
+  });
+});

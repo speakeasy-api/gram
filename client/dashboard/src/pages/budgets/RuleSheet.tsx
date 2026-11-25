@@ -1,3 +1,10 @@
+import { Spinner } from "@/components/ui/Spinner";
+import { isKnownEnumValue } from "@/lib/enum";
+import {
+  WindowKind,
+  CreateSpendRuleRequestBodyAction,
+} from "@gram/client/models/components/createspendrulerequestbody.js";
+import { enumPresentation } from "@/lib/enum";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -20,10 +27,13 @@ import {
 } from "@/components/ui/Sheet";
 import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
-import { Archive, Check, Loader2, Search, Users } from "lucide-react";
+import { Archive, Check, Search, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import {
   WINDOW_LABELS,
+  isRuleTargetOperator,
+  isSupportedRuleTarget,
+  operatorsForAttribute,
   defaultRuleDraft,
   formatUsd,
   toDraft,
@@ -63,15 +73,6 @@ const WINDOW_RESET_HINTS: Record<BudgetWindow, string> = {
   monthly: "Fixed window — resets on the 1st of each month (UTC).",
 };
 
-const STRING_OPERATORS: RuleTargetOperator[] = [
-  "equals",
-  "not_equals",
-  "starts_with",
-  "ends_with",
-  "contains",
-  "matches",
-];
-const LIST_OPERATORS: RuleTargetOperator[] = ["includes"];
 const OPERATOR_LABELS: Record<RuleTargetOperator, string> = {
   equals: "is",
   not_equals: "is not",
@@ -87,14 +88,6 @@ function actorAttribute(
   name: string,
 ): ActorAttribute | undefined {
   return attributes.find((attr) => attr.name === name);
-}
-
-/** Operators offered for an attribute. Unknown/not-yet-loaded attributes fall
- *  back to the string operators — the common case, and never a list-only op. */
-function operatorsForAttribute(
-  attr: ActorAttribute | undefined,
-): RuleTargetOperator[] {
-  return attr?.type === "list" ? LIST_OPERATORS : STRING_OPERATORS;
 }
 
 function attributeLabel(name: string): string {
@@ -142,12 +135,13 @@ export function RuleSheet({
  *  current-window spend against the proposed per-person limit. */
 function useRulePreview(
   draft: Pick<RuleDraft, "target" | "limitUsd" | "warnAtPct" | "windowKind">,
+  supported: boolean,
 ): { preview: PreviewSpendRuleResult | null; loading: boolean } {
   const { preview: runPreviewMutation, isPending } = usePreviewBudgetRule();
   const [preview, setPreview] = useState<PreviewSpendRuleResult | null>(null);
 
   useEffect(() => {
-    if (draft.limitUsd <= 0 || draft.target.value.trim() === "") {
+    if (!supported || draft.limitUsd <= 0 || draft.target.value.trim() === "") {
       // No preview request will be issued for an invalid draft — drop any
       // previous result so a stale usage/breach preview isn't shown for it.
       setPreview(null);
@@ -166,6 +160,7 @@ function useRulePreview(
     }, 350);
     return () => clearTimeout(timer);
   }, [
+    supported,
     draft.target,
     draft.limitUsd,
     draft.warnAtPct,
@@ -194,10 +189,25 @@ function RuleForm({
 
   const patch = (p: Partial<RuleDraft>) => setDraft((d) => ({ ...d, ...p }));
 
-  const { attributes } = useActorAttributes();
-  const { preview, loading: previewLoading } = useRulePreview(draft);
-
+  const {
+    attributes,
+    isLoading: attributesLoading,
+    isError: attributesError,
+    isReady: attributesReady,
+  } = useActorAttributes();
+  const knownWindow = isKnownEnumValue(WindowKind, draft.windowKind);
+  const knownTarget =
+    attributesReady && isSupportedRuleTarget(draft.target, attributes);
+  const canPreview = knownWindow && knownTarget;
+  const { preview, loading: previewLoading } = useRulePreview(
+    draft,
+    canPreview,
+  );
+  const supportedSettings =
+    canPreview &&
+    isKnownEnumValue(CreateSpendRuleRequestBodyAction, draft.action);
   const canSubmit =
+    supportedSettings &&
     draft.name.trim() !== "" &&
     draft.target.value.trim() !== "" &&
     draft.limitUsd > 0 &&
@@ -217,6 +227,7 @@ function RuleForm({
     blockingEditConfirmationDescription(overLimitCount);
 
   const handleSubmit = () => {
+    if (!canSubmit) return;
     if (requiresConfirmation) {
       setConfirmOpen(true);
       return;
@@ -225,6 +236,7 @@ function RuleForm({
   };
 
   const handleConfirmSubmit = () => {
+    if (!canSubmit) return;
     setConfirmOpen(false);
     onSubmit(draft);
   };
@@ -265,15 +277,29 @@ function RuleForm({
             combine attributes? Create a second rule — the strictest matching
             rule wins.
           </p>
-          <TargetConditionField
-            value={draft.target}
-            onChange={(target) => patch({ target })}
-            attributes={attributes}
-          />
-          <MatchedActors
-            preview={draft.target.value.trim() === "" ? null : preview}
-            loading={previewLoading}
-          />
+          {attributesLoading ? (
+            <Text muted small>
+              Loading target attributes…
+            </Text>
+          ) : attributesError ? (
+            <Text muted small>
+              Could not load target attributes. Refresh the page before editing
+              this rule.
+            </Text>
+          ) : (
+            <TargetConditionField
+              value={draft.target}
+              onChange={(target) => patch({ target })}
+              attributes={attributes}
+              readOnly={rule !== undefined && !knownTarget}
+            />
+          )}
+          {knownTarget && (
+            <MatchedActors
+              preview={draft.target.value.trim() === "" ? null : preview}
+              loading={previewLoading}
+            />
+          )}
         </div>
 
         {/* Limit + window + warn threshold */}
@@ -301,12 +327,14 @@ function RuleForm({
               onValueChange={(v) => patch({ windowKind: v as BudgetWindow })}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {knownWindow ? undefined : "Unknown window"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {WINDOWS.map((w) => (
                   <SelectItem key={w} value={w}>
-                    {WINDOW_LABELS[w]}
+                    {enumPresentation(WINDOW_LABELS, w, "Unknown")}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -341,9 +369,13 @@ function RuleForm({
           </Field>
         </div>
         <p className="text-muted-foreground -mt-4 text-xs">
-          {WINDOW_RESET_HINTS[draft.windowKind]} Each matched person gets{" "}
-          {formatUsd(draft.limitUsd)} per window; a warning event fires at{" "}
-          {draft.warnAtPct}% of it.
+          {enumPresentation(
+            WINDOW_RESET_HINTS,
+            draft.windowKind,
+            "Reset schedule unavailable.",
+          )}{" "}
+          Each matched person gets {formatUsd(draft.limitUsd)} per window; a
+          warning event fires at {draft.warnAtPct}% of it.
         </p>
 
         {/* On breach */}
@@ -382,15 +414,28 @@ function RuleForm({
         <div className="bg-muted/30 space-y-2 border p-4">
           <div className="flex items-center justify-between">
             <Text variant="small" className="font-medium">
-              Current usage this {draft.windowKind} window
+              {attributesLoading
+                ? "Usage preview"
+                : canPreview
+                  ? `Current usage this ${draft.windowKind} window`
+                  : "Usage preview unavailable"}
             </Text>
-            {previewLoading && (
-              <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
+            {(previewLoading || attributesLoading) && (
+              <Spinner
+                label="Loading usage preview"
+                className="text-muted-foreground mr-0 size-3.5"
+              />
             )}
           </div>
           {!preview ? (
             <p className="text-muted-foreground text-xs">
-              Choose a target condition to preview usage.
+              {attributesLoading
+                ? "Waiting for target attributes to load."
+                : attributesError
+                  ? "Refresh the page to load target attributes."
+                  : canPreview
+                    ? "Choose a target condition to preview usage."
+                    : "Refresh the page for updated support for this rule."}
             </p>
           ) : (
             <>
@@ -413,6 +458,12 @@ function RuleForm({
         </div>
       </div>
 
+      {attributesReady && !supportedSettings && (
+        <Text muted small className="px-6">
+          Refresh the page before editing this rule. Some settings are not
+          supported by this dashboard yet.
+        </Text>
+      )}
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         {onArchive ? (
           <Button
@@ -636,10 +687,12 @@ function TargetConditionField({
   value,
   onChange,
   attributes,
+  readOnly,
 }: {
   value: RuleTargetCondition;
   onChange: (value: RuleTargetCondition) => void;
   attributes: ActorAttribute[];
+  readOnly: boolean;
 }): JSX.Element {
   const [condition, setCondition] = useState<RuleTargetCondition>(value);
 
@@ -649,7 +702,25 @@ function TargetConditionField({
   };
 
   const attribute = actorAttribute(attributes, condition.attribute);
-  const operators = operatorsForAttribute(attribute);
+  const operators = [...operatorsForAttribute(attribute)];
+  // A custom attribute may be absent from the catalog. Preserve its saved
+  // operator as a selectable option instead of showing an empty selection.
+  if (
+    !attribute &&
+    isRuleTargetOperator(condition.operator) &&
+    !operators.includes(condition.operator)
+  ) {
+    operators.push(condition.operator);
+  }
+
+  if (readOnly || !isRuleTargetOperator(condition.operator)) {
+    return (
+      <Text muted small>
+        This target condition is not supported by this dashboard yet. Refresh
+        the page before editing it.
+      </Text>
+    );
+  }
 
   return (
     <div className="space-y-2 border p-3">
@@ -657,10 +728,13 @@ function TargetConditionField({
         <Select
           value={condition.attribute}
           onValueChange={(attributeName) => {
+            if (attributeName === condition.attribute) return;
             const nextAttribute = actorAttribute(attributes, attributeName);
+            const operator = operatorsForAttribute(nextAttribute)[0];
+            if (!operator) return;
             update({
               attribute: attributeName,
-              operator: operatorsForAttribute(nextAttribute)[0]!,
+              operator,
               value: "",
             });
           }}
@@ -669,14 +743,24 @@ function TargetConditionField({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            {!attribute && condition.attribute && (
+              <SelectItem value={condition.attribute}>
+                {attributeLabel(condition.attribute)}
+              </SelectItem>
+            )}
             {attributes.map((attr) => (
-              <SelectItem key={attr.name} value={attr.name}>
+              <SelectItem
+                key={attr.name}
+                value={attr.name}
+                disabled={operatorsForAttribute(attr).length === 0}
+              >
                 {attributeLabel(attr.name)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select
+          disabled={operators.length === 0}
           value={condition.operator}
           onValueChange={(operator) =>
             update({ ...condition, operator: operator as RuleTargetOperator })

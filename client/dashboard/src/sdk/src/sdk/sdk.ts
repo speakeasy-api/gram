@@ -6,21 +6,25 @@ import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
 import { AdminAssets } from "./adminassets.js";
 import { AdminChatAnalysis } from "./adminchatanalysis.js";
-import { AdminExternalCredentials } from "./adminexternalcredentials.js";
 import { AdminOpenRouterKeys } from "./adminopenrouterkeys.js";
 import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
+import { Agents } from "./agents.js";
 import { AiIntegrations } from "./aiintegrations.js";
+import { Analytics } from "./analytics.js";
 import { Assets } from "./assets.js";
 import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
+import { AuthClients } from "./authclients.js";
 import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
-import { Collections } from "./collections.js";
+import { CommandSearch } from "./commandsearch.js";
+import { Dashboards } from "./dashboards.js";
+import { DataExports } from "./dataexports.js";
 import { Deployments } from "./deployments.js";
 import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
@@ -29,42 +33,55 @@ import { External } from "./external.js";
 import { ExternalCredentials } from "./externalcredentials.js";
 import { ExternalKeys } from "./externalkeys.js";
 import { Features } from "./features.js";
+import { GatewaySessions } from "./gatewaysessions.js";
+import { HiddenMcpServers } from "./hiddenmcpservers.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
 import { Identity } from "./identity.js";
-import { Instances } from "./instances.js";
+import { IdentityProviderConnections } from "./identityproviderconnections.js";
 import { Integrations } from "./integrations.js";
+import { IntentPolicies } from "./intentpolicies.js";
+import { InternalSessionIssuers } from "./internalsessionissuers.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Killswitches } from "./killswitches.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
+import { McpConnectionHealth } from "./mcpconnectionhealth.js";
 import { McpEndpoints } from "./mcpendpoints.js";
+import { McpFeedback } from "./mcpfeedback.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
 import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
+import { NetworkIngress } from "./networkingress.js";
+import { OktaResourceConnections } from "./oktaresourceconnections.js";
+import { OktaServerSuggestions } from "./oktaserversuggestions.js";
 import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
+import { OrganizationUserSessionIssuers } from "./organizationusersessionissuers.js";
+import { OrgEncryption } from "./orgencryption.js";
 import { Otel } from "./otel.js";
-import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
 import { PlatformKillswitches } from "./platformkillswitches.js";
 import { PlatformMcp } from "./platformmcp.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
+import { RegistryDiscovery } from "./registrydiscovery.js";
 import { RemoteMcp } from "./remotemcp.js";
 import { RemoteSessionClients } from "./remotesessionclients.js";
 import { RemoteSessionIssuers } from "./remotesessionissuers.js";
 import { RemoteSessions } from "./remotesessions.js";
 import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
+import { Sigint } from "./sigint.js";
 import { SkillEfficacy } from "./skillefficacy.js";
 import { Skills } from "./skills.js";
+import { SlackDirectoryConnections } from "./slackdirectoryconnections.js";
 import { SpendRules } from "./spendrules.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
@@ -81,6 +98,8 @@ import { UserSessionIssuers } from "./usersessionissuers.js";
 import { UserSessionIssuersCimdClients } from "./usersessionissuerscimdclients.js";
 import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
+import { Widgets } from "./widgets.js";
+import { WorkloadIdentities } from "./workloadidentities.js";
 
 export class Gram extends ClientSDK {
   private _otel?: Otel;
@@ -103,13 +122,6 @@ export class Gram extends ClientSDK {
     return (this._adminChatAnalysis ??= new AdminChatAnalysis(this._options));
   }
 
-  private _adminExternalCredentials?: AdminExternalCredentials;
-  get adminExternalCredentials(): AdminExternalCredentials {
-    return (this._adminExternalCredentials ??= new AdminExternalCredentials(
-      this._options,
-    ));
-  }
-
   private _adminOpenRouterKeys?: AdminOpenRouterKeys;
   get adminOpenRouterKeys(): AdminOpenRouterKeys {
     return (this._adminOpenRouterKeys ??= new AdminOpenRouterKeys(
@@ -129,9 +141,19 @@ export class Gram extends ClientSDK {
     return (this._agent ??= new Agent(this._options));
   }
 
+  private _agents?: Agents;
+  get agents(): Agents {
+    return (this._agents ??= new Agents(this._options));
+  }
+
   private _aiIntegrations?: AiIntegrations;
   get aiIntegrations(): AiIntegrations {
     return (this._aiIntegrations ??= new AiIntegrations(this._options));
+  }
+
+  private _analytics?: Analytics;
+  get analytics(): Analytics {
+    return (this._analytics ??= new Analytics(this._options));
   }
 
   private _assets?: Assets;
@@ -159,6 +181,11 @@ export class Gram extends ClientSDK {
     return (this._auth ??= new Auth(this._options));
   }
 
+  private _authClients?: AuthClients;
+  get authClients(): AuthClients {
+    return (this._authClients ??= new AuthClients(this._options));
+  }
+
   private _businessMemories?: BusinessMemories;
   get businessMemories(): BusinessMemories {
     return (this._businessMemories ??= new BusinessMemories(this._options));
@@ -179,9 +206,19 @@ export class Gram extends ClientSDK {
     return (this._cliAuth ??= new CliAuth(this._options));
   }
 
-  private _collections?: Collections;
-  get collections(): Collections {
-    return (this._collections ??= new Collections(this._options));
+  private _commandSearch?: CommandSearch;
+  get commandSearch(): CommandSearch {
+    return (this._commandSearch ??= new CommandSearch(this._options));
+  }
+
+  private _dashboards?: Dashboards;
+  get dashboards(): Dashboards {
+    return (this._dashboards ??= new Dashboards(this._options));
+  }
+
+  private _dataExports?: DataExports;
+  get dataExports(): DataExports {
+    return (this._dataExports ??= new DataExports(this._options));
   }
 
   private _deployments?: Deployments;
@@ -221,6 +258,16 @@ export class Gram extends ClientSDK {
     return (this._externalKeys ??= new ExternalKeys(this._options));
   }
 
+  private _gatewaySessions?: GatewaySessions;
+  get gatewaySessions(): GatewaySessions {
+    return (this._gatewaySessions ??= new GatewaySessions(this._options));
+  }
+
+  private _hiddenMcpServers?: HiddenMcpServers;
+  get hiddenMcpServers(): HiddenMcpServers {
+    return (this._hiddenMcpServers ??= new HiddenMcpServers(this._options));
+  }
+
   private _hooks?: Hooks;
   get hooks(): Hooks {
     return (this._hooks ??= new Hooks(this._options));
@@ -236,14 +283,27 @@ export class Gram extends ClientSDK {
     return (this._identity ??= new Identity(this._options));
   }
 
-  private _instances?: Instances;
-  get instances(): Instances {
-    return (this._instances ??= new Instances(this._options));
+  private _identityProviderConnections?: IdentityProviderConnections;
+  get identityProviderConnections(): IdentityProviderConnections {
+    return (this._identityProviderConnections ??=
+      new IdentityProviderConnections(this._options));
   }
 
   private _integrations?: Integrations;
   get integrations(): Integrations {
     return (this._integrations ??= new Integrations(this._options));
+  }
+
+  private _intentPolicies?: IntentPolicies;
+  get intentPolicies(): IntentPolicies {
+    return (this._intentPolicies ??= new IntentPolicies(this._options));
+  }
+
+  private _internalSessionIssuers?: InternalSessionIssuers;
+  get internalSessionIssuers(): InternalSessionIssuers {
+    return (this._internalSessionIssuers ??= new InternalSessionIssuers(
+      this._options,
+    ));
   }
 
   private _jsonWebKeySets?: JsonWebKeySets;
@@ -271,9 +331,21 @@ export class Gram extends ClientSDK {
     return (this._mcpApproval ??= new McpApproval(this._options));
   }
 
+  private _mcpConnectionHealth?: McpConnectionHealth;
+  get mcpConnectionHealth(): McpConnectionHealth {
+    return (this._mcpConnectionHealth ??= new McpConnectionHealth(
+      this._options,
+    ));
+  }
+
   private _mcpEndpoints?: McpEndpoints;
   get mcpEndpoints(): McpEndpoints {
     return (this._mcpEndpoints ??= new McpEndpoints(this._options));
+  }
+
+  private _mcpFeedback?: McpFeedback;
+  get mcpFeedback(): McpFeedback {
+    return (this._mcpFeedback ??= new McpFeedback(this._options));
   }
 
   private _mcpMetadata?: McpMetadata;
@@ -301,6 +373,30 @@ export class Gram extends ClientSDK {
     return (this._modelKeys ??= new ModelKeys(this._options));
   }
 
+  private _networkIngress?: NetworkIngress;
+  get networkIngress(): NetworkIngress {
+    return (this._networkIngress ??= new NetworkIngress(this._options));
+  }
+
+  private _oktaResourceConnections?: OktaResourceConnections;
+  get oktaResourceConnections(): OktaResourceConnections {
+    return (this._oktaResourceConnections ??= new OktaResourceConnections(
+      this._options,
+    ));
+  }
+
+  private _oktaServerSuggestions?: OktaServerSuggestions;
+  get oktaServerSuggestions(): OktaServerSuggestions {
+    return (this._oktaServerSuggestions ??= new OktaServerSuggestions(
+      this._options,
+    ));
+  }
+
+  private _orgEncryption?: OrgEncryption;
+  get orgEncryption(): OrgEncryption {
+    return (this._orgEncryption ??= new OrgEncryption(this._options));
+  }
+
   private _organizationAssets?: OrganizationAssets;
   get organizationAssets(): OrganizationAssets {
     return (this._organizationAssets ??= new OrganizationAssets(this._options));
@@ -325,14 +421,15 @@ export class Gram extends ClientSDK {
     ));
   }
 
+  private _organizationUserSessionIssuers?: OrganizationUserSessionIssuers;
+  get organizationUserSessionIssuers(): OrganizationUserSessionIssuers {
+    return (this._organizationUserSessionIssuers ??=
+      new OrganizationUserSessionIssuers(this._options));
+  }
+
   private _organizations?: Organizations;
   get organizations(): Organizations {
     return (this._organizations ??= new Organizations(this._options));
-  }
-
-  private _otelForwarding?: OtelForwarding;
-  get otelForwarding(): OtelForwarding {
-    return (this._otelForwarding ??= new OtelForwarding(this._options));
   }
 
   private _packages?: Packages;
@@ -401,6 +498,11 @@ export class Gram extends ClientSDK {
     return (this._risk ??= new Risk(this._options));
   }
 
+  private _sigint?: Sigint;
+  get sigint(): Sigint {
+    return (this._sigint ??= new Sigint(this._options));
+  }
+
   private _skillEfficacy?: SkillEfficacy;
   get skillEfficacy(): SkillEfficacy {
     return (this._skillEfficacy ??= new SkillEfficacy(this._options));
@@ -409,6 +511,13 @@ export class Gram extends ClientSDK {
   private _skills?: Skills;
   get skills(): Skills {
     return (this._skills ??= new Skills(this._options));
+  }
+
+  private _slackDirectoryConnections?: SlackDirectoryConnections;
+  get slackDirectoryConnections(): SlackDirectoryConnections {
+    return (this._slackDirectoryConnections ??= new SlackDirectoryConnections(
+      this._options,
+    ));
   }
 
   private _spendRules?: SpendRules;
@@ -492,5 +601,20 @@ export class Gram extends ClientSDK {
   private _variations?: Variations;
   get variations(): Variations {
     return (this._variations ??= new Variations(this._options));
+  }
+
+  private _widgets?: Widgets;
+  get widgets(): Widgets {
+    return (this._widgets ??= new Widgets(this._options));
+  }
+
+  private _workloadIdentities?: WorkloadIdentities;
+  get workloadIdentities(): WorkloadIdentities {
+    return (this._workloadIdentities ??= new WorkloadIdentities(this._options));
+  }
+
+  private _registryDiscovery?: RegistryDiscovery;
+  get registryDiscovery(): RegistryDiscovery {
+    return (this._registryDiscovery ??= new RegistryDiscovery(this._options));
   }
 }

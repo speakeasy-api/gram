@@ -17,7 +17,7 @@ const (
 )
 
 func newUserRequestWithUserAgent(userAgent string) *proxy.UserRequest {
-	r := httptest.NewRequest("POST", "/x/mcp/figma", nil)
+	r := httptest.NewRequest("POST", "/mcp/figma", nil)
 	r.Header.Set("User-Agent", userAgent)
 	return &proxy.UserRequest{
 		UserHTTPRequest: r,

@@ -3,7 +3,9 @@ package organizations_test
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +14,8 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -20,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/svix/svixtest"
@@ -28,7 +33,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// seedLocalRole inserts an organization_roles row and returns its Gram local
+// testPlatformHost is the extra platform host that organizations in these
+// tests can record as their default host.
+const testPlatformHost = "https://platform.example.test"
+
+// testOrgHosts resolves request-less links the way a deployment with no
+// legacy default host override does: organizations without a default host use
+// the server and site URLs the tests configure.
+func testOrgHosts(t *testing.T) *orghost.Resolver {
+	t.Helper()
+	serverURL, err := url.Parse("http://localhost:35291")
+	require.NoError(t, err)
+	siteURL, err := url.Parse("http://localhost:5173")
+	require.NoError(t, err)
+	return orghost.New(orghost.Config{
+		ServerURL:                  serverURL,
+		SiteURL:                    siteURL,
+		PlatformHosts:              map[string]string{"platform.example.test": testPlatformHost},
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
+}
+
+// seedLocalRole inserts an organization_roles row and returns its Speakeasy local
 // UUID — the same identifier the dashboard receives from access.listRoles and
 // sends back in invite payloads.
 func seedLocalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug, name string) string {
@@ -55,18 +82,56 @@ func seedLocalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organi
 	return row.ID.String()
 }
 
-// stubOrgFeatures returns false for all features — tests use the WorkOS fallback path.
-type stubOrgFeatures struct{}
-
-func (stubOrgFeatures) IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error) {
-	return false, nil
+// orgFeatureStub mirrors the unexported feature-checker interface accepted by
+// organizations.NewService so test constructors can parametrize it.
+type orgFeatureStub interface {
+	IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+	UpdateFeatureCache(ctx context.Context, organizationID string, feature productfeatures.Feature, enabled bool)
 }
 
-// stubOrgFeaturesEnabled returns true for all features — tests use the RBAC path.
+// stubOrgFeaturesEnabled reports every feature enabled, entitling all
+// feature-gated portal-link intents.
 type stubOrgFeaturesEnabled struct{}
 
-func (stubOrgFeaturesEnabled) IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error) {
+func (stubOrgFeaturesEnabled) IsFeatureEnabledUncached(context.Context, string, productfeatures.Feature) (bool, error) {
 	return true, nil
+}
+
+func (stubOrgFeaturesEnabled) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {
+}
+
+// featureMapStub enables exactly the features mapped to true.
+type featureMapStub map[productfeatures.Feature]bool
+
+func (m featureMapStub) IsFeatureEnabledUncached(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+	return m[feature], nil
+}
+
+func (featureMapStub) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {}
+
+// enabledFeatures builds a featureMapStub that enables exactly the listed features.
+func enabledFeatures(features ...productfeatures.Feature) featureMapStub {
+	m := make(featureMapStub, len(features))
+	for _, feature := range features {
+		m[feature] = true
+	}
+	return m
+}
+
+// withAccountType returns a context whose auth context is a copy carrying the
+// given account type. The copy matters: contexts share the underlying auth
+// context pointer, so mutating it in place would retier every context derived
+// from ctx.
+func withAccountType(t *testing.T, ctx context.Context, accountType string) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	clone := *authCtx
+	clone.AccountType = accountType
+
+	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
 // testAuthUserWorkOSID is the WorkOS user id for the session user in tests.
@@ -94,17 +159,24 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service *organizations.Service
-	conn    *pgxpool.Pool
-	orgs    *MockOrganizationProvider
-	loops   *MockLoopsClient
-	trial   *fakeTrialNotifier
-	svixSrv *svixtest.MockServer
+	service  *organizations.Service
+	conn     *pgxpool.Pool
+	orgs     *MockOrganizationProvider
+	loops    *MockLoopsClient
+	trial    *fakeTrialNotifier
+	posthog  *fakeOnboardingTelemetry
+	features *productfeatures.Client
+	svixSrv  *svixtest.MockServer
+	// sessionManager is the service's session manager.
+	sessionManager *sessions.Manager
 }
 
 type fakeTrialNotifier struct {
-	adminAddedErr error
-	adminAdded    []adminAddedNotification
+	mu              sync.Mutex
+	trialStartedErr error
+	trialStarted    []string
+	adminAddedErr   error
+	adminAdded      []adminAddedNotification
 }
 
 type adminAddedNotification struct {
@@ -112,11 +184,16 @@ type adminAddedNotification struct {
 	userID         string
 }
 
-func (f *fakeTrialNotifier) TrialStarted(context.Context, string) error {
-	return nil
+func (f *fakeTrialNotifier) TrialStarted(_ context.Context, organizationID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.trialStarted = append(f.trialStarted, organizationID)
+	return f.trialStartedErr
 }
 
 func (f *fakeTrialNotifier) AdminAdded(_ context.Context, organizationID, userID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.adminAdded = append(f.adminAdded, adminAddedNotification{organizationID: organizationID, userID: userID})
 	return f.adminAddedErr
 }
@@ -125,62 +202,75 @@ func (f *fakeTrialNotifier) TrialInactive(context.Context, string) error {
 	return nil
 }
 
+type capturedOnboardingEvent struct {
+	eventName  string
+	distinctID string
+	properties map[string]any
+}
+
+type fakeOnboardingTelemetry struct {
+	mu          sync.Mutex
+	captureErr  error
+	identifyErr error
+	events      []capturedOnboardingEvent
+	identified  []capturedOnboardingEvent
+}
+
+func (f *fakeOnboardingTelemetry) CaptureEvent(_ context.Context, eventName, distinctID string, properties map[string]any) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, capturedOnboardingEvent{eventName: eventName, distinctID: distinctID, properties: properties})
+	return f.captureErr
+}
+
+func (f *fakeOnboardingTelemetry) IdentifyUser(_ context.Context, distinctID string, properties map[string]any) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.identified = append(f.identified, capturedOnboardingEvent{distinctID: distinctID, properties: properties})
+	return f.identifyErr
+}
+
 func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
-	ctx := t.Context()
-
-	logger := testenv.NewLogger(t)
-	tracerProvider := testenv.NewTracerProvider(t)
-	conn, err := infra.CloneTestDatabase(t, "testdb")
-	require.NoError(t, err)
-
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	billingClient := billing.NewStubClient(logger, tracerProvider)
-
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
-
-	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-
-	// UpsertUserFromIDP (called inside InitAuthContext) now backfills workos_id
-	// with the mock IDP's user ID. Override it to the test-specific WorkOS user
-	// ID so that mock expectations on GetOrgMembership match.
-	err = userrepo.New(conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
-		ID:       authCtx.UserID,
-		WorkosID: conv.ToPGText(testAuthUserWorkOSID),
-	})
-	require.NoError(t, err)
-
-	orgs := newMockOrganizationProvider(t)
-
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
-
-	auditLogger := audit.NewLogger()
-
-	svixSrv := svixtest.NewMockServer(logger)
-	t.Cleanup(svixSrv.Close)
-	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
-	require.NoError(t, err)
-
-	trialNotifier := &fakeTrialNotifier{}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, nil, authzEngine, nil, trialNotifier, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
-
-	return ctx, &testInstance{
-		service: svc,
-		conn:    conn,
-		orgs:    orgs,
-		trial:   trialNotifier,
-		svixSrv: svixSrv,
-	}
+	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), productfeatures.SeedEnterpriseTrialBundleTx, stubUserProvisioner{}, false)
 }
 
-// newTestOrganizationsServiceRBAC creates a service instance where RBAC feature is enabled,
-// so requireOrgTeamManagementAccess takes the access.Require path instead of the WorkOS fallback.
+func newTestOrganizationsServiceWithTrialBundleSeeder(t *testing.T, trialBundleSeeder auth.EnterpriseTrialBundleSeeder) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), trialBundleSeeder, stubUserProvisioner{}, false)
+}
+
+func newTestOrganizationsServiceWithInviteIdentityProvider(t *testing.T, invite organizations.InviteIdentityProvider) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), productfeatures.SeedEnterpriseTrialBundleTx, invite, false)
+}
+
+func newTestOrganizationsServiceWithRealFeatures(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), productfeatures.SeedEnterpriseTrialBundleTx, stubUserProvisioner{}, true)
+}
+
+// newTestOrganizationsServiceRBAC creates a service instance whose feature
+// checker reports every feature enabled. The checker only gates portal-link
+// intent entitlements, so that is the sole difference from
+// newTestOrganizationsService.
 func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestOrganizationsServiceWithFeatures(t, stubOrgFeaturesEnabled{})
+}
+
+func newTestOrganizationsServiceWithFeatures(t *testing.T, features orgFeatureStub) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestOrganizationsServiceWithOptions(t, features, productfeatures.SeedEnterpriseTrialBundleTx, stubUserProvisioner{}, false)
+}
+
+func newTestOrganizationsServiceWithOptions(t *testing.T, featureStub orgFeatureStub, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, invite organizations.InviteIdentityProvider, useRealFeatures bool) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -222,20 +312,34 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	require.NoError(t, err)
 
 	trialNotifier := &fakeTrialNotifier{}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeaturesEnabled{}, nil, authzEngine, nil, trialNotifier, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	posthog := &fakeOnboardingTelemetry{}
+	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	featureChecker := featureStub
+	if useRealFeatures {
+		featureChecker = features
+	}
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, featureChecker, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
 
 	return ctx, &testInstance{
-		service: svc,
-		conn:    conn,
-		orgs:    orgs,
-		trial:   trialNotifier,
-		svixSrv: svixSrv,
+		service:        svc,
+		conn:           conn,
+		orgs:           orgs,
+		trial:          trialNotifier,
+		posthog:        posthog,
+		features:       features,
+		svixSrv:        svixSrv,
+		sessionManager: sessionManager,
 	}
 }
 
 // newTestOrganizationsServiceWithEmail creates a service with a mock email
 // sender so tests can assert on email delivery success/failure paths.
 func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestOrganizationsServiceWithEmailEnabled(t, true)
+}
+
+func newTestOrganizationsServiceWithEmailEnabled(t *testing.T, emailEnabled bool) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -275,17 +379,19 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 	require.NoError(t, err)
 
 	emailService := email.NewService(logger, loopsMock, email.NewTemplateIDs(map[string]string{
-		"team_invite": "team-invite-test-id",
-	}), true)
+		"team_invite":           "team-invite-test-id",
+		"setup_task_assignment": "setup-task-assignment-test-id",
+	}), emailEnabled)
 	trialNotifier := &fakeTrialNotifier{}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, nil, authzEngine, emailService, trialNotifier, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
 
 	return ctx, &testInstance{
-		service: svc,
-		conn:    conn,
-		orgs:    orgs,
-		loops:   loopsMock,
-		trial:   trialNotifier,
-		svixSrv: svixSrv,
+		service:        svc,
+		conn:           conn,
+		orgs:           orgs,
+		loops:          loopsMock,
+		trial:          trialNotifier,
+		svixSrv:        svixSrv,
+		sessionManager: sessionManager,
 	}
 }

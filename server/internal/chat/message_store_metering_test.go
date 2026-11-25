@@ -56,47 +56,72 @@ func TestChatMessageWriterMetersStoredTextAndToolCalls(t *testing.T) {
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 
 	toolCalls := []byte(`[{"function":{"name":"lookup","arguments":"{\"city\":\"Paris\"}"}}]`)
-	params := []repo.CreateChatMessageParams{{
-		ID:               uuid.Nil,
-		ChatID:           chatID,
-		Role:             "assistant",
-		ProjectID:        ti.projectID,
-		Content:          "Plan a route",
-		ContentRaw:       nil,
-		ContentAssetUrl:  pgtype.Text{},
-		StorageError:     pgtype.Text{},
-		Model:            pgtype.Text{},
-		MessageID:        pgtype.Text{},
-		ToolCallID:       pgtype.Text{},
-		UserID:           pgtype.Text{},
-		ExternalUserID:   pgtype.Text{},
-		FinishReason:     pgtype.Text{},
-		ToolCalls:        toolCalls,
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
-		Origin:           pgtype.Text{},
-		UserAgent:        pgtype.Text{},
-		IpAddress:        pgtype.Text{},
-		Source:           conv.ToPGText("codex"),
-		ContentHash:      nil,
-		Generation:       0,
-		Replayed:         false,
-		CreatedAt:        pgtype.Timestamptz{},
+	messageUserID := uuid.NewString()
+	billingUserID := uuid.NewString()
+	writes := []chat.MessageWrite{{
+		Params: repo.CreateChatMessageParams{
+			ID:               uuid.Nil,
+			ChatID:           chatID,
+			Role:             "assistant",
+			ProjectID:        ti.projectID,
+			Content:          "Plan a route",
+			ContentRaw:       nil,
+			ContentAssetUrl:  pgtype.Text{},
+			StorageError:     pgtype.Text{},
+			Model:            conv.ToPGText("gpt-5"),
+			MessageID:        pgtype.Text{},
+			ToolCallID:       pgtype.Text{},
+			UserID:           conv.ToPGText(messageUserID),
+			ExternalUserID:   conv.ToPGText("provider-user-123"),
+			FinishReason:     pgtype.Text{},
+			ToolCalls:        toolCalls,
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			TotalTokens:      0,
+			Origin:           pgtype.Text{},
+			UserAgent:        pgtype.Text{},
+			IpAddress:        pgtype.Text{},
+			Source:           conv.ToPGText("Codex"),
+			ContentHash:      nil,
+			Generation:       0,
+			Replayed:         false,
+			CreatedAt:        pgtype.Timestamptz{},
+		},
+		BillingUserID:  billingUserID,
+		AssistantID:    uuid.Nil,
+		WorkloadSource: metering.WorkloadSourceHook,
+		UserEmail:      "reported@example.test",
+		Provider:       "openai",
+		HookHostname:   "workstation.example.test",
+		AccountType:    "team",
+		BillingMode:    "metered",
 	}}
-	written, err := writer.Write(ctx, ti.projectID, params)
+	written, err := writer.Write(ctx, ti.projectID, writes)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), written)
-	require.NotEqual(t, uuid.Nil, params[0].ID)
+	require.NotEqual(t, uuid.Nil, writes[0].Params.ID)
 
 	expected, err := stokens.NewCodec().Count(ctx, "Plan a route", "lookup", `{"city":"Paris"}`)
 	require.NoError(t, err)
 	messages := meterMessages(t, ti)
 	require.Len(t, messages, 1)
 	require.Equal(t, string(metering.MeterAgentSessionStorage), messages[0].GetMeterId())
-	require.Equal(t, "chat_message:"+params[0].ID.String(), messages[0].GetOperationId())
+	require.Equal(t, "chat_message:"+writes[0].Params.ID.String(), messages[0].GetOperationId())
 	require.Equal(t, int64(expected), messages[0].GetValue())
-	require.NotContains(t, messages[0].GetAttributes(), "codec")
+	require.Equal(t, map[string]string{
+		metering.AttributeChatID:                chatID.String(),
+		metering.AttributeModel:                 "gpt-5",
+		metering.AttributeProvider:              "openai",
+		metering.AttributeHookSource:            "codex",
+		metering.AttributeWorkloadSource:        string(metering.WorkloadSourceHook),
+		metering.AttributeHookHostname:          "workstation.example.test",
+		metering.AttributeAccountType:           "team",
+		metering.AttributeBillingMode:           "metered",
+		metering.AttributeBillingUserID:         billingUserID,
+		metering.AttributeMessageUserID:         messageUserID,
+		metering.AttributeMessageExternalUserID: "provider-user-123",
+		metering.AttributeMessageUserEmail:      "reported@example.test",
+	}, messages[0].GetAttributes())
 	require.Equal(t, uint32(1), messages[0].GetMeterVersion())
 	require.Equal(t, meteringv1.MeterReading_KIND_USAGE, messages[0].GetKind())
 	require.Equal(t, string(metering.MeasurementTiktokenO200kBase), messages[0].GetMeasurementMethod())
@@ -114,36 +139,46 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 
 	historical := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
-	param := repo.CreateExternalChatMessageParams{
-		ID:                uuid.Nil,
-		ChatID:            chatID,
-		Role:              "user",
-		ProjectID:         ti.projectID,
-		Content:           "Imported transcript",
-		ContentRaw:        nil,
-		ContentAssetUrl:   pgtype.Text{},
-		StorageError:      pgtype.Text{},
-		Model:             pgtype.Text{},
-		MessageID:         pgtype.Text{},
-		ToolCallID:        pgtype.Text{},
-		UserID:            pgtype.Text{},
-		ExternalUserID:    pgtype.Text{},
-		ExternalMessageID: conv.ToPGText("external-message-1"),
-		FinishReason:      pgtype.Text{},
-		ToolCalls:         nil,
-		PromptTokens:      0,
-		CompletionTokens:  0,
-		TotalTokens:       0,
-		Origin:            pgtype.Text{},
-		UserAgent:         pgtype.Text{},
-		IpAddress:         pgtype.Text{},
-		Source:            conv.ToPGText("external"),
-		ContentHash:       nil,
-		Generation:        0,
-		CreatedAt:         conv.ToPGTimestamptz(historical),
+	billingUserID := uuid.NewString()
+	param := chat.ExternalMessageWrite{
+		Params: repo.CreateExternalChatMessageParams{
+			ID:                uuid.Nil,
+			ChatID:            chatID,
+			Role:              "user",
+			ProjectID:         ti.projectID,
+			Content:           "Imported transcript",
+			ContentRaw:        nil,
+			ContentAssetUrl:   pgtype.Text{},
+			StorageError:      pgtype.Text{},
+			Model:             conv.ToPGText("imported-model"),
+			MessageID:         pgtype.Text{},
+			ToolCallID:        pgtype.Text{},
+			UserID:            pgtype.Text{},
+			ExternalUserID:    conv.ToPGText("opaque-provider-user-456"),
+			ExternalMessageID: conv.ToPGText("external-message-1"),
+			FinishReason:      pgtype.Text{},
+			ToolCalls:         nil,
+			PromptTokens:      0,
+			CompletionTokens:  0,
+			TotalTokens:       0,
+			Origin:            pgtype.Text{},
+			UserAgent:         pgtype.Text{},
+			IpAddress:         pgtype.Text{},
+			Source:            conv.ToPGText("ChatGPT"),
+			ContentHash:       nil,
+			Generation:        0,
+			CreatedAt:         conv.ToPGTimestamptz(historical),
+		},
+		BillingUserID:  billingUserID,
+		WorkloadSource: metering.WorkloadSourceImport,
+		UserEmail:      "imported@example.test",
+		Provider:       "openai",
+		HookHostname:   "",
+		AccountType:    "team",
+		BillingMode:    "flat_rate",
 	}
 	before := time.Now().UTC()
-	written, err := writer.WriteExternal(ctx, ti.projectID, []repo.CreateExternalChatMessageParams{param})
+	written, err := writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{param})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), written)
 	after := time.Now().UTC()
@@ -156,16 +191,32 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 	require.Equal(t, meteringv1.MeterReading_KIND_USAGE, message.GetKind())
 	require.Equal(t, string(metering.MeasurementTiktokenO200kBase), message.GetMeasurementMethod())
 	require.Equal(t, "chat_message_writer", message.GetSource())
+	require.Equal(t, map[string]string{
+		metering.AttributeChatID:                chatID.String(),
+		metering.AttributeModel:                 "imported-model",
+		metering.AttributeProvider:              "openai",
+		metering.AttributeHookSource:            "chatgpt",
+		metering.AttributeWorkloadSource:        string(metering.WorkloadSourceImport),
+		metering.AttributeAccountType:           "team",
+		metering.AttributeBillingMode:           "flat_rate",
+		metering.AttributeBillingUserID:         billingUserID,
+		metering.AttributeMessageExternalUserID: "opaque-provider-user-456",
+		metering.AttributeMessageUserEmail:      "imported@example.test",
+	}, message.GetAttributes())
 	occurredAt, err := time.Parse(time.RFC3339Nano, message.GetOccurredAt())
 	require.NoError(t, err)
 	require.False(t, occurredAt.Before(before))
 	require.False(t, occurredAt.After(after))
 	require.False(t, occurredAt.Equal(historical))
 
-	written, err = writer.WriteExternal(ctx, ti.projectID, []repo.CreateExternalChatMessageParams{param})
+	written, err = writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{param})
 	require.NoError(t, err)
 	require.Zero(t, written)
 	require.Len(t, meterMessages(t, ti), 1)
+	publications := conversationMessages(t, ti)
+	require.Len(t, publications, 1)
+	require.NotEmpty(t, publications[0].GetMessageId())
+	require.Equal(t, historical.Format(time.RFC3339Nano), publications[0].GetMessageCreatedAt())
 }
 
 func TestChatMessageWriterRejectsExternalMessageForAnotherProject(t *testing.T) {
@@ -183,7 +234,7 @@ func TestChatMessageWriterRejectsExternalMessageForAnotherProject(t *testing.T) 
 	param.Content = "wrong project"
 	param.ExternalMessageID = conv.ToPGText("external-project-mismatch")
 
-	written, err := writer.WriteExternal(ctx, ti.projectID, []repo.CreateExternalChatMessageParams{param})
+	written, err := writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{{Params: param, UserEmail: ""}})
 
 	require.ErrorContains(t, err, "project id does not match")
 	require.Zero(t, written)
@@ -199,9 +250,10 @@ func TestChatMessageWriterRejectsChatOwnedByAnotherProject(t *testing.T) {
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 
-	written, err := writer.Write(ctx, ti.projectID, []repo.CreateChatMessageParams{
-		minimalChatMessageParams(foreignChat, ti.projectID),
-	})
+	written, err := writer.Write(ctx, ti.projectID, []chat.MessageWrite{{
+		Params:    minimalChatMessageParams(foreignChat, ti.projectID),
+		UserEmail: "",
+	}})
 
 	require.ErrorContains(t, err, "chat does not belong to project")
 	require.Zero(t, written)
@@ -220,13 +272,47 @@ func TestChatMessageWriterRejectsCorrelatedChatOwnedByAnotherProject(t *testing.
 	written, err := writer.WriteCorrelated(
 		ctx,
 		ti.projectID,
-		minimalChatMessageParams(foreignChat, ti.projectID),
+		chat.MessageWrite{Params: minimalChatMessageParams(foreignChat, ti.projectID), UserEmail: ""},
 		"cross-project-correlation",
 	)
 
 	require.ErrorContains(t, err, "chat does not belong to project")
 	require.Zero(t, written)
 	require.Empty(t, meterMessages(t, ti))
+}
+
+func TestChatMessageWriterRejectsCorrelatedPromotionForAnotherProject(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	otherProject := createProjectInSameOrg(t, ti)
+	foreignChat := seedChatInProject(t, ti, otherProject, "foreign correlated promotion")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+
+	param := minimalChatMessageParams(foreignChat, otherProject)
+	param.Source = conv.ToPGText("litellm")
+	correlationID := "cross-project-promotion"
+	written, err := writer.WriteCorrelated(ctx, otherProject, chat.MessageWrite{
+		Params: param,
+	}, correlationID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), written)
+	initialMessages := listAllMessages(t, ctx, ti.conn, foreignChat, otherProject)
+	initialReadings := meterMessages(t, ti)
+	require.Len(t, initialReadings, 1)
+
+	param.Source = conv.ToPGText("codex")
+	param.Model = conv.ToPGText("native-model")
+	written, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params: param,
+	}, correlationID)
+	require.Error(t, err)
+	require.Zero(t, written)
+	require.Equal(t, initialMessages, listAllMessages(t, ctx, ti.conn, foreignChat, otherProject))
+	readings := meterMessages(t, ti)
+	require.Len(t, readings, 1)
+	require.True(t, proto.Equal(initialReadings[0], readings[0]), "rejected promotion must not change usage")
 }
 
 func TestChatMessageWriterRejectsExternalChatOwnedByAnotherProject(t *testing.T) {
@@ -244,20 +330,22 @@ func TestChatMessageWriterRejectsExternalChatOwnedByAnotherProject(t *testing.T)
 	param.Role = "user"
 	param.Content = "cross-project external message"
 	param.ExternalMessageID = conv.ToPGText("cross-project-external")
-	written, err := writer.WriteExternal(ctx, ti.projectID, []repo.CreateExternalChatMessageParams{param})
+	written, err := writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{{Params: param, UserEmail: ""}})
 
 	require.ErrorContains(t, err, "chat does not belong to project")
 	require.Zero(t, written)
 	require.Empty(t, meterMessages(t, ti))
 }
 
-func TestChatMessageWriterDoesNotMeterCorrelatedPromotion(t *testing.T) {
+func TestChatMessageWriterPreservesInitialReadingOnCorrelatedPromotion(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "u", "", "metered correlated message")
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	proxyBillingUserID := uuid.NewString()
+	nativeBillingUserID := uuid.NewString()
 
 	base := repo.CreateChatMessageParams{
 		ID:               uuid.Nil,
@@ -274,7 +362,7 @@ func TestChatMessageWriterDoesNotMeterCorrelatedPromotion(t *testing.T) {
 		UserID:           pgtype.Text{},
 		ExternalUserID:   pgtype.Text{},
 		FinishReason:     pgtype.Text{},
-		ToolCalls:        nil,
+		ToolCalls:        []byte(`[{"function":{"name":"lookup","arguments":"{}"}}]`),
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
@@ -287,18 +375,97 @@ func TestChatMessageWriterDoesNotMeterCorrelatedPromotion(t *testing.T) {
 		Replayed:         false,
 		CreatedAt:        pgtype.Timestamptz{},
 	}
-	written, err := writer.WriteCorrelated(ctx, ti.projectID, base, base.MessageID.String)
+	written, err := writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params:        base,
+		BillingUserID: proxyBillingUserID,
+		UserEmail:     "proxy-observed@example.test",
+		Provider:      "openai",
+		HookHostname:  "",
+		AccountType:   "",
+		BillingMode:   "",
+	}, base.MessageID.String)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), written)
-	require.Len(t, meterMessages(t, ti), 1)
+	initialReadings := meterMessages(t, ti)
+	require.Len(t, initialReadings, 1)
+	require.Equal(t, proxyBillingUserID, initialReadings[0].GetAttributes()[metering.AttributeBillingUserID])
+	initialMessages := listAllMessages(t, ctx, ti.conn, chatID, ti.projectID)
+	require.Len(t, initialMessages, 1)
 
 	promoted := base
 	promoted.ID = uuid.Nil
+	promoted.Content = "Native hook content must not replace the persisted correlated prompt when metering"
+	promoted.ToolCalls = []byte(`[{"function":{"name":"different_tool","arguments":"{\"changed\":true}"}}]`)
 	promoted.Source = conv.ToPGText("codex")
-	written, err = writer.WriteCorrelated(ctx, ti.projectID, promoted, promoted.MessageID.String)
+	written, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params:        promoted,
+		BillingUserID: nativeBillingUserID,
+		UserEmail:     "native-observed@example.test",
+		Provider:      "openai",
+		HookHostname:  "workstation.example.test",
+		AccountType:   "team",
+		BillingMode:   "metered",
+	}, promoted.MessageID.String)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), written)
-	require.Len(t, meterMessages(t, ti), 1)
+
+	expectedValue, err := stokens.NewCodec().Count(ctx, base.Content, "lookup", "{}")
+	require.NoError(t, err)
+	readings := meterMessages(t, ti)
+	require.Len(t, readings, 1)
+	require.Equal(t, int64(expectedValue), readings[0].GetValue())
+	require.True(t, proto.Equal(initialReadings[0], readings[0]), "promotion must preserve the entire initial usage fact")
+
+	storedMessages := listAllMessages(t, ctx, ti.conn, chatID, ti.projectID)
+	require.Len(t, storedMessages, 1)
+	require.Equal(t, initialMessages[0].ID, storedMessages[0].ID)
+	require.Equal(t, "codex", storedMessages[0].Source.String)
+	require.Equal(t, base.Content, storedMessages[0].Content)
+	require.JSONEq(t, string(base.ToolCalls), string(storedMessages[0].ToolCalls))
+	publications := conversationMessages(t, ti)
+	require.Len(t, publications, 1, "metadata-only promotion must not republish the message")
+	require.Equal(t, initialMessages[0].ID.String(), publications[0].GetMessageId())
+	require.Equal(t, "litellm", publications[0].GetIngestion().GetSource())
+}
+
+func TestChatMessageWriterPreservesNativeReadingOnLaterLiteLLMObservation(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	chatID := seedChat(t, ctx, ti, "u", "", "native-first correlated message")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+
+	native := minimalChatMessageParams(chatID, ti.projectID)
+	native.Content = "Native prompt"
+	native.Source = conv.ToPGText("codex")
+	externalMessageID := "agent-prompt:v1:native-first"
+	written, err := writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params: native,
+	}, externalMessageID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), written)
+	initialReadings := meterMessages(t, ti)
+	require.Len(t, initialReadings, 1)
+	require.Equal(t, "codex", initialReadings[0].GetAttributes()[metering.AttributeHookSource])
+
+	proxy := native
+	proxy.Content = "Proxy observation must not replace the native prompt"
+	proxy.Source = conv.ToPGText("litellm")
+	written, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params: proxy,
+	}, externalMessageID)
+	require.NoError(t, err)
+	require.Zero(t, written)
+	readings := meterMessages(t, ti)
+	require.Len(t, readings, 1)
+	require.True(t, proto.Equal(initialReadings[0], readings[0]), "a later proxy observation must not change usage")
+
+	storedMessages := listAllMessages(t, ctx, ti.conn, chatID, ti.projectID)
+	require.Len(t, storedMessages, 1)
+	require.Equal(t, native.Content, storedMessages[0].Content)
+	require.Equal(t, "codex", storedMessages[0].Source.String)
+	require.Len(t, conversationMessages(t, ti), 1)
 }
 
 func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {
@@ -309,37 +476,39 @@ func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 
-	params := []repo.CreateChatMessageParams{{
-		ID:               uuid.Nil,
-		ChatID:           chatID,
-		Role:             "user",
-		ProjectID:        ti.projectID,
-		Content:          "Rollback this message",
-		ContentRaw:       nil,
-		ContentAssetUrl:  pgtype.Text{},
-		StorageError:     pgtype.Text{},
-		Model:            pgtype.Text{},
-		MessageID:        pgtype.Text{},
-		ToolCallID:       pgtype.Text{},
-		UserID:           pgtype.Text{},
-		ExternalUserID:   pgtype.Text{},
-		FinishReason:     pgtype.Text{},
-		ToolCalls:        nil,
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
-		Origin:           pgtype.Text{},
-		UserAgent:        pgtype.Text{},
-		IpAddress:        pgtype.Text{},
-		Source:           pgtype.Text{},
-		ContentHash:      nil,
-		Generation:       0,
-		Replayed:         false,
-		CreatedAt:        pgtype.Timestamptz{},
+	writes := []chat.MessageWrite{{
+		Params: repo.CreateChatMessageParams{
+			ID:               uuid.Nil,
+			ChatID:           chatID,
+			Role:             "user",
+			ProjectID:        ti.projectID,
+			Content:          "Rollback this message",
+			ContentRaw:       nil,
+			ContentAssetUrl:  pgtype.Text{},
+			StorageError:     pgtype.Text{},
+			Model:            pgtype.Text{},
+			MessageID:        pgtype.Text{},
+			ToolCallID:       pgtype.Text{},
+			UserID:           pgtype.Text{},
+			ExternalUserID:   pgtype.Text{},
+			FinishReason:     pgtype.Text{},
+			ToolCalls:        nil,
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			TotalTokens:      0,
+			Origin:           pgtype.Text{},
+			UserAgent:        pgtype.Text{},
+			IpAddress:        pgtype.Text{},
+			Source:           pgtype.Text{},
+			ContentHash:      nil,
+			Generation:       0,
+			Replayed:         false,
+			CreatedAt:        pgtype.Timestamptz{},
+		},
+		UserEmail: "",
 	}}
-	tx, err := ti.conn.Begin(ctx) //nolint:glint // transaction contains only package APIs and SQLc-generated queries
-	require.NoError(t, err)
-	_, err = writer.WriteInTx(ctx, tx, params)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := writer.WriteInTx(ctx, tx, writes)
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback(ctx))
 
@@ -347,4 +516,5 @@ func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, messages)
 	require.Empty(t, meterMessages(t, ti))
+	require.Empty(t, conversationMessages(t, ti))
 }

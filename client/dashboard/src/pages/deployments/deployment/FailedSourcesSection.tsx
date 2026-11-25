@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/Checkbox";
 import type { FailedSource } from "@/components/sources/useFailedDeploymentSources";
@@ -15,9 +16,7 @@ import {
   CircleAlert,
   Code,
   FileCode,
-  Loader2,
   Network,
-  Server,
   Wrench,
 } from "lucide-react";
 import { useRoutes } from "@/routes";
@@ -29,12 +28,26 @@ interface FailedSourcesSectionProps {
   generalErrors: DeploymentLogEvent[];
   deployment: Deployment;
   onRemoveSuccess: () => void;
+  /**
+   * Tool counts could not be loaded. A zero is then not "unused", so nothing
+   * is preselected for removal.
+   */
+  toolCountsUnknown?: boolean;
+}
+
+function unusedSourceIds(
+  failedSources: FailedSource[],
+  toolCountsUnknown: boolean,
+): Set<string> {
+  if (toolCountsUnknown) return new Set();
+  return new Set(
+    failedSources.filter((s) => s.toolCount === 0).map((s) => s.id),
+  );
 }
 
 const SOURCE_ICONS = {
   openapi: FileCode,
   function: Code,
-  externalmcp: Server,
   // Remote/tunneled/unproxied MCP servers are project-scoped, not
   // deployment-bound, so they cannot appear in failed deployment sources —
   // but the icon map must cover the full SourceType union for the indexed
@@ -49,13 +62,13 @@ export function FailedSourcesSection({
   generalErrors,
   deployment,
   onRemoveSuccess,
+  toolCountsUnknown = false,
 }: FailedSourcesSectionProps): JSX.Element {
   const client = useSdkClient();
   const routes = useRoutes();
   // Auto-select only sources with no toolset references
-  const [selected, setSelected] = useState<Set<string>>(
-    () =>
-      new Set(failedSources.filter((s) => s.toolCount === 0).map((s) => s.id)),
+  const [selected, setSelected] = useState<Set<string>>(() =>
+    unusedSourceIds(failedSources, toolCountsUnknown),
   );
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [pending, setPending] = useState(false);
@@ -63,12 +76,10 @@ export function FailedSourcesSection({
 
   // Reset selection when sources change
   useEffect(() => {
-    setSelected(
-      new Set(failedSources.filter((s) => s.toolCount === 0).map((s) => s.id)),
-    );
+    setSelected(unusedSourceIds(failedSources, toolCountsUnknown));
     setExpanded(new Set());
     setPending(false);
-  }, [failedSources]);
+  }, [failedSources, toolCountsUnknown]);
 
   const toggleSelected = useCallback((id: string) => {
     setSelected((prev) => {
@@ -124,7 +135,6 @@ export function FailedSourcesSection({
     try {
       const excludeOpenapiv3Assets: string[] = [];
       const excludeFunctions: string[] = [];
-      const excludeExternalMcps: string[] = [];
 
       for (const source of selectedSources) {
         switch (source.type) {
@@ -133,9 +143,6 @@ export function FailedSourcesSection({
             break;
           case "function":
             excludeFunctions.push(source.id);
-            break;
-          case "externalmcp":
-            excludeExternalMcps.push(source.slug);
             break;
           case "remotemcp":
             break;
@@ -154,7 +161,6 @@ export function FailedSourcesSection({
             excludeOpenapiv3Assets,
           }),
           ...(excludeFunctions.length > 0 && { excludeFunctions }),
-          ...(excludeExternalMcps.length > 0 && { excludeExternalMcps }),
         },
       });
 
@@ -227,11 +233,7 @@ export function FailedSourcesSection({
                       {source.name}
                     </span>
                     <span className="text-muted-foreground text-xs">
-                      {source.type === "openapi"
-                        ? "API Source"
-                        : source.type === "function"
-                          ? "Function"
-                          : "External MCP"}{" "}
+                      {source.type === "openapi" ? "API Source" : "Function"}{" "}
                       &middot;{" "}
                       {`${source.errors.length} error${source.errors.length !== 1 ? "s" : ""}`}
                     </span>
@@ -302,7 +304,7 @@ export function FailedSourcesSection({
               >
                 {pending && (
                   <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
+                    <Spinner className="mr-0 size-4" />
                   </Button.LeftIcon>
                 )}
                 <Button.Text>

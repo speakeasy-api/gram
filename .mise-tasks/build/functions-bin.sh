@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#MISE description="Build the Gram Functions host program"
+#MISE description="Build the Speakeasy Functions host program"
 #MISE dir="{{ config_root }}/functions"
 #MISE depends=["go:tidy"]
 

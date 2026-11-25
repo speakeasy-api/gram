@@ -1,3 +1,7 @@
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
+import { useOrganization } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { MemberFacepile } from "@/components/member-facepile";
 import {
   DetailSidebarInfoLabel,
@@ -16,7 +20,6 @@ import {
   pluginSectionHref,
   PLUGIN_ASSIGNMENTS_SECTION_ID,
   PLUGIN_OVERVIEW_SECTION_ID,
-  PLUGIN_SERVERS_SECTION_ID,
   PLUGIN_SETTINGS_SECTION_ID,
   PLUGIN_SKILLS_SECTION_ID,
   type PluginSection,
@@ -39,28 +42,109 @@ import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useRoles } from "@gram/client/react-query/roles";
 import {
   LayoutDashboard,
-  Network,
   Settings as SettingsIcon,
-  Sparkles,
+  Terminal,
   Users,
 } from "lucide-react";
+import { pluginUpToDate } from "@/pages/plugins/plugin-sync-state";
 import * as React from "react";
 import { useLocation, useParams } from "react-router";
 
 export function PluginDetailSidebarNav(): React.JSX.Element | null {
+  const { hasScope, isLoading } = useRBAC();
+  const organization = useOrganization();
+  const canWritePlugin = usePluginWriteAccess();
+  if (isLoading) return null;
+  return canWritePlugin || hasScope("org:read", organization.id) ? (
+    <OrganizationPluginSidebarNav />
+  ) : (
+    <DistributionPluginSidebarNav />
+  );
+}
+
+function DistributionPluginSidebarNav(): React.JSX.Element | null {
+  const routes = useRoutes();
+  const location = useLocation();
+  const { pluginId } = useParams<{ pluginId: string }>();
+  if (!pluginId) return null;
+  const skillId = new URLSearchParams(location.search).get("skillId");
+  return (
+    <DetailSidebarNav
+      backHref={
+        skillId ? routes.skills.detail.href(skillId) : routes.skills.href()
+      }
+      backLabel={skillId ? "Back to skill" : "Back to skills"}
+      itemsTitle="Distribution"
+      items={[
+        {
+          key: PLUGIN_SKILLS_SECTION_ID,
+          title: "Skills",
+          Icon: Terminal,
+          href: `${pluginSectionHref(routes, pluginId, PLUGIN_SKILLS_SECTION_ID)}${location.search}`,
+          active: true,
+        },
+      ]}
+    />
+  );
+}
+
+function OrganizationPluginSidebarNav(): React.JSX.Element | null {
+  const { hasScope } = useRBAC();
+  const organization = useOrganization();
+  return hasScope("org:admin", organization.id) ? (
+    <PluginSidebarWithAssignments />
+  ) : (
+    <PluginSidebarContent />
+  );
+}
+
+function PluginSidebarWithAssignments(): React.JSX.Element | null {
+  const scope = usePluginQueryScope();
+  const { data: membersData } = useMembers(scope, undefined, {
+    queryKeyHashFn: (key) => JSON.stringify([scope, key]),
+  });
+  const { data: rolesData } = useRoles(scope, undefined, {
+    queryKeyHashFn: (key) => JSON.stringify([scope, key]),
+  });
+  const { data: audiencesData } = useAudiences(scope);
+  return (
+    <PluginSidebarContent
+      membersData={membersData}
+      rolesData={rolesData}
+      audiencesData={audiencesData}
+    />
+  );
+}
+
+function PluginSidebarContent({
+  membersData,
+  rolesData,
+  audiencesData,
+}: {
+  membersData?: ReturnType<typeof useMembers>["data"];
+  rolesData?: ReturnType<typeof useRoles>["data"];
+  audiencesData?: ReturnType<typeof useAudiences>["data"];
+} = {}): React.JSX.Element | null {
+  const { hasScope } = useRBAC();
+  const organization = useOrganization();
+  const canWritePlugin = usePluginWriteAccess();
+  const canAdmin = hasScope("org:admin", organization.id);
   const routes = useRoutes();
   const location = useLocation();
   const { pluginId } = useParams<{ pluginId: string }>();
 
-  const { data: plugin } = usePlugin({ id: pluginId ?? "" }, undefined, {
-    throwOnError: false,
-    enabled: !!pluginId,
-  });
-  const { data: publishStatus } = usePublishStatus();
-  const { data: membersData } = useMembers();
-  const { data: rolesData } = useRoles();
-  const { data: audiencesData } = useAudiences();
-  const showAssignments = usePluginAssignmentsVisible();
+  const scope = usePluginQueryScope();
+  const { data: plugin } = usePlugin(
+    { ...scope, id: pluginId ?? "" },
+    undefined,
+    {
+      throwOnError: false,
+      enabled: !!pluginId,
+    },
+  );
+  const { data: publishStatus } = usePublishStatus(scope);
+  const assignmentsVisible = usePluginAssignmentsVisible();
+  const showAssignments = canAdmin && assignmentsVisible;
 
   const memberByUrn = React.useMemo(
     () => memberMapByUrn(membersData?.members ?? []),
@@ -92,12 +176,13 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
 
   const items: DetailSidebarNavItem[] = [
     sectionItem(PLUGIN_OVERVIEW_SECTION_ID, "Overview", LayoutDashboard),
-    sectionItem(PLUGIN_SERVERS_SECTION_ID, "MCP Servers", Network),
-    sectionItem(PLUGIN_SKILLS_SECTION_ID, "Skills", Sparkles),
+    sectionItem(PLUGIN_SKILLS_SECTION_ID, "Skills", Terminal),
     ...(showAssignments
       ? [sectionItem(PLUGIN_ASSIGNMENTS_SECTION_ID, "Assignments", Users)]
       : []),
-    sectionItem(PLUGIN_SETTINGS_SECTION_ID, "Settings", SettingsIcon),
+    ...(canWritePlugin
+      ? [sectionItem(PLUGIN_SETTINGS_SECTION_ID, "Settings", SettingsIcon)]
+      : []),
   ];
 
   const assignments = plugin?.assignments ?? [];
@@ -112,8 +197,9 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
     : undefined;
   // Only the explicit booleans are a known freshness — an undefined upToDate
   // (connection predates fingerprinting) must not read as "Up to date".
-  const hasUnpublishedChanges = publishStatus?.upToDate === false;
-  const isUpToDate = publishStatus?.upToDate === true;
+  const upToDate = pluginUpToDate(publishStatus, plugin?.slug);
+  const hasUnpublishedChanges = upToDate === false;
+  const isUpToDate = upToDate === true;
   const showMarketplaceInfo =
     !!publishStatus?.connected &&
     (hasUnpublishedChanges || isUpToDate || !!cleanVersion);

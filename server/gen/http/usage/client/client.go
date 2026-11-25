@@ -21,6 +21,14 @@ type Client struct {
 	// getPeriodUsage endpoint.
 	GetPeriodUsageDoer goahttp.Doer
 
+	// GetMeterUsage Doer is the HTTP client used to make requests to the
+	// getMeterUsage endpoint.
+	GetMeterUsageDoer goahttp.Doer
+
+	// GetSpendBreakdown Doer is the HTTP client used to make requests to the
+	// getSpendBreakdown endpoint.
+	GetSpendBreakdownDoer goahttp.Doer
+
 	// GetTokensUnderManagement Doer is the HTTP client used to make requests to
 	// the getTokensUnderManagement endpoint.
 	GetTokensUnderManagementDoer goahttp.Doer
@@ -53,9 +61,9 @@ type Client struct {
 	// createCustomerSession endpoint.
 	CreateCustomerSessionDoer goahttp.Doer
 
-	// CreateCheckout Doer is the HTTP client used to make requests to the
-	// createCheckout endpoint.
-	CreateCheckoutDoer goahttp.Doer
+	// GetStripeCheckoutStatus Doer is the HTTP client used to make requests to the
+	// getStripeCheckoutStatus endpoint.
+	GetStripeCheckoutStatusDoer goahttp.Doer
 
 	// CreateStripeCheckout Doer is the HTTP client used to make requests to the
 	// createStripeCheckout endpoint.
@@ -106,6 +114,8 @@ func NewClient(
 ) *Client {
 	return &Client{
 		GetPeriodUsageDoer:            doer,
+		GetMeterUsageDoer:             doer,
+		GetSpendBreakdownDoer:         doer,
 		GetTokensUnderManagementDoer:  doer,
 		SetBillingMetadataDoer:        doer,
 		GetBillingEmailDoer:           doer,
@@ -114,7 +124,7 @@ func NewClient(
 		GetInferenceSpendCapsDoer:     doer,
 		GetUsageTiersDoer:             doer,
 		CreateCustomerSessionDoer:     doer,
-		CreateCheckoutDoer:            doer,
+		GetStripeCheckoutStatusDoer:   doer,
 		CreateStripeCheckoutDoer:      doer,
 		GetStripeSubscriptionDoer:     doer,
 		GetPaygBillingSummaryDoer:     doer,
@@ -149,6 +159,54 @@ func (c *Client) GetPeriodUsage() goa.Endpoint {
 		resp, err := c.GetPeriodUsageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "getPeriodUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMeterUsage returns an endpoint that makes HTTP requests to the usage
+// service getMeterUsage server.
+func (c *Client) GetMeterUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMeterUsageRequest(c.encoder)
+		decodeResponse = DecodeGetMeterUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMeterUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMeterUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getMeterUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSpendBreakdown returns an endpoint that makes HTTP requests to the usage
+// service getSpendBreakdown server.
+func (c *Client) GetSpendBreakdown() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSpendBreakdownRequest(c.encoder)
+		decodeResponse = DecodeGetSpendBreakdownResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSpendBreakdownRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSpendBreakdownDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getSpendBreakdown", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -341,15 +399,15 @@ func (c *Client) CreateCustomerSession() goa.Endpoint {
 	}
 }
 
-// CreateCheckout returns an endpoint that makes HTTP requests to the usage
-// service createCheckout server.
-func (c *Client) CreateCheckout() goa.Endpoint {
+// GetStripeCheckoutStatus returns an endpoint that makes HTTP requests to the
+// usage service getStripeCheckoutStatus server.
+func (c *Client) GetStripeCheckoutStatus() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeCreateCheckoutRequest(c.encoder)
-		decodeResponse = DecodeCreateCheckoutResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetStripeCheckoutStatusRequest(c.encoder)
+		decodeResponse = DecodeGetStripeCheckoutStatusResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildCreateCheckoutRequest(ctx, v)
+		req, err := c.BuildGetStripeCheckoutStatusRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -357,9 +415,9 @@ func (c *Client) CreateCheckout() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.CreateCheckoutDoer.Do(req)
+		resp, err := c.GetStripeCheckoutStatusDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("usage", "createCheckout", err)
+			return nil, goahttp.ErrRequestError("usage", "getStripeCheckoutStatus", err)
 		}
 		return decodeResponse(resp)
 	}

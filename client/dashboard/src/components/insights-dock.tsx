@@ -1,3 +1,8 @@
+import {
+  ComposerDraftHandover,
+  isEmptyThreadError,
+} from "@/hooks/useComposerDraftHandover";
+import { Spinner } from "@/components/ui/Spinner";
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { showProjectAssistantConnecting } from "@/hooks/projectAssistantAccess";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
@@ -19,10 +24,18 @@ import {
   GramElementsProvider,
   useThreadId,
 } from "@/elements";
+import { ROOT_SELECTOR } from "@/elements/constants/tailwind";
+import {
+  createElementsContextBridge,
+  ElementsContextSource,
+  ElementsContextTarget,
+  usePublishedElementsSource,
+} from "@/elements/contexts/ElementsContextBridge";
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
-import { useSession } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
@@ -44,24 +57,19 @@ import {
   ArrowLeft,
   ArrowUp,
   HistoryIcon,
-  Loader2,
   Maximize2,
   SquarePen,
   Terminal,
   X,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  ReactElement,
-} from "react";
+import type { ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
 import { InsightsShortcutKeys } from "./insights-dock-shortcut-hint";
 import { useAskAiListener } from "./command-palette/askAiBridge";
+import { TERMINAL_SKIN_COMPONENTS } from "./home/terminal-skin-components";
+import { TERMINAL_SKIN_CSS } from "./home/terminal-skin-theme";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
@@ -426,11 +434,37 @@ function InsightsDock({
   // without re-opening the dock. Collapses commit through a grace timer that
   // a route change can cancel (or, for slow clicks, undo).
   const [expanded, setExpanded] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const restoreFocusRef = useRef(false);
+  const setFallbackInput = useCallback((input: HTMLInputElement | null) => {
+    if (!input) {
+      restoreFocusRef.current = document.activeElement === inputRef.current;
+    }
+    inputRef.current = input;
+  }, []);
   /** Wraps the shared composer; also the focus target for Cmd+/. */
   const composerHostRef = useRef<HTMLDivElement>(null);
   /** Whether the shared composer holds a draft (see ComposerDraftReporter). */
   const [sharedDraft, setSharedDraft] = useState(false);
+  const continueButtonRef = useRef<HTMLButtonElement>(null);
+  const showContinue = continueMode && !value.trim() && !sharedDraft;
+  const showComposer = runtimeReady && !value.trim() && !showContinue;
+  useEffect(() => {
+    if ((!showComposer && !showContinue) || !restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    let frame = 0;
+    let attempts = 0;
+    const focus = () => {
+      if (document.activeElement !== document.body) return;
+      if (showContinue) continueButtonRef.current?.focus();
+      else focusChatComposer(composerHostRef.current);
+      if (document.activeElement === document.body && ++attempts < 10) {
+        frame = requestAnimationFrame(focus);
+      }
+    };
+    focus();
+    return () => cancelAnimationFrame(frame);
+  }, [showComposer, showContinue]);
   const cardRef = useRef<HTMLDivElement>(null);
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Stamped only by grace-timer collapses (blur/outside click), never by
@@ -466,14 +500,20 @@ function InsightsDock({
   // Keyboard shortcut path: the provider bumps focusKey when Cmd+/ fires.
   // The AUI composer's input lives in a shadow root, so it can't be reached
   // with a plain ref.
+  const handledFocusKey = useRef(0);
   useEffect(() => {
-    if (focusKey === 0) return;
-    if (runtimeReady) {
+    if (focusKey === handledFocusKey.current) return;
+    handledFocusKey.current = focusKey;
+    if (showContinue) {
+      continueButtonRef.current?.focus();
+      return;
+    }
+    if (showComposer) {
       focusChatComposer(composerHostRef.current);
       return;
     }
     inputRef.current?.focus();
-  }, [focusKey, runtimeReady]);
+  }, [focusKey, showComposer, showContinue]);
 
   // Navigation keeps the dock expanded: cancel any pending collapse, and undo
   // one that just fired (slow click — the grace timer can win the race
@@ -485,12 +525,18 @@ function InsightsDock({
       isFirstLocation.current = false;
       return;
     }
+    // Settings pages are long forms with a Save button per section; an
+    // expanded dock would sit over them, so they always open on the pill.
+    if (/\/settings(\/|$)/.test(location.pathname)) {
+      collapseNow();
+      return;
+    }
     cancelCollapse();
     if (Date.now() - collapsedAt.current < DOCK_REOPEN_WINDOW_MS) {
       collapsedAt.current = 0;
       setExpanded(true);
     }
-  }, [location.pathname, cancelCollapse]);
+  }, [location.pathname, cancelCollapse, collapseNow]);
 
   // After surviving a navigation the dock is expanded without holding focus,
   // so blur can never fire again — collapse on pointerdown outside the card
@@ -527,16 +573,17 @@ function InsightsDock({
 
   // Within the continue window the resting pill is a "Continue chat" button
   // that reopens the recent conversation instead of an "Ask anything" input.
-  const composerField = continueMode ? (
+  const composerField = showContinue ? (
     <button
       type="button"
       onClick={onContinue}
+      ref={continueButtonRef}
       tabIndex={open ? -1 : 0}
       className="text-muted-foreground hover:text-foreground min-w-0 flex-1 cursor-pointer text-left text-sm transition-colors"
     >
       Continue chat
     </button>
-  ) : runtimeReady ? (
+  ) : showComposer ? (
     // The shared composer, sending straight through the runtime — no prompt
     // hand-off, so the dock gets dictation and every other composer feature.
     <div
@@ -549,7 +596,7 @@ function InsightsDock({
     </div>
   ) : (
     <input
-      ref={inputRef}
+      ref={setFallbackInput}
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
@@ -572,6 +619,15 @@ function InsightsDock({
         "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pt-14 pb-12",
       )}
     >
+      {runtimeReady && value.trim() !== "" && (
+        <ComposerDraftHandover
+          value={value}
+          onAccepted={() => {
+            setSharedDraft(true);
+            setValue("");
+          }}
+        />
+      )}
       {/* Frosted veil under the dock: blurs the page content directly behind
           the card, radiating out as a soft ellipse centred on the dock so
           there is no rectangular edge. Pointer-events stay off so the page
@@ -877,6 +933,10 @@ export function InsightsProvider({
   // resolved when the dock is opened OR when on a chat route, so the page has a
   // live runtime without the user touching the dock first.
   const onChatRoute = /\/chat(\/|$)/.test(pathname);
+  // The add flows (/mcp/add and everything under it) are focused tasks with
+  // their own primary action and a deliberately empty sidebar. The docked
+  // composer sits over that work and competes with it, so hide it there.
+  const onAddFlowRoute = /\/mcp\/add(\/|$)/.test(pathname);
   // On a chat route the page owns the chat and the dock is hidden, so collapse
   // the dock (a maximize leaves it expanded). The shared runtime stays mounted
   // via onChatRoute, so this collapse never unmounts it.
@@ -898,11 +958,28 @@ export function InsightsProvider({
   const suggestions =
     override?.suggestions ?? routeSuggestions ?? defaultSuggestions;
   const contextInfo = override?.contextInfo;
-  const hideTrigger = (override?.hideTrigger ?? false) || dockHiddenByPage;
+  const pageHidesTrigger =
+    (override?.hideTrigger ?? false) || dockHiddenByPage || onAddFlowRoute;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
+  const organization = useOrganization();
+  const targetProjectId = organization.projects.find(
+    (project) => project.slug === mcpConfig.projectSlug,
+  )?.id;
+  const { grants, isLoading: permissionsLoading, hasScope } = useRBAC();
+  const canReadSkills =
+    !permissionsLoading &&
+    !!targetProjectId &&
+    hasScopeInGrants(
+      grants ?? [],
+      "skill:read",
+      targetProjectId,
+      targetProjectId,
+    );
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const selectedSkillIdsRef = useRef(selectedSkillIds);
-  selectedSkillIdsRef.current = selectedSkillIds;
+  // The transport retains this callback across renders. Gate its ref immediately,
+  // rather than waiting for the effect that clears the composer's selection.
+  selectedSkillIdsRef.current = canReadSkills ? selectedSkillIds : [];
   const getSelectedSkillIds = useCallback(
     () => selectedSkillIdsRef.current,
     [],
@@ -916,7 +993,7 @@ export function InsightsProvider({
 
   useEffect(() => {
     setSelectedSkillIds([]);
-  }, [mcpConfig.projectSlug]);
+  }, [mcpConfig.projectSlug, canReadSkills]);
 
   // Server-side Project Assistant. Resolved lazily the first time the chat
   // panel is opened or a chat route is visited; once resolved it stays, so the
@@ -928,25 +1005,31 @@ export function InsightsProvider({
     transport: serverTransport,
     assistantId: managedAssistantId,
     ready: assistantReady,
+    allowed: assistantAllowed,
     error: assistantError,
+    retry: retryAssistant,
     needsAdmin: assistantNeedsAdmin,
   } = useServerAssistantTransport(mcpConfig.projectSlug, true, {
     getSkillIds: getSelectedSkillIds,
     onSkillIdsSent: handleSkillIdsSent,
   });
+  const hideTrigger = pageHidesTrigger || !assistantAllowed;
 
   const skillsQuery = useSkillsInfinite(
     { limit: 200, gramProject: mcpConfig.projectSlug },
     undefined,
     {
-      enabled: assistantReady,
+      enabled: assistantReady && canReadSkills,
       throwOnError: false,
     },
   );
-  useDrainInfiniteQuery(skillsQuery, assistantReady);
+  useDrainInfiniteQuery(skillsQuery, assistantReady && canReadSkills);
   const composerSkills = useMemo(
     () =>
-      (skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? [])
+      (canReadSkills
+        ? (skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? [])
+        : []
+      )
         .filter((skill) => skill.hasValidVersion)
         .map((skill) => ({
           id: skill.id,
@@ -954,7 +1037,7 @@ export function InsightsProvider({
           displayName: skill.displayName,
           summary: skill.summary,
         })),
-    [skillsQuery.data?.pages],
+    [skillsQuery.data?.pages, canReadSkills],
   );
 
   // Derive "Continue chat" from the server: if the viewer's most recent
@@ -987,7 +1070,10 @@ export function InsightsProvider({
   // extra request, and avoids the cross-origin auth mismatch a direct fetch
   // from inside Elements would hit (its request headers are scoped to the
   // chat API, not `access.listMembers`).
-  const { data: membersData } = useMembers();
+  const canReadMembers = hasScope("org:read", organization.id);
+  const { data: membersData } = useMembers(undefined, undefined, {
+    enabled: canReadMembers,
+  });
   const resolveCreator = useCallback(
     ({
       userId,
@@ -996,7 +1082,8 @@ export function InsightsProvider({
       userId?: string;
       externalUserId?: string;
     }) => {
-      if (!userId && !externalUserId) return undefined;
+      // Disabled queries retain cached data; authorization also gates its use.
+      if (!canReadMembers || (!userId && !externalUserId)) return undefined;
       // Chats started from the dashboard itself have no `userId` at capture
       // time and stash the caller's email in `externalUserId` instead —
       // resolveChatOwner falls back to a case-insensitive email match so
@@ -1013,7 +1100,7 @@ export function InsightsProvider({
         }
       );
     },
-    [membersData],
+    [canReadMembers, membersData],
   );
 
   // The backend only lets a chat's creator send into it (see
@@ -1041,10 +1128,20 @@ export function InsightsProvider({
   // exception: wrapping them would nest RemoteThreadListRuntimes before their
   // useHideInsightsDock layout effect can register with this parent.
   const pageOwnsRuntime =
-    routes.playground.active ||
+    // Inspect's Chat tab mounts its own provider.
+    routes.mcp.details.inspect.active ||
+    routes.mcp.gateway.inspect.active ||
     routes.assistants.newAssistant.active ||
     routes.assistants.detail.active;
-  const runtimeMounted = assistantReady && !pageOwnsRuntime;
+  const shouldMountRuntime = assistantReady && !pageOwnsRuntime;
+  // The runtime mounts beside the page and reaches it through this bridge (see
+  // the return below). Chat surfaces wait for the current instance to publish,
+  // which also takes them down and back up around a new conversation.
+  const [runtimeBridge] = useState(createElementsContextBridge);
+  const runtimeInstance = `${mcpConfig.projectSlug}:${runtimeKey}`;
+  const publishedRuntime = usePublishedElementsSource(runtimeBridge);
+  const runtimeMounted =
+    shouldMountRuntime && publishedRuntime === runtimeInstance;
 
   // Read inside the transport wrapper via ref so override churn doesn't
   // re-create the transport identity on every parent re-render.
@@ -1113,6 +1210,13 @@ export function InsightsProvider({
   const elementsConfig = useMemo<ElementsConfig>(
     () => ({
       ...mcpConfig,
+      // The server-side Project Assistant discovers and executes its own
+      // tools. Passing the project inventory to Elements also initializes
+      // every MCP in the browser, even with the dock closed, and retries the
+      // whole inventory when those unnecessary connections fail. Keep this
+      // runtime mounted for composer/history state without client discovery.
+      mcp: undefined,
+      mcps: [],
       variant: "standalone",
       // Route the conversation through the persistent server-side Project
       // Assistant. Its model and system prompt are owned server-side, so we
@@ -1177,8 +1281,10 @@ export function InsightsProvider({
           skills: composerSkills,
           selectedSkillIds,
           onSelectedSkillIdsChange: setSelectedSkillIds,
-          loading: skillsQuery.isPending || skillsQuery.isFetchingNextPage,
-          error: !!skillsQuery.error,
+          loading:
+            canReadSkills &&
+            (skillsQuery.isPending || skillsQuery.isFetchingNextPage),
+          error: canReadSkills && !!skillsQuery.error,
           maxSelected: 10,
         },
       },
@@ -1193,8 +1299,12 @@ export function InsightsProvider({
           CHAT_MARKDOWN_CSS +
           CHAT_FULLPAGE_COMPOSER_CSS +
           CHAT_LANDING_COMPOSER_CSS +
-          CHAT_LINK_CSS,
+          CHAT_LINK_CSS +
+          TERMINAL_SKIN_CSS,
       },
+      // Inert unless a surface wraps <Chat /> in TerminalSkinContext.Provider
+      // (the project homepage terminal); everywhere else renders stock.
+      components: { ...mcpConfig.components, ...TERMINAL_SKIN_COMPONENTS },
     }),
     [
       mcpConfig,
@@ -1206,6 +1316,7 @@ export function InsightsProvider({
       managedAssistantId,
       composerSkills,
       selectedSkillIds,
+      canReadSkills,
       skillsQuery.isPending,
       skillsQuery.isFetchingNextPage,
       skillsQuery.error,
@@ -1245,16 +1356,46 @@ export function InsightsProvider({
 
   const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
 
+  // Dismiss genies the dock down into the sidebar-footer resume button (and
+  // the button genies it back) — same view transition as the onboarding
+  // banner. Collapse the panel too so a resume always restores the pill.
+  const {
+    dismissed: dockDismissed,
+    dismiss: dismissDock,
+    resume: resumeDock,
+  } = useInsightsDockCta();
+  const handleDockDismiss = useCallback(() => {
+    setIsExpanded(false);
+    dismissDock();
+  }, [dismissDock]);
+  // A dismissed dock renders no panel, so opening it has to bring the dock back.
+  const dockRef = useRef({
+    hidden: hideTrigger,
+    dismissed: dockDismissed,
+    resume: resumeDock,
+  });
+  dockRef.current = {
+    hidden: hideTrigger,
+    dismissed: dockDismissed,
+    resume: resumeDock,
+  };
+  const expandPanel = useCallback((expanded: boolean) => {
+    const dock = dockRef.current;
+    // A page that hides the dock keeps it dismissed, and keeps its resume button.
+    if (expanded && dock.dismissed && !dock.hidden) dock.resume();
+    setIsExpanded(expanded);
+  }, []);
+
   // Bridge: the command palette's "Ask AI" row dispatches a window event from
   // outside this provider. Open the chat panel and, when a prompt was typed,
   // drop the user straight into a running conversation.
   useAskAiListener(
     useCallback(
       (prompt: string) => {
-        setIsExpanded(true);
+        expandPanel(true);
         if (prompt.trim()) handleSendPrompt(prompt);
       },
-      [handleSendPrompt],
+      [expandPanel, handleSendPrompt],
     ),
   );
 
@@ -1268,16 +1409,6 @@ export function InsightsProvider({
     },
     [handleSendPrompt],
   );
-
-  // Dismiss genies the dock down into the sidebar-footer resume button (and
-  // the button genies it back) — same view transition as the onboarding
-  // banner. Collapse the panel too so a resume always restores the pill.
-  const { dismissed: dockDismissed, dismiss: dismissDock } =
-    useInsightsDockCta();
-  const handleDockDismiss = useCallback(() => {
-    setIsExpanded(false);
-    dismissDock();
-  }, [dismissDock]);
 
   // Start a brand-new Project Assistant conversation. Bumping the runtime key
   // remounts the shared runtime onto a fresh thread; the new thread gets its
@@ -1343,7 +1474,7 @@ export function InsightsProvider({
     () => ({
       available: !hideTrigger,
       isExpanded,
-      setIsExpanded,
+      setIsExpanded: expandPanel,
       setOverride: handleSetOverride,
       sendPrompt: handleSendPrompt,
       // Expose the gated "runtime is mounted" signal, not the raw eager
@@ -1351,16 +1482,21 @@ export function InsightsProvider({
       // only once the provider actually exists.
       assistantReady: runtimeMounted,
       assistantNeedsAdmin,
+      assistantError,
+      retryAssistant,
       newConversation: handleStartFresh,
       registerDockHide,
     }),
     [
       hideTrigger,
       isExpanded,
+      expandPanel,
       handleSetOverride,
       handleSendPrompt,
       runtimeMounted,
       assistantNeedsAdmin,
+      assistantError,
+      retryAssistant,
       handleStartFresh,
       registerDockHide,
     ],
@@ -1397,7 +1533,16 @@ export function InsightsProvider({
       {assistantError && (
         <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
-          <span>{assistantError}</span>
+          <span>
+            {assistantError}{" "}
+            <button
+              type="button"
+              onClick={retryAssistant}
+              className="cursor-pointer font-medium underline underline-offset-2"
+            >
+              Try again
+            </button>
+          </span>
         </div>
       )}
 
@@ -1426,8 +1571,8 @@ export function InsightsProvider({
   // Expanded chat panel rendered inside the dock card. Granola-style header:
   // icon-only controls with no title bar — history picker on the left; new
   // conversation, full-page chat, and close on the right. The chat runtime is
-  // the shared GramElementsProvider mounted around the whole dock + outlet (see
-  // the return below), so this panel just renders against it.
+  // the shared GramElementsProvider bridged to the whole dock + outlet (see the
+  // return below), so this panel just renders against it.
   const panelContent = (
     <div className="flex h-full flex-col">
       {runtimeMounted ? (
@@ -1519,7 +1664,7 @@ export function InsightsProvider({
             noMcpAccessConfigured: noToolsetsConfigured,
           }) && (
             <div className="text-muted-foreground flex flex-1 items-center justify-center gap-2 text-sm">
-              <Loader2 className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
               <span>Connecting to the Project Assistant…</span>
             </div>
           )}
@@ -1528,14 +1673,20 @@ export function InsightsProvider({
     </div>
   );
 
-  // Page content (outlet) + the docked composer. Relative so the composer
-  // floats at the bottom-center of the content area.
+  // Page content (outlet) + the docked composer. The document scrolls, so the
+  // composer rides a zero-height sticky rail at the end of the content: it
+  // pins to the viewport bottom and spans the content area's width. `mt-auto`
+  // pushes the rail to the bottom of this full-height column when the page is
+  // shorter than the viewport (e.g. while loading); sticky alone would leave
+  // it right under the content.
   const dockSurface = (
-    <div className="relative h-full w-full overflow-hidden">
+    <div className="relative flex w-full flex-1 flex-col">
       {children}
 
-      {/* Backdrop overlay - closes the chat panel when clicked */}
-      {isExpanded && (
+      {/* Backdrop overlay - closes the chat panel when clicked. A page that
+          hides the dock hides the panel with it, so the backdrop goes too:
+          left behind, it would swallow clicks on that page. */}
+      {isExpanded && !hideTrigger && (
         <div
           className="fixed inset-0 z-20"
           onClick={() => setIsExpanded(false)}
@@ -1548,18 +1699,20 @@ export function InsightsProvider({
             Hidden on pages that opt out via hideTrigger, and while dismissed
             to the sidebar resume button. */}
       {!hideTrigger && !dockDismissed && (
-        <InsightsDock
-          suggestions={suggestions}
-          open={isExpanded}
-          focusKey={focusComposerKey}
-          onSubmitPrompt={handleDockSubmit}
-          onContinue={handleReopenChat}
-          continueMode={continueMode}
-          onDismiss={handleDockDismiss}
-          onOpenHistory={handleOpenHistory}
-          panel={panelContent}
-          runtimeReady={runtimeMounted}
-        />
+        <div className="pointer-events-none sticky bottom-0 z-30 mt-auto h-0 shrink-0">
+          <InsightsDock
+            suggestions={suggestions}
+            open={isExpanded}
+            focusKey={focusComposerKey}
+            onSubmitPrompt={handleDockSubmit}
+            onContinue={handleReopenChat}
+            continueMode={continueMode}
+            onDismiss={handleDockDismiss}
+            onOpenHistory={handleOpenHistory}
+            panel={panelContent}
+            runtimeReady={runtimeMounted}
+          />
+        </div>
       )}
     </div>
   );
@@ -1567,31 +1720,41 @@ export function InsightsProvider({
   return (
     <InsightsContext.Provider value={contextValue}>
       <InsightsRainbowStyles />
-      {/* The dock and the full-page chat share ONE runtime so an in-flight
-          conversation survives moving between them. The assistant id resolves
-          eagerly (for the "Continue chat" lookup), but the runtime only mounts
-          where chat is actually shown — the open dock or a chat route — to
-          avoid running MCP discovery on every page. It remounts (via
-          runtimeKey) only when a new conversation is started; PendingPromptBridge
-          appends any queued prompt to the fresh thread. */}
-      {runtimeMounted ? (
-        <GramElementsProvider
-          key={`${mcpConfig.projectSlug}:${runtimeKey}`}
-          config={elementsConfig}
+      {/* The page keeps this position whether or not the runtime is mounted,
+          so the runtime appearing or restarting never resets page state. The
+          wrapper only takes the Elements scope once there is a runtime; until
+          then it generates no box. */}
+      <ElementsContextTarget bridge={runtimeBridge} active={runtimeMounted}>
+        <div
+          className={runtimeMounted ? cn(ROOT_SELECTOR, "h-full") : "contents"}
         >
-          <PendingPromptBridge
-            pending={pendingPrompt}
-            onConsume={consumePendingPrompt}
-          />
-          <StopDictationOnNavigate />
-          <OpenPanelOnSend
-            enabled={!isExpanded && !onChatRoute && !hideTrigger}
-            onSend={() => setIsExpanded(true)}
-          />
           {dockSurface}
-        </GramElementsProvider>
-      ) : (
-        dockSurface
+        </div>
+      </ElementsContextTarget>
+      {/* The dock and the full-page chat share ONE runtime so an in-flight
+          conversation survives moving between them. It mounts eagerly for
+          composer/history state, but does not run client-side MCP discovery.
+          It remounts (via runtimeKey) only when a new conversation is started;
+          PendingPromptBridge appends any queued prompt to the fresh thread.
+          It renders no UI of its own, so its Elements root stays out of layout. */}
+      {shouldMountRuntime && (
+        <div hidden>
+          <GramElementsProvider key={runtimeInstance} config={elementsConfig}>
+            <ElementsContextSource
+              bridge={runtimeBridge}
+              sourceId={runtimeInstance}
+            />
+            <PendingPromptBridge
+              pending={pendingPrompt}
+              onConsume={consumePendingPrompt}
+            />
+            <StopDictationOnNavigate />
+            <OpenPanelOnSend
+              enabled={!isExpanded && !onChatRoute && !hideTrigger}
+              onSend={() => setIsExpanded(true)}
+            />
+          </GramElementsProvider>
+        </div>
       )}
     </InsightsContext.Provider>
   );
@@ -1600,8 +1763,8 @@ export function InsightsProvider({
 /**
  * Expand affordance in the chat panel header. Reads the current conversation
  * id from the runtime (so the full-page chat opens the same thread) and hands
- * it to the provider, which navigates to `/chat/:chatId`. Lives inside
- * GramElementsProvider so `useThreadId` resolves.
+ * it to the provider, which navigates to `/chat/:chatId`. Renders only once the
+ * shared runtime is bridged in, so `useThreadId` resolves.
  */
 function ExpandToPageButton({
   onExpand,
@@ -1693,16 +1856,6 @@ function StopDictationOnNavigate(): null {
     // Cleanup runs on every pathname change, which is exactly the signal.
   }, [pathname, aui]);
   return null;
-}
-
-/**
- * assistant-ui's EMPTY_THREAD_CORE placeholder throws a single shared sentinel
- * Error on append (and other actions) until the real thread core binds. It's
- * not exported, so we match its message to tell "thread not ready yet, retry"
- * apart from a genuine send failure.
- */
-function isEmptyThreadError(err: unknown): boolean {
-  return err instanceof Error && err.message.includes("empty thread");
 }
 
 /**

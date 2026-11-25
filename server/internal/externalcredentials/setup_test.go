@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	adminecgen "github.com/speakeasy-api/gram/server/gen/admin_external_credentials"
 	gen "github.com/speakeasy-api/gram/server/gen/external_credentials"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -35,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -76,24 +76,25 @@ func orgAdmin(t *testing.T, ctx context.Context) context.Context {
 	return authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource))
 }
 
-// withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.
-// Admin-only endpoints opt in explicitly so non-admin paths exercise the
-// realistic default produced by authztest.InitAuthContext.
+// withAdmin marks the test user a durable platform admin and returns a
+// validated session context. Admin-only endpoints opt in explicitly so
+// non-admin paths exercise the realistic default produced by
+// authztest.InitAuthContext.
 //
 // The flag is set on a copy. The context holds a pointer, so flipping it in
 // place would raise the caller's own context to admin as well, and a test that
 // went on to act as an ordinary administrator would silently keep the staff
 // privileges it meant to drop.
-func withAdmin(t *testing.T, ctx context.Context) context.Context {
+func withAdmin(t *testing.T, ctx context.Context, ti *testInstance) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
+	require.NoError(t, testrepo.New(ti.conn).SetUserPlatformAdminFixture(ctx, testrepo.SetUserPlatformAdminFixtureParams{Admin: true, ID: authCtx.UserID}))
 
 	elevated := *authCtx
 	elevated.IsAdmin = true
-
-	return contextvalues.SetAuthContext(ctx, &elevated)
+	return contextvalues.WithValidatedGramSession(ctx, &elevated, false)
 }
 
 // logCapture collects the service's log output so a test can assert on a record
@@ -216,7 +217,7 @@ func newTestServiceWithLogger(t *testing.T, logger *slog.Logger) (context.Contex
 }
 
 // gramProjectServiceAccount builds a service account address inside the same
-// project the stub resolver reports as Gram's own — i.e. exactly what the
+// project the stub resolver reports as Speakeasy's own — i.e. exactly what the
 // self-project screening must reject. Derived from the stub's constant so the
 // tests cannot drift from it.
 func gramProjectServiceAccount(name string) string {
@@ -259,7 +260,7 @@ func credentialIDs(result *gen.ListExternalCredentialsResult) []string {
 }
 
 // createAWSExternalIDCredential is a fixture: an AWS credential that assumes a
-// role with a Gram-generated ExternalId.
+// role with a Speakeasy-generated ExternalId.
 func createAWSExternalIDCredential(t *testing.T, ctx context.Context, ti *testInstance, name string) *gen.AwsIamCredential {
 	t.Helper()
 
@@ -309,7 +310,7 @@ func createGCPWifCredentialDirect(t *testing.T, ctx context.Context, ti *testIns
 }
 
 // createGCPUnscreenedCredentialDirect is a fixture for a row written before the
-// impersonation screening existed: it names a service account in Gram's own
+// impersonation screening existed: it names a service account in Speakeasy's own
 // project while carrying no exemption, which the API refuses to produce today.
 func createGCPUnscreenedCredentialDirect(t *testing.T, ctx context.Context, ti *testInstance, name string) *gen.GcpIamCredential {
 	t.Helper()
@@ -326,7 +327,7 @@ func createGCPUnscreenedCredentialDirect(t *testing.T, ctx context.Context, ti *
 
 // createGCPAmbientCredentialDirect is a fixture for the other state the API can
 // no longer produce: an organization GCP credential naming no identity at all,
-// which the resolver would treat as Gram's own ambient one.
+// which the resolver would treat as Speakeasy's own ambient one.
 func createGCPAmbientCredentialDirect(t *testing.T, ctx context.Context, ti *testInstance, name string) *gen.GcpIamCredential {
 	t.Helper()
 
@@ -426,23 +427,4 @@ func createGCPCredentialDirect(t *testing.T, ctx context.Context, ti *testInstan
 	require.NoError(t, err)
 
 	return mv.BuildGcpIamCredentialView(ec, gcp)
-}
-
-// createPlatformGCPAmbientCredential is a fixture: a platform (organization_id
-// NULL, project_id NULL) GCP credential using the ambient attached identity.
-func createPlatformGCPAmbientCredential(t *testing.T, ctx context.Context, ti *testInstance, name string) *adminecgen.GcpIamCredential {
-	t.Helper()
-
-	cred, err := ti.service.CreateGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.CreateGcpIamPlatformCredentialPayload{
-		SessionToken:              nil,
-		Name:                      name,
-		ImpersonateServiceAccount: nil,
-		WifPoolID:                 nil,
-		WifProviderID:             nil,
-		WifProjectNumber:          nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, cred)
-
-	return cred
 }

@@ -170,7 +170,7 @@ func TestIngest_ShadowMCPDenyWithoutLinkCarriesNoBlockEffect(t *testing.T) {
 		ingestUserScopedShadowMCPScanner: ingestUserScopedShadowMCPScanner{userID: authCtx.UserID},
 		policyID:                         uuid.NewString(),
 	}
-	ti.service.siteURL = nil
+	ti.service.orgHosts = nil
 
 	result, err := ti.service.Ingest(ctx, shadowMCPDenyPayload("block-effect-no-link", "call-effect-2"))
 	require.NoError(t, err)

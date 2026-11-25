@@ -40,7 +40,7 @@ type MCPProvenance struct {
 // never resolved a server, or — for senders whose recorded tool-call id is not
 // the value their trace id derives from — the join cannot succeed at all.
 // Callers must treat an absent entry as "unknown provenance", never as "not
-// Gram-hosted".
+// Speakeasy-hosted".
 //
 // Trace IDs in telemetry_logs are derived from tool call IDs via SHA256
 // truncation (see internal/hooks/impl.go), so the lookup is implemented as a

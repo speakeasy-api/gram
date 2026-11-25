@@ -85,6 +85,10 @@ export type QueryPayload = {
    */
   groupBy?: GroupBy | undefined;
   /**
+   * Whether to include distinct values for other dimensions in each table row. When omitted, defaults to true.
+   */
+  includeDimensionValues?: boolean | undefined;
+  /**
    * Measure used to rank groups for top_n. Defaults to total_cost.
    */
   sortBy?: QueryPayloadSortBy | undefined;
@@ -114,6 +118,7 @@ export type QueryPayload$Outbound = {
   from: string;
   granularity_seconds?: number | undefined;
   group_by?: string | undefined;
+  include_dimension_values: boolean;
   sort_by: string;
   to: string;
   top_n: number;
@@ -129,6 +134,7 @@ export const QueryPayload$outboundSchema: z.ZodMiniType<
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     granularitySeconds: z.optional(z.int()),
     groupBy: z.optional(GroupBy$outboundSchema),
+    includeDimensionValues: z._default(z.boolean(), true),
     sortBy: z._default(QueryPayloadSortBy$outboundSchema, "total_cost"),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     topN: z._default(z.int(), 10),
@@ -137,6 +143,7 @@ export const QueryPayload$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       granularitySeconds: "granularity_seconds",
       groupBy: "group_by",
+      includeDimensionValues: "include_dimension_values",
       sortBy: "sort_by",
       topN: "top_n",
     });

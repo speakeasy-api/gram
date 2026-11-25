@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { DETECTION_RULES, type DetectionRule } from "./policy-data";
@@ -22,12 +23,10 @@ function policy(overrides: Partial<RiskPolicy>): RiskPolicy {
     enabled: true,
     id: "policy-1",
     name: "Sensitive Data",
-    pendingMessages: 0,
     policyType: "standard",
     projectId: "project-1",
     score: 5,
     sources: [],
-    totalMessages: 0,
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     version: 1,
     ...overrides,
@@ -82,6 +81,21 @@ describe("getPolicyRuleGroupNamesForDeleteDialog", () => {
         }),
       ),
     ).toEqual(["Financial Information", "Personal Identifiable Information"]);
+  });
+
+  it("returns a single PII group for any Presidio policy under the LLM analyzer", () => {
+    expect(
+      getPolicyRuleGroupNamesForDeleteDialog(
+        policy({ sources: ["gitleaks", "presidio"] }),
+        "llm",
+      ),
+    ).toEqual(["Secrets", "PII"]);
+    expect(
+      getPolicyRuleGroupNamesForDeleteDialog(
+        policy({ sources: ["presidio"], presidioEntities: ["CREDIT_CARD"] }),
+        "llm",
+      ),
+    ).toEqual(["PII"]);
   });
 
   it("returns all Presidio-backed categories when Presidio has no entity filter", () => {

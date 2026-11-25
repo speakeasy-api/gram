@@ -1,13 +1,20 @@
 {
-  "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
+  "$schema": "https://unpkg.com/@changesets/config@4.0.0/schema.json",
   "changelog": "@changesets/cli/changelog",
+  "format": false,
   "commit": [
     "@changesets/cli/commit",
     {
       "skipCI": false
     }
   ],
-  "fixed": [["@gram-ai/functions", "@gram-ai/create-function"]],
+  "fixed": [
+    [
+      "@speakeasy-api/functions",
+      "@gram-ai/functions",
+      "@gram-ai/create-function"
+    ]
+  ],
   "linked": [],
   "access": "restricted",
   "baseBranch": "origin/main",

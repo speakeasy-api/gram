@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { toolSectionRiskMatches } from "./toolRisk";
@@ -32,6 +33,18 @@ describe("toolSectionRiskMatches", () => {
     ]);
 
     expect(toolSectionRiskMatches([result], "", "tool.args")).toEqual([]);
+  });
+
+  it("matches a value as it is escaped inside JSON arguments", () => {
+    const result = riskResult("risk-1", 'hun"ter\\2');
+
+    expect(
+      toolSectionRiskMatches(
+        [result],
+        JSON.stringify({ password: 'hun"ter\\2' }),
+        "tool.args",
+      ),
+    ).toEqual([{ value: 'hun\\"ter\\\\2', result }]);
   });
 
   it("keeps unattributed legacy findings only when their value is visible", () => {

@@ -1,0 +1,229 @@
+import { enumPresentation } from "@/lib/enum";
+/**
+ * Tool limits for a role's Use access, and the server inventory the role
+ * editor's access grid reads.
+ */
+
+import type { Disposition } from "@gram/client/models/components/selector.js";
+
+import type { Server, ServerGroup, ServerTool } from "./serverMerge";
+
+/** The four tool annotations the backend checks, in the order shown. */
+export const DISPOSITIONS = [
+  "read_only",
+  "idempotent",
+  "destructive",
+  "open_world",
+] as const satisfies readonly Disposition[];
+
+export const DISPOSITION_COPY: Record<
+  Disposition,
+  { label: string; badge: string; description: string }
+> = {
+  read_only: {
+    label: "Read-only",
+    badge: "Read-Only Tools",
+    description: "Only read data",
+  },
+  idempotent: {
+    label: "Idempotent",
+    badge: "Idempotent Tools",
+    description: "Safe to repeat with the same result",
+  },
+  destructive: {
+    label: "Destructive",
+    badge: "Destructive Tools",
+    description: "May delete or overwrite data",
+  },
+  open_world: {
+    label: "Open-world",
+    badge: "Open World Tools",
+    description: "Reach systems outside the server",
+  },
+  unannotated: {
+    label: "Unannotated",
+    badge: "Unannotated Tools",
+    description: "Declare none of the annotations above",
+  },
+};
+
+/** Which tools of a server (or of every server) a role can call. */
+export type ToolLimit =
+  | { kind: "all" }
+  | { kind: "tools"; tools: string[] }
+  | {
+      kind: "annotations";
+      dispositions: Disposition[];
+      tools?: string[];
+    };
+
+export type ToolLimitKind = ToolLimit["kind"];
+
+interface ToolHints {
+  readOnlyHint?: boolean | null | undefined;
+  destructiveHint?: boolean | null | undefined;
+  idempotentHint?: boolean | null | undefined;
+  openWorldHint?: boolean | null | undefined;
+}
+
+/**
+ * The one disposition the server assigns a tool (authz.DispositionFromHints):
+ * the first of its hints set to true, except that a tool claiming to be both
+ * read-only and destructive counts as destructive, and a tool with no hint set
+ * is unannotated. disposition-cases.gen.json holds the server's answers, and
+ * the tests check this function against them.
+ */
+export function toolDisposition(tool: {
+  annotations?: ToolHints | null | undefined;
+}): Disposition {
+  const hints = tool.annotations;
+  if (hints?.readOnlyHint && hints.destructiveHint) return "destructive";
+  if (hints?.readOnlyHint) return "read_only";
+  if (hints?.destructiveHint) return "destructive";
+  if (hints?.idempotentHint) return "idempotent";
+  if (hints?.openWorldHint) return "open_world";
+  return "unannotated";
+}
+
+export function toolLimitReaches(limit: ToolLimit, tool: ServerTool): boolean {
+  switch (limit.kind) {
+    case "all":
+      return true;
+    case "tools":
+      return limit.tools.includes(tool.name);
+    case "annotations":
+      return (
+        limit.dispositions.includes(toolDisposition(tool)) ||
+        (limit.tools ?? []).includes(tool.name)
+      );
+  }
+}
+
+/**
+ * Kinds are kept when a tool is ticked, so tools of that kind added later stay
+ * covered: ticking update_task on read-only tools names it beside them.
+ * Unticking a tool a kind covers turns the rule into a tool list, because a
+ * kind cannot leave one tool out.
+ */
+export function limitAfterToggle(
+  limit: ToolLimit,
+  tools: ServerTool[],
+  name: string,
+  next: string[],
+): ToolLimit {
+  if (limit.kind !== "annotations") {
+    if (next.length === tools.length) return { kind: "all" };
+    return { kind: "tools", tools: next };
+  }
+  const named = limit.tools ?? [];
+  const tool = tools.find((candidate) => candidate.name === name);
+  const kindCovers =
+    tool !== undefined && limit.dispositions.includes(toolDisposition(tool));
+  if (next.includes(name)) {
+    if (kindCovers || named.includes(name)) return limit;
+    return { ...limit, tools: [...named, name] };
+  }
+  if (!kindCovers) {
+    return { ...limit, tools: named.filter((other) => other !== name) };
+  }
+  return { kind: "tools", tools: next };
+}
+
+/**
+ * Move a limit to another kind, carrying access over where the tools allow:
+ * a tool list keeps the tools the annotations covered, and annotations keep
+ * the ones the chosen tools carry.
+ */
+export function convertToolLimit(
+  limit: ToolLimit,
+  kind: ToolLimitKind,
+  tools: ServerTool[],
+): ToolLimit {
+  if (limit.kind === kind) return limit;
+  switch (kind) {
+    case "all":
+      return { kind: "all" };
+    case "tools": {
+      const names = tools
+        .filter((tool) => {
+          if (limit.kind === "all") return true;
+          if (limit.kind !== "annotations") return false;
+          return toolLimitReaches(limit, tool);
+        })
+        .map((tool) => tool.name);
+      return { kind: "tools", tools: names };
+    }
+    case "annotations": {
+      if (limit.kind === "all") {
+        return { kind: "annotations", dispositions: [...DISPOSITIONS] };
+      }
+      const chosen = new Set(limit.kind === "tools" ? limit.tools : []);
+      const dispositions = DISPOSITIONS.filter((d) =>
+        tools.some(
+          (tool) => chosen.has(tool.name) && toolDisposition(tool) === d,
+        ),
+      );
+      return { kind: "annotations", dispositions };
+    }
+  }
+}
+
+/** Subsequence match, so "gdrv" finds "Google Drive". */
+export function fuzzyMatch(query: string, text: string): boolean {
+  const q = query.toLowerCase().replace(/\s+/g, "");
+  if (!q) return true;
+  const t = text.toLowerCase();
+  let i = 0;
+  for (const ch of t) {
+    if (ch === q[i]) i++;
+    if (i === q.length) return true;
+  }
+  return false;
+}
+
+export interface ServerWithProject {
+  server: Server;
+  projectId: string;
+  projectName: string;
+}
+
+/** Every server in the inventory, keyed by grant resource id. */
+export function indexServers(
+  groups: ServerGroup[],
+): Map<string, ServerWithProject> {
+  const index = new Map<string, ServerWithProject>();
+  for (const group of groups) {
+    for (const server of group.servers) {
+      index.set(server.id, {
+        server,
+        projectId: group.projectId,
+        projectName: group.projectName,
+      });
+    }
+  }
+  return index;
+}
+
+/** The short handle shown under a server's name: its MCP slug when it has one. */
+export function serverHandle(server: Server): string {
+  return server.mcpSlug ?? server.slug;
+}
+
+export function dispositionCopy(
+  disposition: Disposition,
+): (typeof DISPOSITION_COPY)[Disposition] {
+  return enumPresentation(DISPOSITION_COPY, disposition, {
+    label: "Unknown annotation",
+    badge: "Unknown annotation",
+    description: "Refresh the page for updated annotation details.",
+  });
+}
+
+export function toggleDisposition(
+  selected: Disposition[],
+  disposition: Disposition,
+  on: boolean,
+): Disposition[] {
+  if (!on) return selected.filter((value) => value !== disposition);
+  return [...new Set([...selected, disposition])];
+}

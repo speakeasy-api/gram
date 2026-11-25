@@ -10,42 +10,71 @@ import (
 )
 
 type Environment struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Slug string
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type EnvironmentEntry struct {
-	Name          string
-	Value         string
-	IsSecret      bool
+	// @access: confidential
+	Name string
+	// @access: secret-restricted
+	Value string
+	// @access: confidential
+	IsSecret bool
+	// @access: confidential
 	EnvironmentID uuid.UUID
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SourceEnvironment struct {
-	ID            uuid.UUID
-	SourceKind    string
-	SourceSlug    string
-	ProjectID     uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	SourceKind string
+	// @access: confidential
+	SourceSlug string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	EnvironmentID uuid.UUID
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type ToolsetEnvironment struct {
-	ID            uuid.UUID
-	ToolsetID     uuid.UUID
-	ProjectID     uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ToolsetID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	EnvironmentID uuid.UUID
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

@@ -4,12 +4,39 @@
 INSERT INTO external_oauth_server_metadata (
     project_id,
     slug,
-    metadata
+    metadata,
+    authorization_server_issuer
 ) VALUES (
     @project_id,
     @slug,
-    @metadata
+    @metadata,
+    @authorization_server_issuer
 ) RETURNING *;
+
+-- name: CreateGeneratedExternalOAuthServerMetadata :one
+INSERT INTO external_oauth_server_metadata (
+    project_id,
+    slug,
+    metadata,
+    authorization_server_issuer
+) VALUES (
+    @project_id,
+    @slug,
+    @metadata,
+    @authorization_server_issuer
+)
+ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO NOTHING
+RETURNING *;
+
+-- name: UpdateExternalOAuthServerSource :one
+UPDATE external_oauth_server_metadata
+SET metadata = @metadata,
+    authorization_server_issuer = @authorization_server_issuer,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = @id
+  AND deleted IS FALSE
+RETURNING *;
 
 -- name: GetExternalOAuthServerMetadata :one
 SELECT * FROM external_oauth_server_metadata
@@ -21,3 +48,10 @@ UPDATE external_oauth_server_metadata SET
     updated_at = clock_timestamp()
 WHERE project_id = @project_id AND id = @id
 RETURNING id, slug;
+
+-- name: InsertExternalOAuthServerMetadataSourceFixture :exec
+-- Test fixture: inserts the given metadata/issuer pair as-is, so constraint
+-- tests can assert which combinations the source check accepts.
+INSERT INTO external_oauth_server_metadata
+  (project_id, slug, metadata, authorization_server_issuer)
+VALUES (@project_id, @slug, sqlc.narg(metadata)::jsonb, sqlc.narg(authorization_server_issuer)::text);

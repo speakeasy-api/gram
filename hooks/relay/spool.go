@@ -34,8 +34,15 @@ import (
 
 const (
 	// spoolEntryVersion versions the on-disk entry schema; drain skips
-	// versions it doesn't understand rather than guessing.
-	spoolEntryVersion = 1
+	// versions it doesn't understand rather than guessing. Version 2 added
+	// token_project: a drain that predates it would replay a token box's
+	// event without the token-project check, so it must skip v2.
+	spoolEntryVersion = 2
+
+	// spoolEntryVersionV1 is the pre-token_project schema, still drained:
+	// its entries carry no project binding, so token credentials never
+	// replay them.
+	spoolEntryVersionV1 = 1
 
 	// spoolMaxAge expires entries that were never drained (a laptop shelved
 	// mid-outage). Mirrors the org-settings cache's 14d ceiling: events
@@ -63,14 +70,17 @@ var (
 // came from. The envelope itself already contains the event's occurred_at,
 // so replay preserves original timestamps.
 type spoolEntry struct {
-	V              int                          `json:"v"`
-	IdempotencyKey string                       `json:"idempotency_key"`
-	ServerURL      string                       `json:"server_url"`
-	OrgID          string                       `json:"org_id,omitempty"`
-	ProjectSlug    string                       `json:"project_slug,omitempty"`
-	ConfigPath     string                       `json:"config_path,omitempty"`
-	SpooledAt      time.Time                    `json:"spooled_at"`
-	Envelope       components.IngestRequestBody `json:"envelope"`
+	V              int    `json:"v"`
+	IdempotencyKey string `json:"idempotency_key"`
+	ServerURL      string `json:"server_url"`
+	OrgID          string `json:"org_id,omitempty"`
+	ProjectSlug    string `json:"project_slug,omitempty"`
+	// TokenProject is the configured hooks project a token box's event was
+	// bound to; the drain drops the entry if the box's token now names another.
+	TokenProject string                       `json:"token_project,omitempty"`
+	ConfigPath   string                       `json:"config_path,omitempty"`
+	SpooledAt    time.Time                    `json:"spooled_at"`
+	Envelope     components.IngestRequestBody `json:"envelope"`
 }
 
 // maxSpoolEntryBytes caps one entry on disk. A single entry must never
@@ -84,7 +94,7 @@ const maxSpoolEntryBytes = 8 << 20
 // control plane. Best-effort by design: a spool failure only logs — the
 // event's gating outcome was already decided, and buffering must never
 // affect the user's session.
-func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody) {
+func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody, tokenProject string) {
 	dir := spoolDir()
 	if dir == "" {
 		r.debugf("spool: no writable state dir; entry dropped")
@@ -96,6 +106,7 @@ func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody
 		ServerURL:      r.cfg.ServerURL,
 		OrgID:          r.cfg.OrgID,
 		ProjectSlug:    r.cfg.ProjectSlug,
+		TokenProject:   tokenProject,
 		ConfigPath:     r.cfg.ConfigPath,
 		SpooledAt:      time.Now().UTC(),
 		Envelope:       payload,

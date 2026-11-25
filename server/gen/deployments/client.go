@@ -15,27 +15,31 @@ import (
 
 // Client is the "deployments" service client.
 type Client struct {
-	GetDeploymentEndpoint       goa.Endpoint
-	GetLatestDeploymentEndpoint goa.Endpoint
-	GetActiveDeploymentEndpoint goa.Endpoint
-	CreateDeploymentEndpoint    goa.Endpoint
-	EvolveEndpoint              goa.Endpoint
-	RedeployEndpoint            goa.Endpoint
-	ListDeploymentsEndpoint     goa.Endpoint
-	GetDeploymentLogsEndpoint   goa.Endpoint
+	GetDeploymentEndpoint           goa.Endpoint
+	GetLatestDeploymentEndpoint     goa.Endpoint
+	GetActiveDeploymentEndpoint     goa.Endpoint
+	CreateDeploymentEndpoint        goa.Endpoint
+	EvolveEndpoint                  goa.Endpoint
+	RedeployEndpoint                goa.Endpoint
+	ListDeploymentsEndpoint         goa.Endpoint
+	GetDeploymentLogsEndpoint       goa.Endpoint
+	EvaluateOpenAPIv3Endpoint       goa.Endpoint
+	GetDeploymentEvaluationEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "deployments" service client given the endpoints.
-func NewClient(getDeployment, getLatestDeployment, getActiveDeployment, createDeployment, evolve, redeploy, listDeployments, getDeploymentLogs goa.Endpoint) *Client {
+func NewClient(getDeployment, getLatestDeployment, getActiveDeployment, createDeployment, evolve, redeploy, listDeployments, getDeploymentLogs, evaluateOpenAPIv3, getDeploymentEvaluation goa.Endpoint) *Client {
 	return &Client{
-		GetDeploymentEndpoint:       getDeployment,
-		GetLatestDeploymentEndpoint: getLatestDeployment,
-		GetActiveDeploymentEndpoint: getActiveDeployment,
-		CreateDeploymentEndpoint:    createDeployment,
-		EvolveEndpoint:              evolve,
-		RedeployEndpoint:            redeploy,
-		ListDeploymentsEndpoint:     listDeployments,
-		GetDeploymentLogsEndpoint:   getDeploymentLogs,
+		GetDeploymentEndpoint:           getDeployment,
+		GetLatestDeploymentEndpoint:     getLatestDeployment,
+		GetActiveDeploymentEndpoint:     getActiveDeployment,
+		CreateDeploymentEndpoint:        createDeployment,
+		EvolveEndpoint:                  evolve,
+		RedeployEndpoint:                redeploy,
+		ListDeploymentsEndpoint:         listDeployments,
+		GetDeploymentLogsEndpoint:       getDeploymentLogs,
+		EvaluateOpenAPIv3Endpoint:       evaluateOpenAPIv3,
+		GetDeploymentEvaluationEndpoint: getDeploymentEvaluation,
 	}
 }
 
@@ -219,4 +223,50 @@ func (c *Client) GetDeploymentLogs(ctx context.Context, p *GetDeploymentLogsPayl
 		return
 	}
 	return ires.(*GetDeploymentLogsResult), nil
+}
+
+// EvaluateOpenAPIv3 calls the "evaluateOpenAPIv3" endpoint of the
+// "deployments" service.
+// EvaluateOpenAPIv3 may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) EvaluateOpenAPIv3(ctx context.Context, p *EvaluateOpenAPIv3Payload) (res *OpenAPIv3Evaluation, err error) {
+	var ires any
+	ires, err = c.EvaluateOpenAPIv3Endpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*OpenAPIv3Evaluation), nil
+}
+
+// GetDeploymentEvaluation calls the "getDeploymentEvaluation" endpoint of the
+// "deployments" service.
+// GetDeploymentEvaluation may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetDeploymentEvaluation(ctx context.Context, p *GetDeploymentEvaluationPayload) (res *GetDeploymentEvaluationResult, err error) {
+	var ires any
+	ires, err = c.GetDeploymentEvaluationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetDeploymentEvaluationResult), nil
 }

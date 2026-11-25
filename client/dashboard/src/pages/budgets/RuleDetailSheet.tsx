@@ -1,3 +1,7 @@
+import { Spinner } from "@/components/ui/Spinner";
+import { enumPresentation } from "@/lib/enum";
+import { IdentityLink } from "@/components/identity-link";
+import type { IdentityRef } from "@/lib/identity-urn";
 import { Button } from "@/components/ui/Button";
 import {
   Sheet,
@@ -8,11 +12,12 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
-import { Loader2, Pencil, Search, Users } from "lucide-react";
+import { Pencil, Search, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import { EventTypeBadge, RuleActionBadge, UsageBar } from "./budget-shared";
 import {
   WINDOW_LABELS,
+  isSupportedRuleTarget,
   formatUsd,
   parseRuleUrn,
   sortEventsByRecency,
@@ -23,7 +28,11 @@ import {
   type SpendRuleActorUsage,
   type SpendRuleUsage,
 } from "./budgets-data";
-import { useBudgetEvents, usePreviewBudgetRule } from "./budgets-queries";
+import {
+  useActorAttributes,
+  useBudgetEvents,
+  usePreviewBudgetRule,
+} from "./budgets-queries";
 
 /** Read-only drill-down for one rule: live budget state, which people are
  *  driving the spend, and the rule's lifecycle events. */
@@ -123,7 +132,13 @@ function RuleDetail({
   });
   const events = useMemo(() => sortEventsByRecency(ruleEvents), [ruleEvents]);
 
+  const {
+    attributes,
+    isLoading: attributesLoading,
+    isError: attributesError,
+  } = useActorAttributes();
   const actors = preview?.actors ?? [];
+  const knownWindow = Object.hasOwn(WINDOW_LABELS, rule.windowKind);
 
   return (
     <>
@@ -154,9 +169,12 @@ function RuleDetail({
               Budget
             </Text>
             <span className="text-muted-foreground text-xs">
-              {WINDOW_LABELS[rule.windowKind]} window · resets in{" "}
-              {timeUntilWindowReset(rule.windowKind)} · warns at{" "}
-              {rule.warnAtPct}%
+              {enumPresentation(WINDOW_LABELS, rule.windowKind, "Unknown")}{" "}
+              window
+              {knownWindow && (
+                <> · resets in {timeUntilWindowReset(rule.windowKind)}</>
+              )}{" "}
+              · warns at {rule.warnAtPct}%
             </span>
           </div>
           {usage ? (
@@ -182,13 +200,33 @@ function RuleDetail({
         </section>
 
         {/* Who is driving the spend */}
-        <PeopleSection
-          actors={actors}
-          matchedCount={preview?.matchedCount ?? 0}
-          loading={actorsLoading}
-          error={actorsError}
-          onRetry={retryActors}
-        />
+        {!knownWindow ? (
+          <p className="text-muted-foreground text-xs">
+            Usage preview is unavailable for this window. Refresh the page for
+            updated support.
+          </p>
+        ) : attributesLoading ? (
+          <Text muted small>
+            Loading target attributes…
+          </Text>
+        ) : attributesError ? (
+          <Text muted small>
+            Could not load target attributes. Refresh the page to preview usage.
+          </Text>
+        ) : !isSupportedRuleTarget(rule.target, attributes) ? (
+          <p className="text-muted-foreground text-xs">
+            Usage preview is unavailable for this target condition. Refresh the
+            page for updated support.
+          </p>
+        ) : (
+          <PeopleSection
+            actors={actors}
+            matchedCount={preview?.matchedCount ?? 0}
+            loading={actorsLoading}
+            error={actorsError}
+            onRetry={retryActors}
+          />
+        )}
 
         {/* Lifecycle events */}
         <section className="space-y-2">
@@ -224,8 +262,11 @@ function RuleDetail({
                       </span>
                     </div>
                     <p className="text-muted-foreground text-xs">
-                      {event.displayName || event.email} ·{" "}
-                      {formatUsd(event.spendUsd)} of {formatUsd(event.limitUsd)}
+                      <IdentityLink identifier={identityRefForActor(event)}>
+                        {event.displayName || event.email}
+                      </IdentityLink>{" "}
+                      · {formatUsd(event.spendUsd)} of{" "}
+                      {formatUsd(event.limitUsd)}
                     </p>
                   </li>
                 );
@@ -243,6 +284,19 @@ function RuleDetail({
       </SheetFooter>
     </>
   );
+}
+
+/**
+ * The link target for a budget actor. The Speakeasy user id names the person the
+ * server matched; an address only names them if no alias of theirs resolves
+ * first, so it is the fallback rather than the key.
+ */
+function identityRefForActor(actor: {
+  userId?: string | undefined;
+  email?: string | undefined;
+}): IdentityRef | null {
+  if (actor.userId) return { userId: actor.userId };
+  return actor.email ? { email: actor.email } : null;
 }
 
 /** Number of people shown before the list collapses behind a "show all"
@@ -297,7 +351,10 @@ function PeopleSection({
           People {matchedCount > 0 ? `(${matchedCount})` : ""}
         </Text>
         {loading && (
-          <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
+          <Spinner
+            label="Loading people"
+            className="text-muted-foreground mr-0 size-3.5"
+          />
         )}
       </div>
 
@@ -413,7 +470,9 @@ function ActorRow({ actor }: { actor: SpendRuleActorUsage }): JSX.Element {
       <div className="flex items-center justify-between gap-3 text-xs">
         <div className="min-w-0">
           <div className="truncate font-medium">
-            {actor.displayName || actor.email}
+            <IdentityLink identifier={identityRefForActor(actor)}>
+              {actor.displayName || actor.email}
+            </IdentityLink>
           </div>
           {actor.displayName && (
             <div className="text-muted-foreground truncate">{actor.email}</div>

@@ -16,3 +16,12 @@ const (
 	MinTrialRearmDays = MinTrialExtensionDays
 	MaxTrialRearmDays = MaxTrialExtensionDays
 )
+
+// MinTrialStartDays and MaxTrialStartDays bound a newly granted trial. Aliases
+// of the extension pair for the same reason the re-arm bounds are: a start that
+// runs longer than a year is a contract, and the three writes should keep the
+// same floor and ceiling until someone splits them on purpose.
+const (
+	MinTrialStartDays = MinTrialExtensionDays
+	MaxTrialStartDays = MaxTrialExtensionDays
+)

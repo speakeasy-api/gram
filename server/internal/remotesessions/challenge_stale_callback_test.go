@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -75,6 +76,7 @@ func seedRemoteLoginInFlight(t *testing.T, slug string, spy *revocationSpy) (con
 		ti.conn,
 		enc,
 		policy,
+		nil,
 		ti.redisCache,
 		mustURL(t, "http://localhost"),
 	)
@@ -98,7 +100,7 @@ func seedRemoteLoginInFlight(t *testing.T, slug string, spy *revocationSpy) (con
 
 	secretCiphertext, err := enc.Encrypt([]byte(slug + "-secret"))
 	require.NoError(t, err)
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -126,7 +128,7 @@ func seedRemoteLoginInFlight(t *testing.T, slug string, spy *revocationSpy) (con
 		UserSessionIssuerID: userIssuer,
 		Subject:             &subject,
 		McpSlug:             slug,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 	}, clients[0])
 	require.NoError(t, err)
 
@@ -180,27 +182,23 @@ func TestHandleRemoteLoginCallback_RejectsStateWhoseIssuerWasDeleted(t *testing.
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "no remote_sessions row is resurrected for the dead issuer")
 
-	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Gram refused to store is handed back to the provider")
+	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Speakeasy refused to store is handed back to the provider")
 }
 
-// The callback and the issuer delete take the client row and the issuer row in
-// opposite orders, so the issuer lock has to stay compatible with the foreign
-// key check the session insert performs. Neither outcome may leave a live
-// upstream grant behind: here the write wins the race and the cascade sweeps it.
-func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteSweepsTheStoredGrant(t *testing.T) {
+// Even a first grant, with no existing provenance to discover, cannot publish
+// behind a concurrent issuer retirement.
+func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteRejectsFirstGrant(t *testing.T) {
 	t.Parallel()
 
 	spy := &revocationSpy{}
 	ctx, fx := seedRemoteLoginInFlight(t, "cb-race", spy)
 
-	tx, err := fx.ti.conn.Begin(ctx) //nolint:glint // the raw-SQL rule catches tx.Exec with a query string; this transaction only ever runs SQLc-generated methods, and it exists to replay an issuer delete around the live callback
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	tx := testenv.BeginTx(t, ctx, fx.ti.conn)
 
 	// The issuer delete's first lock, taken while the user is still at the
 	// provider and held for the whole callback.
 	txIssuers := usersessionsrepo.New(tx)
-	_, err = txIssuers.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
+	_, err := txIssuers.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
 		ID:        fx.userIssuer,
 		ProjectID: fx.projectID,
 	})
@@ -211,20 +209,8 @@ func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteSweepsTheStoredGrant(t 
 		done <- fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "race-code"))
 	}()
 
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(30 * time.Second):
-		t.Fatal("the callback is stuck behind the issuer-delete lock: the two would deadlock in production")
-	}
+	testenv.WaitForBackendsBlockedBy(t, ctx, fx.ti.conn, testenv.BackendPID(tx), 1)
 
-	stored, err := repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
-		SubjectUrn:            fx.subject,
-		RemoteSessionClientID: fx.clientID,
-	})
-	require.NoError(t, err, "the callback committed while the delete held the issuer lock")
-
-	// The rest of the delete, now that the callback has released the client row.
 	_, err = txIssuers.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
 		ID:        fx.userIssuer,
 		ProjectID: fx.projectID,
@@ -232,13 +218,17 @@ func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteSweepsTheStoredGrant(t 
 	require.NoError(t, err)
 
 	revoker := newTestUpstreamRevoker(t, fx.ti)
-	creds, err := revoker.DetachUserSessionIssuerFromClients(ctx, tx, fx.userIssuer, fx.projectID, fx.organizationID)
+	creds, err := revoker.RetireDeletedUserSessionIssuer(ctx, tx, fx.userIssuer, fx.projectID, fx.organizationID)
 	require.NoError(t, err)
-	require.Len(t, creds, 1, "the grant written mid-delete is picked up by the orphan scan")
-	require.Equal(t, stored.RemoteSessionClientID, creds[0].RemoteSessionClientID)
+	require.Empty(t, creds, "the waiting callback has not stored any grant")
 	require.NoError(t, tx.Commit(ctx))
 
-	revoker.RevokeAllDetached(ctx, creds)
+	select {
+	case err := <-done:
+		require.ErrorContains(t, err, "no longer exists")
+	case <-time.After(5 * time.Second):
+		t.Fatal("callback still waiting after issuer retirement committed")
+	}
 
 	_, err = repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            fx.subject,
@@ -247,4 +237,51 @@ func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteSweepsTheStoredGrant(t 
 	require.ErrorIs(t, err, pgx.ErrNoRows, "no grant survives the delete it raced")
 
 	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens())
+}
+
+// Issuer migration holds the issuer FOR UPDATE and then key-shares the client
+// row through the links it inserts, so the callback locks the issuer before
+// the client row to stay in the same order. Once the migration commits, the
+// re-read finds the issuer retired and the login is rejected rather than
+// stored against the tombstone.
+func TestHandleRemoteLoginCallback_WaitsForIssuerMigrationThenRejectsRetiredIssuer(t *testing.T) {
+	t.Parallel()
+
+	spy := &revocationSpy{}
+	ctx, fx := seedRemoteLoginInFlight(t, "cb-migrate", spy)
+
+	tx := testenv.BeginTx(t, ctx, fx.ti.conn)
+	txIssuers := usersessionsrepo.New(tx)
+	// The migration's issuer row lock, taken while the user is at the provider.
+	_, err := txIssuers.GetOrganizationManagedUserSessionIssuerByIDForUpdate(ctx, usersessionsrepo.GetOrganizationManagedUserSessionIssuerByIDForUpdateParams{
+		ID:             fx.userIssuer,
+		OrganizationID: fx.organizationID,
+	})
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "migrate-code"))
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, fx.ti.conn, testenv.BackendPID(tx), 1)
+
+	// The migration retires the source and commits.
+	_, err = txIssuers.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
+		ID:        fx.userIssuer,
+		ProjectID: fx.projectID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	require.Eventually(t, func() bool { return len(done) > 0 }, 5*time.Second, 10*time.Millisecond)
+	require.ErrorContains(t, <-done, "no longer exists", "the callback re-reads the issuer as retired and is rejected")
+	require.Equal(t, int64(1), fx.exchanges.Load(), "rejection happens at persist time, after the code exchange")
+
+	_, err = repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            fx.subject,
+		RemoteSessionClientID: fx.clientID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "no remote_sessions row lands on the retired issuer")
+
+	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Speakeasy refused to store is handed back to the provider")
 }

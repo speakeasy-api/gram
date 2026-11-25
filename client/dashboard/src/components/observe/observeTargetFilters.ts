@@ -1,3 +1,4 @@
+import { PENDING_DOT_CLASS } from "@/components/chart/palette";
 import type {
   FilterChip,
   ObserveStatusFilterValue,
@@ -5,18 +6,21 @@ import type {
 } from "@/components/observe/ObserveFilterBar";
 import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
+import type { ToolUsageGatewayFilterOption } from "@gram/client/models/components/toolusagegatewayfilteroption.js";
 import type { ToolUsageHostedServerFilterOption } from "@gram/client/models/components/toolusagehostedserverfilteroption.js";
 import type { ToolUsageShadowServerFilterOption } from "@gram/client/models/components/toolusageshadowserverfilteroption.js";
 import type { TargetTypes } from "@gram/client/models/components/gettoolusagesummarypayload";
-import type { Statuses } from "@gram/client/models/components/listtoolusagetracespayload";
+import type { Statuses } from "@gram/client/models/components/gettoolusagesummarypayload";
 import { normalizeUserEmailFilter } from "./observeUserFilters";
 
-export const SERVER_FILTER_PATH = "gram.tool_call.source";
+const SERVER_FILTER_PATH = "gram.tool_call.source";
 export const USER_EMAIL_FILTER_PATH = "user.email";
 const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 
 const HOSTED_SERVER_PREFIX = "hosted:";
 const SHADOW_SERVER_PREFIX = "shadow:";
+const GATEWAY_SERVER_PREFIX = "gateway:";
+const MCP_SERVER_PREFIX = "mcp_server:";
 
 // Local tools are excluded by default: they dominate event volume and drown
 // out the MCP server and skill usage these pages are meant to surface. Users
@@ -24,12 +28,14 @@ const SHADOW_SERVER_PREFIX = "shadow:";
 export const TOOL_USAGE_DEFAULT_TYPES: ObserveTypeFilterValue[] = [
   "hosted_mcp_server",
   "tunneled_mcp_server",
+  "meta_mcp_server",
   "shadow_mcp_server",
   "skill",
 ];
 export const TOOL_USAGE_VALID_TYPES: ObserveTypeFilterValue[] = [
   "hosted_mcp_server",
   "tunneled_mcp_server",
+  "meta_mcp_server",
   "shadow_mcp_server",
   "local_tool",
   "skill",
@@ -38,9 +44,10 @@ export const TOOL_USAGE_TYPE_OPTIONS: Array<{
   label: string;
   value: ObserveTypeFilterValue;
 }> = [
-  { label: "Hosted MCP Servers", value: "hosted_mcp_server" },
-  { label: "Tunneled MCP Servers", value: "tunneled_mcp_server" },
-  { label: "Shadow MCP Servers", value: "shadow_mcp_server" },
+  { label: "Hosted MCP servers", value: "hosted_mcp_server" },
+  { label: "Tunneled MCP servers", value: "tunneled_mcp_server" },
+  { label: "Gateways", value: "meta_mcp_server" },
+  { label: "Shadow MCP servers", value: "shadow_mcp_server" },
   { label: "Local Tools", value: "local_tool" },
   { label: "Skills", value: "skill" },
 ];
@@ -54,11 +61,21 @@ export const TOOL_USAGE_VALID_STATUSES: ObserveStatusFilterValue[] = [
 export const TOOL_USAGE_STATUS_OPTIONS: Array<{
   label: string;
   value: ObserveStatusFilterValue;
+  /** The dot a row with this status carries, so the two agree on sight. */
+  dotClassName: string;
 }> = [
-  { label: "Error", value: "error" },
-  { label: "Success", value: "success" },
-  { label: "Blocked", value: "blocked" },
-  { label: "Pending", value: "pending" },
+  { label: "Error", value: "error", dotClassName: "bg-destructive-default" },
+  { label: "Success", value: "success", dotClassName: "bg-success-default" },
+  // Orange, not red: a denial is the policy working, not the call failing, and
+  // a reader scanning for breakage should not be pulled to it.
+  { label: "Blocked", value: "blocked", dotClassName: "bg-warning-default" },
+  // The filter matches every call with no result: still running (Pending)
+  // or long ended without one (Unknown).
+  {
+    label: "Pending or unknown",
+    value: "pending",
+    dotClassName: PENDING_DOT_CLASS,
+  },
 ];
 
 export function toStatuses(
@@ -71,25 +88,67 @@ export function toStatuses(
 }
 
 export type ParsedTargetFilter =
+  | { type: "mcp_server"; id: string }
   | { type: "hosted"; id: string }
-  | { type: "shadow"; id: string };
+  | { type: "shadow"; id: string }
+  | { type: "gateway"; id: string };
 
-export function encodeHostedServerFilter(slug: string): string {
-  return `${HOSTED_SERVER_PREFIX}${slug}`;
+// Keyed by toolset slug; links made before servers were filtered by id use it.
+export function encodeHostedServerFilter(toolsetSlug: string): string {
+  return `${HOSTED_SERVER_PREFIX}${toolsetSlug}`;
+}
+
+export function encodeMcpServerFilter(mcpServerId: string): string {
+  return `${MCP_SERVER_PREFIX}${mcpServerId}`;
+}
+
+/** Hosted option value; a selected legacy slug value is kept so it stays selected. */
+export function hostedServerFilterValue(
+  server: { toolsetSlug: string; mcpServerId?: string | undefined },
+  selectedValues: string[],
+): string {
+  const legacy = encodeHostedServerFilter(server.toolsetSlug);
+  if (!server.mcpServerId || selectedValues.includes(legacy)) return legacy;
+  return encodeMcpServerFilter(server.mcpServerId);
 }
 
 export function encodeShadowServerFilter(name: string): string {
   return `${SHADOW_SERVER_PREFIX}${name}`;
 }
 
+// Keyed by meta MCP server id; covers calls on the gateway and its dispatches to members.
+export function encodeGatewayServerFilter(metaMcpServerId: string): string {
+  return `${GATEWAY_SERVER_PREFIX}${metaMcpServerId}`;
+}
+
 export function parseTargetFilter(value: string): ParsedTargetFilter {
+  if (value.startsWith(MCP_SERVER_PREFIX)) {
+    return { type: "mcp_server", id: value.slice(MCP_SERVER_PREFIX.length) };
+  }
   if (value.startsWith(HOSTED_SERVER_PREFIX)) {
     return { type: "hosted", id: value.slice(HOSTED_SERVER_PREFIX.length) };
   }
   if (value.startsWith(SHADOW_SERVER_PREFIX)) {
     return { type: "shadow", id: value.slice(SHADOW_SERVER_PREFIX.length) };
   }
+  if (value.startsWith(GATEWAY_SERVER_PREFIX)) {
+    return { type: "gateway", id: value.slice(GATEWAY_SERVER_PREFIX.length) };
+  }
   return { type: "shadow", id: value };
+}
+
+/** Splits server filters into server ids and legacy toolset slugs. */
+export function splitHostedTargets(filters: ParsedTargetFilter[]): {
+  mcpServerIds: string[];
+  hostedToolsetSlugs: string[];
+} {
+  const mcpServerIds: string[] = [];
+  const hostedToolsetSlugs: string[] = [];
+  for (const filter of filters) {
+    if (filter.type === "mcp_server") mcpServerIds.push(filter.id);
+    if (filter.type === "hosted") hostedToolsetSlugs.push(filter.id);
+  }
+  return { mcpServerIds, hostedToolsetSlugs };
 }
 
 export function selectedTargetValues(activeFilters: FilterChip[]): string[] {
@@ -114,13 +173,35 @@ export function selectedHookSources(activeFilters: FilterChip[]): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Whether the selection is the view's default. Views default differently (one
+ * scoped to an identity starts from every type), so each passes its own
+ * defaults: the page-wide `TOOL_USAGE_DEFAULT_TYPES` or a scoped list.
+ */
 export function isDefaultToolUsageTypeSelection(
   selectedTypes: ObserveTypeFilterValue[],
+  defaultTypes: ObserveTypeFilterValue[],
 ): boolean {
   return (
-    selectedTypes.length === TOOL_USAGE_DEFAULT_TYPES.length &&
-    TOOL_USAGE_DEFAULT_TYPES.every((type) => selectedTypes.includes(type))
+    selectedTypes.length === defaultTypes.length &&
+    defaultTypes.every((type) => selectedTypes.includes(type))
   );
+}
+
+/** Every tool type but local tools, for an identity view that hides them. */
+export const TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS: ObserveTypeFilterValue[] =
+  TOOL_USAGE_VALID_TYPES.filter((type) => type !== "local_tool");
+
+/**
+ * The type selection a view scoped to one identity starts from. It shows
+ * every type unless the page hides local tools. Both lists are module
+ * constants, so the reference stays stable across renders.
+ */
+export function scopedToolUsageDefaultTypes(
+  includeLocalTools: boolean,
+): ObserveTypeFilterValue[] {
+  if (includeLocalTools) return TOOL_USAGE_VALID_TYPES;
+  return TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS;
 }
 
 export function toTargetTypes(
@@ -135,19 +216,23 @@ export function toTargetTypes(
 export function buildServerOptionGroups({
   hostedServers,
   shadowServers,
+  gateways = [],
   activeFilters,
   serverNameMappings,
 }: {
   hostedServers: ToolUsageHostedServerFilterOption[];
   shadowServers: ToolUsageShadowServerFilterOption[];
+  gateways?: ToolUsageGatewayFilterOption[];
   activeFilters: FilterChip[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }): MultiSelectGroup[] {
   const hosted = new Map<string, { label: string; count: number }>();
   const shadow = new Map<string, { label: string; count: number }>();
+  const gateway = new Map<string, { label: string; count: number }>();
 
+  const selectedValues = selectedTargetValues(activeFilters);
   for (const server of hostedServers) {
-    hosted.set(encodeHostedServerFilter(server.toolsetSlug), {
+    hosted.set(hostedServerFilterValue(server, selectedValues), {
       label: server.toolsetName || server.toolsetSlug,
       count: server.eventCount,
     });
@@ -162,10 +247,23 @@ export function buildServerOptionGroups({
     });
   }
 
-  for (const value of selectedTargetValues(activeFilters)) {
+  for (const entry of gateways) {
+    gateway.set(encodeGatewayServerFilter(entry.metaMcpServerId), {
+      label: entry.name || entry.metaMcpServerId,
+      count: entry.eventCount,
+    });
+  }
+
+  for (const value of selectedValues) {
     const parsed = parseTargetFilter(value);
-    if (parsed.type === "hosted" && !hosted.has(value)) {
+    if (
+      (parsed.type === "hosted" || parsed.type === "mcp_server") &&
+      !hosted.has(value)
+    ) {
       hosted.set(value, { label: parsed.id, count: 0 });
+    }
+    if (parsed.type === "gateway" && !gateway.has(value)) {
+      gateway.set(value, { label: parsed.id, count: 0 });
     }
     const encodedShadow = encodeShadowServerFilter(parsed.id);
     if (parsed.type === "shadow" && !shadow.has(encodedShadow)) {
@@ -190,6 +288,7 @@ export function buildServerOptionGroups({
 
   return [
     { heading: "Hosted MCP", options: toOptions(hosted) },
+    { heading: "Gateways", options: toOptions(gateway) },
     { heading: "Shadow MCP", options: toOptions(shadow) },
   ].filter((group) => group.options.length > 0);
 }

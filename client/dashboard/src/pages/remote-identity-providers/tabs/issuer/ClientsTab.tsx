@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/Badge";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { DotRow } from "@/components/ui/DotRow";
@@ -5,7 +6,7 @@ import { DotTable } from "@/components/ui/DotTable";
 import type { Action } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import type { OrganizationRemoteSessionClient } from "@gram/client/models/components/organizationremotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
@@ -19,22 +20,28 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
-import { remoteSessionClientDisplayName } from "../../clientDisplay";
+import {
+  remoteSessionClientDisplayName,
+  remoteSessionClientShortId,
+} from "../../clientDisplay";
 import { CreateRemoteSessionClientSheet } from "../../CreateRemoteSessionClientSheet";
 import { DeleteClientDialog } from "../../clientDialogs";
+import { DuplicateClientFlow } from "../../DuplicateClient";
 
 export function ClientsTab({
   issuer,
 }: {
   issuer: RemoteSessionIssuer;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const { hasAnyScope } = useRBAC();
   const canManage = hasAnyScope(["org:admin"]);
   const { data, isLoading, isError } = useOrganizationRemoteSessionClients({
     issuerId: issuer.id,
   });
   const [deleteTarget, setDeleteTarget] =
+    useState<OrganizationRemoteSessionClient | null>(null);
+  const [duplicateTarget, setDuplicateTarget] =
     useState<OrganizationRemoteSessionClient | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -50,14 +57,14 @@ export function ClientsTab({
   } else if (!isLoading && items.length === 0) {
     body = (
       <Text muted className="py-8 text-center">
-        No clients registered with this provider.
+        No clients registered with this authorization server.
       </Text>
     );
   } else {
     body = (
       <DotTable
         headers={[
-          { label: "Client ID" },
+          { label: "Client" },
           { label: "MCP Servers" },
           { label: "Active Sessions" },
           { label: "" },
@@ -65,6 +72,10 @@ export function ClientsTab({
       >
         {items.map((item) => {
           const actions: Action[] = [
+            {
+              label: "Duplicate",
+              onClick: () => setDuplicateTarget(item),
+            },
             {
               label: "Delete client",
               destructive: true,
@@ -80,20 +91,42 @@ export function ClientsTab({
                 icon={
                   <Icon name="key" className="text-muted-foreground h-5 w-5" />
                 }
-                href={orgRoutes.remoteIdentityProviders.clientDetail.href(
+                href={routes.remoteIdentityProviders.clientDetail.href(
                   issuer.id,
                   item.client.id,
                 )}
-                ariaLabel={`View client ${remoteSessionClientDisplayName(item.client)}`}
+                ariaLabel={
+                  item.client.displayName
+                    ? `View client ${item.client.displayName} (${remoteSessionClientShortId(item.client)})`
+                    : `View client ${remoteSessionClientDisplayName(item.client)}`
+                }
               >
                 <td className="px-3 py-3">
-                  <Text
-                    variant="subheading"
-                    as="div"
-                    className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
-                  >
-                    {remoteSessionClientDisplayName(item.client)}
-                  </Text>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Text
+                      variant="subheading"
+                      as="div"
+                      className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
+                    >
+                      {remoteSessionClientDisplayName(item.client)}
+                    </Text>
+                    {item.client.credentialOwner === "self" && (
+                      <Badge variant="information" size="sm">
+                        <Badge.Text>Service account</Badge.Text>
+                      </Badge>
+                    )}
+                  </div>
+                  {item.client.displayName && (
+                    <Text
+                      small
+                      muted
+                      as="div"
+                      className="truncate font-mono"
+                      title={item.client.clientId}
+                    >
+                      {remoteSessionClientShortId(item.client)}
+                    </Text>
+                  )}
                 </td>
                 <td className="px-3 py-3">
                   <Text small muted>
@@ -164,6 +197,15 @@ export function ClientsTab({
           clientId={deleteTarget.client.id}
           clientLabel={remoteSessionClientDisplayName(deleteTarget.client)}
           onClose={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {duplicateTarget && (
+        <DuplicateClientFlow
+          client={duplicateTarget.client}
+          issuer={issuer}
+          issuerId={issuer.id}
+          onClose={() => setDuplicateTarget(null)}
         />
       )}
 

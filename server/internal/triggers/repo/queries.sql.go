@@ -10,7 +10,44 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+const advanceTriggerThreadRouteCursor = `-- name: AdvanceTriggerThreadRouteCursor :exec
+UPDATE trigger_thread_routes
+SET last_seen_cursor = CASE
+        WHEN last_seen_cursor IS NULL THEN $1::text
+        WHEN $1::text COLLATE "C" > last_seen_cursor COLLATE "C" THEN $1::text
+        ELSE last_seen_cursor
+    END,
+    updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND target_kind = $3
+  AND target_ref = $4
+  AND correlation_id = $5
+  AND deleted IS FALSE
+`
+
+type AdvanceTriggerThreadRouteCursorParams struct {
+	LastSeenCursor string
+	ProjectID      uuid.UUID
+	TargetKind     string
+	TargetRef      string
+	CorrelationID  string
+}
+
+// Moves the cursor forward without touching state, so a delivery racing an
+// unsubscribe cannot subscribe the target again.
+func (q *Queries) AdvanceTriggerThreadRouteCursor(ctx context.Context, arg AdvanceTriggerThreadRouteCursorParams) error {
+	_, err := q.db.Exec(ctx, advanceTriggerThreadRouteCursor,
+		arg.LastSeenCursor,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.CorrelationID,
+	)
+	return err
+}
 
 const createDashboardTriggerInstance = `-- name: CreateDashboardTriggerInstance :one
 INSERT INTO trigger_instances (
@@ -67,6 +104,77 @@ func (q *Queries) CreateDashboardTriggerInstance(ctx context.Context, arg Create
 		arg.TargetDisplay,
 		arg.ConfigJson,
 		arg.Status,
+	)
+	var i TriggerInstance
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DefinitionSlug,
+		&i.Name,
+		&i.EnvironmentID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.TargetDisplay,
+		&i.ConfigJson,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createSpeakeasySlackTriggerInstance = `-- name: CreateSpeakeasySlackTriggerInstance :one
+INSERT INTO trigger_instances (
+    organization_id,
+    project_id,
+    definition_slug,
+    name,
+    environment_id,
+    target_kind,
+    target_ref,
+    target_display,
+    config_json,
+    status
+) VALUES (
+    $1,
+    $2,
+    'speakeasy_slack',
+    $3,
+    NULL,
+    $4,
+    $5,
+    $6,
+    $7,
+    'active'
+)
+ON CONFLICT (project_id, target_ref)
+  WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE
+DO NOTHING
+RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateSpeakeasySlackTriggerInstanceParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	TargetKind     string
+	TargetRef      string
+	TargetDisplay  string
+	ConfigJson     []byte
+}
+
+func (q *Queries) CreateSpeakeasySlackTriggerInstance(ctx context.Context, arg CreateSpeakeasySlackTriggerInstanceParams) (TriggerInstance, error) {
+	row := q.db.QueryRow(ctx, createSpeakeasySlackTriggerInstance,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.TargetDisplay,
+		arg.ConfigJson,
 	)
 	var i TriggerInstance
 	err := row.Scan(
@@ -230,6 +338,47 @@ func (q *Queries) DeleteTriggerInstancesByTargetExceptDefinition(ctx context.Con
 	return err
 }
 
+const getSpeakeasySlackTriggerInstance = `-- name: GetSpeakeasySlackTriggerInstance :one
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+FROM trigger_instances
+WHERE project_id = $1
+  AND definition_slug = 'speakeasy_slack'
+  AND target_kind = $2
+  AND target_ref = $3
+  AND status = 'active'
+  AND deleted IS FALSE
+LIMIT 1
+`
+
+type GetSpeakeasySlackTriggerInstanceParams struct {
+	ProjectID  uuid.UUID
+	TargetKind string
+	TargetRef  string
+}
+
+func (q *Queries) GetSpeakeasySlackTriggerInstance(ctx context.Context, arg GetSpeakeasySlackTriggerInstanceParams) (TriggerInstance, error) {
+	row := q.db.QueryRow(ctx, getSpeakeasySlackTriggerInstance, arg.ProjectID, arg.TargetKind, arg.TargetRef)
+	var i TriggerInstance
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DefinitionSlug,
+		&i.Name,
+		&i.EnvironmentID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.TargetDisplay,
+		&i.ConfigJson,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getTriggerInstanceByID = `-- name: GetTriggerInstanceByID :one
 SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
@@ -245,6 +394,43 @@ type GetTriggerInstanceByIDParams struct {
 
 func (q *Queries) GetTriggerInstanceByID(ctx context.Context, arg GetTriggerInstanceByIDParams) (TriggerInstance, error) {
 	row := q.db.QueryRow(ctx, getTriggerInstanceByID, arg.ID, arg.ProjectID)
+	var i TriggerInstance
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DefinitionSlug,
+		&i.Name,
+		&i.EnvironmentID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.TargetDisplay,
+		&i.ConfigJson,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getTriggerInstanceByIDForUpdate = `-- name: GetTriggerInstanceByIDForUpdate :one
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+FROM trigger_instances ti
+WHERE ti.id = $1
+  AND ti.project_id = $2
+  AND ti.deleted IS FALSE
+FOR UPDATE
+`
+
+type GetTriggerInstanceByIDForUpdateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetTriggerInstanceByIDForUpdate(ctx context.Context, arg GetTriggerInstanceByIDForUpdateParams) (TriggerInstance, error) {
+	row := q.db.QueryRow(ctx, getTriggerInstanceByIDForUpdate, arg.ID, arg.ProjectID)
 	var i TriggerInstance
 	err := row.Scan(
 		&i.ID,
@@ -294,6 +480,77 @@ func (q *Queries) GetTriggerInstanceByIDPublic(ctx context.Context, id uuid.UUID
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getTriggerThreadRoute = `-- name: GetTriggerThreadRoute :one
+SELECT id, project_id, target_kind, target_ref, correlation_id, route_to_correlation_id, state, last_seen_cursor, created_at, updated_at, deleted_at, deleted
+FROM trigger_thread_routes
+WHERE project_id = $1
+  AND target_kind = $2
+  AND target_ref = $3
+  AND correlation_id = $4
+  AND deleted IS FALSE
+`
+
+type GetTriggerThreadRouteParams struct {
+	ProjectID     uuid.UUID
+	TargetKind    string
+	TargetRef     string
+	CorrelationID string
+}
+
+func (q *Queries) GetTriggerThreadRoute(ctx context.Context, arg GetTriggerThreadRouteParams) (TriggerThreadRoute, error) {
+	row := q.db.QueryRow(ctx, getTriggerThreadRoute,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.CorrelationID,
+	)
+	var i TriggerThreadRoute
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.CorrelationID,
+		&i.RouteToCorrelationID,
+		&i.State,
+		&i.LastSeenCursor,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getWakeWorkloadSession = `-- name: GetWakeWorkloadSession :one
+SELECT id
+FROM user_sessions
+WHERE jti = $1 AND subject_urn = $2
+  AND organization_id = $3
+  AND (project_id = $4 OR project_id IS NULL)
+  AND deleted IS FALSE AND expires_at > clock_timestamp()
+`
+
+type GetWakeWorkloadSessionParams struct {
+	Jti            string
+	SubjectUrn     urn.SessionSubject
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+}
+
+// Recheck the authenticated session inside the wake transaction.
+func (q *Queries) GetWakeWorkloadSession(ctx context.Context, arg GetWakeWorkloadSessionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getWakeWorkloadSession,
+		arg.Jti,
+		arg.SubjectUrn,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listActiveTriggerInstancesByTarget = `-- name: ListActiveTriggerInstancesByTarget :many
@@ -467,6 +724,76 @@ func (q *Queries) ListTriggerInstances(ctx context.Context, projectID uuid.UUID)
 	return items, nil
 }
 
+const routeTriggerThread = `-- name: RouteTriggerThread :one
+INSERT INTO trigger_thread_routes (
+    project_id,
+    target_kind,
+    target_ref,
+    correlation_id,
+    route_to_correlation_id,
+    state,
+    last_seen_cursor
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+ON CONFLICT (project_id, target_kind, target_ref, correlation_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    route_to_correlation_id = EXCLUDED.route_to_correlation_id,
+    state = EXCLUDED.state,
+    last_seen_cursor = CASE
+        WHEN EXCLUDED.last_seen_cursor IS NULL THEN trigger_thread_routes.last_seen_cursor
+        WHEN trigger_thread_routes.last_seen_cursor IS NULL THEN EXCLUDED.last_seen_cursor
+        WHEN EXCLUDED.last_seen_cursor COLLATE "C" > trigger_thread_routes.last_seen_cursor COLLATE "C" THEN EXCLUDED.last_seen_cursor
+        ELSE trigger_thread_routes.last_seen_cursor
+    END,
+    updated_at = clock_timestamp()
+RETURNING id, project_id, target_kind, target_ref, correlation_id, route_to_correlation_id, state, last_seen_cursor, created_at, updated_at, deleted_at, deleted
+`
+
+type RouteTriggerThreadParams struct {
+	ProjectID            uuid.UUID
+	TargetKind           string
+	TargetRef            string
+	CorrelationID        string
+	RouteToCorrelationID pgtype.Text
+	State                string
+	LastSeenCursor       pgtype.Text
+}
+
+func (q *Queries) RouteTriggerThread(ctx context.Context, arg RouteTriggerThreadParams) (TriggerThreadRoute, error) {
+	row := q.db.QueryRow(ctx, routeTriggerThread,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.CorrelationID,
+		arg.RouteToCorrelationID,
+		arg.State,
+		arg.LastSeenCursor,
+	)
+	var i TriggerThreadRoute
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.CorrelationID,
+		&i.RouteToCorrelationID,
+		&i.State,
+		&i.LastSeenCursor,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const setTriggerInstanceStatus = `-- name: SetTriggerInstanceStatus :one
 UPDATE trigger_instances
 SET
@@ -547,6 +874,41 @@ func (q *Queries) SetTriggerInstanceStatusByID(ctx context.Context, arg SetTrigg
 	return i, err
 }
 
+const setTriggerThreadRoutesStateForTarget = `-- name: SetTriggerThreadRoutesStateForTarget :execrows
+UPDATE trigger_thread_routes
+SET state = $1,
+    updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND target_kind = $3
+  AND target_ref = $4
+  AND (correlation_id = $5 OR route_to_correlation_id = $5)
+  AND deleted IS FALSE
+`
+
+type SetTriggerThreadRoutesStateForTargetParams struct {
+	State         string
+	ProjectID     uuid.UUID
+	TargetKind    string
+	TargetRef     string
+	CorrelationID string
+}
+
+// Sets the state of every conversation delivered under @correlation_id: the
+// conversation itself and every conversation routed to it.
+func (q *Queries) SetTriggerThreadRoutesStateForTarget(ctx context.Context, arg SetTriggerThreadRoutesStateForTargetParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setTriggerThreadRoutesStateForTarget,
+		arg.State,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.CorrelationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateTriggerInstance = `-- name: UpdateTriggerInstance :one
 UPDATE trigger_instances
 SET
@@ -606,6 +968,73 @@ func (q *Queries) UpdateTriggerInstance(ctx context.Context, arg UpdateTriggerIn
 		&i.TargetDisplay,
 		&i.ConfigJson,
 		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertTriggerThreadRouteState = `-- name: UpsertTriggerThreadRouteState :one
+INSERT INTO trigger_thread_routes (
+    project_id,
+    target_kind,
+    target_ref,
+    correlation_id,
+    state,
+    last_seen_cursor
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+ON CONFLICT (project_id, target_kind, target_ref, correlation_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    state = EXCLUDED.state,
+    last_seen_cursor = CASE
+        WHEN EXCLUDED.last_seen_cursor IS NULL THEN trigger_thread_routes.last_seen_cursor
+        WHEN trigger_thread_routes.last_seen_cursor IS NULL THEN EXCLUDED.last_seen_cursor
+        WHEN EXCLUDED.last_seen_cursor COLLATE "C" > trigger_thread_routes.last_seen_cursor COLLATE "C" THEN EXCLUDED.last_seen_cursor
+        ELSE trigger_thread_routes.last_seen_cursor
+    END,
+    updated_at = clock_timestamp()
+RETURNING id, project_id, target_kind, target_ref, correlation_id, route_to_correlation_id, state, last_seen_cursor, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertTriggerThreadRouteStateParams struct {
+	ProjectID      uuid.UUID
+	TargetKind     string
+	TargetRef      string
+	CorrelationID  string
+	State          string
+	LastSeenCursor pgtype.Text
+}
+
+// Cursors are compared in byte order, so a cursor only moves forward when the
+// source's cursors sort lexically (Slack message timestamps do).
+func (q *Queries) UpsertTriggerThreadRouteState(ctx context.Context, arg UpsertTriggerThreadRouteStateParams) (TriggerThreadRoute, error) {
+	row := q.db.QueryRow(ctx, upsertTriggerThreadRouteState,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.CorrelationID,
+		arg.State,
+		arg.LastSeenCursor,
+	)
+	var i TriggerThreadRoute
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.CorrelationID,
+		&i.RouteToCorrelationID,
+		&i.State,
+		&i.LastSeenCursor,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

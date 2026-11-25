@@ -7,18 +7,20 @@ import (
 	"os"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -67,6 +69,14 @@ func (p *stubProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, 
 	return 0, nil
 }
 
+func (*stubProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{}, nil
+}
+
+func (*stubProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, nil
+}
+
 func (p *stubProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
 	return nil
 }
@@ -91,7 +101,7 @@ func (p *stubProvisioner) GetModelUsage(ctx context.Context, generationID string
 type testInstance struct {
 	service     *modelkeys.Service
 	conn        *pgxpool.Pool
-	enc         *encryption.Client
+	keys        *aiproviderkeys.Keys
 	provisioner *stubProvisioner
 	features    *productfeatures.Client
 }
@@ -106,7 +116,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 // the product-feature cache on its own redis database. Every test shares
 // mockidp.MockOrgID while cloning its own Postgres database, so a feature
 // cached as enabled by one test would leak into a parallel test asserting the
-// disabled path.
+// disabled path. Dedicated databases still retain cached values across -count
+// repetitions, so those variants also get a private Redis instance.
 func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -118,15 +129,21 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
-	redisClient, err := infra.NewRedisClient(t, redisDB)
-	require.NoError(t, err)
+	var redisClient *redis.Client
+	if redisDB == 0 {
+		redisClient, err = infra.NewRedisClient(t, redisDB)
+		require.NoError(t, err)
+	} else {
+		redisClient = redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
+		t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
+	}
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	enc := testenv.NewEncryptionClient(t)
+	keys := testenv.NewAIProviderKeys(t, conn)
 
 	provisioner := &stubProvisioner{platformKey: "platform-key", usageErr: nil, usageCalls: 0}
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
@@ -137,7 +154,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 		conn,
 		sessionManager,
 		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
-		enc,
+		keys,
 		provisioner,
 		features,
 		audit.NewLogger(),
@@ -146,7 +163,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 	return ctx, &testInstance{
 		service:     svc,
 		conn:        conn,
-		enc:         enc,
+		keys:        keys,
 		provisioner: provisioner,
 		features:    features,
 	}

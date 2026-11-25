@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { useOrganization } from "@/contexts/Auth";
+import { capturePreservedStorageIfSafe } from "@/lib/logout-storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { AdminRow, AdminSection } from "./AdminSection";
@@ -87,6 +88,9 @@ export function OrgOverrideSection(): JSX.Element {
         className="flex items-center gap-2 px-4 py-3"
         method="post"
         action="/rpc/auth.startSupportSession"
+        onSubmit={() => {
+          capturePreservedStorageIfSafe();
+        }}
       >
         <Input
           placeholder="organization-slug"

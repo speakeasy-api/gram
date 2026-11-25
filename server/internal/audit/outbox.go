@@ -10,20 +10,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 )
 
-func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, result repo.InsertAuditLogRow) error {
-	input := entry.Params
+// PublishWebhook publishes the webhook event for an inserted entry of either
+// log, unless internal, in the caller's transaction. Staff actions are masked as the Speakeasy
+// team, and category tells subscribers which log the entry is in.
+func PublishWebhook(ctx context.Context, dbtx repo.DBTX, input repo.InsertAuditLogParams, result repo.InsertAuditLogRow, category Category, event *outbox.EventDef[events.AuditLogCreatedPayloadV1]) error {
+	// Internal entries are persisted but never reach any outbox consumer.
+	if input.IsInternal {
+		return nil
+	}
 	actorDisplayName := conv.FromPGTextOrEmpty[string](input.ActorDisplayName)
 	actorSlug := conv.FromPGTextOrEmpty[string](input.ActorSlug)
-	if conv.FromPGTextOrEmpty[string](input.ActingSurface) == string(SurfaceAdmin) {
+	actingSurface := Surface(conv.FromPGTextOrEmpty[string](input.ActingSurface))
+	actorID := input.ActorID
+	actingClientID := conv.FromPGTextOrEmpty[string](input.ActingClientID)
+	if IsStaffAdminSurface(actingSurface) {
+		actorID = ""
 		actorDisplayName = SpeakeasyTeamActorLabel
 		actorSlug = ""
+		actingClientID = ""
 	}
 
-	if _, err := outbox.PublishWebhookEvent(ctx, dbtx, result.OrganizationID, entry.OutboxEvent, events.AuditLogCreatedPayloadV1{
+	if _, err := outbox.PublishWebhookEvent(ctx, dbtx, result.OrganizationID, event, events.AuditLogCreatedPayloadV1{
 		ID:                 result.ID,
 		OrganizationID:     result.OrganizationID,
 		ProjectID:          input.ProjectID,
-		ActorID:            input.ActorID,
+		ActorID:            actorID,
 		ActorType:          input.ActorType,
 		ActorDisplayName:   actorDisplayName,
 		ActorSlug:          actorSlug,
@@ -36,9 +47,10 @@ func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, resul
 		AfterSnapshot:      input.AfterSnapshot,
 		Metadata:           input.Metadata,
 		ActingSurface:      conv.FromPGTextOrEmpty[string](input.ActingSurface),
-		ActingClientID:     conv.FromPGTextOrEmpty[string](input.ActingClientID),
+		Category:           string(category),
+		ActingClientID:     actingClientID,
 	}); err != nil {
-		return fmt.Errorf("append to outbox: %w", err)
+		return fmt.Errorf("log %s: append to outbox: %w", input.Action, err)
 	}
 
 	return nil

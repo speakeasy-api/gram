@@ -3,13 +3,21 @@ package judgemessage
 import (
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 // Message is the message under evaluation by a judge.
 type Message struct {
-	// Type is the Gram chat message type that produced this judge input.
+	// AnchorID locates the persisted event for conversation context; zero means unlinked.
+	AnchorID uuid.UUID
+
+	// ChatID locates available history for an event that has not been persisted.
+	ChatID uuid.UUID
+
+	// Type is the Speakeasy chat message type that produced this judge input.
 	Type message.Type
 	// Body is the text content rendered for judge evaluation.
 	Body string
@@ -29,6 +37,19 @@ type Message struct {
 	// ToolCalls contains the individual tool invocations for multi-call
 	// assistant messages. Single-call messages use ToolName/MCPServer/MCPFunction.
 	ToolCalls []ToolCall
+}
+
+// Trajectory is bounded causal context for the event under evaluation.
+// PriorUserRequest is the latest preceding user request.
+// RecentUntrustedContent is the latest tool result after that request and
+// before the current event. Both values remain untrusted evidence.
+type Trajectory struct {
+	PriorUserRequest       string
+	RecentUntrustedContent string
+}
+
+func (t Trajectory) HasContent() bool {
+	return strings.TrimSpace(t.PriorUserRequest) != "" || strings.TrimSpace(t.RecentUntrustedContent) != ""
 }
 
 // ToolCall is one tool invocation within a multi-call assistant message.
@@ -52,6 +73,8 @@ type ToolCall struct {
 func New(messageType message.Type, toolName, body string) Message {
 	server, fn, _ := toolref.AttributeTool(toolName)
 	return Message{
+		AnchorID:    uuid.Nil,
+		ChatID:      uuid.Nil,
 		Type:        messageType,
 		Body:        body,
 		ToolName:    toolName,
@@ -83,6 +106,8 @@ func NewToolCall(toolName, arguments string) ToolCall {
 
 func NewForToolCalls(calls []ToolCall) Message {
 	return Message{
+		AnchorID:    uuid.Nil,
+		ChatID:      uuid.Nil,
 		Type:        message.ToolRequest,
 		Body:        "",
 		ToolName:    "",

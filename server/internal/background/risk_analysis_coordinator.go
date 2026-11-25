@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/throttle"
 	"github.com/speakeasy-api/gram/server/internal/uuidv7"
@@ -113,18 +115,13 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					MessageIDs:       batch,
 					ContentPartIDs:   nil,
 					Sources:          policy.Sources,
-					MessageTypes:     policy.MessageTypes,
 					PresidioEntities: policy.PresidioEntities,
 					// Derived authoritatively from the policy inside AnalyzeBatch.Do;
 					// left unset here to avoid a second config source.
 					PresidioScoreThreshold: 0,
 					ApprovedEmailDomains:   nil,
 					CustomRuleIds:          policy.CustomRuleIds,
-					// Placeholder: overwritten by AnalyzeBatch.Do from the refetched
-					// policy's AnalyzerConfig (defaults to true). The zero value here
-					// does NOT disable the library; it is required only by exhaustruct.
-					BuiltinPresetsEnabled: false,
-					DetectionScopes:       nil,
+					DetectionScopes:        nil,
 				})
 				dispatches = append(dispatches, analyzeDispatch{future: f, riskPolicyID: policy.ID, messageIDs: batch, contentPartIDs: nil})
 			}
@@ -137,12 +134,10 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					MessageIDs:             nil,
 					ContentPartIDs:         batch,
 					Sources:                policy.Sources,
-					MessageTypes:           policy.MessageTypes,
 					PresidioEntities:       policy.PresidioEntities,
 					PresidioScoreThreshold: 0,
 					ApprovedEmailDomains:   nil,
 					CustomRuleIds:          policy.CustomRuleIds,
-					BuiltinPresetsEnabled:  false,
 					DetectionScopes:        nil,
 				})
 				dispatches = append(dispatches, analyzeDispatch{future: f, riskPolicyID: policy.ID, messageIDs: nil, contentPartIDs: batch})
@@ -288,6 +283,22 @@ func (s *TemporalRiskAnalysisSignaler) Signal(ctx context.Context, projectID uui
 	return nil
 }
 
+// Describe reports the run state of the project's coordinator by describing
+// the latest run of its deterministic workflow id. An empty run id asks
+// Temporal for the most recent run, which is what "last ran" means for a
+// ContinueAsNew chain. NotFound maps to StateNever rather than an error.
+func (s *TemporalRiskAnalysisSignaler) Describe(ctx context.Context, projectID uuid.UUID) (analysisstatus.Status, error) {
+	if s.TemporalEnv == nil {
+		return analysisstatus.Status{}, errors.New("risk analysis signaler has no temporal environment")
+	}
+	resp, err := s.TemporalEnv.Client().DescribeWorkflowExecution(ctx, coordinatorWorkflowID(projectID), "")
+	status, err := analysisstatus.FromDescribe(resp, err)
+	if err != nil {
+		return analysisstatus.Status{}, fmt.Errorf("describe coordinator %s: %w", coordinatorWorkflowID(projectID), err)
+	}
+	return status, nil
+}
+
 // ── Throttled Signaler ───────────────────────────────────────────────────────
 
 // ProjectSignaler wakes a per-project coordinator workflow. Every coordinator
@@ -353,6 +364,21 @@ func (t *ThrottledSignaler) Signal(ctx context.Context, projectID uuid.UUID) err
 		)
 	}
 	return nil
+}
+
+// Describe delegates to the wrapped signaler when it can describe its
+// coordinator. Throttling only shapes signals, never reads, so there is
+// nothing to coalesce here.
+func (t *ThrottledSignaler) Describe(ctx context.Context, projectID uuid.UUID) (analysisstatus.Status, error) {
+	d, ok := t.inner.(analysisstatus.Describer)
+	if !ok {
+		return analysisstatus.Status{}, fmt.Errorf("risk analysis signaler %T cannot describe coordinator runs", t.inner)
+	}
+	status, err := d.Describe(ctx, projectID)
+	if err != nil {
+		return analysisstatus.Status{}, fmt.Errorf("describe: %w", err)
+	}
+	return status, nil
 }
 
 // Shutdown flushes any pending throttled signals. Call during graceful shutdown.

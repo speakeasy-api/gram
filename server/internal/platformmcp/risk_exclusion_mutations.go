@@ -88,7 +88,7 @@ func (s *riskExclusionMutationService) createExclusionTool(ctx context.Context, 
 	var reconcile *exclusioncore.Exclusion
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operationCreateRiskExclusion, IdempotencyKey: input.IdempotencyKey, Input: prepared.normalized,
-	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		queries := riskrepo.New(tx)
 		if err := queries.LockRiskExclusionMutations(ctx, project.ID.String()); err != nil {
 			return nil, fmt.Errorf("lock risk exclusion create convergence: %w", err)
@@ -147,7 +147,7 @@ func (s *riskExclusionMutationService) updateExclusionTool(ctx context.Context, 
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operationUpdateRiskExclusion, IdempotencyKey: input.IdempotencyKey,
 		Input: map[string]any{"project_slug": project.Slug, "exclusion_id": exclusionID.String(), "enabled": input.Enabled, "expected_version": input.ExpectedVersion},
-	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		updated, err := s.exclusions.ToggleInTransaction(ctx, tx, exclusioncore.ToggleMutation{
 			ID: exclusionID, ProjectID: project.ID, Enabled: input.Enabled, Actor: riskExclusionActor(principal),
 		}, func(locked exclusioncore.Exclusion) error {
@@ -203,26 +203,49 @@ func (s *riskExclusionMutationService) prepareCreate(principal Principal, projec
 		normalizedPolicyID = &value
 	}
 
+	// The input schema is one flat object, because Anthropic rejects a
+	// top-level oneOf, so each match type's rules are enforced here.
 	switch input.MatchType {
 	case "exact":
-		if (input.RuleIDFilter != "" && !slices.Contains(s.catalog.DisabledRules, input.RuleIDFilter)) || (input.SourceFilter != "" && !slices.Contains(s.catalog.Sources, input.SourceFilter)) {
-			return preparedRiskExclusionCreate{}, invalidRiskExclusionRequest()
+		if input.RuleIDFilter != "" && !slices.Contains(s.catalog.DisabledRules, input.RuleIDFilter) {
+			return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("rule_id_filter is not a known detector rule.")
+		}
+		if input.SourceFilter != "" && !slices.Contains(s.catalog.Sources, input.SourceFilter) {
+			return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("source_filter is not a known detector source.")
 		}
 	case "rule_id":
-		if !slices.Contains(s.catalog.DisabledRules, input.MatchValue) || input.RuleIDFilter != "" || (input.SourceFilter != "" && !slices.Contains(s.catalog.Sources, input.SourceFilter)) {
-			return preparedRiskExclusionCreate{}, invalidRiskExclusionRequest()
+		if !slices.Contains(s.catalog.DisabledRules, input.MatchValue) {
+			return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("For match_type rule_id, match_value must be a known detector rule, one of the values rule_id_filter accepts.")
+		}
+		if input.RuleIDFilter != "" {
+			return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("match_type rule_id takes no rule_id_filter.")
+		}
+		if input.SourceFilter != "" && !slices.Contains(s.catalog.Sources, input.SourceFilter) {
+			return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("source_filter is not a known detector source.")
 		}
 	case "source":
-		if !slices.Contains(s.catalog.Sources, input.MatchValue) || input.SourceFilter != "" || (input.RuleIDFilter != "" && !slices.Contains(s.catalog.DisabledRules, input.RuleIDFilter)) {
-			return preparedRiskExclusionCreate{}, invalidRiskExclusionRequest()
+		if !slices.Contains(s.catalog.Sources, input.MatchValue) {
+			return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("For match_type source, match_value must be a known detector source, one of the values source_filter accepts.")
+		}
+		if input.SourceFilter != "" {
+			return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("match_type source takes no source_filter.")
+		}
+		if input.RuleIDFilter != "" && !slices.Contains(s.catalog.DisabledRules, input.RuleIDFilter) {
+			return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("rule_id_filter is not a known detector rule.")
 		}
 	case "entity_type":
-		if !slices.Contains(s.catalog.PresidioEntities, input.MatchValue) || input.RuleIDFilter != "" || (input.SourceFilter != "" && input.SourceFilter != policycatalog.PresidioSource) {
-			return preparedRiskExclusionCreate{}, invalidRiskExclusionRequest()
+		if !slices.Contains(s.catalog.PresidioEntities, input.MatchValue) {
+			return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("For match_type entity_type, match_value must be a known Presidio entity type.")
+		}
+		if input.RuleIDFilter != "" {
+			return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("match_type entity_type takes no rule_id_filter.")
+		}
+		if input.SourceFilter != "" && input.SourceFilter != policycatalog.PresidioSource {
+			return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("match_type entity_type takes source_filter presidio or none.")
 		}
 		input.SourceFilter = policycatalog.PresidioSource
 	default:
-		return preparedRiskExclusionCreate{}, invalidRiskExclusionRequest()
+		return preparedRiskExclusionCreate{}, invalidRiskExclusionKind("match_type must be exact, rule_id, source or entity_type.")
 	}
 
 	normalized := normalizedCreateRiskExclusion{
@@ -313,11 +336,14 @@ func mapRiskExclusionMutationError(err error) error {
 	case errors.Is(err, exclusioncore.ErrPolicyNotFound), errors.Is(err, exclusioncore.ErrExclusionNotFound), errors.Is(err, pgx.ErrNoRows):
 		return &RiskMutationError{Code: "not_found", Message: "The requested risk exclusion or policy was not found.", Cause: fmt.Errorf("%w: %w", ErrRiskMutationNotFound, err)}
 	}
-	var coreMutation *exclusioncore.MutationError
-	if errors.As(err, &coreMutation) {
+	if _, ok := errors.AsType[*exclusioncore.MutationError](err); ok {
 		return riskMutationUnavailableWithCause(err)
 	}
 	return riskMutationUnavailableWithCause(err)
+}
+
+func invalidRiskExclusionKind(message string) error {
+	return &RiskMutationError{Code: "invalid_request", Message: message + " No exclusion was created.", Cause: ErrRiskMutationInvalid}
 }
 
 func invalidRiskExclusionRequest() error {

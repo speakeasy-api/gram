@@ -13,36 +13,54 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/organizations"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/admin"
+	"github.com/speakeasy-api/gram/server/internal/adminmcp"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/deployments"
+	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
-
-const adminBillingTelemetryEnabledFlag = "admin-billing-telemetry-enabled"
 
 func newAdminStripeClient(
 	ctx context.Context,
@@ -56,6 +74,25 @@ func newAdminStripeClient(
 		return nil
 	}
 	return client
+}
+
+// resolveAdminAssetStorage never guesses a filesystem location. A gs URI is
+// self-describing; other locations require an explicit backend.
+func resolveAdminAssetStorage(backend, uri string) (assetStorageOptions, error) {
+	if uri == "" {
+		return assetStorageOptions{}, errors.New("assets URI is not configured")
+	}
+	if backend == "fs" {
+		return assetStorageOptions{assetsBackend: backend, assetsURI: uri}, nil
+	}
+	if backend != "" && backend != "gcs" {
+		return assetStorageOptions{}, errors.New("unsupported explicit assets backend")
+	}
+	parsed, err := url.Parse(uri)
+	if err != nil || parsed.Scheme != "gs" || parsed.Hostname() == "" || parsed.Host != parsed.Hostname() || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return assetStorageOptions{}, errors.New("assets backend unresolved: GCS requires a valid gs URI with a bucket")
+	}
+	return assetStorageOptions{assetsBackend: "gcs", assetsURI: uri}, nil
 }
 
 func newAdminCommand() *cli.Command {
@@ -79,6 +116,21 @@ func newAdminCommand() *cli.Command {
 			Usage:    "The URL of the admin server",
 			EnvVars:  []string{"GRAM_ADMIN_SERVER_URL"},
 			Required: true,
+		},
+		&cli.BoolFlag{
+			Name:    "admin-mcp-enabled",
+			Usage:   "Enable the staff Admin MCP on the private admin ingress",
+			EnvVars: []string{"GRAM_ADMIN_MCP_ENABLED"},
+		},
+		&cli.StringFlag{
+			Name:    "admin-mcp-signing-key",
+			Usage:   "Independent signing key for staff Admin MCP access tokens",
+			EnvVars: []string{"GRAM_ADMIN_MCP_SIGNING_KEY"},
+		},
+		&cli.BoolFlag{
+			Name:    "admin-mcp-writes-enabled",
+			Usage:   "Switch for staff Admin MCP writes. Off by default",
+			EnvVars: []string{"GRAM_ADMIN_MCP_WRITES_ENABLED"},
 		},
 		&cli.StringFlag{
 			Name:     "environment",
@@ -129,6 +181,16 @@ func newAdminCommand() *cli.Command {
 			Usage:    "The URL of the site",
 			EnvVars:  []string{"GRAM_SITE_URL"},
 			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "server-url",
+			Usage:   "The public URL of the Speakeasy server, used to build MCP server URLs. Defaults to site-url.",
+			EnvVars: []string{"GRAM_SERVER_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "authz-issuer-url",
+			Usage:   "Speakeasy platform signing issuer origin. Without it the assistant identity migration is unavailable.",
+			EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"},
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -210,6 +272,7 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
+		internalCatalogFlag(),
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -217,10 +280,15 @@ func newAdminCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name: "workos-api-key",
-			Usage: "WorkOS API key for user identity lookups and organization creation. " +
-				"Falls back to the same secret the server and worker read, so a deployment that already sets one does not need a second.",
-			EnvVars:  []string{"WORKOS_API_KEY", "GRAM_IDP_CLIENT_SECRET"},
+			Name:     "workos-api-key",
+			Usage:    "WorkOS API key for user identity lookups and organization creation.",
+			EnvVars:  []string{"WORKOS_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "workos-environment-id",
+			Usage:    "WorkOS environment ID used to link organizations to the WorkOS dashboard. Leave unset to hide those links.",
+			EnvVars:  []string{"WORKOS_ENVIRONMENT_ID"},
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -235,6 +303,14 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_IDP_CLIENT_ID"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "idp-client-secret",
+			Usage:    "Client secret for local admin API calls through dev-idp",
+			EnvVars:  []string{"GRAM_IDP_CLIENT_SECRET"},
+			Required: false,
+		},
+		&cli.StringFlag{Name: "assets-backend", EnvVars: []string{"GRAM_ASSETS_BACKEND"}, Usage: "Asset backend (fs or gcs); inferred only from a gs:// URI when omitted"},
+		&cli.StringFlag{Name: "assets-uri", EnvVars: []string{"GRAM_ASSETS_URI"}, Usage: "Shared asset storage location; logos are unavailable when unresolved"},
 		// The server's own flag names and environment variables, so a deployment
 		// already running gram-server needs no new secrets. The encryption key
 		// is the application-wide one, not admin-encryption-key.
@@ -260,43 +336,32 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"LOOPS_API_KEY"},
 			Required: false,
 		},
-		&cli.StringFlag{
-			Name: "stripe-api-key", Usage: "The Stripe API key", EnvVars: []string{"STRIPE_API_KEY"},
-		},
-		&cli.StringFlag{
-			Name: "stripe-webhook-secret", Usage: "The Stripe webhook signing secret", EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
-		},
-		&cli.BoolFlag{
-			Name:    adminBillingTelemetryEnabledFlag,
-			Usage:   "Enable PAYG billing telemetry from ClickHouse",
-			EnvVars: []string{"GRAM_ADMIN_BILLING_TELEMETRY_ENABLED"},
-		},
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-price-id-tum", Aliases: []string{"stripe.price_id_tum"}, EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-meter-id-tum", Aliases: []string{"stripe.meter_id_tum"}, EnvVars: []string{"STRIPE_METER_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-meter-event-name", Aliases: []string{"stripe.meter_event_name"}, EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-portal-configuration-id", Aliases: []string{"stripe.portal_configuration_id"}, EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
-		}),
 	}
+	flags = append(flags, stripeFlags()...)
 	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, clickHouseReadFlags()...)
+	flags = append(flags, platformHostsCLIFlag())
+	flags = append(flags, orgDefaultHostFlags()...)
+	flags = append(flags, posthogFlags()...)
+	flags = append(flags, customDomainTargetSuffixFlag())
+	flags = append(flags, orgEncryptionFlags()...)
+	flags = append(flags, staffFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
-		Usage: "Start the Gram admin server",
+		Usage: "Start the Speakeasy admin server",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
-			siteURL, err := url.Parse(c.String("site-url"))
-			if err != nil || siteURL.Host == "" || (siteURL.Scheme != "http" && siteURL.Scheme != "https") {
-				return fmt.Errorf("invalid site-url: must be an absolute HTTP(S) URL")
+			siteURL, err := parseSiteURL(c.String("site-url"))
+			if err != nil {
+				return fmt.Errorf("invalid site-url: %w", err)
 			}
 			if c.String("environment") == "prod" && siteURL.Scheme != "https" {
 				return fmt.Errorf("invalid site-url: HTTPS is required in production")
+			}
+			staffOrg, err := staffOrganizationFromCLI(c)
+			if err != nil {
+				return err
 			}
 
 			serviceName := "gram-admin"
@@ -317,6 +382,7 @@ func newAdminCommand() *cli.Command {
 				ServiceName:    serviceName,
 				ServiceVersion: shortGitSHA(),
 				GitSHA:         GitSHA,
+				Partition:      PullPartition(ctx),
 				EnableTracing:  c.Bool("with-otel-tracing"),
 				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
@@ -356,6 +422,9 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			defer db.Close()
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+				return err
+			}
 
 			err = o11y.StartObservers(meterProvider, db)
 			if err != nil {
@@ -377,16 +446,19 @@ func newAdminCommand() *cli.Command {
 			}
 
 			stripeClient := newAdminStripeClient(ctx, logger, guardianPolicy, c)
-			var billingTelemetry *telemetryrepo.Queries
-			if c.Bool(adminBillingTelemetryEnabledFlag) {
-				chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
-				if err != nil {
-					logger.WarnContext(ctx, "billing usage telemetry unavailable; continuing without ClickHouse", attr.SlogError(err))
-				} else {
-					defer o11y.LogDefer(ctx, logger, func() error { return chShutdown(ctx) })
-					billingTelemetry = telemetryrepo.New(chDB)
-				}
+			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("connect to clickhouse database: %w", err)
 			}
+			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse client", func() error { return chShutdown(ctx) })
+			// Admin reads run on the read replica. chDB stays for the migration
+			// tools, which write.
+			chReadDB, chReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("connect to clickhouse read replica: %w", err)
+			}
+			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse read client", func() error { return chReadShutdown(ctx) })
+			billingTelemetry := telemetryrepo.New(chReadDB)
 
 			adminEncryption, err := encryption.New(c.String("admin-encryption-key"))
 			if err != nil {
@@ -434,13 +506,164 @@ func newAdminCommand() *cli.Command {
 			mux.Use(admin.SessionMiddleware)
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
-			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
+			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c, staffOrg)
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
+			authz.SetUpstreamSelectorWriteGate(newAdminUpstreamSelectorWriteGate(ctx, c, logger, posthogClient))
+			mcpServerURL := siteURL
+			if raw := c.String("server-url"); raw != "" {
+				mcpServerURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("invalid server-url: %w", err)
+				}
+				if err := validateServerURL(mcpServerURL, c.String("environment")); err != nil {
+					return fmt.Errorf("invalid server-url: %w", err)
+				}
+			}
+			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
+			if err != nil {
+				return fmt.Errorf("invalid platform hosts: %w", err)
+			}
+			orgHosts, err := orgHostResolverFromCLI(c, mcpServerURL, siteURL, c.String("environment"), platformHosts)
+			if err != nil {
+				return err
+			}
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
+			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
-			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger())
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL))
+			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), chReadDB, staffOrg)
+			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
+				return fmt.Errorf("initialize support matrix: %w", err)
+			}
+			registryValidator, err := mcpregistry.LoadValidator()
+			if err != nil {
+				return fmt.Errorf("load registry validator: %w", err)
+			}
+			registryService := mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL)
+			if err := registryService.Ready(ctx); err != nil {
+				return fmt.Errorf("registry readiness: %w", err)
+			}
+			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
+				return fmt.Errorf("sync onboarding steps: %w", err)
+			}
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chReadDB), telemetry.NewMCPServerHealth(db, chReadDB), siteURL, registryService, staffOrg)
+			adminService.SetProviderHealth(mcpconnectionattempts.NewProviderHealth(logger, chDB))
+			var projectRedeployer admin.ProjectRedeployer
+			if temporalEnv != nil {
+				projectRedeployer = deployments.NewStaffRedeployer(logger, tracerProvider, db, temporalEnv, audit.NewLogger())
+				adminService.SetProjectRedeployer(projectRedeployer)
+				adminService.SetMemoryEvalRunStarter(&background.TemporalMemoryEvalRunStarter{TemporalEnv: temporalEnv})
+			}
+			var assistantIdentities *assistantidentity.Service
+			if c.String("authz-issuer-url") != "" {
+				assistantIdentities = newAssistantIdentities(c, audit.NewLogger())
+				adminService.SetAssistantIdentities(assistantIdentities)
+			}
+			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
+			adminService.SetMCPServerURL(mcpServerURL)
+			adminService.SetHookClients(telemetry.NewHookClients(chReadDB))
+			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))
+			hooksVersionPolicy, err := plugins.HooksVersionPolicy()
+			if err != nil {
+				return fmt.Errorf("hooks version policy: %w", err)
+			}
+			adminService.SetHookFleet(telemetry.NewHookFleet(chDB), hooksVersionPolicy)
+			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
+			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
+			adminService.SetStripeDashboardMode(c.String("stripe-api-key"))
+			customDomainTargetSuffix, err := customDomainTargetSuffixFromCLI(c)
+			if err != nil {
+				return err
+			}
+			adminService.SetCustomDomainTargetSuffix(customDomainTargetSuffix)
+			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
+			if err != nil {
+				return err
+			}
+			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			// Built whether or not the application key is set: the remote
+			// session service and the Tailscale OAuth client migration need
+			// both, but the organization encryption transition methods need
+			// only organization encryption. Building
+			// it here stops admin at startup when it is misconfigured.
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
+			if err != nil {
+				return err
+			}
+			if applicationEncryption != nil {
+				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, orgEncryption.ClientSecrets(logger, applicationEncryption), guardianPolicy))
+				if orgEncryption.Provisioner != nil {
+					adminService.SetTailscaleOAuthMigration(&admin.TailscaleOAuthMigration{
+						Transitions: orgEncryption.Transitions,
+						Runner:      orgencryption.NewRunner(logger, db, orgEncryption.Cipher(logger, applicationEncryption), meterProvider),
+						Store:       ingresscredentials.NewCopyStore(db),
+					})
+				}
+			} else {
+				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
+			}
+			// Transitions change only where keys can be provisioned.
+			// Without Temporal, runs are unavailable and the hourly
+			// background run finishes the clear after finalize.
+			if orgEncryption.Service != nil && orgEncryption.Provisioner != nil {
+				var runs admin.OrganizationEncryptionRunStarter
+				if temporalEnv != nil {
+					runs = &background.TemporalOrganizationEncryptionRunStarter{TemporalEnv: temporalEnv}
+				}
+				adminService.SetOrganizationEncryption(admin.OrganizationEncryption{
+					Transitions: orgEncryption.Transitions,
+					UseCases:    orgEncryptionUseCaseStores(db),
+					Runs:        runs,
+				})
+			} else {
+				logger.WarnContext(ctx, "Admin organization encryption transitions unavailable; organization encryption is not configured")
+			}
+			var platformAssets *assets.Service
+			assetOptions, err := resolveAdminAssetStorage(c.String("assets-backend"), c.String("assets-uri"))
+			if err != nil {
+				logger.WarnContext(ctx, "Admin logos unavailable; continuing without asset storage", attr.SlogError(err))
+			} else {
+				assetStorage, assetShutdown, err := newAssetStorage(ctx, logger, assetOptions)
+				if err != nil {
+					return fmt.Errorf("initialize admin asset storage: %w", err)
+				}
+				defer o11y.LogDefer(ctx, logger, "shut down admin asset storage", func() error { return assetShutdown(ctx) })
+				platformAssets = assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage)
+				adminService.SetAssetService(platformAssets)
+				adminService.SetMCPSourceStorage(assetStorage)
+			}
+			adminService.SetGCPIdentity(gcpIdentity)
+			admin.Attach(mux, adminService)
+			if c.Bool("admin-mcp-enabled") {
+				key := c.String("admin-mcp-signing-key")
+				if err := validateAdminMCPSigningKey(key, c.String("admin-encryption-key"), c.String("encryption-key")); err != nil {
+					return err
+				}
+				writes := adminmcp.WriteConfig{Enabled: c.Bool("admin-mcp-writes-enabled")}
+				signer := sessiontokens.NewSigner(key)
+				staffCache := cache.NewRedisCacheAdapter(redisClient)
+				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, staffCache, adminService.Verifier(), adminEncryption, signer, writes, logger)
+				if err != nil {
+					return fmt.Errorf("initialize staff Admin MCP OAuth: %w", err)
+				}
+				staffOAuth.Attach(mux)
+				staffAuth := adminmcp.NewStaffAuthenticator(signer, db, adminEncryption, adminService.Verifier(), staffOAuth.Issuer(), staffOAuth.Resource())
+				writeDeps := adminmcp.WriteDependencies{Features: productFeatures, Registry: registryService, ImageUploads: nil, ProjectRedeployer: projectRedeployer, AssistantIdentities: assistantIdentities}
+				if platformAssets != nil {
+					imageUploads, err := assets.NewPlatformImageUploads(platformAssets, staffCache, adminServerURL, siteURL, logger)
+					if err != nil {
+						return fmt.Errorf("configure staff Admin MCP image uploads: %w", err)
+					}
+					writeDeps.ImageUploads = imageUploads
+					mux.Handle(http.MethodPut, assets.PlatformImageUploadPath, imageUploads.Handler().ServeHTTP)
+				}
+				staffRuntime := adminmcp.NewRuntime(staffAuth, staffOAuth.ProtectedResourceURL(), adminService)
+				if err := adminmcp.AttachWrites(staffRuntime, staffOAuth, writeDeps, writes); err != nil {
+					return fmt.Errorf("configure staff Admin MCP write tools: %w", err)
+				}
+				mux.Handle(http.MethodPost, adminmcp.Path, staffRuntime.Handler().ServeHTTP)
+				mux.Handle(http.MethodGet, adminmcp.Path+"/tools", staffRuntime.ToolDirectoryHandler(staffOAuth.Authorization, logger).ServeHTTP)
+			}
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
@@ -537,4 +760,30 @@ func newAdminCommand() *cli.Command {
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}
+}
+
+func validateAdminMCPSigningKey(key, adminEncryptionKey, applicationEncryptionKey string) error {
+	if len(key) < 32 || key == adminEncryptionKey || key == applicationEncryptionKey {
+		return errors.New("staff Admin MCP requires an independent signing key of at least 32 bytes")
+	}
+	return nil
+}
+
+// newAdminIssuerEncryption preserves optional issuer setup without accepting a malformed configured key.
+func newAdminIssuerEncryption(key string) (*encryption.Client, error) {
+	if key == "" {
+		return nil, nil
+	}
+	client, err := encryption.New(key)
+	if err != nil {
+		return nil, fmt.Errorf("create remote session encryption client: %w", err)
+	}
+	return client, nil
+}
+
+// newAdminUpstreamSelectorWriteGate builds the upstream_client selector write
+// gate from the same feature flag provider the server and worker use. Without
+// it, admin writes that name upstream_client always fail closed.
+func newAdminUpstreamSelectorWriteGate(ctx context.Context, c *cli.Context, logger *slog.Logger, posthogClient feature.Provider) authz.UpstreamSelectorWriteGate {
+	return feature.UpstreamSelectorWrites(newFeatureFlags(ctx, c, logger, posthogClient))
 }

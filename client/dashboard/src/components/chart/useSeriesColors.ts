@@ -1,15 +1,12 @@
-import { useContext } from "react";
-import { ConfigContext } from "@/components/ui/context/config";
-import { otherSeriesForTheme, seriesForTheme } from "./palette";
+import { useIsDarkTheme } from "@/lib/theme";
+import {
+  otherSeriesForTheme,
+  seriesForTheme,
+  type Trend,
+  trendForTheme,
+} from "./palette";
 
-// Whether the resolved theme is dark, read from the config context
-// OPTIONALLY (rather than via useConfig, which throws without a
-// ConfigProvider) so charts render with the light palette in bare
-// test/storybook mounts.
-export function useIsDarkTheme(): boolean {
-  const config = useContext(ConfigContext);
-  return config?.theme === "dark";
-}
+export { useIsDarkTheme } from "@/lib/theme";
 
 // The categorical series ramp for the resolved theme. Chart.js paints to
 // canvas and cannot follow the CSS theme, so chart components resolve the
@@ -25,4 +22,11 @@ export function useSeriesColors(): string[] {
 // recedes behind the named series on both canvases.
 export function useOtherSeriesColor(): string {
   return otherSeriesForTheme(useIsDarkTheme());
+}
+
+// The up/down/flat trend trio for the resolved theme. Trend colors annotate
+// SVG strokes and inline figures rather than CSS-styled text, so they can't
+// follow the theme through a token and are resolved here like the series ramp.
+export function useTrendColors(): Trend {
+  return trendForTheme(useIsDarkTheme());
 }

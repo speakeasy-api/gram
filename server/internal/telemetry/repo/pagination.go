@@ -80,6 +80,27 @@ func withHavingTuplePagination(sb squirrel.SelectBuilder, cursor, sortOrder, pro
 	return sb.Having("("+timeExpr+", "+groupColumn+") < ("+subquery+", ?)", args...)
 }
 
+// withHavingTupleValuePagination adds the same tuple HAVING condition as
+// withHavingTuplePagination, but against a boundary the caller observed rather
+// than one re-derived from the table. The subquery withHavingTuplePagination
+// builds carries neither the outer query's time window nor its row filters
+// (excluded hook sources, event source, account type, ...), so a row the outer
+// query excludes can supply a later timestamp than the one that actually placed
+// the group on the previous page. Compared against that inflated timestamp the
+// group still satisfies the HAVING clause and is returned again, page after
+// page. A caller that seals the timestamp it was shown into its own cursor
+// passes it here instead, and the comparison is exactly the boundary it saw.
+func withHavingTupleValuePagination(sb squirrel.SelectBuilder, cursor string, cursorTimeUnixNano int64, sortOrder, groupColumn, timeExpr string) squirrel.SelectBuilder {
+	if cursor == "" {
+		return sb
+	}
+
+	if sortOrder == "asc" {
+		return sb.Having("("+timeExpr+", "+groupColumn+") > (?, ?)", cursorTimeUnixNano, cursor)
+	}
+	return sb.Having("("+timeExpr+", "+groupColumn+") < (?, ?)", cursorTimeUnixNano, cursor)
+}
+
 // withOrdering adds ORDER BY clauses based on sort direction.
 // Supports an optional secondary column for tie-breaking.
 func withOrdering(sb squirrel.SelectBuilder, sortOrder, primaryCol, secondaryCol string) squirrel.SelectBuilder {

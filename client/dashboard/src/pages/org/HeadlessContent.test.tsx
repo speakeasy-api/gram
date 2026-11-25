@@ -2,20 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 import { HeadlessContent } from "./HeadlessContent";
+import { MemoryRouter } from "react-router";
 
-vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-}));
 vi.mock("@/components/mode-switch-starfield", () => ({
   ModeSwitchStarfield: () => null,
 }));
 vi.mock("@/components/gram-logo/variants/icon", () => ({
   GramIcon: () => null,
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ home: { goTo: vi.fn() } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 // The wizard is a stack of sheets over live onboarding queries; this page's
 // own job is the list that opens it.
@@ -33,8 +29,29 @@ const agentNames = (container: HTMLElement) =>
   );
 
 describe("HeadlessContent", () => {
+  it("describes the control-plane workflows available to the agent", () => {
+    render(
+      <MemoryRouter>
+        <HeadlessContent />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Connect your agent" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Use the control plane from the agent you already work in. Your role decides which projects, MCP servers, plugins, skills and operational data you can access.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("offers a catch-all agent last", () => {
-    const { container } = render(<HeadlessContent />);
+    const { container } = render(
+      <MemoryRouter>
+        <HeadlessContent />
+      </MemoryRouter>,
+    );
 
     const names = agentNames(container);
     expect(names).toContain("Other agent");
@@ -43,7 +60,11 @@ describe("HeadlessContent", () => {
   });
 
   it("still lists the certified agents ahead of it", () => {
-    const { container } = render(<HeadlessContent />);
+    const { container } = render(
+      <MemoryRouter>
+        <HeadlessContent />
+      </MemoryRouter>,
+    );
 
     expect(agentNames(container).slice(0, -1)).toEqual([
       "Claude Code",

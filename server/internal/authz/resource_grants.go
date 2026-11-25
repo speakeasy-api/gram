@@ -8,7 +8,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Resource identifies one resource-scoped permission.
 type Resource struct {
 	OrganizationID string
 	Scope          Scope
@@ -111,12 +110,14 @@ func (r ResourceGrant) uniquePrincipals() []urn.Principal {
 	return principals
 }
 
-// ReplaceGrantAudience replaces the full audience for one exact grant target.
-// This is intentionally distinct from PatchPrincipalGrants: callers use this
-// when they know the complete desired audience, such as switching from
-// user:all to a narrowed user/role set.
+// ReplaceGrantAudience is for callers that know the complete audience, such
+// as switching from user:all to a narrowed set; PatchPrincipalGrants leaves
+// omitted principals alone.
 func ReplaceGrantAudience(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
+		return err
+	}
+	if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, resource.selector()); err != nil {
 		return err
 	}
 
@@ -140,7 +141,7 @@ func ReplaceGrantAudience(ctx context.Context, db repo.DBTX, resource ResourceGr
 	}
 
 	for _, principal := range resource.uniquePrincipals() {
-		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		if err := upsertGrant(ctx, q, repo.UpsertPrincipalGrantParams{
 			OrganizationID: resource.OrganizationID,
 			PrincipalUrn:   principal,
 			Scope:          string(resource.Scope),
@@ -153,9 +154,81 @@ func ReplaceGrantAudience(ctx context.Context, db repo.DBTX, resource ResourceGr
 	return nil
 }
 
-// Replace replaces allow grants for one resource-scoped permission.
+// PrincipalSelectors is one principal and the selectors it holds for a
+// resource: unrestricted when empty, otherwise one selector per narrowing —
+// a tool name, a disposition, or both.
+type PrincipalSelectors struct {
+	Principal urn.Principal
+	Selectors []Selector
+}
+
+// ReplaceResourceAudience replaces every grant naming one resource under one
+// scope, including the narrowed ones. Distinct from ReplaceGrantAudience,
+// which replaces a single exact (scope, selector) target: a principal may hold
+// several selectors on the same resource once tools and dispositions are in
+// play, so the whole resource is the unit that gets rewritten.
+func ReplaceResourceAudience(ctx context.Context, db repo.DBTX, resource Resource, audience []PrincipalSelectors) error {
+	if err := resource.Validate(); err != nil {
+		return err
+	}
+
+	// The whole replacement is prepared before anything is deleted: a caller
+	// without a transaction would otherwise lose the existing audience to a
+	// selector that never passed validation.
+	type pendingGrant struct {
+		principal urn.Principal
+		selector  []byte
+	}
+	pending := make([]pendingGrant, 0, len(audience))
+	for _, entry := range audience {
+		selectors := entry.Selectors
+		if len(selectors) == 0 {
+			selectors = []Selector{NewSelector(resource.Scope, resource.ResourceID)}
+		}
+		for _, selector := range selectors {
+			if err := ValidateSelector(resource.Scope, selector); err != nil {
+				return fmt.Errorf("invalid selector for scope %q: %w", resource.Scope, err)
+			}
+			if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, selector); err != nil {
+				return err
+			}
+			selectorBytes, err := selector.MarshalJSON()
+			if err != nil {
+				return fmt.Errorf("marshal grant selector: %w", err)
+			}
+			pending = append(pending, pendingGrant{principal: entry.Principal, selector: selectorBytes})
+		}
+	}
+
+	q := repo.New(db)
+	if _, err := q.DeletePrincipalGrantsByResource(ctx, repo.DeletePrincipalGrantsByResourceParams{
+		OrganizationID: resource.OrganizationID,
+		Scope:          string(resource.Scope),
+		ResourceKind:   resource.Kind(),
+		ResourceID:     resource.ResourceID,
+	}); err != nil {
+		return fmt.Errorf("delete resource audience: %w", err)
+	}
+
+	for _, grant := range pending {
+		if err := upsertGrant(ctx, q, repo.UpsertPrincipalGrantParams{
+			OrganizationID: resource.OrganizationID,
+			PrincipalUrn:   grant.principal,
+			Scope:          string(resource.Scope),
+			Selectors:      grant.selector,
+		}); err != nil {
+			return fmt.Errorf("upsert resource audience grant: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
+		return err
+	}
+	if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, resource.selector()); err != nil {
 		return err
 	}
 	selector := resource.selector()
@@ -177,7 +250,7 @@ func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource Resour
 	}
 
 	for _, principal := range principals {
-		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		if err := upsertGrant(ctx, q, repo.UpsertPrincipalGrantParams{
 			OrganizationID: resource.OrganizationID,
 			PrincipalUrn:   principal,
 			Scope:          string(resource.Scope),
@@ -190,10 +263,11 @@ func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource Resour
 	return nil
 }
 
-// Grant adds one allow grant per principal without replacing other principals'
-// grants for the same resource.
 func GrantResourceToPrincipals(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
+		return err
+	}
+	if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, resource.selector()); err != nil {
 		return err
 	}
 	if err := resource.ValidatePrincipals(); err != nil {
@@ -213,8 +287,6 @@ func GrantResourceToPrincipals(ctx context.Context, db repo.DBTX, resource Resou
 	return nil
 }
 
-// Revoke removes one exact allow grant per principal without replacing other
-// principals' grants for the same resource.
 func RevokeResourceFromPrincipals(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
 		return err
@@ -236,7 +308,6 @@ func RevokeResourceFromPrincipals(ctx context.Context, db repo.DBTX, resource Re
 	return nil
 }
 
-// ListGrantsForResource loads grants for one resource-scoped permission.
 func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource) ([]Grant, error) {
 	if err := resource.Validate(); err != nil {
 		return nil, err
@@ -262,16 +333,14 @@ func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource)
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
 			Selector:     selector,
+			Inferred:     false,
 		})
 	}
 
 	return grants, nil
 }
 
-// ListGrantsForResourceIDs loads grants for a set of resources under one scope
-// in an org in a single query, batching what ListGrantsForResource does for a
-// single resource while staying scoped to the given ids. Callers group the
-// returned grants by Selector.ResourceID() to attribute each grant.
+// Callers group the returned grants by Selector.ResourceID().
 func ListGrantsForResourceIDs(ctx context.Context, db repo.DBTX, organizationID string, scope Scope, resourceIDs []string) ([]Grant, error) {
 	if organizationID == "" {
 		return nil, fmt.Errorf("organization id is required")
@@ -307,6 +376,7 @@ func ListGrantsForResourceIDs(ctx context.Context, db repo.DBTX, organizationID 
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
 			Selector:     selector,
+			Inferred:     false,
 		})
 	}
 

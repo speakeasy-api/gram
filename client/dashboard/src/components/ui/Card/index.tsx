@@ -1,12 +1,14 @@
+// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { cn } from "@/lib/utils";
-import React, { FC, PropsWithChildren, ReactNode } from "react";
+import type { FC, PropsWithChildren, ReactNode } from "react";
+import React from "react";
 import { Icon } from "../Icon";
 import { SimpleTooltip } from "../Tooltip";
 import { Stack } from "../Stack";
 import { Button } from "../Button";
 import { Grid } from "../Grid";
 import { Skeleton, SkeletonParagraph } from "../Skeleton";
-import { iconNames } from "../Icon/names";
+import type { IconName } from "../Icon/names";
 import { Children } from "react";
 
 type RightElement = {
@@ -16,7 +18,7 @@ type RightElement = {
 };
 
 type IconProps = {
-  name: (typeof iconNames)[number];
+  name: IconName;
   size?: "small" | "medium" | "large";
 };
 
@@ -238,6 +240,8 @@ type CardEntityProps = {
   icon?: ReactNode;
   /** Additional styling for the icon rail surface. */
   iconRailClassName?: string;
+  /** Additional styling for the bordered tile the icon sits in. */
+  iconTileClassName?: string;
   /** Extra content layered on the icon rail (e.g. an "Added" badge). */
   overlay?: ReactNode;
   className?: string;
@@ -253,6 +257,7 @@ const CardEntity: FC<CardEntityProps> = ({
   children,
   icon,
   iconRailClassName,
+  iconTileClassName,
   className,
   overlay,
   onClick,
@@ -274,6 +279,10 @@ const CardEntity: FC<CardEntityProps> = ({
     className={cn(
       "group flex h-full min-h-[156px] flex-row overflow-hidden border bg-card text-card-foreground transition-colors",
       "hover:border-neutral-hover",
+      // A clickable card takes focus, so it has to show it: without a ring the
+      // keyboard user tabbing through a grid has no idea which card is theirs.
+      onClick &&
+        "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
       className,
     )}
   >
@@ -285,7 +294,9 @@ const CardEntity: FC<CardEntityProps> = ({
     >
       {icon && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="border bg-card p-3">{icon}</div>
+          <div className={cn("border bg-card p-3", iconTileClassName)}>
+            {icon}
+          </div>
         </div>
       )}
       {overlay}
@@ -296,6 +307,8 @@ const CardEntity: FC<CardEntityProps> = ({
 CardEntity.displayName = "CardEntity";
 
 type CardDashboardProps = {
+  /** One line under the title, saying what the panel is for. */
+  description?: React.ReactNode;
   title: string;
   action?: ReactNode;
   children: ReactNode;
@@ -304,6 +317,8 @@ type CardDashboardProps = {
   bodyClassName?: string;
   /** Root classes, e.g. `h-auto` for a panel that should not stretch. */
   className?: string;
+  /** Title-bar classes, e.g. tighter padding above a dense list. */
+  headerClassName?: string;
 };
 
 /**
@@ -313,10 +328,12 @@ type CardDashboardProps = {
  */
 function CardDashboard({
   title,
+  description,
   action,
   children,
   tooltip,
   bodyClassName,
+  headerClassName,
   className,
 }: CardDashboardProps): JSX.Element {
   return (
@@ -326,20 +343,30 @@ function CardDashboard({
         className,
       )}
     >
-      <div className="flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4">
-        <div className="flex items-center gap-1.5">
-          <h3 className="text-eyebrow">{title}</h3>
-          {tooltip && (
-            <SimpleTooltip tooltip={tooltip}>
-              <button
-                type="button"
-                aria-label={`About ${title}`}
-                className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
-              >
-                <Icon name="info" className="size-3.5" />
-              </button>
-            </SimpleTooltip>
-          )}
+      <div
+        className={cn(
+          "flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4",
+          headerClassName,
+        )}
+      >
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-eyebrow">{title}</h3>
+            {tooltip && (
+              <SimpleTooltip tooltip={tooltip}>
+                <button
+                  type="button"
+                  aria-label={`About ${title}`}
+                  className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
+                >
+                  <Icon name="info" className="size-3.5" />
+                </button>
+              </SimpleTooltip>
+            )}
+          </div>
+          {description != null ? (
+            <p className="text-muted-foreground text-sm">{description}</p>
+          ) : null}
         </div>
         {action}
       </div>

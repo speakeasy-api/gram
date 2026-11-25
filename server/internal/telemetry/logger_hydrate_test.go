@@ -26,7 +26,7 @@ type directorySnapshotSeed struct {
 	userID string
 }
 
-// seedDirectorySnapshotData creates an organization, a Gram user, a linked
+// seedDirectorySnapshotData creates an organization, a Speakeasy user, a linked
 // directory user with custom attributes, a current group membership, and a
 // role assignment — the full directory state the telemetry logger hydrates.
 func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.Pool, suffix string) directorySnapshotSeed {
@@ -142,7 +142,7 @@ func TestCreateLog_HydratesDirectorySnapshot(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := getLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	// user.attributes carries the allowlisted WorkOS predefined attributes.
 	require.Contains(t, log.Attributes, "Engineering")
@@ -181,7 +181,7 @@ func TestCreateLog_NoDirectorySnapshotWhenNoDirectoryData(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := getLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	// Empty snapshot parts are omitted rather than stamped as empty payloads.
 	require.NotContains(t, log.Attributes, "groups")

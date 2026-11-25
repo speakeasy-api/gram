@@ -82,7 +82,7 @@ type countingBypassDB struct {
 
 func (d *countingBypassDB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	d.readCalls++
-	rows, err := d.DBTX.Query(ctx, sql, args...)
+	rows, err := d.DBTX.Query(ctx, sql, args...) //nolint:glint // notestingrawsql: wrapper forwards SQLc-generated SQL while counting bypass reads
 	if err != nil {
 		return nil, fmt.Errorf("run counted bypass query: %w", err)
 	}
@@ -91,7 +91,7 @@ func (d *countingBypassDB) Query(ctx context.Context, sql string, args ...any) (
 
 func (d *countingBypassDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	d.readCalls++
-	return d.DBTX.QueryRow(ctx, sql, args...)
+	return d.DBTX.QueryRow(ctx, sql, args...) //nolint:glint // notestingrawsql: wrapper forwards SQLc-generated SQL while counting bypass reads
 }
 
 func TestOfflineShadowMCPScan_CursorApprovalWithURLAndIdentitySuppressesFinding(t *testing.T) {

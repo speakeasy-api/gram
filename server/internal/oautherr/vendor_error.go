@@ -11,7 +11,8 @@ import (
 // shape; the decode error itself is ignored because encoding/json fills every
 // member it can, so an RFC-shaped or foreign body simply leaves the shape's
 // required members empty. Adding a shape means adding a struct, a parser, and
-// an entry here.
+// an entry here; a provider that keeps the RFC shape but invents its own
+// dead-grant code belongs in vendorDeadGrantCodes instead.
 var vendorTokenErrorParsers = []func(body []byte) (RFC6749Error, bool){
 	parseVendorErrorsStringArray,
 	parseVendorErrorCodeMessageObject,
@@ -100,6 +101,30 @@ func (v vendorCodeMessage) normalized() vendorCodeMessage {
 		Code:    strings.TrimSpace(v.Code),
 		Message: strings.TrimSpace(strings.TrimRight(message, ".")),
 	}
+}
+
+// vendorDeadGrantCodes maps RFC-shaped extension codes that a provider sends
+// only when a grant can never succeed again onto CodeInvalidGrant, which RFC
+// 6749 §5.2 defines for an invalid, expired or revoked authorization code or
+// refresh token alike. GitHub's token endpoint
+// (https://github.com/login/oauth/access_token) answers a revoked or expired
+// refresh token with "bad_refresh_token" and a spent or unknown authorization
+// code with "bad_verification_code", both under HTTP 200. Matching is exact:
+// any other extension code is returned as is.
+var vendorDeadGrantCodes = map[string]string{
+	"bad_refresh_token":     CodeInvalidGrant,
+	"bad_verification_code": CodeInvalidGrant,
+}
+
+// CanonicalTokenErrorCode maps a vendor extension code that means a dead
+// grant onto CodeInvalidGrant and returns every other code unchanged.
+// ParseTokenError keeps extension codes verbatim, so callers that act on
+// invalid_grant apply this before deciding.
+func CanonicalTokenErrorCode(code string) string {
+	if canonical, ok := vendorDeadGrantCodes[code]; ok {
+		return canonical
+	}
+	return code
 }
 
 // vendorDeadGrantErrors is the last-chance fallback for token endpoints that

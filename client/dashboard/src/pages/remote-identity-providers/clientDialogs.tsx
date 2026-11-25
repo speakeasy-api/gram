@@ -4,9 +4,11 @@ import { invalidateAllOrganizationRemoteSessionClientSessions } from "@gram/clie
 import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { useRevokeAllOrganizationRemoteSessionClientSessionsMutation } from "@gram/client/react-query/revokeAllOrganizationRemoteSessionClientSessions.js";
+import { useRotateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/rotateOrganizationRemoteSessionClient.js";
+import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 // DeleteClientDialog confirms deletion of a remote session client, surfacing the
 // server-side pre-flight (active session count + affected MCP server names).
@@ -122,6 +124,131 @@ export function RevokeAllSessionsDialog({
           request: { clientId },
         })
       }
+    />
+  );
+}
+
+// RotateClientDialog confirms re-registering a client with its issuer in
+// place: the client_id and secret are replaced, the row and its attachments
+// stay, and every session minted against the old client_id is revoked.
+export function RotateClientDialog({
+  clientId,
+  clientLabel,
+  onClose,
+}: {
+  clientId: string;
+  clientLabel: string;
+  onClose: () => void;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  // isFetching, not isLoading: a reopened dialog has cached preflight data
+  // while it refetches, and a second rotation must not be confirmed against
+  // the count from before the first one.
+  const { data: preflight, isFetching } =
+    useOrganizationRemoteSessionClientDeletePreflight({ id: clientId });
+  const sessionCount = preflight?.sessionCount ?? 0;
+
+  const rotate = useRotateOrganizationRemoteSessionClientMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAllOrganizationRemoteSessionClient(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllOrganizationRemoteSessionClients(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllOrganizationRemoteSessionClientSessions(queryClient, {
+          refetchType: "all",
+        }),
+      ]);
+      toast.success("Client re-registered with the authorization server");
+      onClose();
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to rotate client",
+      );
+    },
+  });
+
+  return (
+    <ConfirmDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={`Rotate client "${clientLabel}"?`}
+      description="Speakeasy registers a new client with the authorization server and replaces this client's ID and secret in place. Its attachments are kept, but every session minted against the old client is revoked, so users reconnect once."
+      confirmLabel="Rotate client"
+      isPending={rotate.isPending}
+      impact={{
+        summary: `${sessionCount} ${sessionCount === 1 ? "session" : "sessions"} will be revoked.`,
+        mcpServerNames: preflight?.mcpServerNames,
+        isLoading: isFetching,
+      }}
+      onConfirm={() =>
+        rotate.mutate({
+          request: { riskIDRequestBody: { id: clientId } },
+        })
+      }
+    />
+  );
+}
+
+// ChangeClientIdDialog confirms saving a corrected client ID. The issuer bound
+// every existing session's tokens to the old ID, so the server revokes them
+// and users reconnect once.
+export function ChangeClientIdDialog({
+  clientId,
+  newClientId,
+  isPending,
+  onConfirm,
+  onClose,
+}: {
+  clientId: string;
+  newClientId: string;
+  isPending: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}): JSX.Element {
+  // isFetching for the same reason as RotateClientDialog: a reopened dialog
+  // must not confirm against a count from before the last change.
+  const {
+    data: preflight,
+    isFetching,
+    isError,
+  } = useOrganizationRemoteSessionClientDeletePreflight({ id: clientId });
+  const sessionCount = preflight?.sessionCount ?? 0;
+
+  return (
+    <ConfirmDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title="Change the client ID?"
+      description={`Speakeasy will identify this client to the authorization server as "${newClientId}". Everyone connected through it is signed out and reconnects once. The client's settings and attachments are kept.`}
+      confirmLabel="Change client ID"
+      pendingLabel="Saving…"
+      isPending={isPending}
+      impact={
+        isError
+          ? undefined
+          : {
+              summary: `${sessionCount} ${sessionCount === 1 ? "session" : "sessions"} will be revoked.`,
+              mcpServerNames: preflight?.mcpServerNames,
+              isLoading: isFetching,
+            }
+      }
+      // Without the count the admin can't see who will be signed out, so
+      // don't let them confirm blind.
+      error={
+        isError
+          ? "Couldn't check how many sessions this would sign out. Close this and try again."
+          : undefined
+      }
+      confirmDisabled={isError}
+      onConfirm={onConfirm}
     />
   );
 }

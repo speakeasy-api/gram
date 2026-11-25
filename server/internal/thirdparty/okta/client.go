@@ -1,0 +1,995 @@
+package okta
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"math/rand/v2"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
+
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/dpop"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+)
+
+const (
+	codeConsentRequired = "consent_required" // OIDC Core code Okta reports at the token endpoint when no requested scope is granted.
+	tokenEndpointPath   = "/oauth2/v1/token" //nolint:gosec // G101 false positive: a URL path, not a credential.
+
+	maxResponseBytes        = 1 << 20
+	tokenExpirySafetyMargin = 60 * time.Second
+	maxRateLimitRetries     = 3
+	maxRateLimitWait        = 2 * time.Minute
+	maxRateLimitJitter      = 250 * time.Millisecond
+	rateLimitSlowdownRatio  = 0.2
+
+	defaultMaxPages          = 50
+	defaultRequestsPerMinute = 300
+)
+
+// hardMaxPages bounds any listing whatever the caller asks for.
+const hardMaxPages = 500
+
+// defaultScopes are requested on every normal token mint.
+var defaultScopes = []string{"okta.apps.read"}
+
+// Config identifies the Okta org and the remote session client whose
+// credential authenticates against it.
+type Config struct {
+	// OrgURL is the Okta org base URL, for example https://example.okta.com.
+	OrgURL string
+
+	// ClientID is the Okta API Services application client id.
+	ClientID string
+
+	// AudienceFormat is the remote_session_clients
+	// token_endpoint_auth_audience_format value and must be "token_endpoint";
+	// provisioning writes that value on the row.
+	AudienceFormat string
+
+	// RemoteSessionClientID is the remote_session_clients row id.
+	RemoteSessionClientID uuid.UUID
+
+	// OrganizationID is the Speakeasy organization that owns the credential.
+	OrganizationID string
+
+	// AuthMethod is the token endpoint client authentication; empty means
+	// private_key_jwt.
+	AuthMethod remotesessions.TokenEndpointAuthMethod
+
+	// JSONWebKeySetID is the organization key set holding the signing key;
+	// required for private_key_jwt only.
+	JSONWebKeySetID uuid.UUID
+
+	// ClientSecretGeneration is the stored client secret's revision for
+	// client_secret_basic. It changes whenever the secret is set, replaced or
+	// cleared, so a factory keyed on Config builds a new client and never
+	// reuses a token minted under the previous secret.
+	ClientSecretGeneration int64
+
+	// Credentials coordinates live credential reads and binding observations
+	// with revocation, and opens the client secret per token request.
+	// Required for client_secret_basic. Implementations must be comparable
+	// (Config is a factory cache key).
+	Credentials CredentialProvider
+
+	// RequireDPoP refuses unbound tokens even for client_secret_basic. Set it
+	// once a connection has been seen DPoP-bound so it cannot silently fall
+	// back to Bearer.
+	RequireDPoP bool
+
+	// MaxPages caps how many pages a list call follows; zero uses 50.
+	MaxPages int
+}
+
+var (
+	// ErrClientSecretUndecryptable means the stored client secret does not
+	// decrypt and retrying cannot help, so no token request was sent.
+	ErrClientSecretUndecryptable = errors.New("okta: client secret could not be decrypted")
+
+	// ErrClientSecretKeyUnavailable means the stored client secret could not
+	// be opened right now, such as when the organization's key is unreachable
+	// or suspended, so no token request was sent. It may clear on its own and
+	// says nothing about the credential.
+	ErrClientSecretKeyUnavailable = errors.New("okta: client secret key unavailable")
+)
+
+type cachedToken struct {
+	requireDPoP bool
+	accessToken string
+	tokenType   string
+	scope       string
+	expiresAt   time.Time
+}
+
+var noToken = cachedToken{requireDPoP: false, accessToken: "", tokenType: "", scope: "", expiresAt: time.Time{}}
+
+type httpClient struct {
+	logger     *slog.Logger
+	cfg        Config
+	httpClient *guardian.HTTPClient
+	signer     remotesessions.TokenEndpointAssertionSigner
+	authMethod remotesessions.TokenEndpointAuthMethod
+	key        *dpop.Key
+	orgURL     *url.URL
+	tokenURL   *url.URL
+	audience   string
+	maxPages   int
+	now        func() time.Time
+	sleep      func(ctx context.Context, d time.Duration) error
+	jitter     func() time.Duration
+
+	// mintAdmission serializes handshakes while allowing waiters to cancel.
+	mintAdmission chan struct{}
+
+	// dpopObserved is monotonic and protected by mintAdmission. It also protects
+	// standalone clients without a durable credential provider.
+	dpopObserved bool
+
+	// nonce is shared by the token endpoint and the Management API because
+	// both live on the org host and Okta issues one nonce for both (RFC 9449 §9).
+	nonce dpop.NonceCache
+
+	mu        sync.Mutex
+	cached    cachedToken
+	slowUntil time.Time
+}
+
+var _ Client = (*httpClient)(nil)
+
+// NewClient builds an Okta Management API client for one org with its own
+// ephemeral DPoP key and token cache. The client never follows redirects:
+// a 3xx from Okta surfaces as an APIError so credentials are only ever sent
+// to the configured org.
+func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotesessions.TokenEndpointAssertionSigner, cfg Config) (Client, error) {
+	orgURL, err := parseOrgURL(cfg.OrgURL)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.ClientID == "" {
+		return nil, errors.New("okta: client id is required")
+	}
+	authMethod := cfg.AuthMethod
+	if authMethod == "" {
+		authMethod = remotesessions.TokenEndpointAuthMethodPrivateKeyJWT
+	}
+	switch authMethod {
+	case remotesessions.TokenEndpointAuthMethodPrivateKeyJWT:
+		if signer == nil {
+			return nil, errors.New("okta: private_key_jwt requires an assertion signer")
+		}
+		if cfg.JSONWebKeySetID == uuid.Nil {
+			return nil, errors.New("okta: private_key_jwt requires a key set")
+		}
+	case remotesessions.TokenEndpointAuthMethodBasic:
+		if cfg.Credentials == nil {
+			return nil, errors.New("okta: client_secret_basic requires a credential provider")
+		}
+	case remotesessions.TokenEndpointAuthMethodPost, remotesessions.TokenEndpointAuthMethodNone:
+		return nil, fmt.Errorf("okta: unsupported token endpoint auth method %q", authMethod)
+	default:
+		return nil, fmt.Errorf("okta: unsupported token endpoint auth method %q", authMethod)
+	}
+	if cfg.AudienceFormat != string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint) {
+		return nil, fmt.Errorf("okta: audience format %q must be %q", cfg.AudienceFormat, remotesessions.TokenEndpointAuthAudienceTokenEndpoint)
+	}
+
+	tokenURL := orgURL.JoinPath(tokenEndpointPath)
+	audience, err := remotesessions.ResolveTokenEndpointAuthAudience(cfg.AudienceFormat, orgURL.String(), tokenURL.String())
+	if err != nil {
+		return nil, fmt.Errorf("okta: resolve client assertion audience: %w", err)
+	}
+
+	key, err := dpop.NewKey()
+	if err != nil {
+		return nil, fmt.Errorf("okta: %w", err)
+	}
+
+	maxPages := cfg.MaxPages
+	if maxPages <= 0 {
+		maxPages = defaultMaxPages
+	}
+
+	// A shallow copy shares the pooled transport but pins the redirect policy.
+	noRedirect := *client
+	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	return &httpClient{
+		logger:        logger.With(attr.SlogComponent("okta_client")),
+		cfg:           cfg,
+		httpClient:    &noRedirect,
+		signer:        signer,
+		authMethod:    authMethod,
+		key:           key,
+		orgURL:        orgURL,
+		tokenURL:      tokenURL,
+		audience:      audience,
+		maxPages:      maxPages,
+		now:           time.Now,
+		sleep:         sleepContext,
+		jitter:        rateLimitJitter,
+		mintAdmission: make(chan struct{}, 1),
+		dpopObserved:  false,
+		nonce:         dpop.NonceCache{},
+		mu:            sync.Mutex{},
+		cached:        noToken,
+		slowUntil:     time.Time{},
+	}, nil
+}
+
+// parseOrgURL accepts an https origin, or an http origin on a loopback host
+// for local stubs, with no path, query, fragment, or userinfo, and returns
+// it in RFC 3986 canonical form.
+func parseOrgURL(raw string) (*url.URL, error) {
+	orgURL, err := url.Parse(raw)
+	if err != nil || orgURL.Hostname() == "" || orgURL.Opaque != "" {
+		return nil, fmt.Errorf("okta: invalid org url %q", raw)
+	}
+	// Validate before trimming: an empty query or fragment ("?", "#") only shows in the raw string.
+	if strings.TrimRight(orgURL.Path, "/") != "" || strings.ContainsAny(raw, "?#") || orgURL.User != nil {
+		return nil, fmt.Errorf("okta: org url %q must be an origin without path, query, fragment, or userinfo", raw)
+	}
+	// Non-ASCII hosts fold differently across URL, DNS, and TLS; require the punycoded form.
+	for _, r := range orgURL.Hostname() {
+		if r > unicode.MaxASCII {
+			return nil, fmt.Errorf("okta: org url %q host must be ascii", raw)
+		}
+	}
+	switch orgURL.Scheme {
+	case "https":
+	case "http":
+		if !isLoopbackHost(strings.ToLower(orgURL.Hostname())) {
+			return nil, fmt.Errorf("okta: org url %q must use https", raw)
+		}
+	default:
+		return nil, fmt.Errorf("okta: org url %q must use https", raw)
+	}
+	// RFC 9449 §4.2, §4.3: canonicalize the origin once so every wire URI is byte-identical to its proof htu.
+	canonical, err := url.Parse(dpop.HTU(orgURL))
+	if err != nil {
+		return nil, fmt.Errorf("okta: invalid org url %q", raw)
+	}
+	canonical.Path, canonical.RawPath = "", ""
+	return canonical, nil
+}
+
+// validateAppID rejects ids that would not stay a single opaque path segment.
+func validateAppID(appID string) error {
+	switch {
+	case appID == "":
+		return errors.New("okta: app id is required")
+	case appID == "." || appID == ".." || strings.ContainsAny(appID, `/\`):
+		return fmt.Errorf("okta: invalid app id %q", appID)
+	default:
+		return nil
+	}
+}
+
+func isLoopbackHost(host string) bool {
+	switch host {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
+}
+
+func sleepContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("wait: %w", ctx.Err())
+	case <-timer.C:
+		return nil
+	}
+}
+
+func (c *httpClient) ListApps(ctx context.Context, req ListAppsRequest) ([]App, error) {
+	q := url.Values{}
+	setQuery(q, "q", req.Query)
+	if req.Status != "" {
+		q.Set("filter", fmt.Sprintf("status eq %q", req.Status))
+	}
+	setLimit(q, req.Limit)
+
+	raw, err := listAll[appJSON](ctx, c, "/api/v1/apps", q, req.MaxPages)
+	if err != nil && !errors.Is(err, ErrTooManyPages) {
+		return nil, err
+	}
+	out := make([]App, 0, len(raw))
+	for _, a := range raw {
+		out = append(out, a.toApp())
+	}
+	return out, err
+}
+
+func (c *httpClient) GetApp(ctx context.Context, appID string) (*App, error) {
+	if err := validateAppID(appID); err != nil {
+		return nil, err
+	}
+	raw, _, err := getJSON[appJSON](ctx, c, c.apiURL("/api/v1/apps", url.PathEscape(appID), nil))
+	if err != nil {
+		return nil, err
+	}
+	app := raw.toApp()
+	return &app, nil
+}
+
+func (c *httpClient) ListAppUsers(ctx context.Context, req ListAppUsersRequest) ([]AppUser, error) {
+	if err := validateAppID(req.AppID); err != nil {
+		return nil, err
+	}
+	q := url.Values{}
+	setLimit(q, req.Limit)
+
+	raw, err := listAll[appUserJSON](ctx, c, "/api/v1/apps/"+url.PathEscape(req.AppID)+"/users", q, req.MaxPages)
+	if err != nil && !errors.Is(err, ErrTooManyPages) {
+		return nil, err
+	}
+	out := make([]AppUser, 0, len(raw))
+	for _, u := range raw {
+		out = append(out, AppUser{
+			ID:          u.ID,
+			Scope:       u.Scope,
+			Status:      u.Status,
+			UserName:    u.Credentials.UserName,
+			Created:     u.Created,
+			LastUpdated: u.LastUpdated,
+		})
+	}
+	return out, err
+}
+
+func (c *httpClient) ListAppGroups(ctx context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
+	if err := validateAppID(req.AppID); err != nil {
+		return nil, err
+	}
+	q := url.Values{}
+	setLimit(q, req.Limit)
+
+	raw, err := listAll[appGroupJSON](ctx, c, "/api/v1/apps/"+url.PathEscape(req.AppID)+"/groups", q, req.MaxPages)
+	if err != nil && !errors.Is(err, ErrTooManyPages) {
+		return nil, err
+	}
+	out := make([]AppGroup, 0, len(raw))
+	for _, g := range raw {
+		out = append(out, AppGroup(g))
+	}
+	return out, err
+}
+
+// VerifyScopes always mints a fresh token for the required scopes. The
+// verification token replaces the cached one only when its grant covers the
+// default scopes, so the reads that follow a verify reuse it instead of
+// minting again; otherwise the cache stays evicted.
+func (c *httpClient) VerifyScopes(ctx context.Context, required []string) (*ScopeVerification, error) {
+	if err := c.acquireMint(ctx); err != nil {
+		return nil, err
+	}
+	defer c.releaseMint()
+	if err := c.waitForSlowdown(ctx); err != nil {
+		return nil, err
+	}
+	c.evictToken()
+
+	tok, err := c.mint(ctx, required)
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest && (apiErr.ErrorCode == oautherr.CodeInvalidScope || apiErr.ErrorCode == codeConsentRequired) {
+		return &ScopeVerification{
+			Granted:   make([]string, 0),
+			Missing:   append([]string(nil), required...),
+			DPoPBound: false,
+			ExpiresAt: time.Time{},
+		}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	granted := make([]string, 0)
+	have := make(map[string]struct{})
+	for s := range strings.FieldsSeq(tok.scope) {
+		granted = append(granted, s)
+		have[s] = struct{}{}
+	}
+	missing := make([]string, 0)
+	for _, s := range required {
+		if _, ok := have[s]; !ok {
+			missing = append(missing, s)
+		}
+	}
+	if c.acceptsTokenType(tok) && coversScopes(have, defaultScopes) {
+		c.mu.Lock()
+		c.cached = tok
+		c.mu.Unlock()
+	}
+	return &ScopeVerification{
+		Granted:   granted,
+		Missing:   missing,
+		DPoPBound: strings.EqualFold(tok.tokenType, dpop.TokenType),
+		ExpiresAt: tok.expiresAt,
+	}, nil
+}
+
+// acceptsTokenType reports whether a minted token may be used. private_key_jwt
+// requires a DPoP-bound token (RFC 9449 §5); client_secret_basic also accepts
+// Bearer because Okta OIN API Service apps may not bind tokens, unless the
+// connection is pinned to DPoP.
+func (c *httpClient) acceptsTokenType(tok cachedToken) bool {
+	tokenType := tok.tokenType
+	if strings.EqualFold(tokenType, dpop.TokenType) {
+		return true
+	}
+	return c.authMethod == remotesessions.TokenEndpointAuthMethodBasic && !c.cfg.RequireDPoP && !tok.requireDPoP && strings.EqualFold(tokenType, oauthwire.TokenTypeBearer)
+}
+
+func coversScopes(have map[string]struct{}, scopes []string) bool {
+	for _, s := range scopes {
+		if _, ok := have[s]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func setQuery(q url.Values, key, value string) {
+	if value != "" {
+		q.Set(key, value)
+	}
+}
+
+func setLimit(q url.Values, limit int) {
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+}
+
+// apiURL joins base and an already path-escaped id under the org origin.
+func (c *httpClient) apiURL(base, id string, q url.Values) *url.URL {
+	target := c.orgURL.JoinPath(base)
+	if id != "" {
+		target = target.JoinPath(id)
+	}
+	if len(q) > 0 {
+		target.RawQuery = q.Encode()
+	}
+	return target
+}
+
+// listAll follows Link pages up to maxPages (zero uses the client cap; the
+// hard ceiling applies regardless of which caller memoized the client). On
+// ErrTooManyPages it returns the pages it did fetch alongside the error.
+func listAll[T any](ctx context.Context, c *httpClient, path string, q url.Values, maxPages int) ([]T, error) {
+	if maxPages <= 0 {
+		maxPages = c.maxPages
+	}
+	maxPages = min(maxPages, hardMaxPages)
+	target := c.apiURL(path, "", q)
+	items := make([]T, 0)
+	pages := 0
+	for target != nil {
+		if pages >= maxPages {
+			return items, fmt.Errorf("%w: %s after %d pages", ErrTooManyPages, path, pages)
+		}
+		pages++
+
+		page, next, err := getJSON[[]T](ctx, c, target)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, page...)
+		target = next
+	}
+	return items, nil
+}
+
+func getJSON[T any](ctx context.Context, c *httpClient, target *url.URL) (T, *url.URL, error) {
+	var out T
+	body, header, err := c.do(ctx, http.MethodGet, target)
+	if err != nil {
+		return out, nil, err
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return out, nil, fmt.Errorf("decode okta %s response: %w", target.EscapedPath(), err)
+	}
+	next, err := nextLink(header, target)
+	if err != nil {
+		return out, nil, fmt.Errorf("parse okta %s next link: %w", target.EscapedPath(), err)
+	}
+	return out, next, nil
+}
+
+// do retries once for a nonce challenge, once for a rejected token, and up to
+// maxRateLimitRetries times for 429.
+func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]byte, http.Header, error) {
+	nonceRetried := false
+	tokenRetried := false
+	rateLimitRetries := 0
+
+	for {
+		if err := c.waitForSlowdown(ctx); err != nil {
+			return nil, nil, err
+		}
+		tok, err := c.token(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		// A token response can start a slowdown, so recheck before the resource call.
+		if err := c.waitForSlowdown(ctx); err != nil {
+			return nil, nil, err
+		}
+
+		req, err := http.NewRequestWithContext(ctx, method, target.String(), nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("build okta request: %w", err)
+		}
+		req.Header.Set("Accept", "application/json")
+		if strings.EqualFold(tok.tokenType, dpop.TokenType) {
+			// RFC 9449 §7.3, §11.1: every attempt, including retries, signs a fresh proof with a new jti and iat.
+			proof, err := c.key.Proof(method, target, dpop.ProofOptions{AccessToken: tok.accessToken, Nonce: c.nonce.Current(), IssuedAt: c.now()})
+			if err != nil {
+				return nil, nil, fmt.Errorf("okta resource proof: %w", err)
+			}
+			// RFC 9449 §7.1: the DPoP-bound token uses the DPoP authorization scheme.
+			req.Header.Set("Authorization", dpop.TokenType+" "+tok.accessToken)
+			// RFC 9449 §4.1, §7: exactly one DPoP header carrying a proof with ath.
+			req.Header.Set(dpop.HeaderName, proof)
+		} else {
+			// RFC 6750 §2.1: an unbound token uses the Bearer scheme and no proof.
+			req.Header.Set("Authorization", oauthwire.TokenTypeBearer+" "+tok.accessToken)
+		}
+
+		status, header, body, err := c.send(req)
+		if err != nil {
+			return nil, nil, fmt.Errorf("okta %s %s: %w", method, target.EscapedPath(), err)
+		}
+		// RFC 9449 §8.2, §9: a DPoP-Nonce on any response, success included, replaces the cached nonce.
+		c.nonce.Remember(header)
+		if status != http.StatusTooManyRequests {
+			c.observeRateLimit(header)
+		}
+
+		switch {
+		case status >= 200 && status < 300:
+			return body, header, nil
+
+		case status == http.StatusTooManyRequests && rateLimitRetries < maxRateLimitRetries:
+			rateLimitRetries++
+			wait := c.rateLimitWait(header)
+			c.logger.WarnContext(ctx, "okta rate limited, backing off",
+				attr.SlogHTTPRequestMethod(method),
+				attr.SlogHTTPRoute(target.EscapedPath()),
+				attr.SlogHTTPResponseStatusCode(status),
+			)
+			if err := c.sleep(ctx, wait); err != nil {
+				return nil, nil, err
+			}
+			continue
+
+		case status == http.StatusUnauthorized:
+			// RFC 9449 §9: a 401 with WWW-Authenticate error="use_dpop_nonce" and DPoP-Nonce is retried once with that nonce.
+			if dpop.IsUseNonceChallenge(header, body) {
+				if nonceRetried {
+					return nil, nil, newAPIError(method, target.EscapedPath(), status, body)
+				}
+				nonceRetried = true
+				continue
+			}
+			if tokenRetried {
+				return nil, nil, newAPIError(method, target.EscapedPath(), status, body)
+			}
+			tokenRetried = true
+			c.evictRejectedToken(tok.accessToken)
+			continue
+
+		default:
+			return nil, nil, newAPIError(method, target.EscapedPath(), status, body)
+		}
+	}
+}
+
+// send reads at most maxResponseBytes and never logs headers.
+func (c *httpClient) send(req *http.Request) (int, http.Header, []byte, error) {
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("send: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("read response: %w", err)
+	}
+	if len(body) > maxResponseBytes {
+		return 0, nil, nil, ErrResponseTooLarge
+	}
+	return resp.StatusCode, resp.Header, body, nil
+}
+
+func (c *httpClient) cachedToken() (cachedToken, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cached.accessToken == "" || !c.now().Before(c.cached.expiresAt.Add(-tokenExpirySafetyMargin)) {
+		return noToken, false
+	}
+	return c.cached, true
+}
+
+// liveCachedToken returns the unexpired cached token unless it is a Bearer
+// token and the durable record has since pinned the connection to DPoP: a
+// client that cached Bearer before another process observed binding must not
+// keep presenting it until expiry. A pinned Bearer token is evicted so the
+// caller mints again under the pin.
+func (c *httpClient) liveCachedToken(ctx context.Context) (cachedToken, bool, error) {
+	tok, ok := c.cachedToken()
+	if !ok {
+		return noToken, false, nil
+	}
+	if c.cfg.Credentials == nil || strings.EqualFold(tok.tokenType, dpop.TokenType) {
+		return tok, true, nil
+	}
+	pinned, err := c.cfg.Credentials.RequireDPoP(ctx, c.cfg)
+	if err != nil {
+		return noToken, false, fmt.Errorf("check okta token binding pin: %w", err)
+	}
+	if pinned {
+		c.evictRejectedToken(tok.accessToken)
+		return noToken, false, nil
+	}
+	return tok, true, nil
+}
+
+func (c *httpClient) evictToken() {
+	c.mu.Lock()
+	c.cached = noToken
+	c.mu.Unlock()
+}
+
+// evictRejectedToken leaves a newer token installed by another request intact.
+func (c *httpClient) evictRejectedToken(accessToken string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cached.accessToken == accessToken {
+		c.cached = noToken
+	}
+}
+
+// acquireMint admits one handshake, unless the caller has been canceled.
+func (c *httpClient) acquireMint(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("wait for okta token mint: %w", err)
+	}
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("wait for okta token mint: %w", ctx.Err())
+	case c.mintAdmission <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			c.releaseMint()
+			return fmt.Errorf("wait for okta token mint: %w", err)
+		}
+		return nil
+	}
+}
+
+func (c *httpClient) releaseMint() { <-c.mintAdmission }
+
+// token returns the cached token or mints one under mint admission.
+func (c *httpClient) token(ctx context.Context) (cachedToken, error) {
+	if err := ctx.Err(); err != nil {
+		return noToken, fmt.Errorf("get okta token: %w", err)
+	}
+	if tok, ok, err := c.liveCachedToken(ctx); err != nil || ok {
+		return tok, err
+	}
+
+	if err := c.acquireMint(ctx); err != nil {
+		return noToken, err
+	}
+	defer c.releaseMint()
+	if tok, ok, err := c.liveCachedToken(ctx); err != nil || ok {
+		return tok, err
+	}
+
+	tok, err := c.mint(ctx, defaultScopes)
+	if err != nil {
+		return cachedToken{}, err
+	}
+	// RFC 9449 §5: a token_type other than DPoP means the token is not sender-constrained.
+	if !c.acceptsTokenType(tok) {
+		return cachedToken{}, fmt.Errorf("okta token type %q is not accepted for %s", tok.tokenType, c.authMethod)
+	}
+
+	c.mu.Lock()
+	c.cached = tok
+	c.mu.Unlock()
+	return tok, nil
+}
+
+// mint runs a client-credentials grant, retrying once for use_dpop_nonce and
+// up to maxRateLimitRetries times for 429. Every private_key_jwt attempt signs
+// a fresh assertion because Okta burns the jti on first use.
+func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, error) {
+	secret := ""
+	required := c.cfg.RequireDPoP || c.dpopObserved
+	var lease CredentialLease
+	if c.cfg.Credentials != nil {
+		var err error
+		lease, err = c.cfg.Credentials.Acquire(ctx, c.cfg)
+		if err != nil {
+			return noToken, fmt.Errorf("acquire okta credential: %w", err)
+		}
+		defer lease.Close()
+		// The secret is opened per token request and held only for the
+		// exchange, so a replaced or revoked secret is never reused.
+		secret, err = lease.ClientSecret(ctx)
+		if err != nil {
+			return noToken, fmt.Errorf("open okta client secret: %w", err)
+		}
+		required = required || lease.RequireDPoP()
+	}
+	tok, err := c.exchange(ctx, scopes, secret)
+	if err != nil {
+		return noToken, err
+	}
+	// The token is unusable until its binding is recorded; the in-memory latch
+	// never runs ahead of the durable record.
+	bound := strings.EqualFold(tok.tokenType, dpop.TokenType)
+	if lease != nil {
+		if err := lease.Observe(ctx, bound); err != nil {
+			return noToken, fmt.Errorf("persist okta token binding: %w", err)
+		}
+	}
+	c.dpopObserved = c.dpopObserved || bound
+	tok.requireDPoP = required
+	return tok, nil
+}
+
+func (c *httpClient) exchange(ctx context.Context, scopes []string, secret string) (cachedToken, error) {
+	nonce := c.nonce.Current()
+	nonceRetried := false
+	rateLimitRetries := 0
+	for {
+		status, header, body, err := c.requestToken(ctx, nonce, scopes, secret)
+		if err != nil {
+			return cachedToken{}, err
+		}
+		// RFC 9449 §8.2: use the nonce the server most recently supplied on every later token request.
+		if nextNonce := header.Get(dpop.NonceHeaderName); nextNonce != "" {
+			nonce = nextNonce
+		}
+
+		switch {
+		case status == http.StatusOK:
+			return parseTokenResponse(body, c.now())
+
+		case status == http.StatusTooManyRequests && rateLimitRetries < maxRateLimitRetries:
+			rateLimitRetries++
+			c.logger.WarnContext(ctx, "okta token endpoint rate limited, backing off",
+				attr.SlogHTTPRequestMethod(http.MethodPost),
+				attr.SlogHTTPRoute(tokenEndpointPath),
+				attr.SlogHTTPResponseStatusCode(status),
+			)
+			if err := c.sleep(ctx, c.rateLimitWait(header)); err != nil {
+				return cachedToken{}, err
+			}
+			continue
+
+		// RFC 9449 §8: a 400 use_dpop_nonce with DPoP-Nonce is retried once with that nonce.
+		case status == http.StatusBadRequest && dpop.IsUseNonceChallenge(header, body):
+			if nonceRetried {
+				return cachedToken{}, errors.New("okta token endpoint rejected dpop nonce twice")
+			}
+			nonceRetried = true
+			continue
+
+		default:
+			return cachedToken{}, newAPIError(http.MethodPost, tokenEndpointPath, status, body)
+		}
+	}
+}
+
+func parseTokenResponse(body []byte, now time.Time) (cachedToken, error) {
+	var parsed tokenResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return cachedToken{}, fmt.Errorf("decode okta token response: %w", err)
+	}
+	if parsed.AccessToken == "" {
+		return cachedToken{}, errors.New("okta token response has no access token")
+	}
+	if parsed.ExpiresIn <= 0 {
+		return cachedToken{}, errors.New("okta token response has no expiry")
+	}
+	return cachedToken{
+		requireDPoP: false,
+		accessToken: parsed.AccessToken,
+		tokenType:   parsed.TokenType,
+		scope:       parsed.Scope,
+		expiresAt:   now.Add(time.Duration(parsed.ExpiresIn) * time.Second),
+	}, nil
+}
+
+// requestToken authenticates one client-credentials request and posts it to
+// the token endpoint, returning the raw response for mint to interpret.
+func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []string, secret string) (int, http.Header, []byte, error) {
+	auth := remotesessions.TokenEndpointClientAuth{
+		Method:                c.authMethod,
+		RemoteSessionClientID: c.cfg.RemoteSessionClientID,
+		OrganizationID:        c.cfg.OrganizationID,
+		JSONWebKeySetID:       c.cfg.JSONWebKeySetID,
+		ClientID:              c.cfg.ClientID,
+		ClientSecret:          "",
+		AssertionAudience:     c.audience,
+		AssertionSigner:       c.signer,
+	}
+	if c.authMethod == remotesessions.TokenEndpointAuthMethodBasic {
+		auth.ClientSecret = secret
+	}
+
+	form := url.Values{"grant_type": {oauthwire.GrantTypeClientCredentials}}
+	if len(scopes) > 0 {
+		form.Set("scope", strings.Join(scopes, " "))
+	}
+	req, err := remotesessions.NewTokenEndpointRequest(ctx, c.tokenURL.String(), form, auth)
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("build okta token request: %w", err)
+	}
+
+	// RFC 9449 §5: the token request carries a fresh proof for POST on the token endpoint, without ath.
+	proof, err := c.key.Proof(http.MethodPost, c.tokenURL, dpop.ProofOptions{AccessToken: "", Nonce: nonce, IssuedAt: c.now()})
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("okta token proof: %w", err)
+	}
+	req.Header.Set(dpop.HeaderName, proof)
+
+	status, header, body, err := c.send(req)
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("okta token request: %w", err)
+	}
+	// RFC 9449 §8.2: a DPoP-Nonce on any token response replaces the cached nonce.
+	c.nonce.Remember(header)
+	if status != http.StatusTooManyRequests {
+		c.observeRateLimit(header)
+	}
+	return status, header, body, nil
+}
+
+// observeRateLimit pauses until reset once fewer than rateLimitSlowdownRatio of quota remains.
+func (c *httpClient) observeRateLimit(header http.Header) {
+	limit, err := strconv.ParseFloat(header.Get("X-Rate-Limit-Limit"), 64)
+	if err != nil || limit <= 0 {
+		return
+	}
+	remaining, err := strconv.ParseFloat(header.Get("X-Rate-Limit-Remaining"), 64)
+	if err != nil {
+		return
+	}
+	if remaining >= limit*rateLimitSlowdownRatio {
+		return
+	}
+	reset := c.resetTime(header)
+	if latest := c.now().Add(maxRateLimitWait); reset.After(latest) {
+		reset = latest
+	}
+	c.mu.Lock()
+	if reset.After(c.slowUntil) {
+		c.slowUntil = reset
+	}
+	c.mu.Unlock()
+}
+
+// waitForSlowdown rechecks the shared deadline after every wake so concurrent
+// extensions are honored before another request is sent.
+func (c *httpClient) waitForSlowdown(ctx context.Context) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("wait for okta slowdown: %w", err)
+		}
+		c.mu.Lock()
+		wait := c.slowUntil.Sub(c.now())
+		if wait <= 0 {
+			c.slowUntil = time.Time{}
+		}
+		c.mu.Unlock()
+		if wait <= 0 {
+			return nil
+		}
+		if err := c.sleep(ctx, min(wait, maxRateLimitWait)); err != nil {
+			return err
+		}
+	}
+}
+
+func (c *httpClient) rateLimitWait(header http.Header) time.Duration {
+	wait := c.resetTime(header).Sub(c.now())
+	if wait <= 0 {
+		wait = time.Second
+	}
+	// Add positive post-reset jitter to spread retries across clients, while
+	// keeping the total sleep capped (including for saturated durations).
+	return min(min(wait, maxRateLimitWait)+c.jitter(), maxRateLimitWait)
+}
+
+func rateLimitJitter() time.Duration {
+	// The global generator is safe for concurrent callers; this is not security-sensitive.
+	return time.Duration(rand.Int64N(int64(maxRateLimitJitter))) + 1 //nolint:gosec // G404: retry jitter does not require cryptographic randomness.
+}
+
+func (c *httpClient) resetTime(header http.Header) time.Time {
+	epoch, err := strconv.ParseInt(header.Get("X-Rate-Limit-Reset"), 10, 64)
+	if err != nil {
+		return c.now().Add(time.Second)
+	}
+	return time.Unix(epoch, 0)
+}
+
+func nextLink(header http.Header, base *url.URL) (*url.URL, error) {
+	for _, link := range header.Values("Link") {
+		for part := range strings.SplitSeq(link, ",") {
+			fields := strings.Split(part, ";")
+			target := strings.TrimSpace(fields[0])
+			if !strings.HasPrefix(target, "<") || !strings.HasSuffix(target, ">") {
+				continue
+			}
+			if !hasNextRel(fields[1:]) {
+				continue
+			}
+			next, err := base.Parse(strings.Trim(target, "<>"))
+			if err != nil {
+				return nil, fmt.Errorf("parse link: %w", err)
+			}
+			if next.Host != base.Host || next.Scheme != base.Scheme {
+				return nil, fmt.Errorf("next link host %q does not match %q", next.Host, base.Host)
+			}
+			return next, nil
+		}
+	}
+	return nil, nil
+}
+
+func hasNextRel(params []string) bool {
+	for _, p := range params {
+		k, v, ok := strings.Cut(strings.TrimSpace(p), "=")
+		if !ok || !strings.EqualFold(strings.TrimSpace(k), "rel") {
+			continue
+		}
+		if strings.EqualFold(strings.Trim(strings.TrimSpace(v), `"`), "next") {
+			return true
+		}
+	}
+	return false
+}
+
+func newAPIError(method, path string, status int, body []byte) *APIError {
+	var parsed struct {
+		ErrorCode        string `json:"errorCode"`
+		ErrorSummary     string `json:"errorSummary"`
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
+	}
+	_ = json.Unmarshal(body, &parsed)
+	code := parsed.ErrorCode
+	if code == "" {
+		code = parsed.Error
+	}
+	summary := parsed.ErrorSummary
+	if summary == "" {
+		summary = parsed.ErrorDescription
+	}
+	return &APIError{Method: method, Path: "/" + strings.TrimLeft(path, "/"), StatusCode: status, ErrorCode: code, Summary: summary}
+}

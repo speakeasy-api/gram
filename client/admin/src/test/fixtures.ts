@@ -4,27 +4,28 @@
 // Invented names throughout. This repository is public, so no fixture ever
 // carries a real organization, project or person.
 
+import type { AdminAuditLog as AuditLog } from "@gram/admin-client/models/components/adminauditlog";
+
 import type {
-  AdminAuditLog,
   AdminOrganization,
   AdminOrganizationMember,
   AdminProject,
 } from "@/lib/gramAdminApi";
 
-export function anActivityLog(
-  overrides: Partial<AdminAuditLog> = {},
-): AdminAuditLog {
+export function anActivityLog(overrides: Partial<AuditLog> = {}): AuditLog {
   return {
     id: "event_1",
-    actor_id: "user_1",
-    actor_type: "user",
-    actor_display_name: "Example Operator",
+    actorId: "user_1",
+    actorType: "user",
+    actorDisplayName: "Example Operator",
     action: "organization:settings_updated",
-    acting_surface: "dashboard",
-    subject_id: "org_1",
-    subject_type: "organization",
-    subject_display_name: "Test Org",
-    created_at: "2026-01-15T12:30:00Z",
+    actingSurface: "dashboard",
+    category: "configuration",
+    isInternal: false,
+    subjectId: "org_1",
+    subjectType: "organization",
+    subjectDisplayName: "Test Org",
+    createdAt: new Date("2026-01-15T12:30:00Z"),
     ...overrides,
   };
 }

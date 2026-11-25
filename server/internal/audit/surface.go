@@ -20,23 +20,38 @@ import (
 type Surface string
 
 const (
-	// SurfaceUnknown is recorded when nothing in the request identifies a
-	// surface. It is an admission rather than a fallback: rows written before
-	// this field existed, and writes from paths that carry no request identity
-	// at all, are honestly unattributed instead of being guessed at.
+	// SurfaceUnknown is recorded when a request reached us and nothing in it
+	// identified a surface. It is an admission rather than a fallback: rows
+	// written before this field existed, and requests whose identity we failed
+	// to classify, are honestly unattributed instead of being guessed at.
+	//
+	// It does not mean "no request". Background work marks itself
+	// SurfaceSystem, so an unknown surface is a gap worth chasing rather than
+	// the expected shape of a scheduled job.
 	SurfaceUnknown Surface = "unknown"
+	// SurfaceSystem is Speakeasy acting on its own, with no request behind it: a
+	// Temporal activity, a scheduled job, a reconciler. These writes have no
+	// session, API key or human actor to attribute, and saying so is more
+	// useful than leaving them indistinguishable from a classification miss.
+	SurfaceSystem Surface = "system"
 	// SurfaceDashboard is an authenticated dashboard session.
 	SurfaceDashboard Surface = "dashboard"
-	// SurfaceAPIKey is a Gram API key, used by the CLI and by automation.
+	// SurfaceAPIKey is a Speakeasy API key, used by the CLI and by automation.
 	SurfaceAPIKey Surface = "api_key"
 	// SurfacePlatformMCP is the OAuth-authenticated Platform MCP endpoint,
 	// where a third-party agent acts on a user's behalf.
 	SurfacePlatformMCP Surface = "platform_mcp"
+	// SurfaceChannels is the Channels endpoint, where an agent instance or a
+	// person's dashboard session acts under a Channels permission rather than
+	// through the Platform MCP audience.
+	SurfaceChannels Surface = "channels"
 	// SurfaceProjectAssistant is a project's managed assistant acting during a
 	// user's turn.
 	SurfaceProjectAssistant Surface = "project_assistant"
 	// SurfaceAdmin is the isolated Google-authenticated admin app.
 	SurfaceAdmin Surface = "admin"
+	// SurfaceAdminMCP is the staff-only Admin MCP endpoint.
+	SurfaceAdminMCP Surface = "admin_mcp"
 	// SurfacePlatformBreakGlass is the main-server platform-administrator
 	// killswitch recovery path. It remains distinct from customer management.
 	SurfacePlatformBreakGlass Surface = "platform_break_glass"
@@ -46,13 +61,22 @@ const (
 // against. A package marking a surface passes a plain string so it need not
 // depend on this one; anything not named here records an unknown surface
 // rather than widening what the column can hold.
+// IsStaffAdminSurface reports whether an audit surface represents staff acting
+// through a staff-only administrative interface.
+func IsStaffAdminSurface(surface Surface) bool {
+	return surface == SurfaceAdmin || surface == SurfaceAdminMCP
+}
+
 var knownSurfaces = map[Surface]struct{}{
 	SurfaceUnknown:            {},
+	SurfaceSystem:             {},
 	SurfaceDashboard:          {},
 	SurfaceAPIKey:             {},
 	SurfacePlatformMCP:        {},
+	SurfaceChannels:           {},
 	SurfaceProjectAssistant:   {},
 	SurfaceAdmin:              {},
+	SurfaceAdminMCP:           {},
 	SurfacePlatformBreakGlass: {},
 }
 
@@ -113,4 +137,19 @@ func actingIdentityFromContext(ctx context.Context) actingIdentity {
 	default:
 		return actingIdentity{Surface: SurfaceUnknown, ClientID: clientID}
 	}
+}
+
+// SurfaceFromContext is how a request is acting, for callers that must carry
+// the surface across a boundary a context cannot cross.
+//
+// Audit normally derives this at the moment of the write, which is where the
+// signals are richest. Work handed to Temporal breaks that: the activity runs
+// in a worker with none of the request's context, so a caller that schedules
+// work on a user's behalf has to capture the surface at schedule time and pass
+// it through the workflow payload the way it already passes the actor.
+//
+// Prefer letting audit derive the surface wherever the write happens in the
+// request's own goroutine. Reach for this only at a handoff.
+func SurfaceFromContext(ctx context.Context) Surface {
+	return actingIdentityFromContext(ctx).Surface
 }

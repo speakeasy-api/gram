@@ -7,9 +7,9 @@ import type { ClientFamily } from "@gram/client/models/components/recordinstalli
 import { GramIcon } from "@/components/gram-logo/variants/icon";
 import { ModeSwitchStarfield } from "@/components/mode-switch-starfield";
 import { PlatformMCPOnboardingContent } from "./PlatformMCP";
-import { RequireScope } from "@/components/require-scope";
 import { SourceSurface } from "@gram/client/models/components/startonboardingrequestbody.js";
 import { useOrgRoutes } from "@/routes";
+import { useSearchParams } from "react-router";
 import { useState } from "react";
 
 // The agents the Platform MCP walkthrough supports, with the same brand marks
@@ -31,6 +31,10 @@ const STEPS = [
   { index: "02", label: "Run one command" },
   { index: "03", label: "Approve access" },
 ];
+
+function entrySourceFromQuery(value: string | null) {
+  return Object.values(SourceSurface).find((surface) => surface === value);
+}
 
 function clientFamilyForAgent(agentID: string): ClientFamily {
   switch (agentID) {
@@ -54,17 +58,18 @@ function clientFamilyForAgent(agentID: string): ClientFamily {
  * paints no background of its own.
  */
 export function HeadlessContent(): JSX.Element {
-  // Same gate the standalone Platform MCP page applies: connecting an agent is
-  // an organization-admin action, so members never see the flow offered.
-  return (
-    <RequireScope scope="org:admin" level="page">
-      <HeadlessHero />
-    </RequireScope>
-  );
+  return <HeadlessHero />;
 }
 
 function HeadlessHero(): JSX.Element {
   const orgRoutes = useOrgRoutes();
+  const [searchParams] = useSearchParams();
+  // Where the user came from, when they arrived through a dashboard CTA rather
+  // than the mode strip. Falls back to the settings surface, which is what
+  // landing here directly means.
+  const entrySource =
+    entrySourceFromQuery(searchParams.get("entrySource")) ??
+    SourceSurface.PlatformMcpSettings;
   const [setupOpen, setSetupOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<ClientFamily>();
   const openSetup = () => {
@@ -103,18 +108,16 @@ function HeadlessHero(): JSX.Element {
             Platform MCP
           </span>
           <h1 className="text-default-fixed-light font-display text-[48px] leading-[0.9] font-thin tracking-[-0.045em] lg:text-[68px]">
-            Connect your
-            <br />
-            coding agent
+            Connect your agent
           </h1>
         </div>
         <p
           className="max-w-md text-base leading-relaxed"
           style={{ color: "var(--text-muted-fixed-light)" }}
         >
-          Drive Speakeasy from the agent you already work in — install reviewed
-          MCP servers, distribute them, and see what they are doing, without
-          leaving your terminal.
+          Use the control plane from the agent you already work in. Your role
+          decides which projects, MCP servers, plugins, skills and operational
+          data you can access.
         </p>
 
         <div className="flex flex-col items-center gap-3">
@@ -125,7 +128,7 @@ function HeadlessHero(): JSX.Element {
             // it reads as invisible until hover.
             className="bg-surface-primary-fixed-light hover:bg-surface-tertiary-fixed-light [&_*]:text-default-fixed-dark"
           >
-            <Button.Text>Connect your coding agent</Button.Text>
+            <Button.Text>Connect your agent</Button.Text>
             <Button.RightIcon>
               <ArrowRight className="h-4 w-4" />
             </Button.RightIcon>
@@ -212,7 +215,7 @@ function HeadlessHero(): JSX.Element {
         sheetOnly
         setupOpen={setupOpen}
         onSetupOpenChange={setSetupOpen}
-        initialSourceSurface={SourceSurface.PlatformMcpSettings}
+        initialSourceSurface={entrySource}
         initialClient={selectedAgent}
         onSetupComplete={() => orgRoutes.home.goTo()}
       />

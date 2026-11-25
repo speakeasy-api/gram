@@ -1,6 +1,7 @@
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
 import type { ClaudeTurnUsage } from "@gram/client/models/components/claudeturnusage.js";
+import { formatDaysHours } from "@/lib/format-duration";
 
 export type ClaudeUsageMatch = {
   turn: ClaudeTurnUsage;
@@ -12,6 +13,33 @@ export function formatUsageCost(cost: number): string {
   if (Math.abs(cost) < 0.0001) return `$${cost.toFixed(6)}`;
   if (Math.abs(cost) < 0.01) return `$${cost.toFixed(4)}`;
   return `$${cost.toFixed(2)}`;
+}
+
+/** Shown wherever a session used tokens but its agent sent no cost. */
+export const UNKNOWN_COST_EXPLANATION =
+  "Unknown cost: this agent doesn't report cost.";
+
+type UsageTotals = {
+  totalCost?: number | null;
+  totalTokens?: number;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+};
+
+export function totalTokensFor(usage: UsageTotals): number {
+  if (usage.totalTokens && usage.totalTokens > 0) return usage.totalTokens;
+  return (usage.totalInputTokens || 0) + (usage.totalOutputTokens || 0);
+}
+
+/**
+ * Only some agents (Claude Code) report what a session cost. Others (Codex,
+ * OpenClaw) report tokens alone, and their missing cost arrives as 0. A
+ * session that used tokens but cost nothing is one whose cost is unknown,
+ * not a free one.
+ */
+export function isCostUnknown(usage: UsageTotals): boolean {
+  if (usage.totalCost != null && usage.totalCost > 0) return false;
+  return totalTokensFor(usage) > 0;
 }
 
 export function formatTokenCount(tokens: number): string {
@@ -49,6 +77,9 @@ export function formatDurationFromNanos(
     if (millis < 10_000) return `${(millis / 1000).toFixed(1)}s`;
     const roundedSeconds = Math.round(millis / 1000);
     if (roundedSeconds < 60) return `${roundedSeconds}s`;
+    // Days use whole elapsed seconds, so 23:59:59.6 is not rounded up to 1d.
+    const daysHours = formatDaysHours(Math.floor(millis / 1000));
+    if (daysHours) return daysHours;
     const minutes = Math.floor(roundedSeconds / 60);
     const remainder = roundedSeconds % 60;
     return `${minutes}m ${remainder}s`;

@@ -11,8 +11,8 @@ import (
 	"context"
 )
 
-// Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set
-// (idp-design.md §3, §6.2). Permanently unauthenticated.
+// Dev-only RPCs for the dev-idp itself. Per-slot currentUser get/set.
+// Permanently unauthenticated.
 type Service interface {
 	// Read the per-mode currentUser. 404s when no row exists yet for that mode.
 	GetCurrentUser(context.Context, *GetCurrentUserPayload) (res *CurrentUser, err error)
@@ -55,10 +55,22 @@ type ClearCurrentUserPayload struct {
 type CurrentUser struct {
 	// Mode whose currentUser is being reported.
 	Mode string
-	// Local user record. Populated for mock-workos / oauth2-1 / oauth2.
+	// Local user record. Populated for the oauth2-1 slot.
 	User *User
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUser
+	// Best-effort local provenance, only on getCurrentUser for the oauth2-1 slot
+	// with a local backend and verifiable disk storage and worktree origin.
+	Provenance *CurrentUserProvenance
+}
+
+type CurrentUserProvenance struct {
+	// Parsed running backend (local).
+	Backend string
+	// Canonical absolute process worktree root.
+	WorktreeRoot string
+	// Canonical absolute opened SQLite main database path.
+	DatabasePath string
 }
 
 // GetCurrentUserPayload is the payload type of the devIdp service

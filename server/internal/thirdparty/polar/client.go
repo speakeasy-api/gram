@@ -181,7 +181,7 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 		return fmt.Errorf("failed to delete customer state cache: %w", err)
 	}
 
-	//nolint:exhaustruct // only the org id is needed
+	//nolint:exhaustruct_v5 // only the org id is needed
 	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID}); err != nil {
 		return fmt.Errorf("failed todelete period usage storage: %w", err)
 	}
@@ -857,8 +857,12 @@ func (p *Client) GetStoredPeriodUsage(ctx context.Context, orgID string) (pu *ge
 	return &state.PeriodUsage, nil
 }
 
-func (p *Client) createCheckoutForProducts(ctx context.Context, spanName, orgID, serverURL, successURL string, productIDs []string) (u string, err error) {
-	ctx, span := p.tracer.Start(ctx, spanName, trace.WithAttributes(attr.OrganizationID(orgID)))
+func (p *Client) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (u string, err error) {
+	if len(p.catalog.ProductIDsTopUp) == 0 {
+		return "", errors.New("no top-up products configured")
+	}
+
+	ctx, span := p.tracer.Start(ctx, "polar_client.create_topup_checkout", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
@@ -874,24 +878,13 @@ func (p *Client) createCheckoutForProducts(ctx context.Context, spanName, orgID,
 		ExternalCustomerID: &orgID,
 		EmbedOrigin:        &serverURL,
 		SuccessURL:         &successURL,
-		Products:           productIDs,
+		Products:           []string{p.catalog.ProductIDsTopUp[0]},
 	})
 	if err != nil {
-		return "", fmt.Errorf("create checkout: %w", err)
+		return "", fmt.Errorf("create top-up checkout: %w", err)
 	}
 
 	return res.Checkout.URL, nil
-}
-
-func (p *Client) CreateCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
-	return p.createCheckoutForProducts(ctx, "polar_client.create_checkout", orgID, serverURL, successURL, []string{p.catalog.ProductIDBase})
-}
-
-func (p *Client) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
-	if len(p.catalog.ProductIDsTopUp) == 0 {
-		return "", errors.New("no top-up products configured")
-	}
-	return p.createCheckoutForProducts(ctx, "polar_client.create_topup_checkout", orgID, serverURL, successURL, []string{p.catalog.ProductIDsTopUp[0]})
 }
 
 func (p *Client) IsTopUpProductID(productID string) bool {
@@ -1088,7 +1081,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				"Custom tool creation",
 				"Hosted server deployments",
 				"14 day log retention",
-				"Built in MCP Playground",
+				"Built in MCP Inspect",
 				"Connect to Claude, Cursor, Gemini and more",
 			},
 			IncludedBullets: []string{
@@ -1102,7 +1095,9 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
 				fmt.Sprintf("%s / 10 additional LLM credits", formatPrice(10*creditsPrice)), // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
-			TumPricePerMillionUsd: nil,
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  29, // Hard coded for now. TODO: Move to Polar
@@ -1127,7 +1122,9 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
 				"$11 per 10 additional LLM credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
-			TumPricePerMillionUsd: nil,
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 		Payg: billing.NewPaygTierLimits(),
 		Enterprise: &gen.TierLimits{
@@ -1144,7 +1141,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				"30 day log retention",
 				"SSO",
 				"Audit logs",
-				"Self-hosting Gram dataplane",
+				"Self-hosting Speakeasy dataplane",
 			},
 			IncludedBullets: []string{
 				"Dedicated slack channel",
@@ -1152,8 +1149,10 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				"Tool design support",
 				"SLA-backed support",
 			},
-			AddOnBullets:          []string{},
-			TumPricePerMillionUsd: nil,
+			AddOnBullets:               []string{},
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 	}, nil
 }

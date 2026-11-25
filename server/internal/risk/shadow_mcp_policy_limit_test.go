@@ -5,8 +5,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -158,8 +161,8 @@ func TestScanner_LookupShadowMCPBlockingPolicy_CarriesDispositionAndBlocklist(t 
 		nil,
 		nil,
 		nil,
-		testCELEngine(t),
-	)
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+
 	require.NoError(t, err)
 
 	policy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
@@ -193,8 +196,8 @@ func TestScanner_LookupShadowMCPBlockingPolicy_BlockAllDisposition(t *testing.T)
 		nil,
 		nil,
 		nil,
-		testCELEngine(t),
-	)
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+
 	require.NoError(t, err)
 
 	policy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)

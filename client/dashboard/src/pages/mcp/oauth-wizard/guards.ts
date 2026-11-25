@@ -1,22 +1,10 @@
 import { type Context } from "./machine-types";
-import {
-  validateExternalMetadataJson,
-  validateIssuerUrl,
-} from "./externalOAuthMetadata";
+import { validateExternalMetadataJson } from "./externalOAuthMetadata";
 
 export type GuardResult = { ok: true } | { ok: false; reason: string };
 
 export function checkExternal(ctx: Context): GuardResult {
-  if (!ctx.external.slug.trim()) {
-    return { ok: false, reason: "Please provide a slug for the OAuth server" };
-  }
-  const issuerError = validateIssuerUrl(ctx.external.issuerUrl);
-  if (issuerError) return { ok: false, reason: issuerError };
-
-  const result = validateExternalMetadataJson(
-    ctx.external.metadataJson,
-    ctx.external.issuerUrl,
-  );
+  const result = validateExternalMetadataJson(ctx.external.metadataJson);
   if (result.ok) return { ok: true };
   return result;
 }

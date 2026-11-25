@@ -144,9 +144,6 @@ func TestFilterToolsByTags_ExcludesToolsWithoutAnyTags(t *testing.T) {
 		httpToolWithSourceTags("a", []string{"billing"}),
 		// No variation and no source tags.
 		httpToolWithoutVariation("b"),
-		// External MCP (proxy) tools never carry tags, so they are excluded
-		// whenever a filter is active.
-		{ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{Name: "proxy"}},
 	}
 
 	got := toolfilter.FilterToolsByTags(tools, []string{"billing"})

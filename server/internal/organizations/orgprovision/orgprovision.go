@@ -1,6 +1,6 @@
 // Package orgprovision holds the parts of creating an organization that every
 // caller must do identically: validating the display name, and creating the
-// WorkOS organization so that its Gram organization ID is derivable from its
+// WorkOS organization so that its Speakeasy organization ID is derivable from its
 // WorkOS ID.
 //
 // Callers own their own database transaction. Self-serve signup attaches the
@@ -18,12 +18,44 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/net/publicsuffix"
+
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 )
 
+// Creation sources name the flow that created an organization. They are stored
+// verbatim in organization_metadata.creation_source.
+//
+// A row with no source is not a fourth value. It means nothing recorded one —
+// every organization created before the column existed, and every row first
+// written by WorkOS organization sync, which learns about an organization
+// without knowing what asked for it.
+//
+// Login reads SourcePlatformAdmin and only that value: a prospect stays behind
+// the book-a-demo gate. The source decides whether a trial can start. Feature
+// entitlement calculation does not read it.
+const (
+	// SourceSignup is a self-serve signup: someone named a company and Speakeasy
+	// created the organization around them.
+	SourceSignup = "signup"
+
+	// SourceAssistants is the organization auto-provisioned for a user who
+	// arrived through Assistants and never asked for one.
+	SourceAssistants = "assistants"
+
+	// SourcePlatformAdmin is an organization a platform admin created from the
+	// admin app, which is how the prospect flow starts.
+	SourcePlatformAdmin = "platform_admin"
+
+	// SourcePlatformMCP is a self-serve signup that started from an MCP client
+	// connecting the Platform MCP: someone with no organization named one
+	// during the OAuth flow.
+	SourcePlatformMCP = "platform_mcp"
+)
+
 // WorkOSOrganizationCreator is the WorkOS surface CreateInWorkOS needs. It
-// takes two methods rather than one because the Gram organization ID is derived
+// takes two methods rather than one because the Speakeasy organization ID is derived
 // from the WorkOS ID that only the create call returns, so external_id can only
 // be set by a second call.
 type WorkOSOrganizationCreator interface {
@@ -36,7 +68,16 @@ type WorkOSOrganizationCreator interface {
 	UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error
 }
 
-// CreatedOrganization is an organization that exists in WorkOS and has no Gram
+// WorkOSVerifiedDomainCreator is the platform-admin provisioning capability.
+type WorkOSVerifiedDomainCreator interface {
+	// CreateOrganizationWithVerifiedDomain returns an ID only after verifying the response domain state.
+	CreateOrganizationWithVerifiedDomain(ctx context.Context, name, hostname string) (string, error)
+
+	// UpdateOrganizationExternalIDWithoutRetry sets the derived ID without retrying.
+	UpdateOrganizationExternalIDWithoutRetry(ctx context.Context, workosOrgID, externalID string) error
+}
+
+// CreatedOrganization is an organization that exists in WorkOS and has no Speakeasy
 // row yet.
 type CreatedOrganization struct {
 	// WorkOSOrganizationID is the ID WorkOS assigned.
@@ -48,9 +89,9 @@ type CreatedOrganization struct {
 }
 
 // CreateInWorkOS creates a WorkOS organization for name and returns it paired
-// with the Gram organization ID derived from the ID WorkOS assigned.
+// with the Speakeasy organization ID derived from the ID WorkOS assigned.
 //
-// Deriving the Gram ID rather than minting one is what lets two writers reach
+// Deriving the Speakeasy ID rather than minting one is what lets two writers reach
 // the same row. The WorkOS organization webhook derives the same ID for an
 // organization it has not seen before (see
 // background/activities.ProcessWorkOSOrganizationEvents), so whichever of the
@@ -69,7 +110,7 @@ func CreateInWorkOS(ctx context.Context, client WorkOSOrganizationCreator, name 
 	// idempotency key, and the only value available before the create returns
 	// is derived from the name. Two organizations may legitimately share a
 	// display name, and a name-derived key would make WorkOS answer the second
-	// create with the first organization, after which the second Gram insert
+	// create with the first organization, after which the second Speakeasy insert
 	// collides on the unique index over workos_id. AGE-3214 covers giving this
 	// call a key that is actually unique per attempt.
 	workosOrgID, err := client.CreateOrganization(ctx, name, "")
@@ -77,9 +118,24 @@ func CreateInWorkOS(ctx context.Context, client WorkOSOrganizationCreator, name 
 		return empty, fmt.Errorf("create WorkOS organization: %w", err)
 	}
 
+	return finishWorkOSCreation(ctx, client.UpdateOrganizationExternalID, workosOrgID)
+}
+
+// CreateInWorkOSWithVerifiedDomain creates an administrator-verified organization.
+// Callers must validate name and hostname and establish ownership before calling this.
+func CreateInWorkOSWithVerifiedDomain(ctx context.Context, client WorkOSVerifiedDomainCreator, name, hostname string) (CreatedOrganization, error) {
+	workosOrgID, err := client.CreateOrganizationWithVerifiedDomain(ctx, name, hostname)
+	if err != nil {
+		return CreatedOrganization{}, fmt.Errorf("create WorkOS organization with verified domain: %w", err)
+	}
+	return finishWorkOSCreation(ctx, client.UpdateOrganizationExternalIDWithoutRetry, workosOrgID)
+}
+
+func finishWorkOSCreation(ctx context.Context, update func(context.Context, string, string) error, workosOrgID string) (CreatedOrganization, error) {
+	var empty CreatedOrganization
 	gramOrgID := orgid.FromWorkOSID(workosOrgID)
 
-	if err := client.UpdateOrganizationExternalID(ctx, workosOrgID, gramOrgID); err != nil {
+	if err := update(ctx, workosOrgID, gramOrgID); err != nil {
 		return empty, fmt.Errorf("set external_id on WorkOS organization: %w", err)
 	}
 
@@ -96,8 +152,18 @@ var ErrUnavailable = errors.New("WorkOS is not configured on this server")
 // Unavailable is the WorkOSOrganizationCreator for a deployment with no WorkOS
 // configuration. Every call fails with ErrUnavailable, because an organization
 // the identity provider does not know about cannot be logged into. Failing is
-// more honest than creating a Gram-only row that looks like a success.
+// more honest than creating a Speakeasy-only row that looks like a success.
 type Unavailable struct{}
+
+// CreateOrganizationWithVerifiedDomain always fails with ErrUnavailable.
+func (Unavailable) CreateOrganizationWithVerifiedDomain(context.Context, string, string) (string, error) {
+	return "", ErrUnavailable
+}
+
+// UpdateOrganizationExternalIDWithoutRetry always fails with ErrUnavailable.
+func (Unavailable) UpdateOrganizationExternalIDWithoutRetry(context.Context, string, string) error {
+	return ErrUnavailable
+}
 
 // CreateOrganization always fails with ErrUnavailable.
 func (Unavailable) CreateOrganization(context.Context, string, string) (string, error) {
@@ -200,4 +266,17 @@ func normalizeSpaces(name string) string {
 	}
 
 	return b.String()
+}
+
+// NameFromHostname derives a display name from a normalized company hostname.
+// Keep punycode as ASCII, and honor private suffixes (tenant.github.io -> tenant).
+// If no registrable domain exists, retain the input rather than invent a name.
+// This is not validation and must never be used to select a verified domain.
+func NameFromHostname(hostname string) string {
+	registrable, err := publicsuffix.EffectiveTLDPlusOne(hostname)
+	if err != nil {
+		return hostname
+	}
+	name, _, _ := strings.Cut(registrable, ".")
+	return name
 }

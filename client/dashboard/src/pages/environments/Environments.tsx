@@ -3,15 +3,16 @@ import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Card } from "@/components/ui/Card";
-import { Action, MoreActions } from "@/components/ui/MoreActions";
+import type { Action } from "@/components/ui/MoreActions";
+import { MoreActions } from "@/components/ui/MoreActions";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
-import { Environment } from "@gram/client/models/components/environment.js";
+import type { Environment } from "@gram/client/models/components/environment.js";
 import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
 import { ArrowRight, Blocks, Plus } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -41,6 +42,18 @@ function EnvironmentsInner() {
     useState(false);
   const [environmentName, setEnvironmentName] = useState("");
   const [cloneSource, setCloneSource] = useState<Environment | null>(null);
+  const [search, setSearch] = useState("");
+
+  const filteredEnvironments = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return environments;
+    return environments.filter(
+      (environment) =>
+        environment.name.toLowerCase().includes(query) ||
+        environment.slug.toLowerCase().includes(query) ||
+        (environment.description?.toLowerCase().includes(query) ?? false),
+    );
+  }, [environments, search]);
 
   const createEnvironmentMutation = useCreateEnvironmentMutation({
     onSuccess: async (data) => {
@@ -91,6 +104,11 @@ function EnvironmentsInner() {
         primaryAction={
           environments.length > 0 ? newEnvironmentButton : undefined
         }
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: "Search environments...",
+        }}
         isEmpty={environments.length === 0}
         empty={{
           icon: "blocks",
@@ -100,8 +118,15 @@ function EnvironmentsInner() {
           action: newEnvironmentButton,
         }}
       >
+        {filteredEnvironments.length === 0 ? (
+          // The project has environments; this search just matches none of
+          // them, so the toolbar stays put rather than the empty state above.
+          <Text muted className="py-8 text-center">
+            {`No environments matching “${search}”`}
+          </Text>
+        ) : null}
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {environments.map((environment) => (
+          {filteredEnvironments.map((environment) => (
             <EnvironmentCard
               key={environment.id}
               environment={environment}

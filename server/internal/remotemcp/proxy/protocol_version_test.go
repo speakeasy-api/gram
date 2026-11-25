@@ -60,7 +60,7 @@ func postSpanAttributes(t *testing.T, recorder *tracetest.SpanRecorder) map[stri
 // initialize-response path exists for: the client asks for a newer revision and
 // the upstream answers with an older one. Both values land on the proxy's own
 // span so the downgrade is attributable to the upstream leg rather than reading
-// as though Gram pinned the version.
+// as though Speakeasy pinned the version.
 func TestProxy_Post_RecordsUpstreamDowngradeOnProxySpan(t *testing.T) {
 	t.Parallel()
 
@@ -74,7 +74,7 @@ func TestProxy_Post_RecordsUpstreamDowngradeOnProxySpan(t *testing.T) {
 	p, recorder := newRecordingProxyForTest(t, upstream.URL)
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -101,7 +101,7 @@ func TestProxy_Post_RecordsUpstreamUpgrade(t *testing.T) {
 	p, recorder := newRecordingProxyForTest(t, upstream.URL)
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -128,7 +128,7 @@ func TestProxy_Post_RecordsNegotiatedVersionFromSSEInitialize(t *testing.T) {
 	p, recorder := newRecordingProxyForTest(t, upstream.URL)
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -153,7 +153,7 @@ func TestProxy_Post_OmitsNegotiatedVersionOnUpstreamError(t *testing.T) {
 	p, recorder := newRecordingProxyForTest(t, upstream.URL)
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2026-07-28"}}`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -180,7 +180,7 @@ func TestProxy_Post_RecordsHeaderOnNonInitializeRequest(t *testing.T) {
 	p, recorder := newRecordingProxyForTest(t, upstream.URL)
 
 	body := `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("MCP-Protocol-Version", mcpversions.Version20250618)
@@ -209,7 +209,7 @@ func TestProxy_Post_ForwardsProtocolVersionHeaderUpstream(t *testing.T) {
 	p, _ := newRecordingProxyForTest(t, upstream.URL)
 
 	body := `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("MCP-Protocol-Version", mcpversions.Version20250618)
@@ -237,7 +237,7 @@ func TestProxy_Post_BoundsOversizedProtocolVersionHeader(t *testing.T) {
 	p, recorder := newRecordingProxyForTest(t, upstream.URL)
 
 	body := `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("MCP-Protocol-Version", strings.Repeat("a", 4096))
@@ -272,7 +272,7 @@ func TestProxy_Post_RecordsRequestedVersionWhenInterceptorRejects(t *testing.T) 
 	}
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
@@ -299,7 +299,7 @@ func TestProxy_Post_IgnoresNegotiatedVersionFromMismatchedResponseID(t *testing.
 	p, recorder := newRecordingProxyForTest(t, upstream.URL)
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 

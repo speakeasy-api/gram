@@ -31,6 +31,7 @@ type LogUserSessionRevokeEvent struct {
 func (l *Logger) LogUserSessionRevoke(ctx context.Context, dbtx repo.DBTX, event LogUserSessionRevokeEvent) error {
 	action := ActionUserSessionRevoke
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

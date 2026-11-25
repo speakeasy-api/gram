@@ -77,6 +77,7 @@ func (r *Recorder) Record(ctx context.Context, input RecordInput) (repo.SkillFee
 	}
 
 	stored, err := queries.CreateSkillFeedback(ctx, repo.CreateSkillFeedbackParams{
+		ID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ProjectID:      input.ProjectID,
 		SkillID:        input.SkillID,
 		SkillVersionID: input.SkillVersionID,

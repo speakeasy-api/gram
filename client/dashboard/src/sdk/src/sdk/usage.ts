@@ -3,15 +3,17 @@
  */
 
 import { usageCancelStripeSubscription } from "../funcs/usageCancelStripeSubscription.js";
-import { usageCreateCheckout } from "../funcs/usageCreateCheckout.js";
 import { usageCreateCustomerSession } from "../funcs/usageCreateCustomerSession.js";
 import { usageCreateStripeCheckout } from "../funcs/usageCreateStripeCheckout.js";
 import { usageCreateStripePortalSession } from "../funcs/usageCreateStripePortalSession.js";
 import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
 import { usageGetBillingEmail } from "../funcs/usageGetBillingEmail.js";
 import { usageGetInferenceSpendCaps } from "../funcs/usageGetInferenceSpendCaps.js";
+import { usageGetMeterUsage } from "../funcs/usageGetMeterUsage.js";
 import { usageGetPaygBillingSummary } from "../funcs/usageGetPaygBillingSummary.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
+import { usageGetSpendBreakdown } from "../funcs/usageGetSpendBreakdown.js";
+import { usageGetStripeCheckoutStatus } from "../funcs/usageGetStripeCheckoutStatus.js";
 import { usageGetStripeSubscription } from "../funcs/usageGetStripeSubscription.js";
 import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManagement.js";
 import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
@@ -21,10 +23,14 @@ import { usageSetBillingMetadata } from "../funcs/usageSetBillingMetadata.js";
 import { usageSetSpendCap } from "../funcs/usageSetSpendCap.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BillingEmail } from "../models/components/billingemail.js";
+import { GetStripeCheckoutStatusResponseBody } from "../models/components/getstripecheckoutstatusresponsebody.js";
 import { InferenceSpendCap } from "../models/components/inferencespendcap.js";
+import { MeterUsageResponse } from "../models/components/meterusageresponse.js";
 import { PaygBillingSummary } from "../models/components/paygbillingsummary.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
+import { SpendBreakdownResponse } from "../models/components/spendbreakdownresponse.js";
 import { SpendCap } from "../models/components/spendcap.js";
+import { StripeEmbeddedCheckout } from "../models/components/stripeembeddedcheckout.js";
 import { StripeSubscription } from "../models/components/stripesubscription.js";
 import { TokensUnderManagement } from "../models/components/tokensundermanagement.js";
 import { UsageTiers } from "../models/components/usagetiers.js";
@@ -32,10 +38,6 @@ import {
   CancelStripeSubscriptionRequest,
   CancelStripeSubscriptionSecurity,
 } from "../models/operations/cancelstripesubscription.js";
-import {
-  CreateCheckoutRequest,
-  CreateCheckoutSecurity,
-} from "../models/operations/createcheckout.js";
 import {
   CreateCustomerSessionRequest,
   CreateCustomerSessionSecurity,
@@ -61,6 +63,10 @@ import {
   GetInferenceSpendCapsSecurity,
 } from "../models/operations/getinferencespendcaps.js";
 import {
+  GetMeterUsageRequest,
+  GetMeterUsageSecurity,
+} from "../models/operations/getmeterusage.js";
+import {
   GetPaygBillingSummaryRequest,
   GetPaygBillingSummarySecurity,
 } from "../models/operations/getpaygbillingsummary.js";
@@ -68,6 +74,14 @@ import {
   GetPeriodUsageRequest,
   GetPeriodUsageSecurity,
 } from "../models/operations/getperiodusage.js";
+import {
+  GetSpendBreakdownRequest,
+  GetSpendBreakdownSecurity,
+} from "../models/operations/getspendbreakdown.js";
+import {
+  GetStripeCheckoutStatusRequest,
+  GetStripeCheckoutStatusSecurity,
+} from "../models/operations/getstripecheckoutstatus.js";
 import {
   GetStripeSubscriptionRequest,
   GetStripeSubscriptionSecurity,
@@ -115,25 +129,6 @@ export class Usage extends ClientSDK {
   }
 
   /**
-   * createCheckout usage
-   *
-   * @remarks
-   * Create a checkout link for upgrading to the business plan
-   */
-  async createCheckout(
-    request?: CreateCheckoutRequest | undefined,
-    security?: CreateCheckoutSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<string> {
-    return unwrapAsync(usageCreateCheckout(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * createCustomerSession usage
    *
    * @remarks
@@ -156,13 +151,13 @@ export class Usage extends ClientSDK {
    * createStripeCheckout usage
    *
    * @remarks
-   * Create a Stripe Checkout link for starting PAYG billing
+   * Create an embedded Stripe Checkout session for starting PAYG billing
    */
   async createStripeCheckout(
     request?: CreateStripeCheckoutRequest | undefined,
     security?: CreateStripeCheckoutSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<string> {
+  ): Promise<StripeEmbeddedCheckout> {
     return unwrapAsync(usageCreateStripeCheckout(
       this,
       request,
@@ -248,6 +243,25 @@ export class Usage extends ClientSDK {
   }
 
   /**
+   * getMeterUsage usage
+   *
+   * @remarks
+   * Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.
+   */
+  async getMeterUsage(
+    request: GetMeterUsageRequest,
+    security?: GetMeterUsageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<MeterUsageResponse> {
+    return unwrapAsync(usageGetMeterUsage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getPaygBillingSummary usage
    *
    * @remarks
@@ -278,6 +292,44 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PeriodUsage> {
     return unwrapAsync(usageGetPeriodUsage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getSpendBreakdown usage
+   *
+   * @remarks
+   * Report spend availability and estimate PAYG organizations' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.
+   */
+  async getSpendBreakdown(
+    request?: GetSpendBreakdownRequest | undefined,
+    security?: GetSpendBreakdownSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SpendBreakdownResponse> {
+    return unwrapAsync(usageGetSpendBreakdown(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getStripeCheckoutStatus usage
+   *
+   * @remarks
+   * Read the current status of a Stripe Checkout session owned by the active organization
+   */
+  async getStripeCheckoutStatus(
+    request: GetStripeCheckoutStatusRequest,
+    security?: GetStripeCheckoutStatusSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetStripeCheckoutStatusResponseBody> {
+    return unwrapAsync(usageGetStripeCheckoutStatus(
       this,
       request,
       security,

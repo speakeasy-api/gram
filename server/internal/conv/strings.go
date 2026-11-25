@@ -17,7 +17,7 @@ func TruncateString(s string, maxRunes int) string {
 
 // truncatedDetailNotice tells a reader the text was cut and where the whole of
 // it can be found.
-const truncatedDetailNotice = "… (truncated, see Gram logs for the full error)"
+const truncatedDetailNotice = "… (truncated, see Speakeasy logs for the full error)"
 
 // TruncateDetail bounds third-party error text that is echoed back to an API
 // caller, appending a notice when it had to cut.
@@ -70,4 +70,19 @@ func DedupeNonEmpty(values []string) []string {
 	}
 
 	return out
+}
+
+// StripNUL removes NUL bytes, which Postgres cannot store in text or jsonb.
+func StripNUL(s string) string {
+	return strings.ReplaceAll(s, "\x00", "")
+}
+
+// PtrStripNUL removes NUL bytes without modifying the input or trimming whitespace.
+// A nil input returns nil; a non-nil input returns a new string pointer.
+func PtrStripNUL(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	stripped := StripNUL(*s)
+	return &stripped
 }

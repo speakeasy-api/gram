@@ -5,11 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -22,15 +19,7 @@ import (
 func TestCreateInWorkOS_AgainstMockWorkOS(t *testing.T) {
 	t.Parallel()
 
-	idp := devidptest.Launch(t, devidptest.LaunchOpts{EnableMockWorkos: true})
-
-	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
-	require.NoError(t, err)
-
-	client := workos.NewClient(guardianPolicy, "dev-idp-mock", workos.ClientOpts{
-		Endpoint: idp.MockWorkosURL,
-		ClientID: "dev-idp-mock",
-	})
+	client := newEmulatorClient(t)
 
 	created, err := orgprovision.CreateInWorkOS(t.Context(), client, "Acme Local Co")
 	require.NoError(t, err)
@@ -51,4 +40,25 @@ func TestCreateInWorkOS_AgainstMockWorkOS(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, created.WorkOSOrganizationID, second.WorkOSOrganizationID)
 	require.NotEqual(t, created.GramOrganizationID, second.GramOrganizationID)
+}
+
+func TestCreateInWorkOSWithVerifiedDomain_AgainstMockWorkOS(t *testing.T) {
+	t.Parallel()
+	client := newEmulatorClient(t)
+	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "example", "www.example.com")
+	require.NoError(t, err)
+	require.NotEmpty(t, created.WorkOSOrganizationID)
+	require.Equal(t, orgid.FromWorkOSID(created.WorkOSOrganizationID), created.GramOrganizationID)
+	org, err := client.GetOrganization(t.Context(), created.WorkOSOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "example", org.Name)
+	require.Equal(t, created.GramOrganizationID, org.ExternalID)
+	policy, err := client.GetOrganizationDomainPolicy(t.Context(), created.WorkOSOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, []workos.OrganizationDomain{{Domain: "www.example.com", State: workos.OrganizationDomainStateVerified}}, policy.Domains)
+	plain, err := orgprovision.CreateInWorkOS(t.Context(), client, "Example")
+	require.NoError(t, err)
+	policy, err = client.GetOrganizationDomainPolicy(t.Context(), plain.WorkOSOrganizationID)
+	require.NoError(t, err)
+	require.Empty(t, policy.Domains)
 }

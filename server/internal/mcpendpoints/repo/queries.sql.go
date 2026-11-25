@@ -12,46 +12,45 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const checkSlugAvailability = `-- name: CheckSlugAvailability :one
+const checkEndpointSlugAvailability = `-- name: CheckEndpointSlugAvailability :one
 SELECT (
-  $1::uuid IS NULL
+  $1::boolean
+  OR $2::uuid IS NULL
   OR EXISTS (
     SELECT 1
-    FROM custom_domains
-    WHERE id = $1::uuid
-      AND organization_id = $2
-      AND deleted IS FALSE
+    FROM custom_domains cd
+    WHERE cd.id = $2::uuid
+      AND cd.organization_id = $3
+      AND cd.deleted IS FALSE
   )
 ) AND NOT EXISTS (
   SELECT 1
-  FROM mcp_endpoints
-  WHERE slug = $3
-    AND custom_domain_id IS NOT DISTINCT FROM $1::uuid
-    AND deleted IS FALSE
+  FROM mcp_endpoints e
+  WHERE e.slug = $4
+    AND e.custom_domain_id IS NOT DISTINCT FROM $2::uuid
+    AND e.deleted IS FALSE
 )
 `
 
-type CheckSlugAvailabilityParams struct {
-	CustomDomainID uuid.NullUUID
-	OrganizationID string
-	Slug           string
+type CheckEndpointSlugAvailabilityParams struct {
+	SkipDomainCheck bool
+	CustomDomainID  uuid.NullUUID
+	OrganizationID  string
+	Slug            string
 }
 
-// Returns true when the slug is available for an mcp_endpoint in the given
-// uniqueness namespace. Platform-domain endpoints (custom_domain_id IS NULL)
-// and custom-domain endpoints live in separate namespaces enforced by partial
-// unique indexes; this query mirrors that scoping by treating NULL as a valid
-// match value via IS NOT DISTINCT FROM. Soft-deleted rows are ignored. The
-// slug-existence check is intentionally not project-scoped because the
-// uniqueness indexes it mirrors span all projects within their namespace.
-//
-// When custom_domain_id is supplied, the domain must also belong to the
-// caller's organization. Foreign or unknown domains short-circuit to
-// "unavailable" (returns false) so callers can't probe slug-existence under
-// domains they don't own. organization_id is ignored on the platform-domain
-// branch (custom_domain_id IS NULL).
-func (q *Queries) CheckSlugAvailability(ctx context.Context, arg CheckSlugAvailabilityParams) (pgtype.Bool, error) {
-	row := q.db.QueryRow(ctx, checkSlugAvailability, arg.CustomDomainID, arg.OrganizationID, arg.Slug)
+// True when no live mcp_endpoints.slug holds the slug in the namespace
+// (platform when custom_domain_id is NULL, else that domain).
+// Not project-scoped, mirroring the partial unique index. Unless
+// skip_domain_check, a supplied domain must be live and owned by
+// organization_id or the result is false (blocks probing foreign domains).
+func (q *Queries) CheckEndpointSlugAvailability(ctx context.Context, arg CheckEndpointSlugAvailabilityParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, checkEndpointSlugAvailability,
+		arg.SkipDomainCheck,
+		arg.CustomDomainID,
+		arg.OrganizationID,
+		arg.Slug,
+	)
 	var column_1 pgtype.Bool
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -289,6 +288,159 @@ func (q *Queries) GetMCPEndpointByProjectAndCustomDomainAndSlug(ctx context.Cont
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const listAddressableGatewayEndpointsByMemberMCPServerIDs = `-- name: ListAddressableGatewayEndpointsByMemberMCPServerIDs :many
+SELECT
+    e.id, e.project_id, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, e.slug, e.is_domain_root, e.created_at, e.updated_at, e.deleted_at, e.deleted,
+    cd.domain AS custom_domain,
+    mm.mcp_server_id AS member_mcp_server_id,
+    g.name AS gateway_name
+FROM meta_mcp_server_members mm
+JOIN mcp_servers s
+  ON s.id = mm.mcp_server_id
+  AND s.project_id = mm.project_id
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+JOIN meta_mcp_servers g
+  ON g.id = mm.meta_mcp_server_id
+  AND g.project_id = mm.project_id
+  AND g.organization_id = $1
+  AND g.deleted IS FALSE
+JOIN mcp_endpoints e
+  ON e.meta_mcp_server_id = g.id
+  AND e.project_id = g.project_id
+  AND e.deleted IS FALSE
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = $1
+  AND cd.deleted IS FALSE
+  AND cd.verified IS TRUE
+  AND cd.activated IS TRUE
+WHERE mm.project_id = $2
+  AND mm.mcp_server_id = ANY($3::uuid[])
+  AND mm.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+ORDER BY g.created_at, g.id
+`
+
+type ListAddressableGatewayEndpointsByMemberMCPServerIDsParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	McpServerIds   []uuid.UUID
+}
+
+type ListAddressableGatewayEndpointsByMemberMCPServerIDsRow struct {
+	McpEndpoint       McpEndpoint
+	CustomDomain      pgtype.Text
+	MemberMcpServerID uuid.UUID
+	GatewayName       string
+}
+
+// The addressable endpoints of every live gateway that serves one of the
+// given servers as a member. A member counts only when the gateway serves
+// it, filtered exactly as ListServableMetaMCPMembers: its server is live,
+// enabled and has a slug. Custom-domain endpoints count only on a verified,
+// activated domain, the same gate as ListAddressableMCPEndpointsByMCPServerIDs.
+func (q *Queries) ListAddressableGatewayEndpointsByMemberMCPServerIDs(ctx context.Context, arg ListAddressableGatewayEndpointsByMemberMCPServerIDsParams) ([]ListAddressableGatewayEndpointsByMemberMCPServerIDsRow, error) {
+	rows, err := q.db.Query(ctx, listAddressableGatewayEndpointsByMemberMCPServerIDs, arg.OrganizationID, arg.ProjectID, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAddressableGatewayEndpointsByMemberMCPServerIDsRow
+	for rows.Next() {
+		var i ListAddressableGatewayEndpointsByMemberMCPServerIDsRow
+		if err := rows.Scan(
+			&i.McpEndpoint.ID,
+			&i.McpEndpoint.ProjectID,
+			&i.McpEndpoint.CustomDomainID,
+			&i.McpEndpoint.McpServerID,
+			&i.McpEndpoint.MetaMcpServerID,
+			&i.McpEndpoint.Slug,
+			&i.McpEndpoint.IsDomainRoot,
+			&i.McpEndpoint.CreatedAt,
+			&i.McpEndpoint.UpdatedAt,
+			&i.McpEndpoint.DeletedAt,
+			&i.McpEndpoint.Deleted,
+			&i.CustomDomain,
+			&i.MemberMcpServerID,
+			&i.GatewayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAddressableMCPEndpointsByMCPServerIDs = `-- name: ListAddressableMCPEndpointsByMCPServerIDs :many
+SELECT e.id, e.project_id, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, e.slug, e.is_domain_root, e.created_at, e.updated_at, e.deleted_at, e.deleted, cd.domain AS custom_domain
+FROM mcp_endpoints e
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.organization_id = $1
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = $1
+  AND cd.deleted IS FALSE
+  AND cd.verified IS TRUE
+  AND cd.activated IS TRUE
+WHERE e.project_id = ANY($2::uuid[])
+  AND e.mcp_server_id = ANY($3::uuid[])
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+`
+
+type ListAddressableMCPEndpointsByMCPServerIDsParams struct {
+	OrganizationID string
+	ProjectIds     []uuid.UUID
+	McpServerIds   []uuid.UUID
+}
+
+type ListAddressableMCPEndpointsByMCPServerIDsRow struct {
+	McpEndpoint  McpEndpoint
+	CustomDomain pgtype.Text
+}
+
+// Custom-domain endpoints count only on a verified, activated domain, the
+// same gate the custom-domain middleware applies before serving. Mirrored in
+// assistants LoadAssistantMcpServers and ResolveMcpServersForWrite.
+func (q *Queries) ListAddressableMCPEndpointsByMCPServerIDs(ctx context.Context, arg ListAddressableMCPEndpointsByMCPServerIDsParams) ([]ListAddressableMCPEndpointsByMCPServerIDsRow, error) {
+	rows, err := q.db.Query(ctx, listAddressableMCPEndpointsByMCPServerIDs, arg.OrganizationID, arg.ProjectIds, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAddressableMCPEndpointsByMCPServerIDsRow
+	for rows.Next() {
+		var i ListAddressableMCPEndpointsByMCPServerIDsRow
+		if err := rows.Scan(
+			&i.McpEndpoint.ID,
+			&i.McpEndpoint.ProjectID,
+			&i.McpEndpoint.CustomDomainID,
+			&i.McpEndpoint.McpServerID,
+			&i.McpEndpoint.MetaMcpServerID,
+			&i.McpEndpoint.Slug,
+			&i.McpEndpoint.IsDomainRoot,
+			&i.McpEndpoint.CreatedAt,
+			&i.McpEndpoint.UpdatedAt,
+			&i.McpEndpoint.DeletedAt,
+			&i.McpEndpoint.Deleted,
+			&i.CustomDomain,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listCustomDomainIDsByMCPServerID = `-- name: ListCustomDomainIDsByMCPServerID :many
@@ -563,6 +715,110 @@ func (q *Queries) ListMCPEndpointsByProject(ctx context.Context, projectID uuid.
 	return items, nil
 }
 
+const listMCPEndpointsByProjectAndSlug = `-- name: ListMCPEndpointsByProjectAndSlug :many
+SELECT id, project_id, custom_domain_id, mcp_server_id, meta_mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+FROM mcp_endpoints
+WHERE project_id = $1
+  AND slug = $2
+  AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC, created_at, id
+`
+
+type ListMCPEndpointsByProjectAndSlugParams struct {
+	ProjectID uuid.UUID
+	Slug      string
+}
+
+// Live endpoints with a slug in the project, platform addresses first.
+func (q *Queries) ListMCPEndpointsByProjectAndSlug(ctx context.Context, arg ListMCPEndpointsByProjectAndSlugParams) ([]McpEndpoint, error) {
+	rows, err := q.db.Query(ctx, listMCPEndpointsByProjectAndSlug, arg.ProjectID, arg.Slug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpEndpoint
+	for rows.Next() {
+		var i McpEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.CustomDomainID,
+			&i.McpServerID,
+			&i.MetaMcpServerID,
+			&i.Slug,
+			&i.IsDomainRoot,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPEndpointsOnLiveDomainsByMCPServerID = `-- name: ListMCPEndpointsOnLiveDomainsByMCPServerID :many
+SELECT e.id, e.project_id, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, e.slug, e.is_domain_root, e.created_at, e.updated_at, e.deleted_at, e.deleted
+FROM mcp_endpoints e
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = $1
+  AND cd.deleted IS FALSE
+WHERE e.project_id = $2
+  AND e.mcp_server_id = $3::uuid
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+`
+
+type ListMCPEndpointsOnLiveDomainsByMCPServerIDParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.UUID
+}
+
+type ListMCPEndpointsOnLiveDomainsByMCPServerIDRow struct {
+	McpEndpoint McpEndpoint
+}
+
+// Endpoints on a deleted or another organization's domain are skipped; those
+// on a domain still pending verification or activation are kept.
+func (q *Queries) ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx context.Context, arg ListMCPEndpointsOnLiveDomainsByMCPServerIDParams) ([]ListMCPEndpointsOnLiveDomainsByMCPServerIDRow, error) {
+	rows, err := q.db.Query(ctx, listMCPEndpointsOnLiveDomainsByMCPServerID, arg.OrganizationID, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPEndpointsOnLiveDomainsByMCPServerIDRow
+	for rows.Next() {
+		var i ListMCPEndpointsOnLiveDomainsByMCPServerIDRow
+		if err := rows.Scan(
+			&i.McpEndpoint.ID,
+			&i.McpEndpoint.ProjectID,
+			&i.McpEndpoint.CustomDomainID,
+			&i.McpEndpoint.McpServerID,
+			&i.McpEndpoint.MetaMcpServerID,
+			&i.McpEndpoint.Slug,
+			&i.McpEndpoint.IsDomainRoot,
+			&i.McpEndpoint.CreatedAt,
+			&i.McpEndpoint.UpdatedAt,
+			&i.McpEndpoint.DeletedAt,
+			&i.McpEndpoint.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRootMCPEndpointsByMCPServerID = `-- name: ListRootMCPEndpointsByMCPServerID :many
 SELECT id, project_id, custom_domain_id, mcp_server_id, meta_mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 FROM mcp_endpoints
@@ -599,6 +855,64 @@ func (q *Queries) ListRootMCPEndpointsByMCPServerID(ctx context.Context, arg Lis
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServableMCPEndpointsByMCPServerID = `-- name: ListServableMCPEndpointsByMCPServerID :many
+SELECT e.id, e.project_id, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, e.slug, e.is_domain_root, e.created_at, e.updated_at, e.deleted_at, e.deleted
+FROM mcp_endpoints e
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = $1
+  AND cd.deleted IS FALSE
+  AND cd.verified
+  AND cd.activated
+WHERE e.project_id = $2
+  AND e.mcp_server_id = $3::uuid
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+`
+
+type ListServableMCPEndpointsByMCPServerIDParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.UUID
+}
+
+type ListServableMCPEndpointsByMCPServerIDRow struct {
+	McpEndpoint McpEndpoint
+}
+
+// Endpoints that can serve: on the platform, or on a live, verified and activated domain of the organization.
+func (q *Queries) ListServableMCPEndpointsByMCPServerID(ctx context.Context, arg ListServableMCPEndpointsByMCPServerIDParams) ([]ListServableMCPEndpointsByMCPServerIDRow, error) {
+	rows, err := q.db.Query(ctx, listServableMCPEndpointsByMCPServerID, arg.OrganizationID, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServableMCPEndpointsByMCPServerIDRow
+	for rows.Next() {
+		var i ListServableMCPEndpointsByMCPServerIDRow
+		if err := rows.Scan(
+			&i.McpEndpoint.ID,
+			&i.McpEndpoint.ProjectID,
+			&i.McpEndpoint.CustomDomainID,
+			&i.McpEndpoint.McpServerID,
+			&i.McpEndpoint.MetaMcpServerID,
+			&i.McpEndpoint.Slug,
+			&i.McpEndpoint.IsDomainRoot,
+			&i.McpEndpoint.CreatedAt,
+			&i.McpEndpoint.UpdatedAt,
+			&i.McpEndpoint.DeletedAt,
+			&i.McpEndpoint.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -792,6 +1106,29 @@ func (q *Queries) LockRootMCPEndpointsByMCPServerID(ctx context.Context, arg Loc
 	return items, nil
 }
 
+const lockSlugScope = `-- name: LockSlugScope :exec
+SELECT
+  pg_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || $1::text, 0)),
+  pg_advisory_xact_lock(hashtextextended(
+    'mcp_slug:' || coalesce($2::uuid::text, 'platform') || '/' || $1::text, 0
+  ))
+`
+
+type LockSlugScopeParams struct {
+	Slug           string
+	CustomDomainID uuid.NullUUID
+}
+
+// Serializes competing claims on one (namespace, slug) address for the rest of
+// the caller's transaction, since the availability check runs before the write.
+// A custom-domain claim also takes the platform lock first: it no longer needs
+// it, but keeping one lock order stays deadlock-free beside pods still running
+// the earlier order.
+func (q *Queries) LockSlugScope(ctx context.Context, arg LockSlugScopeParams) error {
+	_, err := q.db.Exec(ctx, lockSlugScope, arg.Slug, arg.CustomDomainID)
+	return err
+}
+
 const softDeleteMCPEndpointsByCustomDomainID = `-- name: SoftDeleteMCPEndpointsByCustomDomainID :many
 UPDATE mcp_endpoints
 SET
@@ -943,6 +1280,18 @@ func (q *Queries) SoftDeleteMCPEndpointsByMetaMCPServerID(ctx context.Context, a
 	return items, nil
 }
 
+const tryLockPlatformSlugScope = `-- name: TryLockPlatformSlugScope :one
+SELECT pg_try_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || $1::text, 0))::boolean AS locked
+`
+
+// LockSlugScope's platform lock without waiting, for a write that already holds another slug's lock.
+func (q *Queries) TryLockPlatformSlugScope(ctx context.Context, slug string) (bool, error) {
+	row := q.db.QueryRow(ctx, tryLockPlatformSlugScope, slug)
+	var locked bool
+	err := row.Scan(&locked)
+	return locked, err
+}
+
 const updateMCPEndpoint = `-- name: UpdateMCPEndpoint :one
 UPDATE mcp_endpoints
 SET
@@ -971,6 +1320,50 @@ func (q *Queries) UpdateMCPEndpoint(ctx context.Context, arg UpdateMCPEndpointPa
 		arg.CustomDomainID,
 		arg.McpServerID,
 		arg.MetaMcpServerID,
+		arg.Slug,
+		arg.IsDomainRoot,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i McpEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.CustomDomainID,
+		&i.McpServerID,
+		&i.MetaMcpServerID,
+		&i.Slug,
+		&i.IsDomainRoot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateMCPEndpointAddress = `-- name: UpdateMCPEndpointAddress :one
+UPDATE mcp_endpoints
+SET
+    custom_domain_id = $1,
+    slug = $2,
+    is_domain_root = $3,
+    updated_at = clock_timestamp()
+WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
+RETURNING id, project_id, custom_domain_id, mcp_server_id, meta_mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateMCPEndpointAddressParams struct {
+	CustomDomainID uuid.NullUUID
+	Slug           string
+	IsDomainRoot   pgtype.Bool
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) UpdateMCPEndpointAddress(ctx context.Context, arg UpdateMCPEndpointAddressParams) (McpEndpoint, error) {
+	row := q.db.QueryRow(ctx, updateMCPEndpointAddress,
+		arg.CustomDomainID,
 		arg.Slug,
 		arg.IsDomainRoot,
 		arg.ID,

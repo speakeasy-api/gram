@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotemcpproxy "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
 func TestUpdateServer_ServerFields(t *testing.T) {
@@ -106,7 +107,7 @@ func TestUpdateServer_InvalidURL_BlockedIPv4LiteralLoopback(t *testing.T) {
 
 func TestUpdateServer_InvalidURL_BlockedIPv4LiteralPrivate(t *testing.T) {
 	t.Parallel()
-	err := requireUpdateServerInvalidURL(t, "http://10.0.0.1")
+	err := requireUpdateServerInvalidURL(t, "https://10.0.0.1")
 	require.ErrorIs(t, err, guardian.ErrBlockedIP)
 }
 
@@ -118,13 +119,13 @@ func TestUpdateServer_InvalidURL_BlockedIPv6LiteralLoopback(t *testing.T) {
 
 func TestUpdateServer_InvalidURL_HostnameResolvesToBlockedIP(t *testing.T) {
 	t.Parallel()
-	err := requireUpdateServerInvalidURL(t, "http://"+blockedTestHost)
+	err := requireUpdateServerInvalidURL(t, "https://"+blockedTestHost)
 	require.ErrorIs(t, err, guardian.ErrBlockedIP)
 }
 
 func TestUpdateServer_InvalidURL_HostnameFailsToResolve(t *testing.T) {
 	t.Parallel()
-	err := requireUpdateServerInvalidURL(t, "http://"+unresolvableTestHost)
+	err := requireUpdateServerInvalidURL(t, "https://"+unresolvableTestHost)
 	require.ErrorIs(t, err, guardian.ErrBadHost)
 }
 
@@ -138,15 +139,27 @@ func TestUpdateServer_InvalidURL_MissingHost(t *testing.T) {
 	_ = requireUpdateServerInvalidURL(t, "https://")
 }
 
-func TestUpdateServer_AllowsPublicIPLiteral(t *testing.T) {
+func TestUpdateServer_RejectsHostedHTTP(t *testing.T) {
+	t.Parallel()
+	err := requireUpdateServerInvalidURL(t, "http://8.8.8.8")
+	require.ErrorIs(t, err, remotemcpproxy.ErrInsecureRemoteMCPTransport)
+}
+
+func TestUpdateServer_RejectsUserinfo(t *testing.T) {
+	t.Parallel()
+	err := requireUpdateServerInvalidURL(t, "https://user:secret@mcp.example.com")
+	require.ErrorIs(t, err, remotemcpproxy.ErrRemoteMCPURLUserinfo)
+}
+
+func TestUpdateServer_AllowsLoopbackHTTPWithDevelopmentPolicy(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	ctx, ti := newTestServiceWithPolicy(t, newPermissivePolicy(t))
 
 	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		URL:              "https://mcp.example.com",
+		URL:              "https://8.8.8.8",
 		TransportType:    "streamable-http",
 	})
 	require.NoError(t, err)
@@ -155,10 +168,10 @@ func TestUpdateServer_AllowsPublicIPLiteral(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		ID:               created.ID,
-		URL:              new("http://8.8.8.8"),
+		URL:              new("http://[::1]:8080/mcp"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "http://8.8.8.8", updated.URL)
+	require.Equal(t, "http://[::1]:8080/mcp", updated.URL)
 }
 
 func TestUpdateServer_NameSet(t *testing.T) {

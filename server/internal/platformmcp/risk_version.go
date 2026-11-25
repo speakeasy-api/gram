@@ -62,14 +62,7 @@ type RiskPolicyVersionGrant struct {
 // PolicyVersion authenticates the complete transport-neutral persisted policy
 // state. Sensitive prompt, URL-derived scope, model configuration, and audience
 // values contribute only inside the HMAC and never appear in the token.
-func (c *riskVersionCodec) PolicyVersion(input RiskPolicyVersionState) (string, error) {
-	state := input
-	// Progress is computed when a policy is read and changes as background
-	// analysis advances; it is not part of the locked policy definition. Keep
-	// persisted score, version, and timestamps, which do represent admin-visible
-	// policy state and must invalidate stale writes.
-	state.Policy.PendingMessages = nil
-	state.Policy.TotalMessages = nil
+func (c *riskVersionCodec) PolicyVersion(state RiskPolicyVersionState) (string, error) {
 	canonicalAnalyzer, err := canonicalJSON(state.AnalyzerConfig)
 	if err != nil {
 		return "", errRiskVersionInvalid
@@ -81,7 +74,6 @@ func (c *riskVersionCodec) PolicyVersion(input RiskPolicyVersionState) (string, 
 	state.Policy.PromptInjectionRules = sortedStrings(state.Policy.PromptInjectionRules)
 	state.Policy.DisabledRules = sortedStrings(state.Policy.DisabledRules)
 	state.Policy.CustomRuleIDs = sortedStrings(state.Policy.CustomRuleIDs)
-	state.Policy.MessageTypes = sortedStrings(state.Policy.MessageTypes)
 	state.Policy.AudiencePrincipalURNs = sortedStrings(state.Policy.AudiencePrincipalURNs)
 	state.Policy.DetectionScopes = slices.Clone(state.Policy.DetectionScopes)
 	state.AllowedURLGrants, err = canonicalRiskPolicyVersionGrants(state.AllowedURLGrants)
@@ -168,18 +160,14 @@ func compareStrings(a, b string) int {
 }
 
 // riskPolicyVersionState loads every grant-backed part of a policy definition
-// from the same database snapshot as the policy row. Sensitive URLs, principals,
-// selectors, and standing decisions contribute only to the HMAC and are never
-// returned. Mutation validation requests the enforcement lock before any of
-// those reads; repeatable-read projections already have one stable snapshot.
-func riskPolicyVersionState(ctx context.Context, db riskrepo.DBTX, policy policycore.Policy, lockEnforcement bool) (RiskPolicyVersionState, error) {
+// from the caller's database snapshot. URL grant principals, selectors, URLs,
+// and standing decisions contribute only to the HMAC. Policy audience grants
+// are also exposed separately by the administrator-only policy detail read.
+// Mutation callers acquire the project enforcement lock before domain locks;
+// read-only detail projections use one repeatable-read snapshot.
+func riskPolicyVersionState(ctx context.Context, db riskrepo.DBTX, policy policycore.Policy) (RiskPolicyVersionState, error) {
 	state := RiskPolicyVersionState{Policy: policy, AnalyzerConfig: nil, AllowedURLGrants: []RiskPolicyVersionGrant{}, BlockedURLGrants: []RiskPolicyVersionGrant{}, StandingDecisionState: []string{}}
 	approvalQueries := approvalrepo.New(db)
-	if lockEnforcement {
-		if err := approvalQueries.LockProjectEnforcementState(ctx, policy.ProjectID.String()); err != nil {
-			return RiskPolicyVersionState{}, fmt.Errorf("lock risk policy enforcement state: %w", err)
-		}
-	}
 	row, err := riskrepo.New(db).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policy.ID, ProjectID: policy.ProjectID})
 	if err != nil {
 		return RiskPolicyVersionState{}, fmt.Errorf("load risk policy version row: %w", err)
@@ -188,7 +176,7 @@ func riskPolicyVersionState(ctx context.Context, db riskrepo.DBTX, policy policy
 	if err != nil {
 		return RiskPolicyVersionState{}, fmt.Errorf("load risk policy version audience: %w", err)
 	}
-	state.Policy = policycore.Project(row, audience, nil)
+	state.Policy = policycore.Project(row, audience)
 	state.AnalyzerConfig = row.AnalyzerConfig
 	allowedGrants, err := riskPolicyVersionURLGrants(ctx, db, state.Policy, authz.ScopeRiskPolicyBypass)
 	if err != nil {

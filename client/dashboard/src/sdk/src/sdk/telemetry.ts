@@ -5,10 +5,17 @@
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
 import { telemetryGetEmployeeDataFlowGraph } from "../funcs/telemetryGetEmployeeDataFlowGraph.js";
 import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
+import { telemetryGetMcpNetworkTraffic } from "../funcs/telemetryGetMcpNetworkTraffic.js";
 import { telemetryGetMcpServerActivity } from "../funcs/telemetryGetMcpServerActivity.js";
+import { telemetryGetMetaMcpServerUsage } from "../funcs/telemetryGetMetaMcpServerUsage.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
+import { telemetryGetOrgMcpServerActivity } from "../funcs/telemetryGetOrgMcpServerActivity.js";
+import { telemetryGetProjectGatewayOverview } from "../funcs/telemetryGetProjectGatewayOverview.js";
+import { telemetryGetProjectGatewayUsage } from "../funcs/telemetryGetProjectGatewayUsage.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
+import { telemetryGetToolUsageClients } from "../funcs/telemetryGetToolUsageClients.js";
+import { telemetryGetToolUsageClientToolBreakdown } from "../funcs/telemetryGetToolUsageClientToolBreakdown.js";
 import { telemetryGetToolUsageFilterOptions } from "../funcs/telemetryGetToolUsageFilterOptions.js";
 import { telemetryGetToolUsageSummary } from "../funcs/telemetryGetToolUsageSummary.js";
 import { telemetryGetToolUsageTargets } from "../funcs/telemetryGetToolUsageTargets.js";
@@ -38,10 +45,15 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { GetEmployeeDataFlowGraphResult } from "../models/components/getemployeedataflowgraphresult.js";
 import { GetHooksSummaryResult } from "../models/components/gethookssummaryresult.js";
+import { GetMcpNetworkTrafficResult } from "../models/components/getmcpnetworktrafficresult.js";
 import { GetMcpServerActivityResult } from "../models/components/getmcpserveractivityresult.js";
+import { GetMetaMcpServerUsageResult } from "../models/components/getmetamcpserverusageresult.js";
 import { GetMetricsSummaryResult } from "../models/components/getmetricssummaryresult.js";
 import { GetObservabilityOverviewResult } from "../models/components/getobservabilityoverviewresult.js";
+import { GetOrgMcpServerActivityResult } from "../models/components/getorgmcpserveractivityresult.js";
 import { GetProjectOverviewResult } from "../models/components/getprojectoverviewresult.js";
+import { GetToolUsageClientsResult } from "../models/components/gettoolusageclientsresult.js";
+import { GetToolUsageClientToolBreakdownResult } from "../models/components/gettoolusageclienttoolbreakdownresult.js";
 import { GetToolUsageFilterOptionsResult } from "../models/components/gettoolusagefilteroptionsresult.js";
 import { GetToolUsageSummaryResult } from "../models/components/gettoolusagesummaryresult.js";
 import { GetToolUsageTargetsResult } from "../models/components/gettoolusagetargetsresult.js";
@@ -80,13 +92,33 @@ import {
   GetHooksSummarySecurity,
 } from "../models/operations/gethookssummary.js";
 import {
+  GetMcpNetworkTrafficRequest,
+  GetMcpNetworkTrafficSecurity,
+} from "../models/operations/getmcpnetworktraffic.js";
+import {
   GetMcpServerActivityRequest,
   GetMcpServerActivitySecurity,
 } from "../models/operations/getmcpserveractivity.js";
 import {
+  GetMetaMcpServerUsageRequest,
+  GetMetaMcpServerUsageSecurity,
+} from "../models/operations/getmetamcpserverusage.js";
+import {
   GetObservabilityOverviewRequest,
   GetObservabilityOverviewSecurity,
 } from "../models/operations/getobservabilityoverview.js";
+import {
+  GetOrgMcpServerActivityRequest,
+  GetOrgMcpServerActivitySecurity,
+} from "../models/operations/getorgmcpserveractivity.js";
+import {
+  GetProjectGatewayOverviewRequest,
+  GetProjectGatewayOverviewSecurity,
+} from "../models/operations/getprojectgatewayoverview.js";
+import {
+  GetProjectGatewayUsageRequest,
+  GetProjectGatewayUsageSecurity,
+} from "../models/operations/getprojectgatewayusage.js";
 import {
   GetProjectMetricsSummaryRequest,
   GetProjectMetricsSummarySecurity,
@@ -95,6 +127,14 @@ import {
   GetProjectOverviewRequest,
   GetProjectOverviewSecurity,
 } from "../models/operations/getprojectoverview.js";
+import {
+  GetToolUsageClientsRequest,
+  GetToolUsageClientsSecurity,
+} from "../models/operations/gettoolusageclients.js";
+import {
+  GetToolUsageClientToolBreakdownRequest,
+  GetToolUsageClientToolBreakdownSecurity,
+} from "../models/operations/gettoolusageclienttoolbreakdown.js";
 import {
   GetToolUsageFilterOptionsRequest,
   GetToolUsageFilterOptionsSecurity,
@@ -253,6 +293,25 @@ export class Telemetry extends ClientSDK {
   }
 
   /**
+   * getMcpNetworkTraffic telemetry
+   *
+   * @remarks
+   * Observed inbound public and private MCP request counts for a server or gateway over a recent window
+   */
+  async getMcpNetworkTraffic(
+    request: GetMcpNetworkTrafficRequest,
+    security?: GetMcpNetworkTrafficSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetMcpNetworkTrafficResult> {
+    return unwrapAsync(telemetryGetMcpNetworkTraffic(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getMcpServerActivity telemetry
    *
    * @remarks
@@ -272,6 +331,25 @@ export class Telemetry extends ClientSDK {
   }
 
   /**
+   * getMetaMcpServerUsage telemetry
+   *
+   * @remarks
+   * Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.
+   */
+  async getMetaMcpServerUsage(
+    request: GetMetaMcpServerUsageRequest,
+    security?: GetMetaMcpServerUsageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetMetaMcpServerUsageResult> {
+    return unwrapAsync(telemetryGetMetaMcpServerUsage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getObservabilityOverview telemetry
    *
    * @remarks
@@ -283,6 +361,63 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetObservabilityOverviewResult> {
     return unwrapAsync(telemetryGetObservabilityOverview(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getOrgMcpServerActivity telemetry
+   *
+   * @remarks
+   * Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.
+   */
+  async getOrgMcpServerActivity(
+    request: GetOrgMcpServerActivityRequest,
+    security?: GetOrgMcpServerActivitySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetOrgMcpServerActivityResult> {
+    return unwrapAsync(telemetryGetOrgMcpServerActivity(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getProjectGatewayOverview telemetry
+   *
+   * @remarks
+   * Observability overview metrics for calls dispatched through the selected project's Project Gateway: the Organization Gateway limited to that project's servers.
+   */
+  async getProjectGatewayOverview(
+    request: GetProjectGatewayOverviewRequest,
+    security?: GetProjectGatewayOverviewSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetObservabilityOverviewResult> {
+    return unwrapAsync(telemetryGetProjectGatewayOverview(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getProjectGatewayUsage telemetry
+   *
+   * @remarks
+   * Discovery funnel and per-server execution breakdown for the selected project's Project Gateway.
+   */
+  async getProjectGatewayUsage(
+    request: GetProjectGatewayUsageRequest,
+    security?: GetProjectGatewayUsageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetMetaMcpServerUsageResult> {
+    return unwrapAsync(telemetryGetProjectGatewayUsage(
       this,
       request,
       security,
@@ -321,6 +456,44 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetProjectOverviewResult> {
     return unwrapAsync(telemetryGetProjectOverview(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getToolUsageClientToolBreakdown telemetry
+   *
+   * @remarks
+   * Get per-tool MCP and tool usage grouped by MCP client
+   */
+  async getToolUsageClientToolBreakdown(
+    request: GetToolUsageClientToolBreakdownRequest,
+    security?: GetToolUsageClientToolBreakdownSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetToolUsageClientToolBreakdownResult> {
+    return unwrapAsync(telemetryGetToolUsageClientToolBreakdown(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getToolUsageClients telemetry
+   *
+   * @remarks
+   * Get top MCP clients by tool usage
+   */
+  async getToolUsageClients(
+    request: GetToolUsageClientsRequest,
+    security?: GetToolUsageClientsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetToolUsageClientsResult> {
+    return unwrapAsync(telemetryGetToolUsageClients(
       this,
       request,
       security,

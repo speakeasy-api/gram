@@ -70,7 +70,7 @@ describe("SetupGuidePanel", () => {
     );
 
     expect(screen.getByText("Set up in Box")).toBeTruthy();
-    expect(screen.getByText("Set up in Gram")).toBeTruthy();
+    expect(screen.getByText("Set up in Speakeasy")).toBeTruthy();
     expect(container.textContent).toContain(
       "Sign in to the Box Admin Console.",
     );
@@ -112,7 +112,7 @@ describe("SetupGuidePanel", () => {
         guides: [
           guide({
             externalMarkdown:
-              "Next, [add the server](speakeasy.md#add-server) in Gram.\n",
+              "Next, [add the server](speakeasy.md#add-server) in Speakeasy.\n",
             speakeasyMarkdown:
               "## Add the server {#add-server}\n\nClick Add, then see [the console steps](./external.md).\n",
           }),

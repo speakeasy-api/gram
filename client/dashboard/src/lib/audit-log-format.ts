@@ -1,8 +1,31 @@
-import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { isAuditAction, staticActionPhrase } from "@/lib/audit-actions";
 
+import type { AuditLog } from "@gram/client/models/components/auditlog.js";
+
 export function getActorLabel(log: AuditLog): string {
-  return log.actorDisplayName || log.actorSlug || "Someone";
+  // The server nulls the display name and slug for an agent actor, so
+  // without this every agent-made change read as "Someone". An agent is a
+  // named thing; saying so beats a word that suggests we lost the name.
+  if (log.actorType === "agent") {
+    // Some writers prefix the actor id with its type, as the principal
+    // parser already allows for. Shortening that gives "Agent agent:ab":
+    // the type twice and two characters of the id.
+    const id = log.actorId.startsWith("agent:")
+      ? log.actorId.slice("agent:".length)
+      : log.actorId;
+    return `Agent ${id.slice(0, 8)}`;
+  }
+  const stored = log.actorDisplayName || log.actorSlug;
+  if (stored) return stored;
+  // A system actor is a Speakeasy component working with no person behind
+  // it. It is never anonymous, so it must not read as "Someone".
+  if (
+    log.actorType === "system" ||
+    ["system", "user:system"].includes(log.actorId)
+  ) {
+    return "Speakeasy";
+  }
+  return "Someone";
 }
 
 export function formatAuditAction(action: string): string {
@@ -28,6 +51,8 @@ function getResourceLabel(resource: string): string {
       return "environment";
     case "mcp_metadata":
       return "MCP metadata";
+    case "network_ingress":
+      return "private network ingress";
     case "otel_forwarding":
     case "otel_forwarding_config":
       return "OpenTelemetry forwarding";
@@ -148,14 +173,28 @@ function recordString(value: unknown, key: string): string | undefined {
   return typeof field === "string" && field !== "" ? field : undefined;
 }
 
-function formatRoleSlug(roleSlug: string): string {
-  return roleSlug.replace(/[-_]/g, " ");
+/**
+ * The sensitive scopes a role or membership change gave, as the server
+ * recorded them (`sensitive_scopes_added` in the row's metadata). Empty for
+ * every other row.
+ */
+export function sensitiveScopesAdded(log: AuditLog): string[] {
+  if (log.metadata == null || typeof log.metadata !== "object") return [];
+  const added = (log.metadata as Record<string, unknown>)[
+    "sensitive_scopes_added"
+  ];
+  if (!Array.isArray(added)) return [];
+  return added.filter((scope): scope is string => typeof scope === "string");
+}
+
+function humanizeSlug(slug: string): string {
+  return slug.replace(/[-_]/g, " ");
 }
 
 function describeInvitation(log: AuditLog): string | undefined {
   if (log.action === "organization_invitation:create") {
     const role = recordString(log.metadata, "role_slug");
-    return role ? `sent ${formatRoleSlug(role)} invite to` : undefined;
+    return role ? `sent ${humanizeSlug(role)} invite to` : undefined;
   }
 
   if (log.action === "organization_invitation:update_role") {
@@ -166,14 +205,31 @@ function describeInvitation(log: AuditLog): string | undefined {
       recordString(log.afterSnapshot, "RoleSlug") ??
       recordString(log.afterSnapshot, "role_slug");
     if (before && after && before !== after) {
-      return `changed invite role from ${formatRoleSlug(before)} to ${formatRoleSlug(after)} for`;
+      return `changed invite role from ${humanizeSlug(before)} to ${humanizeSlug(after)} for`;
     }
     if (after) {
-      return `changed invite role to ${formatRoleSlug(after)} for`;
+      return `changed invite role to ${humanizeSlug(after)} for`;
     }
   }
 
   return undefined;
+}
+
+function describeAuthClientDetach(log: AuditLog): string | undefined {
+  const server =
+    recordString(log.metadata, "mcp_server_name") ??
+    recordString(log.metadata, "mcp_server_id");
+  return server ? `removed MCP server ${server} from auth client` : undefined;
+}
+
+function describeProductFeatureToggle(log: AuditLog): string | undefined {
+  const feature = recordString(log.metadata, "feature_name");
+  if (!feature) return undefined;
+  const verb =
+    log.action === "organization:product_feature_enabled"
+      ? "enabled"
+      : "disabled";
+  return `${verb} the ${humanizeSlug(feature)} feature for`;
 }
 
 const IRREGULAR_PAST_TENSE: Record<string, string> = {
@@ -217,10 +273,12 @@ const ASSET_KIND_LABELS: Record<string, string> = {
 
 const SUBJECT_TYPE_LABELS: Record<string, string> = {
   mcp_server: "MCP server",
-  mcp_collection: "Collection",
   otel_forwarding_config: "OpenTelemetry forwarding",
   api_key: "API key",
   chat_session: "Chat session",
+  channels_settings: "Organization",
+  channels_access: "Member",
+  user_session_issuer: "MCP sign-in",
 };
 
 function subjectTypeLabel(subjectType: string): string {
@@ -266,7 +324,7 @@ export function formatAuditActionLabel(action: string): string {
   const phrase = isAuditAction(action)
     ? staticActionPhrase(action)
     : describeUnknownAction(action);
-  const trimmed = phrase.replace(/\s+(for|to|from|on)$/, "");
+  const trimmed = phrase.replace(/\s+(for|to|from|on|under)$/, "");
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
@@ -281,9 +339,28 @@ export function renderVerb(log: AuditLog): string {
     case "organization_invitation:create":
     case "organization_invitation:update_role":
       return describeInvitation(log) ?? staticActionPhrase(log.action);
+    case "auth-client:detach-mcp-server":
+      return describeAuthClientDetach(log) ?? staticActionPhrase(log.action);
+    case "organization:product_feature_enabled":
+    case "organization:product_feature_disabled":
+      return (
+        describeProductFeatureToggle(log) ?? staticActionPhrase(log.action)
+      );
   }
 
-  return isAuditAction(log.action)
+  const phrase = isAuditAction(log.action)
     ? staticActionPhrase(log.action)
     : describeUnknownAction(log.action);
+  return dropNounNamedBySubject(phrase, log);
+}
+
+// An id-only subject renders as "MCP sign-in 01900000", so a phrase ending in
+// the same noun would read "created MCP sign-in MCP sign-in 01900000".
+function dropNounNamedBySubject(phrase: string, log: AuditLog): string {
+  const raw = log.subjectDisplayName || log.subjectSlug || log.subjectId;
+  if (!UUID.test(raw)) return phrase;
+  const noun = ` ${subjectTypeLabel(log.subjectType).toLowerCase()}`;
+  return phrase.toLowerCase().endsWith(noun)
+    ? phrase.slice(0, -noun.length)
+    : phrase;
 }

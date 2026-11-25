@@ -59,7 +59,7 @@ func TestAttributeFault(t *testing.T) {
 		},
 		{
 			// A fresh readiness result is a direct statement about this
-			// server's Gram-side setup and outranks inference from outcomes.
+			// server's Speakeasy-side setup and outranks inference from outcomes.
 			name:           "not-ready readiness attributes to gram configuration",
 			readiness:      freshReadiness(ReadinessNeedsGramAuthorization),
 			readinessFound: true,
@@ -77,7 +77,7 @@ func TestAttributeFault(t *testing.T) {
 		},
 		{
 			// The rejections classified here are the provider's answer to
-			// Gram's own calls, so a probe that authorized with the same
+			// Speakeasy's own calls, so a probe that authorized with the same
 			// credentials contradicts them. Naming the caller at fault would
 			// blame the one party this evidence says nothing about.
 			name:           "fresh ready with unauthorized calls is indeterminate",
@@ -120,6 +120,29 @@ func TestAttributeFault(t *testing.T) {
 			server:     outcomeTotals{Total: 30, Success: 0, Unauthorized: 10, ClientError: 10, ServerError: 10},
 			wantFault:  FaultIndeterminate,
 			wantReason: reasonMixedFailures,
+			wantScope:  FaultScopeUnknown,
+		},
+		{
+			// The tool ran and reported failure; no status names a party.
+			name:       "tool errors alone are indeterminate and say so",
+			server:     outcomeTotals{Total: 20, Success: 5, Failed: 15},
+			wantFault:  FaultIndeterminate,
+			wantReason: reasonToolErrorDominant,
+			wantScope:  FaultScopeUnknown,
+		},
+		{
+			// Tool errors do not dilute a status-classified majority.
+			name:       "server errors still point upstream alongside more tool errors",
+			server:     outcomeTotals{Total: 30, Success: 5, ServerError: 10, Failed: 15},
+			wantFault:  FaultProvider,
+			wantReason: reasonServerErrorDominant,
+			wantScope:  FaultScopeUnknown,
+		},
+		{
+			name:       "unauthorized majority survives tool errors",
+			server:     outcomeTotals{Total: 11, Unauthorized: 5, Failed: 6},
+			wantFault:  FaultGramConfiguration,
+			wantReason: reasonUnauthorizedDominant,
 			wantScope:  FaultScopeUnknown,
 		},
 		{
@@ -179,7 +202,7 @@ func TestAttributeFault(t *testing.T) {
 }
 
 // TestAttributeFault_ExonerationRequiresFreshReady pins the one condition that
-// lets a diagnosis clear Gram's configuration and the provider at once.
+// lets a diagnosis clear Speakeasy's configuration and the provider at once.
 func TestAttributeFault_ExonerationRequiresFreshReady(t *testing.T) {
 	t.Parallel()
 

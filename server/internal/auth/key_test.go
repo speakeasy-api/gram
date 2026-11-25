@@ -8,8 +8,117 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 )
+
+func TestClassifyPrincipalAPIKeyUsesOnlyCompleteLoadedProfile(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+	createdAt := now.Add(-time.Hour)
+	valid := keysrepo.GetAPIKeyByKeyHashRow{
+		CreatedByUserID:        "user_authorizer",
+		SubjectUrn:             pgtype.Text{String: "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001", Valid: true},
+		DelegatedGrants:        []byte(`{"requested":[],"effective":[]}`),
+		DelegatedGrantsVersion: pgtype.Int4{Int32: 1, Valid: true},
+		ExpiresAt:              pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
+		CreatedAt:              pgtype.Timestamptz{Time: createdAt, Valid: true},
+	}
+
+	actor, credential, principal, err := classifyPrincipalAPIKey(valid, now)
+	require.NoError(t, err)
+	require.True(t, principal)
+	require.Equal(t, valid.SubjectUrn.String, actor.String())
+	require.Equal(t, valid.CreatedByUserID, credential.AuthorizerUserID)
+	require.Equal(t, valid.DelegatedGrants, credential.DelegatedGrants)
+	require.Equal(t, int32(1), credential.DelegatedGrantsVersion)
+
+	legacy := keysrepo.GetAPIKeyByKeyHashRow{Scopes: []string{APIKeyScopeAgent.String()}}
+	_, _, principal, err = classifyPrincipalAPIKey(legacy, now)
+	require.NoError(t, err)
+	require.False(t, principal, "legacy scope names cannot select principal authorization")
+
+	invalid := map[string]keysrepo.GetAPIKeyByKeyHashRow{
+		"subject only": func() keysrepo.GetAPIKeyByKeyHashRow {
+			row := keysrepo.GetAPIKeyByKeyHashRow{}
+			row.SubjectUrn = valid.SubjectUrn
+			return row
+		}(),
+		"policy only": {DelegatedGrants: valid.DelegatedGrants},
+		"non-agent subject": func() keysrepo.GetAPIKeyByKeyHashRow {
+			row := valid
+			row.SubjectUrn.String = "user:user_123"
+			return row
+		}(),
+		"malformed subject": func() keysrepo.GetAPIKeyByKeyHashRow {
+			row := valid
+			row.SubjectUrn.String = "agent:not-a-uuid"
+			return row
+		}(),
+		"legacy scopes present": func() keysrepo.GetAPIKeyByKeyHashRow {
+			row := valid
+			row.Scopes = []string{APIKeyScopeProducer.String()}
+			return row
+		}(),
+		"expired": func() keysrepo.GetAPIKeyByKeyHashRow { row := valid; row.ExpiresAt.Time = now; return row }(),
+		"exceeds maximum lifetime": func() keysrepo.GetAPIKeyByKeyHashRow {
+			row := valid
+			row.ExpiresAt.Time = createdAt.Add(maxAgentAPIKeyLifetime + time.Second)
+			return row
+		}(),
+	}
+	for name, row := range invalid {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, _, principal, err := classifyPrincipalAPIKey(row, now)
+			require.True(t, principal)
+			require.Error(t, err)
+		})
+	}
+}
+
+// A scoped key may carry an expiry too -- an observability credential rotation
+// gives the previous hooks key a grace window -- so an expiry alone must not
+// route the key through agent-principal validation, which would reject it.
+func TestClassifyPrincipalAPIKeyIgnoresExpiryOnScopedKeys(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+
+	graced := keysrepo.GetAPIKeyByKeyHashRow{
+		CreatedByUserID: "user_authorizer",
+		Scopes:          []string{APIKeyScopeHooks.String()},
+		ExpiresAt:       pgtype.Timestamptz{Time: now.Add(7 * 24 * time.Hour), Valid: true},
+		CreatedAt:       pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
+	}
+
+	_, _, principal, err := classifyPrincipalAPIKey(graced, now)
+	require.NoError(t, err)
+	require.False(t, principal, "a scoped key with a grace expiry keeps its scopes")
+
+	// Expiry itself is enforced by GetAPIKeyByKeyHash, which never loads an
+	// expired row, so classification does not re-check it for scoped keys.
+	expired := graced
+	expired.ExpiresAt.Time = now.Add(-time.Second)
+	_, _, principal, err = classifyPrincipalAPIKey(expired, now)
+	require.NoError(t, err)
+	require.False(t, principal)
+}
+
+func TestPrincipalAPIKeySupportsOnlyPrincipalSafeTransportRoutes(t *testing.T) {
+	t.Parallel()
+	require.False(t, principalAPIKeySupportsTransportScopes(nil))
+	require.True(t, principalAPIKeySupportsTransportScopes([]string{"consumer"}))
+	require.True(t, principalAPIKeySupportsTransportScopes([]string{"producer"}))
+	require.True(t, principalAPIKeySupportsTransportScopes([]string{"producer", "consumer"}))
+	require.False(t, principalAPIKeySupportsTransportScopes([]string{"producer", "agent"}))
+	require.True(t, principalAPIKeySupportsTransportScopes([]string{"agent_user"}), "agent_user handlers enforce an explicit agent grant")
+	require.True(t, principalAPIKeySupportsTransportScopes([]string{"hooks"}), "hooks services enforce an explicit agent grant")
+	for _, scope := range []string{"agent", "chat", "unknown"} {
+		require.False(t, principalAPIKeySupportsTransportScopes([]string{scope}), scope)
+	}
+}
 
 // TestEffectiveScopes pins the one-way scope implications, especially the
 // device-agent split: an org `agent` install key implies `agent_user` (so it
@@ -138,6 +247,7 @@ func TestIsOrgWidePluginHooksAPIKey(t *testing.T) {
 		{testName: "fractional seconds", keyName: "plugins-hooks-20260713-104500.5-abcdef", want: false},
 		{testName: "invalid timestamp", keyName: "plugins-hooks-20261340-256199-abcdef", want: false},
 		{testName: "mcp purpose", keyName: "plugins-mcp-20260713-104500-abcdef", want: false},
+		{testName: "member claude web hooks key", keyName: "plugins-claude-web-hooks-20261102-120102-abc123", key: "gram_live_abc123abcdef", keyPrefix: "gram_live_abc12", want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.testName, func(t *testing.T) {

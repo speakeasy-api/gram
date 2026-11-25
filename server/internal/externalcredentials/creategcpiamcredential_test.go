@@ -34,7 +34,7 @@ func TestCreateGcpIamCredential_Impersonation(t *testing.T) {
 	require.Nil(t, cred.WifProjectNumber)
 }
 
-// The organization tier is impersonation-only: ambient mode would resolve Gram's
+// The organization tier is impersonation-only: ambient mode would resolve Speakeasy's
 // own identity, which says nothing about the customer's configuration, so a
 // blank target is rejected rather than silently recorded as ambient.
 func TestCreateGcpIamCredential_BlankImpersonationRejected(t *testing.T) {
@@ -49,9 +49,9 @@ func TestCreateGcpIamCredential_BlankImpersonationRejected(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-// getGcpSetupInfo publishes Gram's own service account by design, so without
+// getGcpSetupInfo publishes Speakeasy's own service account by design, so without
 // this guard an organization member could point a credential at an internal
-// service account and use verify to probe Gram's own project.
+// service account and use verify to probe Speakeasy's own project.
 func TestCreateGcpIamCredential_TargetInGramProjectRejected(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -94,8 +94,8 @@ func TestCreateGcpIamCredential_ForbiddenWithoutEntitlement(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-// The screening exists so verify cannot become an oracle for Gram's own project.
-// If Gram's identity is unresolvable there is nothing to screen against, so the
+// The screening exists so verify cannot become an oracle for Speakeasy's own project.
+// If Speakeasy's identity is unresolvable there is nothing to screen against, so the
 // write is refused rather than accepted unscreened.
 func TestCreateGcpIamCredential_FailsClosedWhenGramIdentityUnresolvable(t *testing.T) {
 	t.Parallel()
@@ -113,7 +113,7 @@ func TestCreateGcpIamCredential_FailsClosedWhenGramIdentityUnresolvable(t *testi
 	requireOopsCode(t, err, oops.CodeUnexpected)
 }
 
-// Likewise when Gram resolves to an address that cannot be placed in a project,
+// Likewise when Speakeasy resolves to an address that cannot be placed in a project,
 // such as a default compute service account: comparing a project number against
 // a project id would silently accept every target.
 func TestCreateGcpIamCredential_FailsClosedWhenGramIdentityNotUserManaged(t *testing.T) {
@@ -133,7 +133,7 @@ func TestCreateGcpIamCredential_FailsClosedWhenGramIdentityNotUserManaged(t *tes
 }
 
 // A target that is not user-managed is refused for the same reason: its address
-// identifies its project by number, so it cannot be screened against Gram's.
+// identifies its project by number, so it cannot be screened against Speakeasy's.
 func TestCreateGcpIamCredential_RejectsNonUserManagedTarget(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

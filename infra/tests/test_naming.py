@@ -98,10 +98,9 @@ def test_resolve_subscription_name_from_descriptor() -> None:
 
 
 def test_dead_letter_name_defaults_to_suffix() -> None:
-    options = subscription_options_from_message(processor_pb2.Processor.DESCRIPTOR)
-    assert options is not None
+    dead_letter = options_pb2.DeadLetterPolicy(max_delivery_attempts=5)
     assert (
-        resolve_dead_letter_topic_name("gram-ping-v2-processor", options.dead_letter)
+        resolve_dead_letter_topic_name("gram-ping-v2-processor", dead_letter)
         == "gram-ping-v2-processor-dlq"
     )
 

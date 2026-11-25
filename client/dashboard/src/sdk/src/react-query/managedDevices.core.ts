@@ -12,10 +12,11 @@ import { deviceIntegrationsListManagedDevices } from "../funcs/deviceIntegration
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
-  CoverageBucket,
   ListManagedDevicesRequest,
   ListManagedDevicesResponse,
   ListManagedDevicesSecurity,
+  QueryParamCoverageBucket,
+  QueryParamPolicyState,
 } from "../models/operations/listmanageddevices.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -82,6 +83,7 @@ export function buildManagedDevicesQuery(
     queryKey: queryKeyManagedDevices({
       provider: request?.provider,
       coverageBucket: request?.coverageBucket,
+      policyState: request?.policyState,
       userIds: request?.userIds,
       userEmails: request?.userEmails,
       cursor: request?.cursor,
@@ -128,6 +130,7 @@ export function buildManagedDevicesInfiniteQuery(
     queryKey: queryKeyManagedDevicesInfinite({
       provider: request?.provider,
       coverageBucket: request?.coverageBucket,
+      policyState: request?.policyState,
       userIds: request?.userIds,
       userEmails: request?.userEmails,
       cursor: request?.cursor,
@@ -174,7 +177,8 @@ export function buildManagedDevicesInfiniteQuery(
 export function queryKeyManagedDevices(
   parameters: {
     provider?: string | undefined;
-    coverageBucket?: CoverageBucket | undefined;
+    coverageBucket?: QueryParamCoverageBucket | undefined;
+    policyState?: QueryParamPolicyState | undefined;
     userIds?: Array<string> | undefined;
     userEmails?: Array<string> | undefined;
     cursor?: string | undefined;
@@ -194,7 +198,8 @@ export function queryKeyManagedDevices(
 export function queryKeyManagedDevicesInfinite(
   parameters: {
     provider?: string | undefined;
-    coverageBucket?: CoverageBucket | undefined;
+    coverageBucket?: QueryParamCoverageBucket | undefined;
+    policyState?: QueryParamPolicyState | undefined;
     userIds?: Array<string> | undefined;
     userEmails?: Array<string> | undefined;
     cursor?: string | undefined;

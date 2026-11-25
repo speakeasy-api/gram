@@ -5,18 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
 const maxRiskMutationReceiptPayloadBytes = 16 << 10
@@ -30,8 +25,8 @@ type RiskMutationReceiptRequest struct {
 	Input          any
 }
 
-// RiskMutationReceiptResult is implemented only by the four closed, redacted
-// result projections below. Callbacks cannot supply an open JSON object, so a
+// RiskMutationReceiptResult is implemented only by the closed, redacted result
+// projections below and the finding false-positive projections beside them. Callbacks cannot supply an open JSON object, so a
 // new user-authored field cannot silently enter operation receipts.
 type RiskMutationReceiptResult interface {
 	riskMutationReceiptOperation() string
@@ -84,6 +79,18 @@ func (UpdateRiskPolicyReceiptResult) riskMutationReceiptOperation() string {
 	return operationUpdateRiskPolicy
 }
 
+type ChangeRiskPolicyAudienceReceiptResult struct{ UpdateRiskPolicyReceiptResult }
+
+func (ChangeRiskPolicyAudienceReceiptResult) riskMutationReceiptOperation() string {
+	return operationChangeRiskPolicyAudience
+}
+
+type RemoveSelfFromRiskPolicyReceiptResult struct{ UpdateRiskPolicyReceiptResult }
+
+func (RemoveSelfFromRiskPolicyReceiptResult) riskMutationReceiptOperation() string {
+	return operationRemoveSelfFromRiskPolicy
+}
+
 type CreateRiskExclusionReceiptResult struct {
 	Project         RiskMutationReceiptProject  `json:"project"`
 	Exclusion       RiskExclusionReceiptSummary `json:"exclusion"`
@@ -124,78 +131,68 @@ func NewRiskMutationReceiptStore(db *pgxpool.Pool) *RiskMutationReceiptStore {
 }
 
 // Execute serializes one user's exact operation/project/key, replays an exact
-// completed input from its stored result, and commits receipt + domain + audit
-// atomically. Any callback, completion, or commit failure rolls all three back.
-func (s *RiskMutationReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, request RiskMutationReceiptRequest, mutate RiskMutationTransaction) (OperationReceipt, error) {
-	if s == nil || s.db == nil || s.now == nil || mutate == nil || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || project.Slug == "" || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 128 || !riskMutationOperation(request.Operation) {
-		return OperationReceipt{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request is invalid.", Cause: ErrRiskMutationInvalid}
+// completed input from its stored result without charging, and commits
+// receipt + domain + audit atomically. Any callback, completion, or commit failure rolls all three back.
+func (s *RiskMutationReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, request RiskMutationReceiptRequest, charge func(context.Context) error, mutate RiskMutationTransaction) (OperationReceipt, error) {
+	if mutate == nil {
+		return OperationReceipt{}, invalidRiskMutationReceiptRequest()
 	}
-	inputHash, err := riskMutationInputHash(request.Operation, request.Input)
-	if err != nil {
-		return OperationReceipt{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request could not be normalized.", Cause: ErrRiskMutationInvalid}
-	}
-	connectionID, generation, err := principalConnection(principal)
-	if err != nil {
-		return OperationReceipt{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation caller identity is invalid.", Cause: ErrRiskMutationInvalid}
-	}
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return OperationReceipt{}, fmt.Errorf("begin risk mutation receipt: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := platformrepo.New(tx)
-	lock := platformrepo.LockPlatformMCPOperationReceiptParams{OrganizationID: principal.OrganizationID, SubjectUrn: userSubjectURN(principal.UserID), ProjectID: project.ID.String(), Operation: request.Operation, IdempotencyKey: request.IdempotencyKey}
-	if err := q.LockPlatformMCPOperationReceipt(ctx, lock); err != nil {
-		return OperationReceipt{}, fmt.Errorf("lock risk mutation receipt: %w", err)
-	}
-	lookup := platformrepo.GetPlatformMCPOperationReceiptParams{OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID), ProjectID: project.ID, Operation: request.Operation, IdempotencyKey: request.IdempotencyKey}
-	if _, err := q.DeleteExpiredPlatformMCPOperationReceipt(ctx, platformrepo.DeleteExpiredPlatformMCPOperationReceiptParams(lookup)); err != nil {
-		return OperationReceipt{}, fmt.Errorf("reclaim expired risk mutation receipt: %w", err)
-	}
-	stored, err := q.GetPlatformMCPOperationReceipt(ctx, lookup)
-	switch {
-	case err == nil:
-		if stored.InputHash != inputHash {
-			return OperationReceipt{}, riskMutationConflict("The idempotency key was already used with different risk mutation input.")
-		}
-		if stored.Status != receiptStatusSucceeded || len(stored.ResultPayload) == 0 {
-			return OperationReceipt{}, riskMutationConflict("The matching risk mutation has no completed replay result.")
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return OperationReceipt{}, fmt.Errorf("commit risk mutation replay: %w", err)
-		}
-		return operationReceiptFromRow(stored, true), nil
-	case !errors.Is(err, pgx.ErrNoRows):
-		return OperationReceipt{}, fmt.Errorf("load risk mutation receipt: %w", err)
-	}
-
-	created, err := q.CreatePlatformMCPOperationReceipt(ctx, platformrepo.CreatePlatformMCPOperationReceiptParams{
-		OrganizationID: principal.OrganizationID, ProjectID: project.ID, RegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ConnectionID: connectionID, ConnectionGeneration: generation,
-		UserID: conv.ToPGText(principal.UserID), ActingSurface: conv.ToPGText(string(principal.surface())), Operation: request.Operation, IdempotencyKey: request.IdempotencyKey,
-		InputHash: inputHash, Status: receiptStatusPending, ResultCode: pgtype.Text{String: "", Valid: false}, ResultPayload: nil, ExpiresAt: timestamp(s.now().UTC().Add(receiptLifetime)),
-	})
-	if err != nil {
-		return OperationReceipt{}, fmt.Errorf("create risk mutation receipt: %w", err)
-	}
-	result, err := mutate(ctx, tx)
-	if err != nil {
-		return OperationReceipt{}, fmt.Errorf("apply risk mutation transaction: %w", err)
-	}
-	payload, err := encodeRiskMutationResult(request.Operation, result)
+	execution, err := s.execution(principal, project, request, mutate)
 	if err != nil {
 		return OperationReceipt{}, err
 	}
-	completed, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
-		RegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Status: receiptStatusSucceeded, ResultCode: conv.ToPGText("succeeded"), ResultPayload: payload, ID: created.ID, OrganizationID: principal.OrganizationID,
-	})
+	return executeChargedMutationReceipt(ctx, charge, execution)
+}
+
+// CheckPreview refuses a preview whose idempotency key Execute would refuse
+// for the same request. It only reads: nothing is stored or charged.
+func (s *RiskMutationReceiptStore) CheckPreview(ctx context.Context, principal Principal, project ResolvedProject, request RiskMutationReceiptRequest) error {
+	execution, err := s.execution(principal, project, request, nil)
 	if err != nil {
-		return OperationReceipt{}, fmt.Errorf("complete risk mutation receipt: %w", err)
+		return err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return OperationReceipt{}, fmt.Errorf("commit risk mutation: %w", err)
+	return checkPreviewReceipt(ctx, execution)
+}
+
+func invalidRiskMutationReceiptRequest() error {
+	return &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request is invalid.", Cause: ErrRiskMutationInvalid}
+}
+
+func (s *RiskMutationReceiptStore) execution(principal Principal, project ResolvedProject, request RiskMutationReceiptRequest, mutate RiskMutationTransaction) (mutationReceiptExecution[RiskMutationReceiptResult], error) {
+	if s == nil || s.db == nil || s.now == nil || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || project.Slug == "" || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 128 || !riskMutationOperation(request.Operation) {
+		return mutationReceiptExecution[RiskMutationReceiptResult]{}, invalidRiskMutationReceiptRequest()
 	}
-	return operationReceiptFromRow(completed, false), nil
+	inputHash, err := riskMutationInputHash(request.Operation, request.Input)
+	if err != nil {
+		return mutationReceiptExecution[RiskMutationReceiptResult]{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request could not be normalized.", Cause: ErrRiskMutationInvalid}
+	}
+	return mutationReceiptExecution[RiskMutationReceiptResult]{
+		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: request.Operation, IdempotencyKey: request.IdempotencyKey, InputHash: inputHash, Label: "risk mutation",
+		Invalid: func(cause error) error {
+			return &RiskMutationError{Code: "invalid_request", Message: "The risk mutation caller identity is invalid.", Cause: fmt.Errorf("%w: %w", ErrRiskMutationInvalid, cause)}
+		},
+		Conflict: riskMutationConflict,
+		Unavailable: func(cause error) error {
+			return &RiskMutationError{Code: unavailableCode, Message: "The risk mutation is temporarily unavailable.", Cause: fmt.Errorf("%w: %w", ErrRiskMutationUnavailable, cause)}
+		},
+		ValidateReplay: func(payload []byte) bool {
+			var result any
+			return len(payload) <= maxRiskMutationReceiptPayloadBytes && json.Unmarshal(payload, &result) == nil
+		},
+		EncodeResult: func(result RiskMutationReceiptResult) ([]byte, error) {
+			return encodeRiskMutationResult(request.Operation, result)
+		},
+		Mutate: func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+			if mutate == nil {
+				return nil, ErrRiskMutationInvalid
+			}
+			result, err := mutate(ctx, tx)
+			if err != nil {
+				return nil, fmt.Errorf("apply risk mutation transaction: %w", err)
+			}
+			return result, nil
+		},
+	}, nil
 }
 
 func riskMutationInputHash(operation string, normalized any) (string, error) {
@@ -212,7 +209,7 @@ func riskMutationInputHash(operation string, normalized any) (string, error) {
 
 func riskMutationOperation(operation string) bool {
 	switch operation {
-	case operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion:
+	case operationChangeRiskPolicyAudience, operationRemoveSelfFromRiskPolicy, operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion, operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive:
 		return true
 	default:
 		return false
@@ -236,8 +233,16 @@ func encodeRiskMutationResult(operation string, result RiskMutationReceiptResult
 
 func normalizedRiskMutationReceiptResult(result RiskMutationReceiptResult) (RiskMutationReceiptResult, bool) {
 	switch typed := result.(type) {
-	case CreateRiskPolicyReceiptResult, UpdateRiskPolicyReceiptResult, CreateRiskExclusionReceiptResult, UpdateRiskExclusionReceiptResult:
+	case ChangeRiskPolicyAudienceReceiptResult, RemoveSelfFromRiskPolicyReceiptResult, CreateRiskPolicyReceiptResult, UpdateRiskPolicyReceiptResult, CreateRiskExclusionReceiptResult, UpdateRiskExclusionReceiptResult, MarkRiskFindingsFalsePositiveReceiptResult, UnmarkRiskFindingsFalsePositiveReceiptResult:
 		return typed, true
+	case *ChangeRiskPolicyAudienceReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
+	case *RemoveSelfFromRiskPolicyReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
 	case *CreateRiskPolicyReceiptResult:
 		if typed != nil {
 			return *typed, true
@@ -254,12 +259,24 @@ func normalizedRiskMutationReceiptResult(result RiskMutationReceiptResult) (Risk
 		if typed != nil {
 			return *typed, true
 		}
+	case *MarkRiskFindingsFalsePositiveReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
+	case *UnmarkRiskFindingsFalsePositiveReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
 	}
 	return nil, false
 }
 
 func validRiskMutationReceiptResult(result RiskMutationReceiptResult) bool {
 	switch typed := result.(type) {
+	case ChangeRiskPolicyAudienceReceiptResult:
+		return validRiskMutationReceiptResult(typed.UpdateRiskPolicyReceiptResult)
+	case RemoveSelfFromRiskPolicyReceiptResult:
+		return validRiskMutationReceiptResult(typed.UpdateRiskPolicyReceiptResult)
 	case CreateRiskPolicyReceiptResult:
 		return validRiskReceiptProject(typed.Project) && validRiskPolicyReceiptSummary(typed.Policy) && validRiskReceiptVersion(typed.Version) && validRiskResultCategory(typed.ResultCategory, "created", "matched_existing")
 	case UpdateRiskPolicyReceiptResult:
@@ -268,6 +285,10 @@ func validRiskMutationReceiptResult(result RiskMutationReceiptResult) bool {
 		return validRiskReceiptProject(typed.Project) && validRiskExclusionReceiptSummary(typed.Exclusion) && validRiskReceiptVersion(typed.Version) && validRiskResultCategory(typed.ResultCategory, "created", "matched_existing") && typed.Reconciliation == "scheduled"
 	case UpdateRiskExclusionReceiptResult:
 		return validRiskReceiptProject(typed.Project) && validRiskExclusionReceiptSummary(typed.Exclusion) && validRiskReceiptVersion(typed.Version) && validRiskResultCategory(typed.ResultCategory, "updated") && typed.Reconciliation == "scheduled"
+	case MarkRiskFindingsFalsePositiveReceiptResult:
+		return validRiskFindingFalsePositiveReceipt(typed.RiskFindingFalsePositiveReceipt, riskFindingResultCategoryDismissed)
+	case UnmarkRiskFindingsFalsePositiveReceiptResult:
+		return validRiskFindingFalsePositiveReceipt(typed.RiskFindingFalsePositiveReceipt, riskFindingResultCategoryRestored)
 	default:
 		return false
 	}

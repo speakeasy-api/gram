@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,15 +15,17 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
+	geminivault "github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 )
 
 // ErrTypeAIUsagePollFailed is the Temporal application error type emitted
@@ -54,6 +57,7 @@ type stageFailureDetail struct {
 }
 
 type PollAIData struct {
+	logger                        *slog.Logger
 	integrations                  *aiintegrations.Store
 	cursorUsagePoller             *aiintegrations.UsagePollService
 	anthropicComplianceImporter   *aiintegrations.ComplianceImportService
@@ -62,17 +66,18 @@ type PollAIData struct {
 	codexCostImporter             *aiintegrations.CodexCostImportService
 	chatgptConversationImporter   *aiintegrations.ChatGPTConversationImportService
 	codexCloudImporter            *aiintegrations.CodexCloudImportService
+	geminiImporter                *aiintegrations.GeminiImportService
 }
 
 func NewPollAIData(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
-	encryptionClient *encryption.Client,
+	keys *aiproviderkeys.Keys,
 	telemetryLogger *telemetry.Logger,
 	guardianPolicy *guardian.Policy,
 	chatWriter *chat.ChatMessageWriter,
 ) *PollAIData {
-	store := aiintegrations.NewStore(logger, db, encryptionClient)
+	store := aiintegrations.NewStore(logger, db, keys)
 	complianceHeartbeat := func(ctx context.Context, scope string, page int) {
 		activity.RecordHeartbeat(ctx, map[string]any{
 			"schedule": aiintegrations.ScheduleAnthropicCompliance,
@@ -104,7 +109,11 @@ func NewPollAIData(
 			"page":     page,
 		})
 	}
+	geminiHeartbeat := func(ctx context.Context, scope string, page int) {
+		activity.RecordHeartbeat(ctx, map[string]any{"schedule": aiintegrations.ScheduleGeminiCompliance, "scope": scope, "page": page})
+	}
 	return &PollAIData{
+		logger:       logger.With(attr.SlogComponent("activities.poll_ai_data")),
 		integrations: store,
 		cursorUsagePoller: aiintegrations.NewUsagePollService(store, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
@@ -118,6 +127,7 @@ func NewPollAIData(
 		codexCostImporter:             aiintegrations.NewCodexCostImportService(logger, store, telemetryLogger, guardianPolicy, codexHeartbeat),
 		chatgptConversationImporter:   aiintegrations.NewChatGPTConversationImportService(logger, store, db, guardianPolicy, chatWriter, chatgptHeartbeat),
 		codexCloudImporter:            aiintegrations.NewCodexCloudImportService(logger, store, db, guardianPolicy, chatWriter, codexCloudHeartbeat),
+		geminiImporter:                aiintegrations.NewGeminiImportService(logger, db, guardianPolicy, chatWriter, geminiHeartbeat),
 	}
 }
 
@@ -162,6 +172,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		// retrying within this run can't help: a rejected api key, or a
 		// provider outage whose retry cadence the schedule-level backoff
 		// already owns — so it's visible to the user in the dashboard.
+		recorded := false
 		if attempt >= PollUsageMaxAttempts || rejected || unavailable {
 			recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cancel()
@@ -175,10 +186,23 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 			shareableErr := shareablePollError(schedule, err)
 			if recordErr := p.integrations.RecordSchedulePollFailure(recordCtx, cfg.ID, schedule, endTime, shareableErr, pauseAfter); recordErr != nil {
 				err = errors.Join(err, fmt.Errorf("record ai integration schedule failure: %w", recordErr))
+			} else {
+				recorded = true
 			}
 		}
 
-		err = newPollFailureError(cfg.ID, cfg.Provider, attempt, rejected, unavailable, err)
+		final := finalizePollFailure(cfg.ID, cfg.Provider, attempt, rejected, unavailable, recorded, err)
+		if final == nil {
+			p.logger.WarnContext(ctx, "ai integration poll ended in a provider failure",
+				attr.SlogError(err),
+				attr.SlogAIIntegrationConfigID(cfg.ID.String()),
+				attr.SlogAIIntegrationSyncSchedule(schedule),
+				attr.SlogProvider(cfg.Provider),
+				attr.SlogAIIntegrationPollProviderRejected(rejected),
+				attr.SlogAIIntegrationPollProviderUnavailable(unavailable),
+			)
+		}
+		err = final
 	}()
 
 	switch schedule {
@@ -196,7 +220,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		if cfg.Provider != aiintegrations.ProviderAnthropicCompliance {
 			return oops.E(oops.CodeInvalid, nil, "anthropic compliance schedule cannot run for provider %s", cfg.Provider)
 		}
-		nextCursor, err := p.anthropicComplianceImporter.SyncAnthropicCompliance(ctx, cfg)
+		nextCursor, err := p.anthropicComplianceImporter.SyncAnthropicCompliance(ctx, cfg, endTime)
 		if err != nil {
 			return fmt.Errorf("sync anthropic compliance data: %w", err)
 		}
@@ -227,6 +251,22 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		if err := p.integrations.RecordSchedulePollSuccess(ctx, cfg.ID, schedule, endTime); err != nil {
 			return fmt.Errorf("record codex compliance schedule success: %w", err)
 		}
+	case aiintegrations.ScheduleGeminiCompliance:
+		if cfg.Provider != aiintegrations.ProviderGeminiCompliance {
+			return oops.E(oops.CodeInvalid, nil, "gemini compliance schedule cannot run for provider %s", cfg.Provider)
+		}
+		// A bounded download can exceed the activity's one-minute heartbeat
+		// timeout. Keep the activity alive during network I/O and XML parsing,
+		// not only between artifacts/pages.
+		stopHeartbeat := startActivityHeartbeat(ctx)
+		defer stopHeartbeat()
+		result, err := p.geminiImporter.SyncGemini(ctx, cfg, endTime)
+		if err != nil {
+			return fmt.Errorf("sync Gemini conversation data: %w", err)
+		}
+		if err := p.integrations.RecordGeminiPollSuccess(ctx, cfg.SyncID, result.Watermark, result.Cursor, endTime, result.Pending); err != nil {
+			return fmt.Errorf("record Gemini compliance schedule success: %w", err)
+		}
 	case aiintegrations.ScheduleChatGPTCompliance:
 		if cfg.Provider != aiintegrations.ProviderChatGPTCompliance {
 			return oops.E(oops.CodeInvalid, nil, "chatgpt compliance schedule cannot run for provider %s", cfg.Provider)
@@ -256,23 +296,55 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 // shareablePollError turns an internal poll failure into the message persisted
 // for organization members. Its ShareableError cause remains available to
 // internal callers, but RecordSchedulePollFailure stores only Error().
+// providerDetail formats a provider's error body for the org-visible poll
+// message. The body is the provider's own explanation of why it refused the
+// request, which is what the user needs to fix the integration.
+func providerDetail(body string) string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return ""
+	}
+	return ": " + body
+}
+
 func shareablePollError(schedule string, cause error) error {
+	if providerErr, ok := errors.AsType[*geminivault.HTTPError](cause); ok {
+		if providerErr.CredentialsRejected() {
+			return oops.E(oops.CodeUnauthorized, cause, "Google rejected the configured service account credentials; check the key, the domain-wide delegation scopes, and the delegated user")
+		}
+		switch providerErr.StatusCode {
+		case 401:
+			return oops.E(oops.CodeUnauthorized, cause, "Google Vault rejected the configured service account credentials")
+		case 403:
+			return oops.E(oops.CodeForbidden, cause, "Google Vault access denied; check domain-wide delegation, delegated user permissions, and matter access")
+		case 404:
+			return oops.E(oops.CodeNotFound, cause, "Google Vault matter or export not found; check the configured matter UUID")
+		case 400, 422:
+			return oops.E(oops.CodeInvalid, cause, "Google Vault rejected the export request; check credentials, matter access, and Gemini retention settings")
+		}
+	}
+
 	if contentErr, ok := errors.AsType[*aiintegrations.CodexCostContentError](cause); ok {
 		return oops.E(oops.CodeUnexpected, cause, "%s", contentErr.ShareableMessage())
 	}
 
-	var cursorErr *cursorapi.HTTPError
-	if errors.As(cause, &cursorErr) && cursorErr.StatusCode == 401 {
-		return oops.E(oops.CodeUnauthorized, cause, "cursor rejected the configured api key")
+	if cursorErr, ok := errors.AsType[*cursorapi.HTTPError](cause); ok {
+		switch cursorErr.StatusCode {
+		case 401, 403:
+			return oops.E(oops.CodeUnauthorized, cause, "cursor rejected the configured api key")
+		case 400, 404, 422:
+			return oops.E(oops.CodeInvalid, cause, "cursor rejected the usage request (HTTP %d); check the api key's team access%s", cursorErr.StatusCode, providerDetail(cursorErr.Body))
+		}
 	}
 
-	var anthropicErr *anthropicapi.HTTPError
-	if schedule == aiintegrations.ScheduleAnthropicCompliance && errors.As(cause, &anthropicErr) {
+	if anthropicErr, ok := errors.AsType[*anthropicapi.HTTPError](cause); ok {
 		switch anthropicErr.StatusCode {
 		case 401, 403:
 			return oops.E(oops.CodeUnauthorized, cause, "anthropic compliance rejected the configured api key")
 		case 404:
 			return oops.E(oops.CodeNotFound, cause, "anthropic compliance organization not found or compliance api access not enabled")
+		case 400, 422:
+			return oops.E(oops.CodeInvalid, cause, "anthropic compliance rejected the request (HTTP %d)%s", anthropicErr.StatusCode, providerDetail(anthropicErr.Body))
 		}
 	}
 
@@ -284,6 +356,8 @@ func shareablePollError(schedule string, cause error) error {
 				return oops.E(oops.CodeUnauthorized, cause, "codex compliance rejected the configured api key")
 			case 404:
 				return oops.E(oops.CodeNotFound, cause, "codex compliance organization not found or compliance api access not enabled")
+			case 400, 422:
+				return oops.E(oops.CodeInvalid, cause, "codex compliance rejected the request (HTTP %d)%s", codexErr.StatusCode, providerDetail(codexErr.Body))
 			}
 		case aiintegrations.ScheduleChatGPTCompliance:
 			switch codexErr.StatusCode {
@@ -291,6 +365,8 @@ func shareablePollError(schedule string, cause error) error {
 				return oops.E(oops.CodeUnauthorized, cause, "chatgpt compliance rejected the configured api key")
 			case 404:
 				return oops.E(oops.CodeNotFound, cause, "chatgpt compliance workspace not found or compliance api access not enabled")
+			case 400, 422:
+				return oops.E(oops.CodeInvalid, cause, "chatgpt compliance rejected the request (HTTP %d)%s", codexErr.StatusCode, providerDetail(codexErr.Body))
 			}
 		case aiintegrations.ScheduleCodexCloudSessions:
 			switch codexErr.StatusCode {
@@ -298,6 +374,8 @@ func shareablePollError(schedule string, cause error) error {
 				return oops.E(oops.CodeUnauthorized, cause, "codex cloud import rejected the configured api key")
 			case 404:
 				return oops.E(oops.CodeNotFound, cause, "codex cloud workspace not found or compliance api access not enabled")
+			case 400, 422:
+				return oops.E(oops.CodeInvalid, cause, "codex cloud import rejected the request (HTTP %d)%s", codexErr.StatusCode, providerDetail(codexErr.Body))
 			}
 		}
 	}
@@ -338,27 +416,40 @@ func shareablePollError(schedule string, cause error) error {
 		message = "sync chatgpt conversation data"
 	case aiintegrations.ScheduleCodexCloudSessions:
 		message = "sync codex cloud session data"
+	case aiintegrations.ScheduleGeminiCompliance:
+		message = "sync gemini conversation data"
 	}
 	return oops.E(oops.CodeUnexpected, cause, "%s", message)
 }
 
-// pollRejectedByProvider reports whether the poll failed because the provider
-// rejected the request in a way retrying can't fix: a rejected api key
-// (401/403), or — for the anthropic compliance api — a 404, which is how it
-// reports an unknown organization or one without compliance api access. Those
-// failures are permanent until the user fixes the integration configuration,
-// so retrying them is wasted work.
+// pollRejectedByProvider reports whether the provider answered with a
+// status that no retry of the same request can change: a rejected key, a
+// missing resource, or a request the provider considers malformed for this
+// configuration. Those are configuration problems for the user to fix, so
+// the run stops on the first attempt and the schedule pauses after a few.
 func pollRejectedByProvider(err error) bool {
+	if providerErr, ok := errors.AsType[*geminivault.HTTPError](err); ok {
+		return providerRejectedStatus(providerErr.StatusCode)
+	}
 	if cursorErr, ok := errors.AsType[*cursorapi.HTTPError](err); ok {
-		return cursorErr.StatusCode == 401
+		return providerRejectedStatus(cursorErr.StatusCode)
 	}
 	if anthropicErr, ok := errors.AsType[*anthropicapi.HTTPError](err); ok {
-		return anthropicErr.StatusCode == 401 || anthropicErr.StatusCode == 403 || anthropicErr.StatusCode == 404
+		return providerRejectedStatus(anthropicErr.StatusCode)
 	}
 	if codexErr, ok := errors.AsType[*codexapi.HTTPError](err); ok {
-		return codexErr.StatusCode == 401 || codexErr.StatusCode == 403 || codexErr.StatusCode == 404
+		return providerRejectedStatus(codexErr.StatusCode)
 	}
 	return false
+}
+
+func providerRejectedStatus(status int) bool {
+	switch status {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusUnprocessableEntity:
+		return true
+	default:
+		return false
+	}
 }
 
 // pollProviderUnavailable reports whether the poll failed because the
@@ -420,7 +511,28 @@ func pollUnavailableHTTPStatus(err error) int {
 	if errors.As(err, &codexErr) && statusUnavailable(codexErr.StatusCode) {
 		return codexErr.StatusCode
 	}
+	if providerErr, ok := errors.AsType[*geminivault.HTTPError](err); ok && statusUnavailable(providerErr.StatusCode) {
+		return providerErr.StatusCode
+	}
 	return 0
+}
+
+// finalizePollFailure decides what a failed poll returns to Temporal.
+//
+// A provider failure — a refusal or an outage — already recorded on the
+// schedule returns nil. It is durable in Postgres and shown in the dashboard,
+// the schedule owns the retry cadence, and re-running cannot change the
+// provider's answer. Failing the activity too would put one misconfigured
+// integration into activity-failure alerting, which exists for Speakeasy's own
+// unexpected errors.
+//
+// Everything else still fails: an unrecorded failure the user would otherwise
+// never see, and any failure that is ours.
+func finalizePollFailure(configID uuid.UUID, provider string, attempt int32, rejected bool, unavailable bool, recorded bool, cause error) error {
+	if recorded && (rejected || unavailable) {
+		return nil
+	}
+	return newPollFailureError(configID, provider, attempt, rejected, unavailable, cause)
 }
 
 // newPollFailureError wraps a poll failure in a typed Temporal application

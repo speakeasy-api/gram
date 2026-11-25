@@ -27,6 +27,27 @@ type TunneledMcpServer struct {
 	AllowPublic bool
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string
+	// RFC 9728 protected resource identifier of the tunneled server, used for
+	// credential routing and as the signed caller assertion audience; never dialed
+	// by Speakeasy. The exact identifier is preserved, including trailing slashes.
+	// When unset, caller assertions use tunneled-mcp-server:<ID>
+	ResourceIdentifier *string
+	// Sustained anonymous MCP requests per second admitted for this tunnel when it
+	// is served through a public MCP endpoint. Applies to every MCP interaction.
+	// Unset means the deployment-wide default applies.
+	PublicRequestRatePerSecond *int
+	// Token-bucket capacity for public_request_rate_per_second: how many requests
+	// are admitted back-to-back from an idle tunnel before admission drops to the
+	// sustained rate. Unset means twice the sustained rate.
+	PublicRequestBurst *int
+	// The sustained anonymous MCP request rate actually applied to this tunnel:
+	// the stored value, or the deployment default when no rate is stored.
+	EffectivePublicRequestRatePerSecond int
+	// The token-bucket capacity actually applied to this tunnel: the stored burst
+	// when a rate is stored alongside it, twice the stored rate when only a rate
+	// is stored, or the deployment default when no rate is stored (a burst stored
+	// without a rate is ignored).
+	EffectivePublicRequestBurst int
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string
 	// Number of active tunnel connections currently visible in Redis

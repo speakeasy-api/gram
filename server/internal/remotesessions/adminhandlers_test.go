@@ -2,14 +2,21 @@ package remotesessions_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
+	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // createGlobalIssuer builds a CreateGlobalIssuer payload for the given slug. The
@@ -33,8 +40,38 @@ func createGlobalIssuer(t *testing.T, slug string) *adminrsgen.CreateGlobalIssue
 		Oidc:                              nil,
 		Passthrough:                       nil,
 		ClientIDMetadataDocumentSupported: nil,
+		UserinfoEndpoint:                  nil,
+		IntrospectionEndpoint:             nil,
+		IntrospectionEndpointAuthMethodsSupported:  nil,
+		IDTokenSigningAlgValuesSupported:           nil,
+		ClaimsSupported:                            nil,
+		BackchannelLogoutSupported:                 nil,
+		AuthorizationResponseIssParameterSupported: nil,
 	}
 	return payload
+}
+
+func TestAdminRemoteSessions_CreateGlobalIssuer_PersistsDiscoveredCapabilities(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	introspection := "https://global-capabilities.example.com/introspect"
+	issParam := true
+	payload := createGlobalIssuer(t, "global-capabilities")
+	payload.IntrospectionEndpoint = &introspection
+	payload.IntrospectionEndpointAuthMethodsSupported = []string{"client_secret_post"}
+	payload.AuthorizationResponseIssParameterSupported = &issParam
+
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, issuer.IntrospectionEndpoint)
+	require.Equal(t, introspection, *issuer.IntrospectionEndpoint)
+	require.Equal(t, []string{"client_secret_post"}, issuer.IntrospectionEndpointAuthMethodsSupported)
+	require.NotNil(t, issuer.AuthorizationResponseIssParameterSupported)
+	require.True(t, *issuer.AuthorizationResponseIssParameterSupported)
+	require.Nil(t, issuer.UserinfoEndpoint)
+	require.Nil(t, issuer.BackchannelLogoutSupported)
 }
 
 func TestAdminRemoteSessions_CreateGlobalIssuer_Success(t *testing.T) {
@@ -383,6 +420,40 @@ func TestAdminRemoteSessions_GlobalClientLifecycle(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestAdminRemoteSessions_GlobalIssuerTrustedReferenceCountAndDeleteGuard(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	issuer, err := ti.service.CreateGlobalIssuer(adminCtx, createGlobalIssuer(t, "global-trusted-reference"))
+	require.NoError(t, err)
+	issuerID, err := uuid.Parse(issuer.ID)
+	require.NoError(t, err)
+	trustedIssuerID := createTrustedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "global-trusted-reference-usi", issuerID)
+
+	loaded, err := ti.service.GetGlobalIssuer(adminCtx, &adminrsgen.GetGlobalIssuerPayload{ID: issuer.ID})
+	require.NoError(t, err)
+	require.Equal(t, 1, loaded.TrustedUserSessionIssuerCount)
+
+	listed, err := ti.service.ListGlobalIssuers(adminCtx, &adminrsgen.ListGlobalIssuersPayload{})
+	require.NoError(t, err)
+	found := false
+	for _, item := range listed.Items {
+		if item.Issuer.ID == issuer.ID {
+			require.Equal(t, 1, item.TrustedUserSessionIssuerCount)
+			found = true
+			break
+		}
+	}
+	require.True(t, found)
+
+	err = ti.service.DeleteGlobalIssuer(adminCtx, &adminrsgen.DeleteGlobalIssuerPayload{ID: issuer.ID})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	clearTrustedRemoteSessionIssuer(t, ctx, ti.conn, trustedIssuerID)
+	require.NoError(t, ti.service.DeleteGlobalIssuer(adminCtx, &adminrsgen.DeleteGlobalIssuerPayload{ID: issuer.ID}))
+}
+
 func TestAdminRemoteSessions_GetGlobalClient(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -458,6 +529,40 @@ func TestAdminRemoteSessions_UpdateGlobalClient(t *testing.T) {
 		Audience:                nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// Global clients serve every org, so no org or project update can opt one into
+// forwarding the client name.
+func TestAdminRemoteSessions_GlobalClientCannotForwardClientName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "forward-name-global-host"))
+	require.NoError(t, err)
+
+	created, err := ti.service.CreateGlobalClient(ctx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "client-forward-name-global",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+	require.False(t, created.ForwardClientName)
+
+	on := true
+	_, err = ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: created.ID, ForwardClientName: &on})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	_, err = ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{ID: created.ID, ForwardClientName: &on})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	stored, err := ti.service.GetGlobalClient(ctx, &adminrsgen.GetGlobalClientPayload{ID: created.ID, SessionToken: nil})
+	require.NoError(t, err)
+	require.False(t, stored.ForwardClientName)
 }
 
 func TestAdminRemoteSessions_UpdateGlobalClient_NotFound(t *testing.T) {
@@ -611,4 +716,101 @@ func TestDeleteGlobalIssuer_BlockedByGlobalClientOnly(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.Contains(t, err.Error(), "delete them here first")
 	require.NotContains(t, err.Error(), "tenant-owned")
+}
+
+// TestDeleteGlobalClient_StopsServersOfferingItPerOrganization proves the staff
+// deletion stops every consuming organization's servers offering it that
+// reached the client, not only the one the request runs in.
+func TestDeleteGlobalClient_StopsServersOfferingItPerOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	adminCtx := withAdmin(t, ctx)
+	issuer, err := ti.service.CreateGlobalIssuer(adminCtx, createGlobalIssuer(t, "global-typed"))
+	require.NoError(t, err)
+	client, err := ti.service.CreateGlobalClient(adminCtx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "global-typed-client",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+	clientID, err := uuid.Parse(client.ID)
+	require.NoError(t, err)
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-global-typed")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "global-typed-server")
+	associate(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userIssuerID,
+	}))
+
+	// A second organization reaching the same platform-global client: the
+	// grouping is what this test is for, so one organization is not enough.
+	otherOrgID := "org-global-typed-" + uuid.NewString()[:8]
+	fixtures := testrepo.New(ti.conn)
+	require.NoError(t, fixtures.CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID: otherOrgID, Name: "Second consumer", Slug: otherOrgID,
+		GramAccountType: "enterprise", WorkosID: pgtype.Text{}, Whitelisted: true,
+		FreeTrialStartedAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		FreeTrialEndsAt:    pgtype.Timestamptz{Time: time.Now().UTC().Add(24 * time.Hour), Valid: true},
+		DisabledAt:         pgtype.Timestamptz{},
+		CreatedAt:          pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}))
+	otherProjectID, err := fixtures.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID: uuid.New(), Name: "Second project", Slug: otherOrgID + "-project", OrganizationID: otherOrgID,
+	})
+	require.NoError(t, err)
+	otherIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProjectID, "usi-global-typed-second")
+	otherServerID := seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, otherIssuerID, "global-typed-server-second")
+	associate(t, ctx, ti.conn, otherOrgID, otherProjectID, otherServerID, clientID)
+
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	recordTypedClients(t, ctx, ti.conn, otherOrgID, otherServerID)
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"the association must be offered through a link to retire")
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, otherServerID),
+		"the second organization's association must be offered too")
+
+	// A typed-only offer has no association mirror for the legacy sync to
+	// remove. Global retirement must tombstone the exact offer itself.
+	typedOnly := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, userIssuerID, "global-typed-only", "https://registration.example.com/mcp")
+	existingOffer := offeredAuthClients(t, ctx, ti.conn, serverID)
+	require.Len(t, existingOffer, 1)
+	require.NoError(t, authclientbackfill.New(ti.conn).SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		ProjectID: projectID, OrganizationID: orgID, McpServerID: typedOnly, AuthClientID: existingOffer[0], Source: "admin",
+	}))
+	require.Equal(t, existingOffer, offeredAuthClients(t, ctx, ti.conn, typedOnly))
+
+	require.NoError(t, ti.service.DeleteGlobalClient(adminCtx, &adminrsgen.DeleteGlobalClientPayload{
+		ID:           client.ID,
+		SessionToken: nil,
+	}))
+
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, typedOnly), "the retired typed offer is still active")
+	// IsServerLinked also recognizes an admin tombstone, so this cannot pass
+	// if deletion simply removed the row.
+	tombstoned, err := authclientbackfill.New(ti.conn).IsServerLinked(ctx, authclientbackfill.IsServerLinkedParams{
+		McpServerID: typedOnly, OrganizationID: orgID, AuthClientID: existingOffer[0],
+	})
+	require.NoError(t, err)
+	require.True(t, tombstoned, "registration deletion did not retain the unmirrored typed offer's tombstone")
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"the consuming organization's link goes with the global client")
+	require.Empty(t, associatedClients(t, ctx, ti.conn, otherProjectID, otherServerID))
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, otherServerID),
+		"a second organization on the same global client is reconciled too")
+	bindings, err := fixtures.CountRemoteSessionClientBindingsFixture(ctx, clientID)
+	require.NoError(t, err)
+	require.Positive(t, bindings, "retirement does not physically unlink compatibility parents")
 }

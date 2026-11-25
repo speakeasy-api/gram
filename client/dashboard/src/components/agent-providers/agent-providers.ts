@@ -34,6 +34,11 @@ export const AGENT_PROVIDERS = {
     description: "Open-source personal AI agent gateway",
     iconSource: "openclaw",
   },
+  pi: {
+    name: "Pi",
+    description: "Minimal, extension-driven terminal coding agent",
+    iconSource: "pi",
+  },
   other: {
     name: "Other agent",
     description: "Any MCP-capable agent",
@@ -42,8 +47,8 @@ export const AGENT_PROVIDERS = {
     iconSource: "other",
   },
   copilot: {
-    name: "GitHub Copilot",
-    description: "Microsoft / GitHub AI pair programmer",
+    name: "GitHub Copilot CLI",
+    description: "GitHub’s terminal coding agent",
     iconSource: "copilot",
   },
   gemini: {
@@ -102,8 +107,21 @@ export const ACTIVE_AGENT_PROVIDER_IDS = {
     "opencode",
     "openclaw",
     "copilot",
+    "pi",
   ],
-  setup: ["claude", "claude-cowork", "codex", "cursor", "opencode", "openclaw"],
+  // OpenClaw is absent deliberately: the other-platforms card is the device
+  // agent's rollout, the agent does not cover OpenClaw, and listing it as a
+  // setup platform offered a walkthrough nothing behind it could deliver. It
+  // keeps its plugin on the plugins page.
+  setup: [
+    "claude",
+    "claude-cowork",
+    "codex",
+    "cursor",
+    "opencode",
+    "copilot",
+    "pi",
+  ],
 } as const satisfies Record<string, readonly AgentProviderId[]>;
 
 export function agentProvidersForSurface(

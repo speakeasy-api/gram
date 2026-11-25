@@ -4,31 +4,51 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 )
 
 // BuildRemoteSessionView converts a remote_sessions row into its API view.
 // subjectDisplayName and subjectEmail carry the resolved identity when the
-// subject is a Gram user; pass nil for apikey/anonymous subjects or when the
+// subject is a Speakeasy user; pass nil for apikey/anonymous subjects or when the
 // user could not be resolved.
 func BuildRemoteSessionView(row repo.RemoteSession, subjectDisplayName, subjectEmail *string) *types.RemoteSession {
-	var refreshExpiresAt *string
+	// A NULL access expiry means the upstream reported none, which readers
+	// treat as non-expiring. Formatting the zero time would send year 0001
+	// instead, which reads as a connection that ended two thousand years ago.
+	var accessExpiresAt, refreshExpiresAt *string
+	if row.AccessExpiresAt.Valid {
+		accessExpiresAt = new(row.AccessExpiresAt.Time.Format(time.RFC3339))
+	}
 	if row.RefreshExpiresAt.Valid {
 		v := row.RefreshExpiresAt.Time.Format(time.RFC3339)
 		refreshExpiresAt = &v
 	}
+	var authorizationExpiresAt, lastUsedAt *string
+	if row.AuthorizationExpiresAt.Valid {
+		authorizationExpiresAt = new(row.AuthorizationExpiresAt.Time.Format(time.RFC3339))
+	}
+	if row.LastUsedAt.Valid {
+		lastUsedAt = new(row.LastUsedAt.Time.Format(time.RFC3339))
+	}
 	return &types.RemoteSession{
-		ID:                    row.ID.String(),
-		SubjectUrn:            row.SubjectUrn.String(),
-		SubjectDisplayName:    subjectDisplayName,
-		SubjectEmail:          subjectEmail,
-		UserSessionIssuerID:   row.UserSessionIssuerID.String(),
-		RemoteSessionClientID: row.RemoteSessionClientID.String(),
-		AccessExpiresAt:       row.AccessExpiresAt.Time.Format(time.RFC3339),
-		RefreshExpiresAt:      refreshExpiresAt,
-		HasRefreshToken:       row.RefreshTokenEncrypted.Valid && row.RefreshTokenEncrypted.String != "",
-		Scopes:                row.Scopes,
-		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
+		AuthorizationExpiresAt: authorizationExpiresAt,
+		LastUsedAt:             lastUsedAt,
+		ID:                     row.ID.String(),
+		SubjectUrn:             row.SubjectUrn.String(),
+		SubjectDisplayName:     subjectDisplayName,
+		SubjectEmail:           subjectEmail,
+		UpstreamEmail:          conv.FromPGText[string](row.UpstreamEmail),
+		UpstreamDisplayName:    conv.FromPGText[string](row.UpstreamDisplayName),
+		IdentitySource:         conv.FromPGText[string](row.IdentitySource),
+		UserSessionIssuerID:    row.UserSessionIssuerID.String(),
+		RemoteSessionClientID:  row.RemoteSessionClientID.String(),
+		AccessExpiresAt:        accessExpiresAt,
+		RefreshExpiresAt:       refreshExpiresAt,
+		HasRefreshToken:        upstreamtokens.Has(upstreamtokens.Stored(row.RefreshTokenEncrypted, row.RefreshTokenOrgEncrypted)),
+		Scopes:                 row.Scopes,
+		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }

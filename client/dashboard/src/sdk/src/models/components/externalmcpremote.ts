@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -27,7 +28,7 @@ export const TransportType = {
 /**
  * Transport type (sse or streamable-http)
  */
-export type TransportType = ClosedEnum<typeof TransportType>;
+export type TransportType = OpenEnum<typeof TransportType>;
 
 /**
  * A remote endpoint for an MCP server
@@ -52,8 +53,10 @@ export type ExternalMCPRemote = {
 };
 
 /** @internal */
-export const TransportType$inboundSchema: z.ZodMiniEnum<typeof TransportType> =
-  z.enum(TransportType);
+export const TransportType$inboundSchema: z.ZodMiniType<
+  TransportType,
+  unknown
+> = openEnums.inboundSchema(TransportType);
 
 /** @internal */
 export const ExternalMCPRemote$inboundSchema: z.ZodMiniType<

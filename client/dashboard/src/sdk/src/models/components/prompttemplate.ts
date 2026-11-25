@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -21,13 +22,13 @@ import { ToolVariation, ToolVariation$inboundSchema } from "./toolvariation.js";
 /**
  * The template engine
  */
-export const Engine = {
+export const PromptTemplateEngine = {
   Mustache: "mustache",
 } as const;
 /**
  * The template engine
  */
-export type Engine = ClosedEnum<typeof Engine>;
+export type PromptTemplateEngine = OpenEnum<typeof PromptTemplateEngine>;
 
 /**
  * The kind of prompt the template is used for
@@ -39,7 +40,7 @@ export const PromptTemplateKind = {
 /**
  * The kind of prompt the template is used for
  */
-export type PromptTemplateKind = ClosedEnum<typeof PromptTemplateKind>;
+export type PromptTemplateKind = OpenEnum<typeof PromptTemplateKind>;
 
 /**
  * A prompt template
@@ -76,7 +77,7 @@ export type PromptTemplate = {
   /**
    * The template engine
    */
-  engine: Engine;
+  engine: PromptTemplateEngine;
   /**
    * The revision tree ID for the prompt template
    */
@@ -137,14 +138,16 @@ export type PromptTemplate = {
 };
 
 /** @internal */
-export const Engine$inboundSchema: z.ZodMiniEnum<typeof Engine> = z.enum(
-  Engine,
-);
+export const PromptTemplateEngine$inboundSchema: z.ZodMiniType<
+  PromptTemplateEngine,
+  unknown
+> = openEnums.inboundSchema(PromptTemplateEngine);
 
 /** @internal */
-export const PromptTemplateKind$inboundSchema: z.ZodMiniEnum<
-  typeof PromptTemplateKind
-> = z.enum(PromptTemplateKind);
+export const PromptTemplateKind$inboundSchema: z.ZodMiniType<
+  PromptTemplateKind,
+  unknown
+> = openEnums.inboundSchema(PromptTemplateKind);
 
 /** @internal */
 export const PromptTemplate$inboundSchema: z.ZodMiniType<
@@ -162,7 +165,7 @@ export const PromptTemplate$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     description: z.string(),
-    engine: Engine$inboundSchema,
+    engine: PromptTemplateEngine$inboundSchema,
     history_id: z.string(),
     id: z.string(),
     kind: PromptTemplateKind$inboundSchema,

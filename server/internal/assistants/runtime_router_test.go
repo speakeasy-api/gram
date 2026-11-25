@@ -85,29 +85,29 @@ var _ RuntimeBackend = (*stubRuntimeBackend)(nil)
 
 func newTestRouter(t *testing.T, target string) (*runtimeRouter, *stubRuntimeBackend, *stubRuntimeBackend) {
 	t.Helper()
-	fly := &stubRuntimeBackend{name: runtimeBackendFlyIO, serverURL: &url.URL{Scheme: "https", Host: "fly.example.com"}, imageRef: "fly:img", ensureRecords: nil, runTurnCount: 0, interruptedThreadIDs: nil, stopCount: 0, reapCount: 0}
+	local := &stubRuntimeBackend{name: runtimeBackendLocal, serverURL: &url.URL{Scheme: "https", Host: "local.example.com"}, imageRef: "local:img", ensureRecords: nil, runTurnCount: 0, interruptedThreadIDs: nil, stopCount: 0, reapCount: 0}
 	gke := &stubRuntimeBackend{name: runtimeBackendGKE, serverURL: &url.URL{Scheme: "https", Host: "gke.example.com"}, imageRef: "gke:img", ensureRecords: nil, runTurnCount: 0, interruptedThreadIDs: nil, stopCount: 0, reapCount: 0}
 	router, err := newRuntimeRouter(target, map[string]RuntimeBackend{
-		runtimeBackendFlyIO: fly,
+		runtimeBackendLocal: local,
 		runtimeBackendGKE:   gke,
 	})
 	require.NoError(t, err)
-	return router, fly, gke
+	return router, local, gke
 }
 
 func TestRuntimeRouterDispatchesByRecordBackend(t *testing.T) {
 	t.Parallel()
 
-	router, fly, gke := newTestRouter(t, runtimeBackendGKE)
+	router, local, gke := newTestRouter(t, runtimeBackendGKE)
 
-	_, err := router.Ensure(t.Context(), testRuntimeRecord(runtimeBackendFlyIO))
+	_, err := router.Ensure(t.Context(), testRuntimeRecord(runtimeBackendLocal))
 	require.NoError(t, err)
-	require.Len(t, fly.ensureRecords, 1)
+	require.Len(t, local.ensureRecords, 1)
 	require.Empty(t, gke.ensureRecords)
 
 	require.NoError(t, router.Reap(t.Context(), testRuntimeRecord(runtimeBackendGKE)))
 	require.Equal(t, 1, gke.reapCount)
-	require.Equal(t, 0, fly.reapCount)
+	require.Equal(t, 0, local.reapCount)
 }
 
 func TestRuntimeRouterTargetSurface(t *testing.T) {
@@ -117,7 +117,7 @@ func TestRuntimeRouterTargetSurface(t *testing.T) {
 	require.Equal(t, runtimeBackendGKE, router.Backend())
 	require.Equal(t, gke.serverURL, router.ServerURL())
 	require.Equal(t, gke.imageRef, router.ImageRef())
-	require.True(t, router.SupportsBackend(runtimeBackendFlyIO))
+	require.True(t, router.SupportsBackend(runtimeBackendLocal))
 	require.True(t, router.SupportsBackend(runtimeBackendGKE))
 	require.False(t, router.SupportsBackend("bogus"))
 }
@@ -134,10 +134,76 @@ func TestNewRuntimeRouterRequiresTargetConfigured(t *testing.T) {
 	t.Parallel()
 
 	_, err := newRuntimeRouter(runtimeBackendGKE, map[string]RuntimeBackend{
-		runtimeBackendFlyIO: &stubRuntimeBackend{name: runtimeBackendFlyIO, serverURL: nil, imageRef: "", ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0},
+		runtimeBackendLocal: &stubRuntimeBackend{name: runtimeBackendLocal, serverURL: nil, imageRef: "", ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0},
 	})
 	require.ErrorContains(t, err, `target backend "gke" is not configured`)
 
-	_, err = newRuntimeRouter(runtimeBackendFlyIO, map[string]RuntimeBackend{})
+	_, err = newRuntimeRouter(runtimeBackendLocal, map[string]RuntimeBackend{})
 	require.ErrorContains(t, err, "at least one backend")
+}
+
+func TestNewRuntimeRouterDisabledTargetNeedsNoBackend(t *testing.T) {
+	t.Parallel()
+
+	router, err := newRuntimeRouter(RuntimeProviderDisabled, map[string]RuntimeBackend{})
+	require.NoError(t, err)
+	require.Equal(t, RuntimeProviderDisabled, router.Backend())
+	require.Nil(t, router.ServerURL())
+	require.Empty(t, router.ImageRef())
+	require.False(t, router.SupportsBackend(runtimeBackendGKE))
+
+	err = router.Stop(t.Context(), testRuntimeRecord(runtimeBackendGKE))
+	require.ErrorContains(t, err, `backend "gke" is not configured`)
+}
+
+func TestRuntimeRouterDisabledTargetKeepsConfiguredBackendsReachable(t *testing.T) {
+	t.Parallel()
+
+	router, _, gke := newTestRouter(t, RuntimeProviderDisabled)
+	require.Equal(t, RuntimeProviderDisabled, router.Backend())
+	require.Nil(t, router.ServerURL())
+	require.Empty(t, router.ImageRef())
+
+	// Rows created before the switch still drain through their backend.
+	require.NoError(t, router.Reap(t.Context(), testRuntimeRecord(runtimeBackendGKE)))
+	require.Equal(t, 1, gke.reapCount)
+}
+
+func TestRuntimeBackendForVersionRejectsDisabledTarget(t *testing.T) {
+	t.Parallel()
+
+	router, err := newRuntimeRouter(RuntimeProviderDisabled, map[string]RuntimeBackend{})
+	require.NoError(t, err)
+	for _, version := range []int16{1, 2} {
+		_, err := runtimeBackendForVersion(router, version)
+		require.ErrorIs(t, err, ErrRuntimeDisabled)
+	}
+}
+
+func TestDisabledRuntimeBackendRefusesKitRowsOnLegacyGKE(t *testing.T) {
+	t.Parallel()
+
+	gke := &stubRuntimeBackend{name: runtimeBackendGKE}
+	backend, err := newDisabledRuntimeBackend(map[string]RuntimeBackend{runtimeBackendGKE: gke})
+	require.NoError(t, err)
+	require.Equal(t, RuntimeProviderDisabled, backend.Backend())
+	require.True(t, backend.SupportsBackend(runtimeBackendGKE))
+
+	// Legacy rows still drain through the configured GKE backend.
+	legacy := testRuntimeRecord(runtimeBackendGKE)
+	legacy.RuntimeVersion = 2
+	require.NoError(t, backend.Reap(t.Context(), legacy))
+	require.Equal(t, 1, gke.reapCount)
+
+	// Kit rows share the backend name but not the teardown, so they are
+	// refused rather than reaped by the legacy backend.
+	kit := testRuntimeRecord(runtimeBackendGKE)
+	kit.RuntimeVersion = 3
+	require.ErrorContains(t, backend.Reap(t.Context(), kit), "version 3 is not configured")
+	require.Equal(t, 1, gke.reapCount)
+
+	for _, version := range []int16{1, 2} {
+		_, err := runtimeBackendForVersion(backend, version)
+		require.ErrorIs(t, err, ErrRuntimeDisabled)
+	}
 }

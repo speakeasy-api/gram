@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -67,13 +68,15 @@ func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
 }
 
 // ListActivitiesParams filters and paginates the activities feed. The feed
-// is always sorted newest first: AfterID pages toward OLDER activities (a
-// backfill) while BeforeID pages toward NEWER activities (an incremental
-// tail read). At most one of AfterID and BeforeID may be set.
+// is always sorted newest first: AfterID pages toward OLDER activities while
+// BeforeID pages toward NEWER activities. At most one of AfterID and BeforeID
+// may be set. CreatedAtGTE and CreatedAtLT bound a time window (inclusive
+// lower bound, exclusive upper bound) for window polling.
 type ListActivitiesParams struct {
 	ActivityTypes   []string
 	OrganizationIDs []string
 	CreatedAtGTE    time.Time
+	CreatedAtLT     time.Time
 	AfterID         string
 	BeforeID        string
 	Limit           int
@@ -131,6 +134,9 @@ func (c *Client) ListActivities(ctx context.Context, params ListActivitiesParams
 	if !params.CreatedAtGTE.IsZero() {
 		q.Set("created_at.gte", params.CreatedAtGTE.UTC().Format(time.RFC3339))
 	}
+	if !params.CreatedAtLT.IsZero() {
+		q.Set("created_at.lt", params.CreatedAtLT.UTC().Format(time.RFC3339))
+	}
 	if params.AfterID != "" {
 		q.Set("after_id", params.AfterID)
 	}
@@ -143,6 +149,110 @@ func (c *Client) ListActivities(ctx context.Context, params ListActivitiesParams
 	endpoint.RawQuery = q.Encode()
 
 	var page ActivitiesPage
+	if err := c.doJSON(ctx, http.MethodGet, endpoint, &page); err != nil {
+		return nil, err
+	}
+	return &page, nil
+}
+
+// ChatOrderByUpdatedAt sorts the chat list by last update time. A chat's
+// updated_at moves when it receives a new message, is moved into or out of a
+// project, or is deleted in claude.ai, so a forward walk under this ordering
+// returns new chats and changed chats in one stream; renames are not
+// guaranteed to surface. It is only supported for org-wide queries, and
+// updated_at.* bounds require it.
+const ChatOrderByUpdatedAt = "updated_at"
+
+// ListChatsParams filters and paginates the org-wide chat list. The list is
+// sorted ascending by OrderBy with ties broken by id, so AfterID pages toward
+// newer entries. Time bounds must match the sort key: UpdatedAtGTE requires
+// ChatOrderByUpdatedAt. Cursors are bound to the sort key too, so an AfterID
+// issued under one OrderBy is rejected under another.
+type ListChatsParams struct {
+	OrganizationIDs []string
+	OrderBy         string
+	UpdatedAtGTE    time.Time
+	AfterID         string
+	Limit           int
+}
+
+// ChatsPage is one page of the chat list.
+type ChatsPage struct {
+	// Data holds the page's chats in OrderBy order.
+	Data []ChatSummary `json:"data"`
+
+	// HasMore reports whether chats exist beyond this page.
+	HasMore bool `json:"has_more"`
+
+	// FirstID is the opaque cursor of the page's first chat.
+	FirstID string `json:"first_id"`
+
+	// LastID is the opaque cursor of the page's last chat; pass it back as
+	// AfterID to continue the walk.
+	LastID string `json:"last_id"`
+}
+
+// ChatSummary is the chat metadata the list endpoint returns. Message
+// content comes from GetChatMessages.
+type ChatSummary struct {
+	// ID is the chat's tagged id, e.g. claude_chat_abc123.
+	ID string `json:"id"`
+
+	// Name is the chat title.
+	Name string `json:"name"`
+
+	// CreatedAt is the chat's creation time in RFC 3339.
+	CreatedAt string `json:"created_at"`
+
+	// UpdatedAt is the chat's last update time in RFC 3339.
+	UpdatedAt string `json:"updated_at"`
+
+	// DeletedAt is set when the user deleted the chat in claude.ai. The chat
+	// is still listed, but its message content is gone.
+	DeletedAt *string `json:"deleted_at"`
+
+	// Href is the chat's claude.ai URL.
+	Href string `json:"href"`
+
+	// Model is the model selected for the chat; nil for chats that never had
+	// one recorded.
+	Model *string `json:"model"`
+
+	// OrganizationUUID is the organization the chat belongs to.
+	OrganizationUUID string `json:"organization_uuid"`
+
+	// ProjectID is the Claude project the chat belongs to, if any.
+	ProjectID string `json:"project_id"`
+
+	// User is the chat's creator. It is empty when the key is restricted to
+	// one organization and the creator is no longer a member of it.
+	User ChatUser `json:"user"`
+}
+
+func (c *Client) ListChats(ctx context.Context, params ListChatsParams) (*ChatsPage, error) {
+	endpoint, err := c.endpoint("/v1/compliance/apps/chats")
+	if err != nil {
+		return nil, err
+	}
+	q := endpoint.Query()
+	for _, organizationID := range params.OrganizationIDs {
+		q.Add("organization_ids[]", organizationID)
+	}
+	if params.OrderBy != "" {
+		q.Set("order_by", params.OrderBy)
+	}
+	if !params.UpdatedAtGTE.IsZero() {
+		q.Set("updated_at.gte", params.UpdatedAtGTE.UTC().Format(time.RFC3339))
+	}
+	if params.AfterID != "" {
+		q.Set("after_id", params.AfterID)
+	}
+	if params.Limit > 0 {
+		q.Set("limit", strconv.Itoa(params.Limit))
+	}
+	endpoint.RawQuery = q.Encode()
+
+	var page ChatsPage
 	if err := c.doJSON(ctx, http.MethodGet, endpoint, &page); err != nil {
 		return nil, err
 	}
@@ -276,7 +386,7 @@ func (c *Client) download(ctx context.Context, path string) (*DownloadedContent,
 	}
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 		defer func() { _ = res.Body.Close() }()
-		return nil, &HTTPError{StatusCode: res.StatusCode, Status: res.Status}
+		return nil, newHTTPError(res)
 	}
 	return &DownloadedContent{
 		Body:          res.Body,
@@ -302,7 +412,7 @@ func (c *Client) doJSON(ctx context.Context, method string, endpoint *url.URL, o
 		_ = res.Body.Close()
 	}()
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		return &HTTPError{StatusCode: res.StatusCode, Status: res.Status}
+		return newHTTPError(res)
 	}
 	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
 		return fmt.Errorf("decode anthropic compliance response: %w", err)
@@ -335,8 +445,23 @@ func filenameFromContentDisposition(value string) string {
 type HTTPError struct {
 	StatusCode int
 	Status     string
+	// Body is the leading, printable part of the response body: Anthropic
+	// explains a rejected request there, and the status alone does not say why.
+	Body string
 }
 
 func (e *HTTPError) Error() string {
-	return fmt.Sprintf("anthropic compliance API returned %s", e.Status)
+	if e.Body == "" {
+		return fmt.Sprintf("anthropic compliance API returned %s", e.Status)
+	}
+	return fmt.Sprintf("anthropic compliance API returned %s: %s", e.Status, e.Body)
+}
+
+// maxHTTPErrorBody bounds how much of an error response is kept for the
+// error message.
+const maxHTTPErrorBody = 512
+
+func newHTTPError(res *http.Response) *HTTPError {
+	body, _ := io.ReadAll(io.LimitReader(res.Body, maxHTTPErrorBody))
+	return &HTTPError{StatusCode: res.StatusCode, Status: res.Status, Body: strings.TrimSpace(guardian.PrintableBodySnippet(body))}
 }

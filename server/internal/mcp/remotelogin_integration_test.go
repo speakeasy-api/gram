@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -68,7 +68,8 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 		ID:                  parentID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        result.Toolset.McpSlug.String,
+			McpSlug:        result.McpSlug,
+			McpServerID:    uuid.NullUUID{UUID: result.Toolset.ID, Valid: true},
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
 		ClientID:            "test-mcp-client",
@@ -112,7 +113,8 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 		ID:                  parentID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        result.Toolset.McpSlug.String,
+			McpSlug:        result.McpSlug,
+			McpServerID:    uuid.NullUUID{UUID: result.Toolset.ID, Valid: true},
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
 		ClientID:            "test-mcp-client",
@@ -128,19 +130,31 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 
 	// Hitting HandleConsent GET through the service exercises the real
 	// card-render path (loadToolset → requireUserSessionIssuer → card build).
-	req := httptest.NewRequest(http.MethodGet, "/mcp/"+result.Toolset.McpSlug.String+"/connect?state="+parentID, nil)
+	// With a single unlinked service the page has nothing left to ask, so that
+	// path ends in a redirect straight to the provider rather than a rendered
+	// page — the auto-connect this endpoint exists to perform.
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+result.McpSlug+"/connect?state="+parentID, nil)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", result.Toolset.McpSlug.String)
+	rctx.URLParams.Add("mcpSlug", result.McpSlug)
 	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleConsent(w, req))
-	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	require.True(
+		t,
+		strings.HasPrefix(w.Header().Get("Location"), idp.Issuer),
+		"auto-connect must redirect to the upstream provider, got %q",
+		w.Header().Get("Location"),
+	)
 
 	stamped, err := authnCache.Get(ctx, "authnChallenge:"+parentID)
 	require.NoError(t, err)
 	require.NotNil(t, stamped.Subject)
 	require.Equal(t, anonymousSubject, *stamped.Subject)
+	// Latched before the redirect, so a denied or failed upstream leg lands
+	// back on a page the user can act on instead of bouncing out again.
+	require.True(t, stamped.AutoConnectDone)
 
 	runRemoteLoginRoundTrip(t, ctx, ti, mgr, result, parentID, stamped.Subject, "")
 }
@@ -193,7 +207,7 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 		UpstreamMetadata:             idp.OAuth21Metadata(t),
 		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
 	})
-	result.Toolset, _ = attachCustomDomainToToolset(t, ctx, ti, authCtx, result.Toolset, "remote-login-custom.example.com")
+	_, _ = attachCustomDomainToToolset(t, ctx, ti, authCtx, hostedToolset{Toolset: result.Toolset, McpSlug: pgtype.Text{String: result.McpSlug, Valid: true}}, "remote-login-custom.example.com")
 
 	mgr, _ := buildChallengeManagerForTest(t, ti)
 	clients, err := mgr.ListClients(ctx, result.Toolset.ProjectID, result.Toolset.OrganizationID, result.UserSessionIssuer.ID)
@@ -204,9 +218,10 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 		ID:                  uuid.NewString(),
 		ProjectID:           result.Toolset.ProjectID,
+		OrganizationID:      result.Toolset.OrganizationID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Subject:             &userSubject,
-		McpSlug:             result.Toolset.McpSlug.String,
+		McpSlug:             result.McpSlug,
 		FinalRedirectURI:    "",
 	}, clients[0])
 	require.NoError(t, err)
@@ -219,7 +234,7 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 
 	upstreamResp := httpGetNoFollow(t, authURL)
 	defer func() { _ = upstreamResp.Body.Close() }()
-	require.Equal(t, http.StatusFound, upstreamResp.StatusCode, "registered Gram callback should be accepted by dev-idp")
+	require.Equal(t, http.StatusFound, upstreamResp.StatusCode, "registered Speakeasy callback should be accepted by dev-idp")
 
 	badURL := *parsed
 	badQuery := badURL.Query()
@@ -253,9 +268,10 @@ func runRemoteLoginRoundTrip(
 	parent := remotesessions.ParentChallenge{
 		ID:                  parentChallengeID,
 		ProjectID:           result.Toolset.ProjectID,
+		OrganizationID:      result.Toolset.OrganizationID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Subject:             expectedSubject,
-		McpSlug:             result.Toolset.McpSlug.String,
+		McpSlug:             result.McpSlug,
 		FinalRedirectURI:    finalRedirectURI,
 	}
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
@@ -281,7 +297,7 @@ func runRemoteLoginRoundTrip(
 	if finalRedirectURI != "" {
 		require.Equal(t, finalRedirectURI, cbW.Header().Get("Location"))
 	} else {
-		require.Contains(t, cbW.Header().Get("Location"), "/mcp/"+result.Toolset.McpSlug.String+"/connect")
+		require.Contains(t, cbW.Header().Get("Location"), "/mcp/"+result.McpSlug+"/connect")
 		require.Contains(t, cbW.Header().Get("Location"), parentChallengeID)
 	}
 
@@ -319,9 +335,9 @@ func attachCustomDomainToToolset(
 	ctx context.Context,
 	ti *testInstance,
 	authCtx *contextvalues.AuthContext,
-	toolset toolsets_repo.Toolset,
+	toolset hostedToolset,
 	domainName string,
-) (toolsets_repo.Toolset, customdomains_repo.CustomDomain) {
+) (hostedToolset, customdomains_repo.CustomDomain) {
 	t.Helper()
 
 	domainsRepo := customdomains_repo.New(ti.conn)
@@ -343,19 +359,8 @@ func attachCustomDomainToToolset(
 	})
 	require.NoError(t, err)
 
-	toolset, err = toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            toolset.McpIsPublic,
-		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
-		McpEnabled:             toolset.McpEnabled,
-		ToolSelectionMode:      toolset.ToolSelectionMode,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Slug: toolset.McpSlug.String, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}})
+	toolset.CustomDomainID = uuid.NullUUID{UUID: domain.ID, Valid: true}
 
 	return toolset, domain
 }
@@ -373,7 +378,7 @@ func buildChallengeManagerForTest(
 	policy, err := guardian.NewUnsafePolicy(ti.tracerProvider, []string{})
 	require.NoError(t, err)
 
-	mgr := remotesessions.NewChallengeManager(ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, ti.cacheAdapter, ti.serverURL)
+	mgr := remotesessions.NewChallengeManager(ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, nil, ti.cacheAdapter, ti.serverURL)
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](
 		ti.logger.With(attr.SlogCacheNamespace("authn_challenge")),
 		ti.cacheAdapter,

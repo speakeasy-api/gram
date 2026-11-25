@@ -9,7 +9,10 @@ import {
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
-import { useMembers } from "@gram/client/react-query/members.js";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import type { AccessRequest } from "@gram/client/models/components/accessrequest.js";
+import { useAccessRequests } from "@gram/client/react-query/accessRequests.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import {
   Link,
@@ -18,21 +21,30 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import {
+  AccessRequestsTab,
+  MAX_LISTED_ACCESS_REQUESTS,
+} from "./AccessRequestsTab";
+import { useState } from "react";
 import { ChallengesTab } from "./ChallengesTab";
 import { GrantAccessDialog } from "./GrantAccessDialog";
-import { MembersTab } from "./MembersTab";
+import { MCPAssignments } from "./MCPAssignments";
 import { RolesTab } from "./RolesTab";
 
+// Member management lives on the Team page; this page is roles and the
+// challenges they produced.
 const tabFromPath: Record<string, string> = {
   roles: "roles",
-  members: "members",
+  assignments: "assignments",
   challenges: "challenges",
+  requests: "requests",
 };
 
 const tabDisplayNames: Record<string, string> = {
   roles: "Roles & Permissions",
-  members: "Roles & Permissions",
+  assignments: "Roles & Permissions",
   challenges: "Roles & Permissions",
+  requests: "Roles & Permissions",
 };
 
 export default function Access(): JSX.Element {
@@ -44,6 +56,11 @@ export default function Access(): JSX.Element {
 
   if (shouldRedirect) {
     return <Navigate to="roles" replace />;
+  }
+  // Member management moved to the Team page; links minted before that (audit
+  // entries, emails) still point here.
+  if (lastSegment === "members") {
+    return <Navigate to="../../team" replace />;
   }
 
   return (
@@ -73,24 +90,81 @@ function AccessInner() {
   const grantUserId = searchParams.get("grant_user");
   const grantScope = searchParams.get("scope");
   const grantResourceId = searchParams.get("resource_id") || undefined;
+  const grantProjectId = searchParams.get("project_id") || undefined;
+  const grantRequestId = searchParams.get("request");
+
+  // Stored access requests, while the rollout is on. Emails and Slack DMs
+  // add ?request=<id>, so the grant dialog can approve that request for a
+  // fixed window.
+  const accessRequestsFlag = useFeatureFlag(FEATURE_FLAGS.accessRequests);
+  const accessRequestsOn = accessRequestsFlag.status === "enabled";
+  const pendingRequests = useAccessRequests({ status: "pending" }, undefined, {
+    enabled: accessRequestsOn,
+    throwOnError: false,
+  });
+  const pendingRows = pendingRequests.data?.requests.length ?? 0;
+  const pendingCount =
+    pendingRows >= MAX_LISTED_ACCESS_REQUESTS
+      ? `${pendingRows}+`
+      : pendingRows || undefined;
+  // A linked request is looked up in every status, so a link to a request
+  // decided or lapsed since opens it and says so. The dialog keeps the request
+  // it opened on, so a decision made in it still shows its outcome.
+  const linkedRequests = useAccessRequests({}, undefined, {
+    enabled: accessRequestsOn && !!grantRequestId,
+    throwOnError: false,
+  });
+  const foundRequest = grantRequestId
+    ? linkedRequests.data?.requests.find((r) => r.id === grantRequestId)
+    : undefined;
+  const [openedRequest, setOpenedRequest] = useState<AccessRequest>();
+  if (
+    foundRequest &&
+    (openedRequest?.id !== foundRequest.id ||
+      openedRequest.status !== foundRequest.status)
+  ) {
+    setOpenedRequest(foundRequest);
+  }
+  const grantRequest =
+    grantRequestId && openedRequest?.id === grantRequestId
+      ? openedRequest
+      : undefined;
 
   const closeGrantDialog = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("grant_user");
     next.delete("scope");
     next.delete("resource_id");
+    next.delete("project_id");
+    next.delete("request");
+    setSearchParams(next, { replace: true });
+  };
+  const reviewRequest = (request: AccessRequest) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("grant_user", request.requesterUserId);
+    next.set("scope", request.scope);
+    if (request.selector.resourceId && request.selector.resourceId !== "*") {
+      next.set("resource_id", request.selector.resourceId);
+    }
+    next.set("request", request.id);
     setSearchParams(next, { replace: true });
   };
   const organization = useOrganization();
   const orgRoutes = useOrgRoutes();
   const { data: rolesData } = useRoles();
-  const { data: membersData } = useMembers();
   const roleCount = rolesData?.roles?.length;
-  const memberCount = membersData?.members?.length;
 
   const pathSegments = location.pathname.split("/");
   const lastSegment = pathSegments[pathSegments.length - 1] ?? "";
-  const currentTab = tabFromPath[lastSegment] || "roles";
+  const pathTab = tabFromPath[lastSegment] || "roles";
+  // With the rollout off there is no Access Requests tab to show, so a direct
+  // link lands on Roles.
+  const currentTab =
+    pathTab === "requests" &&
+    !accessRequestsOn &&
+    accessRequestsFlag.status !== "loading"
+      ? "roles"
+      : pathTab;
 
   const basePath = pathSegments
     .slice(0, lastSegment === "access" ? pathSegments.length : -1)
@@ -129,12 +203,17 @@ function AccessInner() {
             <PageTabsTrigger value="roles">
               Roles{roleCount != null ? ` (${roleCount})` : ""}
             </PageTabsTrigger>
-            <PageTabsTrigger value="members">
-              Members{memberCount != null ? ` (${memberCount})` : ""}
+            <PageTabsTrigger value="assignments">
+              MCP Assignments
             </PageTabsTrigger>
             <PageTabsTrigger value="challenges">
               Authorization Challenges
             </PageTabsTrigger>
+            {accessRequestsOn && (
+              <PageTabsTrigger value="requests">
+                Access Requests{pendingCount ? ` (${pendingCount})` : ""}
+              </PageTabsTrigger>
+            )}
           </PageTabsList>
         </div>
 
@@ -142,13 +221,19 @@ function AccessInner() {
           <RolesTab />
         </TabsContent>
 
-        <TabsContent value="members" className="mt-6">
-          <MembersTab />
+        <TabsContent value="assignments" className="mt-6">
+          <MCPAssignments />
         </TabsContent>
 
         <TabsContent value="challenges" className="mt-6">
           <ChallengesTab />
         </TabsContent>
+
+        {accessRequestsOn && (
+          <TabsContent value="requests" className="mt-6">
+            <AccessRequestsTab onReview={reviewRequest} />
+          </TabsContent>
+        )}
       </Tabs>
 
       {grantUserId && grantScope && (
@@ -156,6 +241,8 @@ function AccessInner() {
           userId={grantUserId}
           scope={grantScope}
           resourceId={grantResourceId}
+          projectId={grantProjectId}
+          request={grantRequest}
           onClose={closeGrantDialog}
         />
       )}

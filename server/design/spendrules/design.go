@@ -391,7 +391,7 @@ var SpendRuleEvent = Type("SpendRuleEvent", func() {
 	Attribute("event_type", String, "Event type.", func() {
 		Enum("warning", "breach")
 	})
-	Attribute("user_id", String, "Gram user ID of the actor, when linked.")
+	Attribute("user_id", String, "Speakeasy user ID of the actor, when linked.")
 	Attribute("email", String, "Actor email.")
 	Attribute("display_name", String, "Actor display name, when known.")
 	Attribute("spend_usd", Float64, "Actor spend in USD at evaluation time.")
@@ -412,7 +412,7 @@ var SpendRuleEvent = Type("SpendRuleEvent", func() {
 var SpendRuleActorUsage = Type("SpendRuleActorUsage", func() {
 	Attribute("email", String, "Actor email.")
 	Attribute("display_name", String, "Actor display name, when known.")
-	Attribute("user_id", String, "Gram user ID of the actor, when linked.")
+	Attribute("user_id", String, "Speakeasy user ID of the actor, when linked.")
 	Attribute("spend_usd", Float64, "Actor spend in USD within the current window.")
 	Attribute("limit_usd", Float64, "Per-person budget in USD.")
 	Attribute("used_pct", Float64, "Spend as a percentage of the limit (may exceed 100).")

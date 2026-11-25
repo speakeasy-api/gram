@@ -71,6 +71,11 @@ type Service struct {
 	projects     *projectsRepo.Queries
 	repo         *repo.Queries
 	audit        *audit.Logger
+
+	// functionsAvailable is whether this deployment can run Functions. It
+	// comes from the Functions provider, so it is the same for every
+	// organization.
+	functionsAvailable bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -91,6 +96,7 @@ func NewService(
 	jwtSecret string,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	functionsAvailable bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("assets"))
 
@@ -107,6 +113,8 @@ func NewService(
 		projects:       projectsRepo.New(db),
 		repo:           repo.New(db),
 		audit:          auditLogger,
+
+		functionsAvailable: functionsAvailable,
 	}
 }
 
@@ -209,16 +217,23 @@ func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (
 		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset")
 	}
 
+	var csp *string
+	if row.ContentType == "image/svg+xml" {
+		csp = new("default-src 'none'; script-src 'none'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox")
+	}
 	return &gen.ServeImageResult{
-		ContentType:              row.ContentType,
-		ContentLength:            row.ContentLength,
-		LastModified:             row.UpdatedAt.Time.Format(time.RFC1123),
-		AccessControlAllowOrigin: new("*"),
+		ContentSecurityPolicy:     csp,
+		XContentTypeOptions:       new("nosniff"),
+		ContentType:               row.ContentType,
+		ContentLength:             row.ContentLength,
+		LastModified:              row.UpdatedAt.Time.Format(time.RFC1123),
+		AccessControlAllowOrigin:  new("*"),
+		CrossOriginResourcePolicy: "cross-origin",
 	}, body, nil
 }
 
 func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm, reader io.ReadCloser) (res *gen.UploadImageResult, err error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close image upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -227,7 +242,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -235,7 +250,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up image upload", func() error {
 		return result.cleanup()
 	})
 
@@ -336,7 +351,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 }
 
 func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFunctionsForm, reader io.ReadCloser) (*gen.UploadFunctionsResult, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close functions upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -347,7 +362,14 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 
 	logger := s.logger
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	// Refused before the body is read, so a disabled deployment never buffers
+	// an archive it cannot run. The message matches functions.ErrFunctionsDisabled,
+	// which this package cannot import because functions imports assets.
+	if !s.functionsAvailable {
+		return nil, oops.E(oops.CodeNotImplemented, nil, "functions are not available on this deployment").LogWarn(ctx, logger)
+	}
+
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeFunctions,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -355,7 +377,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up functions upload", func() error {
 		return result.cleanup()
 	})
 
@@ -458,7 +480,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 }
 
 func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAPIv3Form, reader io.ReadCloser) (*gen.UploadOpenAPIv3Result, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close openapi v3 upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -469,7 +491,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 
 	logger := s.logger
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeOpenAPI,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -477,7 +499,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up openapi v3 upload", func() error {
 		return result.cleanup()
 	})
 
@@ -575,7 +597,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	}, nil
 }
 
-type downloadPendingAssetParams struct {
+type downloadAuthorizedAssetParams struct {
 	maxLength     int64
 	contentLength int64
 	contentType   string
@@ -586,7 +608,7 @@ type downloadPendingAssetResult struct {
 	cleanup func() error
 }
 
-func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, params *downloadPendingAssetParams) (*downloadPendingAssetResult, error) {
+func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, params *downloadAuthorizedAssetParams) (*downloadPendingAssetResult, error) {
 	// Handlers authenticate and resolve their asset owner before calling this,
 	// so the check here is tier-agnostic defense-in-depth: no anonymous path
 	// may buffer request bytes to disk.
@@ -595,6 +617,11 @@ func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, pa
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	return s.downloadAuthorizedAsset(ctx, reader, params)
+}
+
+// downloadAuthorizedAsset is called only after the owning handler authenticates.
+func (s *Service) downloadAuthorizedAsset(ctx context.Context, reader io.Reader, params *downloadAuthorizedAssetParams) (*downloadPendingAssetResult, error) {
 	if params.contentLength == 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "no content")
 	}
@@ -734,7 +761,7 @@ func (s *Service) uploadAsset(ctx context.Context, params *uploadAssetParams) (*
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("write to blob storage: %w", err), "error writing document")
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close blob storage writer", func() error {
 		if err := dst.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
 			return fmt.Errorf("close blob storage: %w", err)
 		}
@@ -897,7 +924,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	if err != nil {
 		return nil, fetchURLRequestError(err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close openapi document fetch response body", func() error {
 		return resp.Body.Close()
 	})
 
@@ -961,7 +988,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 10 MiB limit")
 	}
 
-	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeOpenAPI,
 		contentLength: contentLength,
 		contentType:   mediaType,
@@ -969,7 +996,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up fetched openapi document", func() error {
 		return result.cleanup()
 	})
 
@@ -1101,7 +1128,7 @@ func (s *Service) FetchImageAssetFromURL(ctx context.Context, imageURL string) (
 	if err != nil {
 		return nil, fetchURLRequestError(err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close image fetch response body", func() error {
 		return resp.Body.Close()
 	})
 
@@ -1117,7 +1144,7 @@ func (s *Service) FetchImageAssetFromURL(ctx context.Context, imageURL string) (
 		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 4 MiB limit")
 	}
 
-	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: contentLength,
 		contentType:   resp.Header.Get("Content-Type"),
@@ -1125,7 +1152,7 @@ func (s *Service) FetchImageAssetFromURL(ctx context.Context, imageURL string) (
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up fetched image", func() error {
 		return result.cleanup()
 	})
 
@@ -1343,8 +1370,57 @@ func validateChatAttachmentContentType(contentType string) (mimeType, ext string
 		mediaType)
 }
 
+const (
+	// chatAttachmentCSP confines a chat attachment opened as a top-level
+	// document. Uploaders choose both the bytes and the stored type, and the
+	// serve routes share an origin with session-authenticated RPCs, so the
+	// sandbox gives the document an opaque origin with script disabled and
+	// default-src 'none' stops it loading anything. Browsers still display
+	// passive images, audio and text under this policy; style-src
+	// 'unsafe-inline' lets their built-in viewers lay those out. Fetching an
+	// attachment or embedding it as an <img> or <audio> source is unaffected.
+	chatAttachmentCSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+
+	// chatAttachmentNoSniff stops browsers reinterpreting a stored type, for
+	// example rendering text/plain bytes as HTML.
+	chatAttachmentNoSniff = "nosniff"
+)
+
+// inlineChatAttachmentTypes are the non-audio media types a browser displays
+// without interpreting markup or running script. Every other chat attachment
+// type, including HTML, SVG, XML and PDF (which browsers refuse to render in a
+// sandboxed document), is served as a download.
+var inlineChatAttachmentTypes = []string{
+	"image/png",
+	"image/jpeg",
+	"image/gif",
+	"image/webp",
+	"image/avif",
+	"image/bmp",
+	"text/plain",
+	"text/csv",
+	"text/markdown",
+	"application/json",
+}
+
+// chatAttachmentDisposition returns the Content-Disposition for a stored chat
+// attachment: inline for passive audio, image and text types, and a download
+// for everything else.
+func chatAttachmentDisposition(contentType, filename string) string {
+	disposition := "attachment"
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err == nil && (strings.HasPrefix(mediaType, "audio/") || slices.Contains(inlineChatAttachmentTypes, mediaType)) {
+		disposition = "inline"
+	}
+
+	if header := mime.FormatMediaType(disposition, map[string]string{"filename": filename}); header != "" {
+		return header
+	}
+	return disposition
+}
+
 func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadChatAttachmentForm, reader io.ReadCloser) (*gen.UploadChatAttachmentResult, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close chat attachment upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -1353,7 +1429,7 @@ func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadC
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeChatAttachment,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -1361,7 +1437,7 @@ func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadC
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up chat attachment upload", func() error {
 		return result.cleanup()
 	})
 
@@ -1502,9 +1578,12 @@ func (s *Service) ServeChatAttachment(ctx context.Context, payload *gen.ServeCha
 	}
 
 	return &gen.ServeChatAttachmentResult{
-		ContentType:   row.ContentType,
-		ContentLength: row.ContentLength,
-		LastModified:  row.UpdatedAt.Time.Format(time.RFC1123),
+		ContentType:           row.ContentType,
+		ContentLength:         row.ContentLength,
+		LastModified:          row.UpdatedAt.Time.Format(time.RFC1123),
+		ContentDisposition:    chatAttachmentDisposition(row.ContentType, row.Name),
+		ContentSecurityPolicy: chatAttachmentCSP,
+		XContentTypeOptions:   chatAttachmentNoSniff,
 	}, body, nil
 }
 
@@ -1645,5 +1724,8 @@ func (s *Service) ServeChatAttachmentSigned(ctx context.Context, payload *gen.Se
 		ContentLength:            row.ContentLength,
 		LastModified:             row.UpdatedAt.Time.Format(time.RFC1123),
 		AccessControlAllowOrigin: new("*"),
+		ContentDisposition:       chatAttachmentDisposition(row.ContentType, row.Name),
+		ContentSecurityPolicy:    chatAttachmentCSP,
+		XContentTypeOptions:      chatAttachmentNoSniff,
 	}, body, nil
 }

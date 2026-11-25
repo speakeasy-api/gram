@@ -1,22 +1,37 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Provision and validate Stripe sandbox billing objects and initialize the local webhook secret"
 
-// Idempotent: the meter is keyed on its event name and the price on its
-// lookup key, so re-running against a sandbox that already has the objects
-// just re-saves the existing IDs. Safe to run any time; refuses live-mode
-// keys outright.
+// Idempotent: missing sandbox meters/prices are provisioned by event name
+// and lookup key; compatible existing prices and event names are preserved.
+// Re-running re-saves the existing IDs. Refuses live-mode keys outright.
 
-import { intro, isCancel, log, outro, password } from "@clack/prompts";
+import { intro, isCancel, log, note, outro, password } from "@clack/prompts";
 import { $ } from "zx";
+import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import {
+  chmodSync,
+  lstatSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { join } from "node:path";
+import { localWebhookTarget } from "./helpers.mts";
+import { getSetupReadiness, preflightStripeCLI } from "./readiness.mts";
 
 const METER_EVENT_NAME = "tum";
 const METER_DISPLAY_NAME = "Tokens under management";
 const PRICE_LOOKUP_KEY = "payg-tum";
 const PRODUCT_NAME = "AI Control Plane PAYG";
 const PORTAL_CONFIGURATION_PURPOSE = "gram-payg";
+const PRODUCT_METADATA_SPEAKEASY_PRODUCT = "aicp";
 // $0.35 per 1M TUMs, linear per-unit, expressed in cents per TUM.
 const UNIT_AMOUNT_DECIMAL_CENTS = "0.000035";
+const MCP_EGRESS_PRICE_LOOKUP_KEY = "payg-mcp-egress";
+const RISK_SCANS_PRICE_LOOKUP_KEY = "payg-risk-scans";
 
 interface StripeError {
   error?: { message?: string; type?: string };
@@ -31,6 +46,7 @@ interface StripeAccount {
 interface StripeMeter {
   id: string;
   event_name: string;
+  event_time_window?: string | null;
   status: string;
   livemode: boolean;
   default_aggregation?: { formula?: string };
@@ -38,8 +54,16 @@ interface StripeMeter {
   customer_mapping?: { type?: string; event_payload_key?: string };
 }
 
+interface StripeProduct {
+  active: boolean;
+  id: string;
+  name: string;
+  metadata?: Record<string, string>;
+}
+
 interface StripePrice {
   id: string;
+  product: string;
   active: boolean;
   livemode: boolean;
   currency: string;
@@ -125,7 +149,7 @@ async function stripe<T>(
   const body = (await res.json()) as T & StripeError;
   if (!res.ok) {
     throw new Error(
-      `Stripe ${method} ${path} failed (${res.status}): ${body.error?.message ?? JSON.stringify(body)}`,
+      `Stripe ${method} ${path} failed (${res.status}): Request rejected; inspect the sandbox request log (do not share secrets or tenant details)`,
     );
   }
   return body;
@@ -221,24 +245,54 @@ function assertPortalConfiguration(configuration: StripePortalConfiguration) {
   );
 }
 
-async function resolveSecretKey(): Promise<{ key: string; prompted: boolean }> {
-  const fromEnv = process.env.STRIPE_API_KEY;
+// Current CLI builds print test_mode_publishable_key. Older builds print
+// test_mode_pub_key. Either name is the sandbox publishable key.
+const stripePublishableKeyPattern =
+  /(?:test_mode_publishable_key|test_mode_pub_key)\s*=\s*['"]?(pk_test_[A-Za-z0-9_]+)/;
+
+export function publishableKeyFromStripeCLI(configList: string): string {
+  return configList.match(stripePublishableKeyPattern)?.[1] ?? "";
+}
+
+export async function resolveSecretKey(
+  env: NodeJS.ProcessEnv = process.env,
+  readCLIConfig = async () => {
+    const config = await $({
+      nothrow: true,
+      quiet: true,
+    })`stripe config --list`;
+    return config.stdout;
+  },
+): Promise<{
+  key: string;
+  prompted: boolean;
+  publishableKey: string;
+}> {
+  const fromEnv = env.STRIPE_API_KEY;
   if (fromEnv && fromEnv !== "unset") {
-    return { key: fromEnv, prompted: false };
+    // Treat explicitly configured keys as a pair. The CLI login may belong
+    // to another account, so it must not supply the missing half of that pair.
+    return {
+      key: fromEnv,
+      prompted: false,
+      publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? "",
+    };
   }
 
+  const cliConfig = await readCLIConfig();
+  const publishableKey = publishableKeyFromStripeCLI(cliConfig);
+
   // An authenticated Stripe CLI carries a short-lived test-mode key. Use it
-  // for provisioning but never persist it — it expires after ~90 days.
-  const cliConfig = await $({
-    nothrow: true,
-    quiet: true,
-  })`stripe config --list`;
-  const cliKey = cliConfig.stdout.match(
+  // for provisioning, the server and listener; persist it consistently. It
+  // expires (typically after 90 days), so this is not durable readiness.
+  const cliKey = cliConfig.match(
     /test_mode_api_key\s*=\s*['"]?((?:sk|rk)_test_[A-Za-z0-9_]+)/,
   )?.[1];
   if (cliKey) {
-    log.info("Using the test-mode key from the authenticated Stripe CLI.");
-    return { key: cliKey, prompted: false };
+    log.info(
+      "Using the CLI test key for all local Stripe clients. CLI keys expire (typically after 90 days). After expiry, replace STRIPE_API_KEY and its matching STRIPE_PUBLISHABLE_KEY in mise.local.toml and rerun setup. CLI reauthentication alone does not replace the saved key.",
+    );
+    return { key: cliKey, prompted: false, publishableKey };
   }
 
   if (!process.stdin.isTTY) {
@@ -264,7 +318,23 @@ async function resolveSecretKey(): Promise<{ key: string; prompted: boolean }> {
     outro("Cancelled.");
     process.exit(1);
   }
-  return { key: entered, prompted: true };
+  const enteredPublishableKey = await password({
+    message:
+      "Paste the matching sandbox publishable key from the same Stripe account:",
+    validate: (value) =>
+      /^pk_test_[A-Za-z0-9_]+$/.test(value ?? "")
+        ? undefined
+        : "A sandbox publishable key (pk_test_…) is required.",
+  });
+  if (isCancel(enteredPublishableKey)) {
+    outro("Cancelled.");
+    process.exit(1);
+  }
+  return {
+    key: entered,
+    prompted: true,
+    publishableKey: enteredPublishableKey,
+  };
 }
 
 async function resolveWebhookSecret(key: string): Promise<string> {
@@ -276,13 +346,8 @@ async function resolveWebhookSecret(key: string): Promise<string> {
   const output = `${listener.stdout}\n${listener.stderr}`;
   const secret = output.match(/whsec_[A-Za-z0-9]+/)?.[0];
   if (listener.exitCode !== 0 || !secret) {
-    const details = output
-      .replaceAll(key, "<redacted>")
-      .replace(/(?:sk|rk)_(?:test|live)_[A-Za-z0-9_]+/g, "<redacted>")
-      .replace(/whsec_[A-Za-z0-9]+/g, "<redacted>")
-      .trim();
     throw new Error(
-      `Initialize Stripe CLI webhook listener secret failed${details ? `: ${details}` : "."}`,
+      "Stripe CLI webhook authentication failed. Refresh the sandbox key or CLI login and rerun setup; do not share raw CLI output.",
     );
   }
   return secret;
@@ -291,6 +356,7 @@ async function resolveWebhookSecret(key: string): Promise<string> {
 async function findMeter(
   key: string,
   status: "active" | "inactive",
+  eventName: string,
 ): Promise<StripeMeter | undefined> {
   let startingAfter: string | undefined;
   do {
@@ -304,7 +370,7 @@ async function findMeter(
       params,
     );
     const meter = meters.data.find(
-      (candidate) => candidate.event_name === METER_EVENT_NAME,
+      (candidate) => candidate.event_name === eventName,
     );
     if (meter || !meters.has_more) return meter;
 
@@ -324,6 +390,7 @@ function assertMeterConfiguration(
     [
       ["status", meter.status, expectedStatus],
       ["livemode", meter.livemode, false],
+      ["event_time_window", meter.event_time_window ?? null, null],
       [
         "default_aggregation.formula",
         meter.default_aggregation?.formula,
@@ -345,30 +412,16 @@ function assertMeterConfiguration(
   );
 }
 
-async function main() {
-  intro("Stripe PAYG sandbox setup");
-
-  const { key, prompted } = await resolveSecretKey();
-  if (/^(sk|rk)_live_/.test(key)) {
-    log.error("Refusing to run against a live-mode key.");
-    process.exit(1);
-  }
-
-  const account = await stripe<StripeAccount>(key, "GET", "/account");
-  if (account.livemode === true) {
-    log.error("Refusing to run against a live-mode Stripe account.");
-    process.exit(1);
-  }
-  const accountLabel =
-    account.settings?.dashboard?.display_name ?? account.id ?? "unknown";
-  log.info(`Connected to Stripe account: ${accountLabel}`);
-
-  // Meter — event names are unique across active and inactive meters.
-  let meter = await findMeter(key, "active");
+async function ensureMeter(
+  key: string,
+  eventName: string,
+  displayName: string,
+) {
+  let meter = await findMeter(key, "active", eventName);
   if (meter) {
-    log.info(`Meter "${METER_EVENT_NAME}" already exists: ${meter.id}`);
+    log.info(`Meter "${eventName}" already exists: ${meter.id}`);
   } else {
-    meter = await findMeter(key, "inactive");
+    meter = await findMeter(key, "inactive", eventName);
     if (meter) {
       assertMeterConfiguration(meter, "inactive");
       meter = await stripe<StripeMeter>(
@@ -376,20 +429,164 @@ async function main() {
         "POST",
         `/billing/meters/${meter.id}/reactivate`,
       );
-      log.success(`Reactivated meter "${METER_EVENT_NAME}": ${meter.id}`);
+      log.success(`Reactivated meter "${eventName}": ${meter.id}`);
     } else {
       meter = await stripe<StripeMeter>(key, "POST", "/billing/meters", {
-        display_name: METER_DISPLAY_NAME,
-        event_name: METER_EVENT_NAME,
+        display_name: displayName,
+        event_name: eventName,
         "default_aggregation[formula]": "sum",
         "value_settings[event_payload_key]": "value",
         "customer_mapping[type]": "by_id",
         "customer_mapping[event_payload_key]": "stripe_customer_id",
       });
-      log.success(`Created meter "${METER_EVENT_NAME}": ${meter.id}`);
+      log.success(`Created meter "${eventName}": ${meter.id}`);
     }
   }
   assertMeterConfiguration(meter, "active");
+
+  assertConfiguration(`Meter ${meter.id}`, [
+    ["event_name", meter.event_name, eventName],
+  ]);
+  return meter;
+}
+
+// Sandbox simulation only, NOT authoritative production pricing. Backend
+// tier_limits.go specifies $20/GiB; definition.go and handler_stripe.go export
+// raw bytes. Stripe allows 12 decimal places in cents, so the nearest rate is
+// $19.9999983976448/GiB. No transform_quantity or rounding of usage is applied.
+const SANDBOX_EGRESS_CENTS_PER_BYTE = "0.000001862645";
+// Risk definitions export o200k_base tokens per scanner: $0.99/1M tokens.
+const SANDBOX_RISK_CENTS_PER_TOKEN = "0.000099";
+
+async function resolveMeteredPrice(
+  key: string,
+  lookupKey: string,
+  eventName: string,
+  displayName: string,
+  unitAmount: string,
+) {
+  const prices = await stripe<StripeList<StripePrice>>(key, "GET", "/prices", {
+    "lookup_keys[]": lookupKey,
+    active: "true",
+    limit: "1",
+  });
+  let price = prices.data?.[0];
+  let resolvedMeter: StripeMeter | undefined;
+  if (!price) {
+    // Never replace an archived price or silently transfer its lookup key.
+    const inactive = await stripe<StripeList<StripePrice>>(
+      key,
+      "GET",
+      "/prices",
+      {
+        "lookup_keys[]": lookupKey,
+        active: "false",
+        limit: "1",
+      },
+    );
+    if (inactive.data.length > 0) {
+      throw new Error(
+        `Archived price "${lookupKey}" exists; review it in the sandbox before re-running. Setup will not replace it.`,
+      );
+    }
+    const meter = await ensureMeter(key, eventName, displayName);
+    resolvedMeter = meter;
+    price = await stripe<StripePrice>(key, "POST", "/prices", {
+      "product_data[name]": displayName,
+      "product_data[metadata][speakeasy_product]":
+        PRODUCT_METADATA_SPEAKEASY_PRODUCT,
+      lookup_key: lookupKey,
+      nickname:
+        lookupKey === MCP_EGRESS_PRICE_LOOKUP_KEY
+          ? "Sandbox approximation of $20/GiB (12-decimal cents/byte)"
+          : "Sandbox risk scans ($0.99 per 1M tokens)",
+      currency: "usd",
+      billing_scheme: "per_unit",
+      unit_amount_decimal: unitAmount,
+      "recurring[interval]": "month",
+      "recurring[usage_type]": "metered",
+      "recurring[meter]": meter.id,
+    });
+    assertConfiguration(`New price "${lookupKey}"`, [
+      ["recurring.meter", price.recurring?.meter, meter.id],
+      ["billing_scheme", price.billing_scheme, "per_unit"],
+      ["unit_amount_decimal", price.unit_amount_decimal, unitAmount],
+    ]);
+    if (lookupKey === MCP_EGRESS_PRICE_LOOKUP_KEY) {
+      log.info(
+        "Sandbox MCP approximation: Stripe's 12-decimal precision gives $19.9999983976448/GiB, not authoritative production pricing.",
+      );
+    }
+  }
+  assertConfiguration(
+    `Price "${lookupKey}" (${price.id})`,
+    [
+      ["active", price.active, true],
+      ["livemode", price.livemode, false],
+      ["currency", price.currency, "usd"],
+      ["recurring.interval", price.recurring?.interval, "month"],
+      ["recurring.interval_count", price.recurring?.interval_count, 1],
+      ["recurring.usage_type", price.recurring?.usage_type, "metered"],
+      ["recurring.meter configured", Boolean(price.recurring?.meter), true],
+    ],
+    "Correct the sandbox price configuration and re-run stripe:setup.",
+  );
+  log.info(`Resolved price "${lookupKey}": ${price.id}`);
+  // Existing prices retain their rates, billing schemes and actual event names.
+  let meter =
+    resolvedMeter ??
+    (await stripe<StripeMeter>(
+      key,
+      "GET",
+      `/billing/meters/${price.recurring!.meter}`,
+    ));
+  assertConfiguration(`Meter for "${lookupKey}"`, [
+    ["id", meter.id, price.recurring!.meter],
+    ["event_name configured", Boolean(meter.event_name?.trim()), true],
+  ]);
+  if (meter.status === "inactive") {
+    assertMeterConfiguration(meter, "inactive");
+    meter = await stripe<StripeMeter>(
+      key,
+      "POST",
+      `/billing/meters/${meter.id}/reactivate`,
+    );
+    log.success(`Reactivated meter "${meter.event_name}": ${meter.id}`);
+  }
+  assertMeterConfiguration(meter, "active");
+  return { price, meter };
+}
+
+export async function provisionCatalog(key: string) {
+  if (!/^(sk|rk)_test_[A-Za-z0-9_]+$/.test(key)) {
+    throw new Error("Only Stripe sandbox/test-mode keys are accepted.");
+  }
+  const account = await stripe<StripeAccount>(key, "GET", "/account");
+  if (account.livemode === true) {
+    throw new Error("Refusing to run against a live-mode Stripe account.");
+  }
+  log.info("Connected to Stripe sandbox account.");
+
+  // Backend event names are configurable (flags_stripe.go), with no defaults.
+  // Use stable snake_case names only for new local sandbox catalog entries.
+  const { price: mcpEgressPrice, meter: mcpEgressMeter } =
+    await resolveMeteredPrice(
+      key,
+      MCP_EGRESS_PRICE_LOOKUP_KEY,
+      "mcp_egress",
+      "Sandbox MCP egress",
+      SANDBOX_EGRESS_CENTS_PER_BYTE,
+    );
+  const { price: riskScansPrice, meter: riskScansMeter } =
+    await resolveMeteredPrice(
+      key,
+      RISK_SCANS_PRICE_LOOKUP_KEY,
+      "risk_scans",
+      "Sandbox risk scans",
+      SANDBOX_RISK_CENTS_PER_TOKEN,
+    );
+
+  const meter = await ensureMeter(key, METER_EVENT_NAME, METER_DISPLAY_NAME);
 
   // Price and product — keyed on the lookup key. Creating them in one request
   // avoids leaving an orphan product if price creation fails.
@@ -414,6 +611,8 @@ async function main() {
     );
     const createParams: Record<string, string> = {
       "product_data[name]": PRODUCT_NAME,
+      "product_data[metadata][speakeasy_product]":
+        PRODUCT_METADATA_SPEAKEASY_PRODUCT,
       lookup_key: PRICE_LOOKUP_KEY,
       nickname: "PAYG TUM ($0.35 per 1M)",
       currency: "usd",
@@ -445,6 +644,42 @@ async function main() {
     ["recurring.meter", price.recurring?.meter, meter.id],
   ]);
 
+  // Only the PAYG product may be tagged; a conflicting tag is fixed by hand.
+  const product = await stripe<StripeProduct>(
+    key,
+    "GET",
+    `/products/${price.product}`,
+  );
+  // The lookup key and validated billing semantics identify the catalog.
+  // Display names are mutable; never rename an existing compatible product.
+  assertConfiguration(
+    "PAYG product",
+    [["active", product.active, true]],
+    "Use an active sandbox product/price; setup will not reactivate archived products.",
+  );
+  if (product.name !== PRODUCT_NAME)
+    log.warn(
+      "Reusing a compatible PAYG product with a different display name; leaving its name unchanged.",
+    );
+  const productTag = product.metadata?.speakeasy_product;
+  if (productTag && productTag !== PRODUCT_METADATA_SPEAKEASY_PRODUCT) {
+    throw new Error(
+      `Product ${product.id} has unexpected metadata.speakeasy_product=${productTag}; fix the product association before re-running.`,
+    );
+  }
+  if (!productTag) {
+    await stripe<StripeProduct>(key, "POST", `/products/${product.id}`, {
+      "metadata[speakeasy_product]": PRODUCT_METADATA_SPEAKEASY_PRODUCT,
+    });
+    log.success(
+      `Tagged product ${product.id} with metadata.speakeasy_product=${PRODUCT_METADATA_SPEAKEASY_PRODUCT}`,
+    );
+  } else {
+    log.info(
+      `Product ${product.id} already tagged speakeasy_product=${PRODUCT_METADATA_SPEAKEASY_PRODUCT}`,
+    );
+  }
+
   // Billing Portal — use a dedicated, tagged configuration so production
   // behavior cannot drift when someone edits Stripe's mutable default.
   const portalConfigurations = await findPortalConfigurations(key);
@@ -474,6 +709,10 @@ async function main() {
         "features[subscription_cancel][mode]": "at_period_end",
         "features[subscription_cancel][proration_behavior]": "none",
         "features[subscription_cancel][cancellation_reason][enabled]": "false",
+        "features[subscription_cancel][cancellation_reason][options][0]":
+          "too_expensive",
+        "features[subscription_cancel][cancellation_reason][options][1]":
+          "other",
         "features[subscription_update][enabled]": "false",
       },
     );
@@ -483,61 +722,234 @@ async function main() {
   }
   assertPortalConfiguration(portalConfiguration);
 
-  const webhookSecret = await resolveWebhookSecret(key);
-  log.success("Initialized the Stripe CLI webhook signing secret.");
+  return {
+    meter,
+    price,
+    mcpEgressPrice,
+    riskScansPrice,
+    mcpEgressMeter,
+    riskScansMeter,
+    portalConfiguration,
+  };
+}
 
+interface SetupDependencies {
+  preflight: () => Promise<void>;
+  resolveKey: () => Promise<{ key: string; publishableKey?: string }>;
+  webhookSecret: (key: string) => Promise<string>;
+  provision: typeof provisionCatalog;
+  persist: (settings: Record<string, string>) => Promise<void>;
+}
+
+export async function setupStripe(deps: SetupDependencies) {
+  await deps.preflight();
+  const { key, publishableKey } = await deps.resolveKey();
+  if (!/^(sk|rk)_test_[A-Za-z0-9_]+$/.test(key)) {
+    throw new Error("Only Stripe sandbox/test-mode keys are accepted.");
+  }
+  if (!publishableKey || !/^pk_test_[A-Za-z0-9_]+$/.test(publishableKey)) {
+    throw new Error(
+      "Set the matching sandbox publishable key with `mise set --prompt --file mise.local.toml STRIPE_PUBLISHABLE_KEY`. " +
+        "It must come from the same Stripe account as STRIPE_API_KEY; update both keys when switching accounts. Setup has not changed any settings.",
+    );
+  }
+  // Authentication must succeed before provisioning catalog objects.
+  const webhookSecret = await deps.webhookSecret(key);
+  const {
+    meter,
+    price,
+    mcpEgressPrice,
+    riskScansPrice,
+    mcpEgressMeter,
+    riskScansMeter,
+    portalConfiguration,
+  } = await deps.provision(key);
+  // Categories use different units; only the risk scanners share a meter.
+  const categories = [
+    ["TUM", meter],
+    ["MCP egress", mcpEgressMeter],
+    ["risk scans", riskScansMeter],
+  ] as const;
+  for (const [index, [category, categoryMeter]] of categories.entries()) {
+    for (const [otherCategory, otherMeter] of categories.slice(index + 1)) {
+      for (const field of ["id", "event_name"] as const) {
+        if (categoryMeter[field] === otherMeter[field]) {
+          throw new Error(
+            `${category} and ${otherCategory} must use distinct meter ${field} values.`,
+          );
+        }
+      }
+    }
+  }
   const settings: Record<string, string> = {
+    STRIPE_API_KEY: key,
     STRIPE_PRICE_ID_TUM: price.id,
+    STRIPE_PRICE_ID_MCP_EGRESS: mcpEgressPrice.id,
+    STRIPE_PRICE_ID_RISK_SCANS: riskScansPrice.id,
     STRIPE_METER_ID_TUM: meter.id,
-    STRIPE_METER_EVENT_NAME: METER_EVENT_NAME,
+    STRIPE_METER_EVENT_NAME: meter.event_name,
+    STRIPE_METER_EVENT_NAME_MCP_BANDWIDTH_EGRESS: mcpEgressMeter.event_name,
+    // All scanners contribute their individual token quantities to one price.
+    STRIPE_METER_EVENT_NAME_RISK_GITLEAKS: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_PRESIDIO: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_PROMPT_INJECTION: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_PROMPT_POLICY: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_CUSTOM_RULES: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_CLI_DESTRUCTIVE: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_LLM_ANALYZER: riskScansMeter.event_name,
     STRIPE_PORTAL_CONFIGURATION_ID: portalConfiguration.id,
     STRIPE_WEBHOOK_SECRET: webhookSecret,
   };
-  if (prompted) {
-    settings.STRIPE_API_KEY = key;
-  }
-  for (const [name, value] of Object.entries(settings)) {
-    await $({
-      input: value,
-      quiet: true,
-    })`mise set --stdin --file mise.local.toml ${name}`;
-  }
-  log.success(`Saved to mise.local.toml: ${Object.keys(settings).join(", ")}`);
-
-  log.info(
-    [
-      "Start webhook forwarding for this worktree in a separate terminal:",
-      '  if test "${STRIPE_API_KEY:-}" = unset; then unset STRIPE_API_KEY; fi',
-      '  stripe listen --latest --skip-verify --forward-to "$GRAM_SERVER_URL/rpc/stripe.webhook"',
-    ].join("\n"),
-  );
-
-  log.info(
-    [
-      "Finish Stripe Dashboard setup before sandbox validation:",
-      "",
-      "1. Configure subscription Smart Retries",
-      "   Billing → Revenue recovery → Retries",
-      "   - Under Card payments, click Manage.",
-      "   - Select Smart Retries: 8 retries within 2 weeks.",
-      "   - Set Subscription status to cancel the subscription.",
-      "   - Leave Invoice status as leave the invoice past-due; it applies to one-off invoices.",
-      "   - Save the settings.",
-      "",
-      "2. Configure the metered invoice grace period",
-      "   Settings → Billing → Invoices → Invoice finalization grace period",
-      "   - Click Add rule and set Invoice finalization delay to 72 hours.",
-      "   - Add both conditions: Has a metered price and Invoice is from a subscription cycle.",
-      "   - Save the rule.",
-    ].join("\n"),
-  );
-
-  outro("Done.");
+  settings.STRIPE_PUBLISHABLE_KEY = publishableKey;
+  await deps.persist(settings);
 }
 
-try {
-  await main();
-} catch (err) {
-  log.error(err instanceof Error ? err.message : String(err));
-  process.exit(1);
+/** Worktree-only safety: no database, organization or feature-flag access. */
+export function preflightLocalSetup(
+  root = process.cwd(),
+  env = process.env,
+): void {
+  if (env.GRAM_ENVIRONMENT !== "local") {
+    throw new Error("Stripe setup requires GRAM_ENVIRONMENT=local.");
+  }
+  localWebhookTarget(env.GRAM_SERVER_URL ?? "", env.GRAM_SERVER_PORT ?? "");
+  try {
+    // check-ignore also rejects tracked files, even when an ignore rule matches.
+    execFileSync("git", ["check-ignore", "--quiet", "--", "mise.local.toml"], {
+      cwd: root,
+      stdio: "pipe",
+    });
+    try {
+      const stat = lstatSync(join(root, "mise.local.toml"));
+      if (!stat.isFile() || stat.nlink !== 1) throw new Error("unsafe file");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  } catch {
+    throw new Error(
+      "Stripe setup requires an ignored, untracked regular mise.local.toml (no links).",
+    );
+  }
+}
+
+function localConfigSnapshot(path: string) {
+  try {
+    const stat = lstatSync(path);
+    if (!stat.isFile() || stat.nlink !== 1) {
+      throw new Error(
+        "Stripe setup requires a regular mise.local.toml (no links).",
+      );
+    }
+    return { contents: readFileSync(path, "utf8"), mode: stat.mode & 0o777 };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+export async function persistStripeSettings(
+  settings: Record<string, string>,
+  options: {
+    root?: string;
+    env?: NodeJS.ProcessEnv;
+    set?: (path: string, name: string, value: string) => Promise<void>;
+  } = {},
+): Promise<void> {
+  const root = options.root ?? process.cwd();
+  const env = options.env ?? process.env;
+  preflightLocalSetup(root, env);
+  const localPath = join(root, "mise.local.toml");
+  const original = localConfigSnapshot(localPath);
+  // The ignored staging file stays on the same filesystem for atomic rename.
+  const stagingPath = join(root, `mise.stripe-${randomUUID()}.local.toml`);
+  execFileSync("git", ["check-ignore", "--quiet", "--", stagingPath], {
+    cwd: root,
+    stdio: "pipe",
+  });
+  writeFileSync(stagingPath, original?.contents ?? "", {
+    flag: "wx",
+    mode: 0o600,
+  });
+  try {
+    for (const [name, value] of Object.entries(settings)) {
+      if (options.set) {
+        await options.set(stagingPath, name, value);
+      } else {
+        await $({
+          cwd: root,
+          // Trust only this temporary file for this child; do not persist trust
+          // or trust every config in the working directory.
+          env: { ...env, MISE_TRUSTED_CONFIG_PATHS: stagingPath },
+          // A buffer sends EOF even for empty values; secrets stay out of argv.
+          input: Buffer.from(value),
+          quiet: true,
+        })`mise set --stdin --file ${stagingPath} ${name}`;
+      }
+    }
+    preflightLocalSetup(root, env);
+    const current = localConfigSnapshot(localPath);
+    // Best effort: editors and plain mise commands do not share a writer lock.
+    if (
+      current?.contents !== original?.contents ||
+      current?.mode !== original?.mode
+    ) {
+      throw new Error(
+        "mise.local.toml changed during Stripe setup; rerun setup to keep those edits.",
+      );
+    }
+    chmodSync(stagingPath, original?.mode ?? 0o600);
+    renameSync(stagingPath, localPath);
+  } finally {
+    rmSync(stagingPath, { force: true });
+  }
+}
+
+async function main() {
+  intro("Stripe PAYG sandbox setup");
+  await setupStripe({
+    preflight: async () => {
+      preflightLocalSetup();
+      preflightStripeCLI();
+    },
+    resolveKey: resolveSecretKey,
+    webhookSecret: resolveWebhookSecret,
+    provision: provisionCatalog,
+    persist: async (settings) => {
+      await persistStripeSettings(settings);
+      log.success(
+        "Saved consistent test credentials and billing configuration to ignored mise.local.toml.",
+      );
+    },
+  });
+
+  const readiness = await getSetupReadiness();
+  for (const check of readiness.checks)
+    log.info(`${check.ok ? "OK" : "ACTION"} ${check.message}`);
+  const commands = [
+    ["mise run stripe:status", "Check configuration and forwarding"],
+    ["mise run stripe:listen", "Start/restart managed forwarding"],
+    ["pitchfork restart server worker", "Reload saved billing credentials"],
+    ["pitchfork logs stripe-listener -n 50", "Inspect recent forwarding logs"],
+    ["pitchfork stop stripe-listener", "Stop forwarding"],
+  ] as const;
+  const width = Math.max(...commands.map(([command]) => command.length));
+  note(
+    commands
+      .map(
+        ([command, description]) => `${command.padEnd(width)}  ${description}`,
+      )
+      .join("\n"),
+    "Useful commands",
+  );
+
+  outro("Stripe configuration saved. See checks above for remaining actions.");
+}
+
+if (import.meta.main) {
+  try {
+    await main();
+  } catch (err) {
+    log.error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+  }
 }

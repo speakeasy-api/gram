@@ -3,6 +3,8 @@ package agent
 
 import (
 	"context"
+	crand "crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,18 +51,20 @@ type Config struct {
 	GatewayURL string
 	APIKey     string
 	// LocalMCPURL is pinned at startup; the gateway cannot redirect agent traffic.
-	LocalMCPURL    string
-	ServiceVersion string
-	Metadata       map[string]string
-	MinBackoff     time.Duration
-	MaxBackoff     time.Duration
+	LocalMCPURL        string
+	ServiceVersion     string
+	Metadata           map[string]string
+	MinBackoff         time.Duration
+	MaxBackoff         time.Duration
+	DisableDiagnostics bool
 }
 
 type Agent struct {
-	cfg     Config
-	target  *url.URL
-	handler http.Handler
-	logger  *slog.Logger
+	cfg         Config
+	target      *url.URL
+	handler     http.Handler
+	logger      *slog.Logger
+	diagnostics *diagnostics
 }
 
 func New(cfg Config, logger *slog.Logger) (*Agent, error) {
@@ -83,7 +87,7 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 		cfg.MaxBackoff = defaultMaxBackoff
 	}
 
-	a := &Agent{cfg: cfg, target: target, logger: logger}
+	a := &Agent{cfg: cfg, target: target, logger: logger, diagnostics: newDiagnostics()}
 	a.handler = a.buildHandler(target)
 	return a, nil
 }
@@ -115,6 +119,21 @@ func (a *Agent) Run(ctx context.Context) error {
 
 func (a *Agent) connectOnce(ctx context.Context) error {
 	header := http.Header{}
+	controlToken := ""
+	if a.cfg.DisableDiagnostics {
+		// Announce the opt-out so the gateway reports diagnostics as disabled
+		// instead of treating this agent as one that predates diagnostics.
+		header.Set(wire.HeaderCapabilities, wire.DiagnosticsDisabledCapability)
+	} else {
+		token := make([]byte, 32)
+		if _, err := crand.Read(token); err != nil {
+			return fmt.Errorf("generate tunnel control token: %w", err)
+		}
+		controlToken = hex.EncodeToString(token)
+		header.Set(wire.HeaderCapabilities, wire.DiagnosticsCapability)
+		header.Set(wire.HeaderControlToken, controlToken)
+		header.Set(wire.HeaderTargetDisplay, wire.TargetDisplay(a.cfg.LocalMCPURL))
+	}
 	header.Set("Authorization", "Bearer "+a.cfg.APIKey)
 	header.Set(wire.HeaderAgentVersion, wire.AgentVersion)
 	header.Set(wire.HeaderTunnelServiceVersion, strings.TrimSpace(a.cfg.ServiceVersion))
@@ -157,9 +176,31 @@ func (a *Agent) connectOnce(ctx context.Context) error {
 	defer conn.Close()
 	defer session.Close()
 
+	sessionCtx, cancelSession := context.WithCancel(ctx)
+	defer cancelSession()
+	handler := a.handler
+	if controlToken != "" {
+		a.diagnostics.mu.Lock()
+		a.diagnostics.lastPoll = time.Time{}
+		a.diagnostics.mu.Unlock()
+		go a.diagnostics.run(sessionCtx, a.target)
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == wire.ControlStatusPath {
+				if r.Method != http.MethodGet || !wire.ConstantTimeEqual(r.Header.Get(wire.HeaderControlToken), controlToken) {
+					http.NotFound(w, r)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Cache-Control", "no-store")
+				_ = json.NewEncoder(w).Encode(a.diagnostics.snapshot())
+				return
+			}
+			a.handler.ServeHTTP(w, r)
+		})
+	}
 	// Each yamux substream carries one HTTP exchange.
 	srv := &http.Server{
-		Handler:           a.handler,
+		Handler:           handler,
 		ReadHeaderTimeout: substreamReadHeaderTimeout,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
@@ -220,15 +261,34 @@ func isLocalGatewayHost(host string) bool {
 
 func (a *Agent) buildHandler(target *url.URL) http.Handler {
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	if !a.cfg.DisableDiagnostics {
+		proxy.Transport = observedTransport{base: http.DefaultTransport, diagnostics: a.diagnostics}
+	}
 	proxy.FlushInterval = -1 // stream SSE immediately
 	baseDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
+		req.Header.Del(wire.HeaderControlToken)
+		req.Header.Del(wire.HeaderCapabilities)
+		req.Header.Del(wire.HeaderTargetDisplay)
 		originalPath := req.URL.Path
+		originalRawPath := req.URL.RawPath
+		originalRawQuery := req.URL.RawQuery
+		originalForceQuery := req.URL.ForceQuery
 		baseDirector(req)
 		req.Host = target.Host
 		if target.Path != "" && (originalPath == "" || originalPath == "/") {
 			req.URL.Path = target.Path
 			req.URL.RawPath = target.RawPath
+		} else {
+			req.URL.Path = originalPath
+			req.URL.RawPath = originalRawPath
+			// The inbound path wins over the pinned one, but the pinned
+			// query does not lose with it: TUNNEL_LOCAL_MCP_URL may carry
+			// credentials the local origin authenticates every request by,
+			// and a tunneled OAuth call arrives on the issuer's own path.
+			// Merged the way httputil's director merges it, target first.
+			req.URL.RawQuery = mergeRawQuery(target.RawQuery, originalRawQuery)
+			req.URL.ForceQuery = originalForceQuery
 		}
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
@@ -253,6 +313,20 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 		proxy.ServeHTTP(w, r)
 	})
 	return mux
+}
+
+// mergeRawQuery combines the query pinned on the proxy target with the one the
+// inbound request carried, matching httputil.NewSingleHostReverseProxy's own
+// director: the target's parameters come first, and either side may be empty.
+func mergeRawQuery(targetRawQuery, inboundRawQuery string) string {
+	switch {
+	case targetRawQuery == "":
+		return inboundRawQuery
+	case inboundRawQuery == "":
+		return targetRawQuery
+	default:
+		return targetRawQuery + "&" + inboundRawQuery
+	}
 }
 
 func fullJitter(d time.Duration) time.Duration {

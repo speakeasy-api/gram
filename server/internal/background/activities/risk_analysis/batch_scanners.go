@@ -2,261 +2,237 @@ package risk_analysis
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/codes"
-	"go.temporal.io/sdk/activity"
 
-	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
+	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 )
 
-// batchScanRequestID derives the correlation id stamped on the batch's async
-// scan requests, deterministic over the batch identity (policy, version and
-// the exact message/content-part sets, which Temporal replays verbatim) plus
-// a discriminator separating the standard-policy dispatch from the
-// prompt-policy one. Determinism is a delivery-guarantee requirement, not a
-// convenience: the request id feeds each analyzer's deterministic finding
-// ids, so a retried activity republishes identical requests and the resulting
-// ClickHouse rows converge — a random per-attempt id would mint new rows the
-// read-time dedup could never collapse.
-func batchScanRequestID(args AnalyzeBatchArgs, discriminator string) uuid.UUID {
+const (
+	// shadowStreamExecutionPath labels the per-source analysis handlers' scans
+	// (gitleaks, presidio, custom rules, tool calls) on metering readings and
+	// spans. The value is kept stable for existing metric queries.
+	shadowStreamExecutionPath = "shadow_stream"
+
+	// judgeHandlerStreamExecutionPath labels the prompt-injection and
+	// prompt-policy handlers' judge scans.
+	judgeHandlerStreamExecutionPath = "judge_handler_stream"
+
+	// llmAnalyzerStreamExecutionPath marks analysis requests the fine-tuned
+	// LLM analyzer's streams consumer evaluates as the only engine for the
+	// policy's sources.
+	llmAnalyzerStreamExecutionPath = "llm_analyzer_stream"
+
+	// llmShadowStreamExecutionPath marks analysis requests the fine-tuned LLM
+	// analyzer evaluates in the shadow engine mode: the per-source handlers
+	// scan the same batch and enforce, and the model's verdict is recorded for
+	// comparison only.
+	llmShadowStreamExecutionPath = "llm_shadow_stream"
+)
+
+// batchOperationID identifies metering for one policy execution and scanned
+// anchor independently of transport correlation and batch composition.
+func batchOperationID(args AnalyzeBatchArgs, msg batchMessage, executionPath string) string {
+	chatMessageID, contentPartID := msg.anchorIDStrings()
+	return scanners.AsyncRiskOperationID(
+		executionPath,
+		args.RiskPolicyID.String(),
+		args.PolicyVersion,
+		derefOrEmpty(chatMessageID),
+		derefOrEmpty(contentPartID),
+		"",
+	)
+}
+
+// scanLane separates a message's standard-policy and prompt-policy scan
+// requests so their request ids never collide.
+type scanLane string
+
+const (
+	scanLaneStandard     scanLane = "standard"
+	scanLanePromptPolicy scanLane = "prompt_policy"
+)
+
+// batchScanRequestID derives the correlation id of one anchor's scan request
+// from the anchor, policy, version and standard/prompt-policy lane, never from
+// the rest of the batch. The handlers fold it into their finding ids, so a
+// retry that lands the anchor in a differently composed batch republishes the
+// same finding ids and ClickHouse converges instead of duplicating.
+func batchScanRequestID(args AnalyzeBatchArgs, lane scanLane, contentPart bool, anchorID uuid.UUID) uuid.UUID {
+	anchorKind := "chat_message"
+	if contentPart {
+		anchorKind = "content_part"
+	}
 	parts := []string{
-		discriminator,
+		string(lane),
 		args.ProjectID.String(),
 		args.RiskPolicyID.String(),
 		strconv.FormatInt(args.PolicyVersion, 10),
+		anchorKind,
+		anchorID.String(),
 	}
-	for _, id := range args.MessageIDs {
-		parts = append(parts, id.String())
-	}
-	for _, id := range args.ContentPartIDs {
-		parts = append(parts, id.String())
-	}
-	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:scanrequest:"+strings.Join(parts, "\x00")))
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:scanrequest:anchor:"+strings.Join(parts, "\x00")))
 }
 
-func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
-	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
-	defer scanSpan.End()
-	activity.RecordHeartbeat(ctx, 0)
+// messageScanRequestID is batchScanRequestID for a scanned message or part.
+func messageScanRequestID(args AnalyzeBatchArgs, lane scanLane, msg batchMessage) string {
+	return batchScanRequestID(args, lane, msg.ContentPart, msg.ID).String()
+}
 
-	contents := messageContents(messages)
-	requestID := batchScanRequestID(args, "standard")
-
-	sources := newSourceSet(args.Sources)
-	n := len(messages)
-	gitleaksFindings := make([][]scanners.Finding, n)
-	presidioFindings := make([][]scanners.Finding, n)
-	shadowMCPFindings := make([][]scanners.Finding, n)
-	destructiveToolFindings := make([][]scanners.Finding, n)
-	cliDestructiveFindings := make([][]scanners.Finding, n)
-	promptInjectionFindings := make([][]scanners.Finding, n)
-	customFindings := make([][]scanners.Finding, n)
-
-	var wg sync.WaitGroup
-	var gitleaksErr error
-	var presidioPublishErr error
-	var presidioErr error
-	var promptInjectionErr error
-	var customErr error
-
-	if sources.Has(SourceGitleaks) {
-		wg.Go(func() {
-			findings, err := a.scanGitleaks(ctx, args, requestID, messages, contents)
-			if err != nil {
-				gitleaksErr = err
-				return
-			}
-			gitleaksFindings = findings
-		})
+func nilUUIDString(id uuid.UUID) *string {
+	if id == uuid.Nil {
+		return nil
 	}
+	value := id.String()
+	return &value
+}
 
-	if sources.Has(SourcePresidio) {
-		wg.Go(func() {
-			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
-			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePresidio, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
-			// The publish must succeed for the activity to succeed (the async
-			// analyzer feeds the ClickHouse findings store), while the inline
-			// scan below tolerates partial results.
-			scoreThreshold := resolvePresidioScoreThreshold(args.PresidioScoreThreshold)
-			if err := a.publishPresidioScanRequests(ctx, args, requestID, subMessages, scoreThreshold); err != nil {
-				presidioPublishErr = err
-				return
-			}
-			findings, err := a.scanPresidio(ctx, args, scoreThreshold, subMessages, subContents)
-			presidioFindings = scatterFindings(n, indices, findings)
-			if err != nil {
-				presidioErr = err
-			}
-		})
+func derefOrEmpty(s *string) string {
+	if s == nil {
+		return ""
 	}
+	return *s
+}
 
-	if sources.Has(SourcePromptInjection) {
-		wg.Go(func() {
-			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
-			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
-			findings, err := a.scanPromptInjection(ctx, args, requestID, subMessages, subContents)
-			if err != nil {
-				promptInjectionErr = err
-				return
-			}
-			promptInjectionFindings = scatterFindings(n, indices, findings)
-		})
-	}
-
-	if len(customRuleIDs) > 0 {
-		wg.Go(func() {
-			findings, err := a.scanCustomRules(ctx, args, requestID, messages, customRuleIDs)
-			if err != nil {
-				customErr = err
-				return
-			}
-			customFindings = findings
-		})
-	}
-
-	wg.Wait()
-
-	if gitleaksErr != nil {
-		scanSpan.SetStatus(codes.Error, gitleaksErr.Error())
-		return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
-	}
-	if presidioPublishErr != nil {
-		scanSpan.SetStatus(codes.Error, presidioPublishErr.Error())
-		return nil, fmt.Errorf("presidio scan dispatch: %w", presidioPublishErr)
-	}
-	if promptInjectionErr != nil {
-		scanSpan.SetStatus(codes.Error, promptInjectionErr.Error())
-		return nil, fmt.Errorf("prompt injection scan dispatch: %w", promptInjectionErr)
-	}
-	if customErr != nil {
-		scanSpan.SetStatus(codes.Error, customErr.Error())
-		return nil, fmt.Errorf("custom rule scan: %w", customErr)
-	}
-	if ctx.Err() != nil {
-		err := fmt.Errorf("scan canceled: %w", ctx.Err())
-		if presidioErr != nil {
-			err = errors.Join(err, fmt.Errorf("presidio: %w", presidioErr))
+func batchRiskProvenance(args AnalyzeBatchArgs, msg batchMessage, executionPath, requestID string) metering.RiskProvenance {
+	chatMessageID := msg.ID
+	messageLinkReason := ""
+	if msg.ContentPart {
+		chatMessageID = msg.ParentChatMessageID
+		if chatMessageID == uuid.Nil {
+			messageLinkReason = "content_part_unlinked"
 		}
-		scanSpan.SetStatus(codes.Error, err.Error())
-		return nil, err
 	}
 
-	if sources.Has(shadowmcp.SourceShadowMCP) {
-		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, args.ProjectID, args.RiskPolicyID, messages)
-		activity.RecordHeartbeat(ctx, shadowmcp.SourceShadowMCP)
-	}
-	if sources.Has(shadowmcp.SourceDestructiveTool) {
-		destructiveToolFindings = a.scanDestructiveToolAnnotations(ctx, args.OrganizationID, messages)
-		activity.RecordHeartbeat(ctx, shadowmcp.SourceDestructiveTool)
-	}
-	if sources.Has(SourceCLIDestructive) {
-		cliDestructiveFindings = a.scanDestructiveCLICommands(ctx, messages)
-		activity.RecordHeartbeat(ctx, SourceCLIDestructive)
+	toolCallID := ""
+	toolName := ""
+	if len(msg.ToolCalls) == 1 {
+		toolCallID = msg.ToolCalls[0].ID
+		toolName = msg.ToolCalls[0].Function.Name
 	}
 
-	// Note: SourceAccountIdentity is deliberately absent here — it is
-	// session-scoped and evaluated in Do over the batch's full message-id set,
-	// bypassing the message-type filter and CEL scope that shape `messages`.
-
-	return mergeFindings(mergeFindingsInput{
-		orgID:                   args.OrganizationID,
-		metrics:                 a.metrics,
-		masks:                   masks,
-		exclusions:              exclusions,
-		builtinEnabled:          args.BuiltinPresetsEnabled,
-		builtinPresets:          a.builtinPresets,
-		gitleaksFindings:        gitleaksFindings,
-		presidioFindings:        presidioFindings,
-		shadowMCPFindings:       shadowMCPFindings,
-		destructiveToolFindings: destructiveToolFindings,
-		cliDestructiveFindings:  cliDestructiveFindings,
-		promptInjectionFindings: promptInjectionFindings,
-		customFindings:          customFindings,
-	}, ctx), nil
+	return metering.RiskProvenance{
+		OrganizationID:         args.OrganizationID,
+		ProjectID:              args.ProjectID,
+		RiskPolicyID:           args.RiskPolicyID,
+		RiskPolicyVersion:      args.PolicyVersion,
+		PolicyLinkReason:       "",
+		ChatID:                 msg.ChatID,
+		ExternalConversationID: "",
+		ChatMessageID:          chatMessageID,
+		ContentPartID:          msg.chatContentPartID().UUID,
+		MessageLinkReason:      messageLinkReason,
+		OperationID:            batchOperationID(args, msg, executionPath),
+		ExecutionPath:          executionPath,
+		RequestID:              requestID,
+		MessageType:            msg.Type,
+		HookSource:             msg.Source,
+		UserID:                 msg.UserID,
+		ToolCallID:             toolCallID,
+		ToolName:               toolName,
+		Model:                  "",
+		Provider:               "",
+	}
 }
 
-type mergeFindingsInput struct {
-	orgID                   string
-	metrics                 *riskMetrics
-	masks                   CategoryScopeMasks
-	exclusions              ExclusionSet
-	builtinEnabled          bool
-	builtinPresets          *presetlib.Library
-	gitleaksFindings        [][]scanners.Finding
-	presidioFindings        [][]scanners.Finding
-	shadowMCPFindings       [][]scanners.Finding
-	destructiveToolFindings [][]scanners.Finding
-	cliDestructiveFindings  [][]scanners.Finding
-	promptInjectionFindings [][]scanners.Finding
-	customFindings          [][]scanners.Finding
+// llmLane is the fine-tuned LLM analyzer lane a standard-policy batch uses.
+type llmLane struct {
+	// enforcing means the lane replaces the per-source engines for the sources the
+	// model enforces (the llm risk engine mode).
+	enforcing bool
+
+	// shadow means the lane only records the model's verdict for comparison
+	// while the per-source engines keep enforcing (the shadow risk engine mode).
+	shadow bool
+
+	// orgSlug is carried on each request for the analyzer's attribution.
+	orgSlug string
 }
 
-func mergeFindings(in mergeFindingsInput, ctx context.Context) [][]scanners.Finding {
-	merged := make([][]scanners.Finding, len(in.gitleaksFindings))
-	for i := range merged {
-		combined := concatFindings(
-			in.gitleaksFindings[i],
-			in.presidioFindings[i],
-			in.shadowMCPFindings[i],
-			in.destructiveToolFindings[i],
-			in.cliDestructiveFindings[i],
-			in.promptInjectionFindings[i],
-			in.customFindings[i],
+// ownEngineRuns reports whether source's own engine still evaluates it.
+// prompt_injection is only compared by the model, so its engine always runs.
+func (l llmLane) ownEngineRuns(source string) bool {
+	return !l.enforcing || !llmanalyzer.Enforces(source)
+}
+
+// runs reports whether the policy selects source and its own engine evaluates it.
+func (l llmLane) runs(sources sourceSet, source string) bool {
+	return sources.Has(source) && l.ownEngineRuns(source)
+}
+
+// resolveLLMLane reads the risk engine mode for the batch's organization.
+//
+// The mode selects the engine behind every covered source (gitleaks,
+// presidio, prompt_injection, destructive_tool, cli_destructive). In the llm
+// mode the fine-tuned model's async lane replaces the per-source engines: no
+// per-source analysis request for those sources, whose findings come from the
+// model alone. In the shadow mode the per-source engines run exactly as in the
+// off mode and the same messages are also published to the model's lane,
+// marked shadow, so both engines' verdicts can be compared on identical
+// traffic without the model ever enforcing. Custom rules, shadow_mcp and
+// account_identity keep their engines in every mode.
+//
+// Both model modes only publish when this worker knows an analyzer is
+// configured: with GRAM_RISK_LLM_URL empty the streams consumer acks every
+// request without findings. The llm mode then falls back to the per-source
+// engines rather than leave the organization without async coverage; the
+// shadow mode just skips the comparison lane.
+func (a *AnalyzeBatch) resolveLLMLane(ctx context.Context, args AnalyzeBatchArgs) llmLane {
+	lane := llmLane{enforcing: false, shadow: false, orgSlug: ""}
+	if !llmanalyzer.CoversAnySource(args.Sources) {
+		return lane
+	}
+	mode, orgSlug := policyflags.ProjectFlagMode(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagRiskLLMAnalyzer)
+	switch {
+	case mode == feature.VariantRiskLLMLLM && a.llmAnalyzerEnabled:
+		lane.enforcing, lane.orgSlug = true, orgSlug
+	case mode == feature.VariantRiskLLMLLM:
+		a.llmFallbackOnce.Do(func() {
+			a.logger.WarnContext(ctx, "LLM analyzer mode llm but GRAM_RISK_LLM_URL empty; batch scans fall back to per-source engines",
+				attr.SlogOrganizationID(args.OrganizationID),
+				attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+			)
+		})
+		a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationFallbackLegacy, 1)
+	case mode == feature.VariantRiskLLMShadow && a.llmAnalyzerEnabled:
+		lane.shadow, lane.orgSlug = true, orgSlug
+	case mode == feature.VariantRiskLLMShadow:
+		a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationShadowSkipped, 1)
+	}
+	return lane
+}
+
+// publishLLMLane publishes the batch to the model's lane when one is active.
+// A shadow-lane publish failure is counted and swallowed: the shadow lane only
+// compares, so a dropped request costs the comparison one message, while
+// failing the activity would redrive the per-source engines behind an LLM
+// transport outage. The enforcing lane fails the activity instead.
+func (a *AnalyzeBatch) publishLLMLane(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, lane llmLane, sources sourceSet, masks CategoryScopeMasks) error {
+	if !lane.enforcing && !lane.shadow {
+		return nil
+	}
+	failed, err := a.publishLLMScanRequests(ctx, args, messages, lane.orgSlug, llmCoveredSources(sources), masks, lane.shadow)
+	if err != nil && lane.shadow {
+		a.logger.WarnContext(ctx, "shadow LLM analyzer scan dispatch failed for some messages; continuing without them",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(args.OrganizationID),
+			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+			attr.SlogRiskLLMPublishFailedCount(failed),
 		)
-		combined = filterByCategoryScopes(ctx, in.orgID, in.metrics, in.masks, i, combined)
-		if !in.exclusions.Empty() {
-			combined = in.exclusions.FilterFindings(combined)
-		}
-		if in.builtinEnabled {
-			combined = dropBuiltinFalsePositives(in.builtinPresets, combined)
-		}
-		merged[i] = dedup(combined)
+		a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationShadowPublishError, failed)
+		return nil
 	}
-	return merged
-}
-
-func filterByCategoryScopes(ctx context.Context, orgID string, metrics *riskMetrics, masks CategoryScopeMasks, i int, in []scanners.Finding) []scanners.Finding {
-	if len(in) == 0 {
-		return in
+	if err != nil {
+		return fmt.Errorf("llm analyzer scan dispatch: %w", err)
 	}
-	out := make([]scanners.Finding, 0, len(in))
-	for _, finding := range in {
-		cat := categoryForFinding(finding)
-		if masks.InScope(i, cat) {
-			out = append(out, finding)
-			continue
-		}
-		if len(masks.policyOut) == 0 || !masks.policyOut[i] {
-			metrics.RecordRecommendedScopeSuppressed(ctx, orgID, cat)
-		}
-	}
-	return out
-}
-
-func messageContents(messages []batchMessage) []string {
-	contents := make([]string, len(messages))
-	for i, msg := range messages {
-		contents[i] = msg.scanSurface()
-	}
-	return contents
-}
-
-func concatFindings(groups ...[]scanners.Finding) []scanners.Finding {
-	total := 0
-	for _, group := range groups {
-		total += len(group)
-	}
-	out := make([]scanners.Finding, 0, total)
-	for _, group := range groups {
-		out = append(out, group...)
-	}
-	return out
+	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -45,6 +46,16 @@ func cloneDB(t *testing.T) *pgxpool.Pool {
 	return conn
 }
 
+func newPresidioClient(t *testing.T) *risk_analysis.PresidioClient {
+	t.Helper()
+	return risk_analysis.NewPresidioClient(
+		infra.PresidioURL(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		testenv.NewLogger(t),
+	)
+}
+
 type testData struct {
 	orgID         string
 	projectID     uuid.UUID
@@ -54,6 +65,11 @@ type testData struct {
 }
 
 func seedTestData(t *testing.T, conn *pgxpool.Pool, enabled bool) testData {
+	t.Helper()
+	return seedTestDataWithScope(t, conn, enabled, nil)
+}
+
+func seedTestDataWithScope(t *testing.T, conn *pgxpool.Pool, enabled bool, mcpScope []byte) testData {
 	t.Helper()
 	ctx := t.Context()
 
@@ -85,6 +101,7 @@ func seedTestData(t *testing.T, conn *pgxpool.Pool, enabled bool) testData {
 		Name:           "test policy",
 		Sources:        []string{"gitleaks"},
 		Enabled:        enabled,
+		McpScope:       mcpScope,
 		Action:         "flag",
 		AudienceType:   "everyone",
 		AutoName:       false,

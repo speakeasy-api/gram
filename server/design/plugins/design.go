@@ -14,6 +14,18 @@ var _ = Service("plugins", func() {
 	Description("Manage distributable plugin bundles of MCP servers and hooks.")
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+	HTTP(func() {
+		shared.DeclareHTTPErrorResponses()
+		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+			ContentType("application/json")
+		})
+	})
+
+	distributionMethods()
 
 	Method("listPlugins", func() {
 		Description("List all plugins for the current project.")
@@ -98,11 +110,18 @@ var _ = Service("plugins", func() {
 
 		Result(PluginModel)
 
+		// Refused when turning auto sync off while the plugin has unsynced
+		// changes, or when changing the slug while auto sync is off.
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
 		HTTP(func() {
 			PUT("/rpc/plugins.updatePlugin")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
 		})
 
 		Meta("openapi:operationId", "updatePlugin")
@@ -304,13 +323,40 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadPluginPackage")
 	})
 
+	Method("rotateObservabilityCredential", func() {
+		Description("Rotate the observability plugin's hooks-scoped ingest credential. Mints a replacement key, republishes the marketplace when possible so installs pick it up, and either revokes previous plugin hooks keys immediately or keeps them valid for a grace window.")
+
+		Payload(func() {
+			Attribute("previous_key_fate", String, func() {
+				Description("What happens to existing observability plugin hooks keys after the replacement is minted.")
+				Enum("revoke_immediately", "grace")
+			})
+			Required("previous_key_fate")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RotateObservabilityCredentialResult)
+
+		HTTP(func() {
+			POST("/rpc/plugins.rotateObservabilityCredential")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "rotateObservabilityCredential")
+		Meta("openapi:extension:x-speakeasy-name-override", "rotateObservabilityCredential")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RotateObservabilityCredential"}`)
+	})
+
 	Method("downloadObservabilityPlugin", func() {
-		Description("Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
+		Description("Download a ZIP of the per-org observability plugin (Speakeasy hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
 
 		Payload(func() {
 			Attribute("platform", String, func() {
 				Description("Target platform.")
-				Enum("claude", "cursor", "codex", "opencode", "copilot", "openclaw")
+				Enum("claude", "cursor", "codex", "opencode", "copilot", "openclaw", "pi", "vibe")
 			})
 			Required("platform")
 			security.SessionPayload()
@@ -441,7 +487,8 @@ var _ = Service("plugins", func() {
 		Description("Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.")
 
 		Payload(func() {
-			Attribute("marketplace_name", String, "Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string or omit to clear the override and fall back to the default.")
+			Attribute("marketplace_name", String, "Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string to clear the override and fall back to the default. Omit to leave the current override unchanged.")
+			Attribute("observability_enabled", Boolean, "Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Omit to leave the current value unchanged.")
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -463,9 +510,7 @@ var _ = Service("plugins", func() {
 
 // --- Models ---
 
-// PluginServerModel represents an MCP server included in a plugin. The server
-// is backed by exactly one of a Gram toolset (toolset_id) or a Remote
-// MCP-backed mcp_server (mcp_server_id).
+// PluginServerModel represents one toolset, MCP server, or gateway in a plugin.
 var PluginServerModel = Type("PluginServer", func() {
 	Required("id", "display_name", "policy", "sort_order", "created_at")
 
@@ -474,11 +519,15 @@ var PluginServerModel = Type("PluginServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID. Set when this server is toolset-backed (exactly one of toolset_id / mcp_server_id is set).")
+		Description("Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one of toolset_id / mcp_server_id is set).")
+		Description("Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.")
+		Format(FormatUUID)
+	})
+	Attribute("meta_mcp_server_id", String, func() {
+		Description("MCP gateway ID. When set, no other backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("display_name", String, "Display name shown in generated plugin config.")
@@ -494,13 +543,17 @@ var PluginServerModel = Type("PluginServer", func() {
 
 // PluginAssignmentModel represents a role or user assignment for a plugin.
 var PluginAssignmentModel = Type("PluginAssignment", func() {
-	Required("id", "principal_urn", "created_at")
+	Required("id", "principal_urn", "install_mode", "created_at")
 
 	Attribute("id", String, func() {
 		Description("Unique assignment identifier.")
 		Format(FormatUUID)
 	})
 	Attribute("principal_urn", String, "Principal URN (e.g. role:organization:<uuid>, user:id, or *).")
+	Attribute("install_mode", String, func() {
+		Description("How the device agent installs the plugin for this audience. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on.")
+		shared.InstallModeEnum()
+	})
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -520,7 +573,7 @@ var PluginAudienceModel = Type("PluginAudience", func() {
 
 // PluginModel is the full plugin representation.
 var PluginModel = Type("Plugin", func() {
-	Required("id", "name", "slug", "agent_plugins_v1_compatible", "created_at", "updated_at")
+	Required("id", "name", "slug", "auto_created", "auto_sync_enabled", "auto_add_servers_enabled", "agent_plugins_v1_compatible", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin identifier.")
@@ -530,6 +583,9 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("slug", String, "URL-safe identifier, unique per org.")
 	Attribute("description", String, "Optional description.")
 	Attribute("is_default", Boolean, "Whether this is the project's fallback plugin that new servers attach to.")
+	Attribute("auto_created", Boolean, "Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.")
+	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. When false, they wait until someone syncs the marketplace by hand.")
+	Attribute("auto_add_servers_enabled", Boolean, "Whether the plugin's role audiences add and remove its MCP servers automatically, based on the MCP servers those roles can use. When false, only manual changes alter the plugin's server list.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
 	Attribute("skill_count", Int64, "Number of active skills in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")
@@ -552,6 +608,8 @@ var CreatePluginForm = Type("CreatePluginForm", func() {
 	Attribute("name", String, "Display name for the plugin.")
 	Attribute("slug", String, "Optional URL-safe identifier. Auto-generated from name if omitted.")
 	Attribute("description", String, "Optional description.")
+	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.")
+	Attribute("auto_add_servers_enabled", Boolean, "Whether the plugin's role audiences add and remove its MCP servers automatically. Defaults to false.")
 })
 
 var UpdatePluginForm = Type("UpdatePluginForm", func() {
@@ -563,6 +621,8 @@ var UpdatePluginForm = Type("UpdatePluginForm", func() {
 	Attribute("name", String, "Updated display name.")
 	Attribute("slug", String, "Updated slug.")
 	Attribute("description", String, "Updated description.")
+	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.")
+	Attribute("auto_add_servers_enabled", Boolean, "Whether the plugin's role audiences add and remove its MCP servers automatically. Omit to keep the current setting. Turning it on adds the MCP servers its assigned roles can use now, except ones an admin removed before.")
 })
 
 var AddPluginServerForm = Type("AddPluginServerForm", func() {
@@ -572,14 +632,18 @@ var AddPluginServerForm = Type("AddPluginServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID for a toolset-backed MCP server. Provide exactly one of toolset_id or mcp_server_id.")
+		Description("Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may both be sent when equal.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of toolset_id or mcp_server_id.")
+		Description("Speakeasy MCP server ID. Provide exactly one backend ID; a hosted MCP server's toolset_id and mcp_server_id may both be sent when equal.")
 		Format(FormatUUID)
 	})
-	Attribute("display_name", String, "Display name for the server. Defaults to the backing toolset or mcp_server name when omitted.")
+	Attribute("meta_mcp_server_id", String, func() {
+		Description("MCP gateway ID. Provide exactly one backend ID.")
+		Format(FormatUUID)
+	})
+	Attribute("display_name", String, "Display name for the server. Defaults to the backing server name when omitted.")
 	Attribute("policy", String, func() {
 		Enum("required", "optional")
 		Default("required")
@@ -615,6 +679,11 @@ var SetPluginAssignmentsForm = Type("SetPluginAssignmentsForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("principal_urns", ArrayOf(String), "List of principal URNs to assign.")
+	Attribute("install_modes", MapOf(String, String, func() {
+		Elem(func() {
+			shared.InstallModeEnum()
+		})
+	}), "Install mode per principal URN in principal_urns. A principal missing from this map keeps its current mode, or gets `default` when it is newly assigned.")
 })
 
 // --- Results ---
@@ -641,13 +710,26 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 	Attribute("marketplace_url", String, "Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.")
 	Attribute("claude_observability_plugin", String, "Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
 	Attribute("codex_observability_plugin", String, "Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
+	Attribute("cursor_observability_plugin", String, "Slug of the generated Cursor observability plugin in the published marketplace — the value to mark required in Cursor's team marketplace. Present when connected.")
+	Attribute("vibe_observability_available", Boolean, "Whether the Mistral Vibe observability plugin ZIP can be downloaded right now: the pinned hooks release's relay carries the vibe provider and the org name satisfies the Agent Plugins 1.0 name schema. Present (true or false) when connected and observability is enabled for the project.")
+	Attribute("vibe_observability_plugin", String, "Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present only when connected, observability is enabled, the vibe package is available, and the stored published hooks version equals the current generator version, i.e. the published marketplace repo actually carries the package. The marketplace repo directory is `<slug>-vibe`.")
 	Attribute("has_collaborators", Boolean, "Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.")
-	Attribute("up_to_date", Boolean, "Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).")
+	Attribute("up_to_date", Boolean, "Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).")
+	Attribute("automatic_sync_pending", Boolean, "Whether an automatic publish would change the published marketplace. False while the only pending changes belong to plugins whose auto sync is off, which publish only on a manual sync. Absent when up_to_date is absent.")
+	Attribute("plugins", ArrayOf(PluginPublishStatus), "Each live plugin's own freshness. Absent when up_to_date is absent.")
 	Attribute("last_published_at", String, func() {
 		Description("When the project was last published to GitHub. Absent when the project is not connected.")
 		Format(FormatDateTime)
 	})
 	Attribute("live_version", String, "Version stamped into the currently published plugin.json manifests (e.g. 0.1.1783692954) — the version plugin clients such as Claude Code report for installed plugins. Absent when the project is not connected or the live version could not be determined.")
+})
+
+var PluginPublishStatus = Type("PluginPublishStatus", func() {
+	Required("slug", "up_to_date", "awaiting_manual_sync")
+
+	Attribute("slug", String, "The plugin's slug.")
+	Attribute("up_to_date", Boolean, "Whether the plugin's published package is current. With auto sync on: an automatic publish would push nothing new for it, its package and the marketplace manifests alike. With auto sync off: its package matches what it was last published with.")
+	Attribute("awaiting_manual_sync", Boolean, "Whether the plugin's auto sync is off and it has changes, or has never been published, so only a manual sync publishes it.")
 })
 
 var PublishPluginsResult = Type("PublishPluginsResult", func() {
@@ -656,11 +738,12 @@ var PublishPluginsResult = Type("PublishPluginsResult", func() {
 })
 
 var MarketplaceSettingsResult = Type("MarketplaceSettingsResult", func() {
-	Required("default_name", "effective_name")
+	Required("default_name", "effective_name", "observability_enabled")
 
 	Attribute("marketplace_name", String, "User-provided override for the marketplace name. Absent when no override is configured.")
 	Attribute("default_name", String, "The default marketplace name used when no override is configured.")
 	Attribute("effective_name", String, "The marketplace name that will be used at publish time (override if set, otherwise default).")
+	Attribute("observability_enabled", Boolean, "Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Defaults to true when unset.")
 })
 
 var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", func() {
@@ -669,4 +752,38 @@ var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", fu
 	Attribute("settings", MarketplaceSettingsResult, "The updated marketplace settings.")
 	Attribute("republished", Boolean, "Whether the marketplace was automatically republished to GitHub as part of this update.")
 	Attribute("hooks_update_deferred", Boolean, "True when the new name reached the MCP plugins and marketplace manifests but the observability (hooks) plugin could not be updated yet because the organization is not approved for the latest hooks version; it will update automatically once the organization is rolled forward.")
+})
+
+var RotatedObservabilityKey = Type("RotatedObservabilityKey", func() {
+	Required("id", "name", "key_prefix")
+
+	Attribute("id", String, func() {
+		Description("The API key ID.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The API key name.")
+	Attribute("key_prefix", String, "The recognizable prefix of the previous key.")
+	Attribute("expires_at", String, func() {
+		Description("When this key stops authenticating. A key already inside a shorter grace window keeps its earlier deadline, so this can precede the rotation's own deadline. Absent when the key was revoked immediately.")
+		Format(FormatDateTime)
+	})
+})
+
+var RotateObservabilityCredentialResult = Type("RotateObservabilityCredentialResult", func() {
+	Required("key", "key_prefix", "previous_key_fate", "previous_keys", "previous_keys_retired", "marketplace_republished")
+
+	Attribute("key", String, "The newly minted hooks-scoped API key. Returned only on this response.")
+	Attribute("key_prefix", String, "The recognizable prefix of the new key.")
+	Attribute("previous_key_fate", String, func() {
+		Description("What happened to previous observability plugin hooks keys.")
+		Enum("revoke_immediately", "grace")
+	})
+	Attribute("previous_keys", ArrayOf(RotatedObservabilityKey), "Previous observability plugin hooks keys that were revoked or scheduled to expire.")
+	Attribute("previous_keys_expire_at", String, func() {
+		Description("The latest deadline among previous keys when previous_key_fate is grace. Individual keys can expire earlier, so this is an upper bound rather than a shared deadline; per-key deadlines are on previous_keys.")
+		Format(FormatDateTime)
+	})
+	Attribute("previous_keys_retired", Boolean, "Whether the chosen fate was applied to the previous keys. False means the replacement was created and published but retiring the previous keys failed, so they are still valid and the rotation should be retried.")
+	Attribute("marketplace_republished", Boolean, "Whether the published marketplace was updated with the new credential.")
+	Attribute("marketplace_update_deferred", Boolean, "True when a marketplace exists but could not be updated yet (for example the organization is not approved for the latest hooks version, or GitHub publishing is unavailable). Existing marketplace installs keep the previous credential until the marketplace is republished.")
 })

@@ -15,6 +15,7 @@
 package celenv
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -27,6 +28,7 @@ import (
 	"github.com/google/cel-go/ext"
 	"github.com/tidwall/gjson"
 
+	"github.com/speakeasy-api/gram/server/internal/celeval"
 	"github.com/speakeasy-api/gram/server/internal/message"
 )
 
@@ -162,6 +164,22 @@ func (e *Engine) Compile(expr string) (cel.Program, error) {
 	return prg, nil
 }
 
+// NewCompiler creates an independent bounded cache of risk predicates. Runtime
+// and source-size limits remain at the environment defaults to preserve the
+// accepted rule language. Save-time Compile retains its detailed diagnostics.
+func (e *Engine) NewCompiler(capacity int) (*celeval.Compiler, error) {
+	compiler, err := celeval.New(e.env, celeval.Config{
+		Capacity:           capacity,
+		Predicate:          true,
+		MaxExpressionBytes: 0,
+		CostLimit:          nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create risk predicate compiler: %w", err)
+	}
+	return compiler, nil
+}
+
 // EvalScope evaluates the predicate and returns its boolean verdict. Spans are
 // not collected.
 func (e *Engine) EvalScope(prg cel.Program, msg Message) (bool, error) {
@@ -181,15 +199,11 @@ func (e *Engine) EvalScope(prg cel.Program, msg Message) (bool, error) {
 // fire and no spans are returned.
 func (e *Engine) EvalDetection(prg cel.Program, msg Message) ([]Span, bool, error) {
 	coll := &collector{spans: nil}
-	out, _, err := prg.Eval(activation(msg, coll))
+	matched, err := celeval.EvalPredicate(context.Background(), prg, activation(msg, coll))
 	if err != nil {
 		return nil, false, fmt.Errorf("eval detection: %w", err)
 	}
-	b, ok := out.(types.Bool)
-	if !ok {
-		return nil, false, fmt.Errorf("detection evaluated to %s, want bool", out.Type())
-	}
-	if !bool(b) {
+	if !matched {
 		return nil, false, nil
 	}
 	return coll.spans, true, nil

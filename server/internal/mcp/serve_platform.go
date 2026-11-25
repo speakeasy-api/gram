@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"goa.design/goa/v3/security"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,17 +20,20 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -41,13 +48,10 @@ const PlatformToolsetRoute = "/platform/mcp/{toolsetSlug}"
 const platformToolsetMaxBodyBytes = 1 << 20
 
 // ServePlatformToolset is the runtime-only entrypoint for platform toolsets:
-// only the assistant token is accepted, so user OAuth/API keys/chat sessions
-// are intentionally not honored here.
+// accepts runtime-bound assistant credentials, resource-bound workloads, and
+// principal-mode agent API keys. User OAuth, ordinary user API keys, and chat sessions are not accepted.
 func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
 
 	slug := chi.URLParam(r, "toolsetSlug")
 	if slug == "" {
@@ -56,7 +60,20 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 
 	toolset, ok := s.platformToolsets[slug]
 	if !ok {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		return rejectMissingMCPTarget(w, r, s.logger, mcpversions.SupportedPlatformToolset(),
+			oops.E(oops.CodeNotFound, nil, "platform toolset not found"))
+	}
+
+	prepared, handled, err := s.prepareTerminatedMCPRequest(
+		w,
+		r,
+		s.logger,
+		platformToolsetMaxBodyBytes,
+		mcpversions.SupportedPlatformToolset(),
+		mcpmetrics.SurfacePlatform,
+	)
+	if err != nil || handled {
+		return err
 	}
 
 	token := httpheaders.AuthorizationBearerToken(r)
@@ -64,65 +81,67 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	authedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
+	var authedCtx context.Context
+	workloadPlatform := false
+	if principalcredential.IsToken(token) {
+		// Turn credentials must retain their live assistant/thread binding.
+		// Generic principal authentication would discard that runtime fence.
+		authedCtx, _, err = s.assistantTokens.AuthorizeRuntime(ctx, token)
+	} else if strings.HasPrefix(token, "gram_") {
+		authedCtx, err = s.auth.AuthorizeWithPostAuthenticationCheck(ctx, token, &security.APIKeyScheme{Name: constants.KeySecurityScheme, Scopes: nil, RequiredScopes: []string{"consumer"}}, func(ctx context.Context) error {
+			actor, ok := contextvalues.AuthenticatedActor(ctx)
+			mode, principalKey := contextvalues.APIKeyAuthorization(ctx)
+			if !ok || actor.Type != urn.PrincipalTypeAgent || !principalKey || mode != contextvalues.APIKeyAuthorizationModePrincipal {
+				return oops.C(oops.CodeUnauthorized)
+			}
+			return nil
+		})
+	} else {
+		authedCtx, workloadPlatform, err = s.authorizeWorkloadPlatform(ctx, token, platformtools.PlatformToolsetURL(s.serverURL, slug))
+		if !workloadPlatform {
+			authedCtx, _, err = s.assistantTokens.AuthorizeRuntime(ctx, token)
+		}
+	}
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "failed to authorize platform toolset request").LogError(ctx, s.logger)
+		return fmt.Errorf("authorize platform agent: %w", err)
 	}
 	ctx = authedCtx
+	if project := r.Header.Get("Gram-Project"); project != "" && !workloadPlatform {
+		ctx, err = s.auth.Authorize(ctx, project, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema, Scopes: nil, RequiredScopes: nil})
+		if err != nil {
+			return err
+		}
+	}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.E(oops.CodeUnauthorized, nil, "no project auth context").LogError(ctx, s.logger)
 	}
+	metering.AttributeMCPBandwidth(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypePlatformToolset, slug, slug)
 
 	if err := s.authorizePlatformToolset(ctx, slug, authCtx); err != nil {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeNotFound {
+			return rejectPreparedMCPTarget(w, r, s.logger, prepared, mcpversions.SupportedPlatformToolset(), err)
+		}
+		return err
+	}
+	if prepared.empty() {
+		return nil
+	}
+	if err := validateMCPRequestEnvelope(ctx, s.logger, prepared, oops.CodeRequestTooLarge, "platform toolset request body exceeds 1 MiB"); err != nil {
 		return err
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, platformToolsetMaxBodyBytes)
-
-	bodyBytes, err := io.ReadAll(r.Body)
-	var maxBytesErr *http.MaxBytesError
-	switch {
-	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
-		return nil
-	case errors.As(err, &maxBytesErr):
-		return oops.E(oops.CodeRequestTooLarge, err, "platform toolset request body exceeds 1 MiB").LogError(ctx, s.logger)
-	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, s.logger)
-	}
-
-	if len(bodyBytes) > 0 && bodyBytes[0] == '[' {
-		return oops.E(oops.CodeBadRequest, nil, "batch requests are not supported").LogError(ctx, s.logger)
-	}
-
-	var req rawRequest
-	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").LogError(ctx, s.logger)
-	}
-	if req.JSONRPC != "2.0" {
-		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)
-	}
-
-	// Resolved once per request; the initialize handler overwrites InEffect
-	// with the negotiated answer, which is the one sanctioned mutation.
-	protocolVersion := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedPlatformToolset())
+	req := prepared.request
+	protocolVersion := prepared.protocolVersion
 
 	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"), &protocolVersion)
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(req.ID, err))
-		if merr != nil {
-			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").LogError(ctx, s.logger)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if _, writeErr := w.Write(bs); writeErr != nil {
-			return oops.E(oops.CodeUnexpected, writeErr, "failed to write error response body").LogError(ctx, s.logger)
-		}
-		return nil
+		return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -134,10 +153,10 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 }
 
 // authorizePlatformToolset gates entry to a platform toolset before any work
-// runs. The managed-assistant toolset carries the dashboard egress tool and is
-// reserved for a project's managed assistant; any other assistant token for the
-// project is rejected as if the toolset did not exist, rather than relying on
-// downstream tools to refuse the call.
+// runs. The managed-only toolsets (Platform MCP read, Speakeasy Slack) stay
+// restricted to the managed assistant for runtime-bound credentials. Ordinary
+// agent credentials instead use live agent policy and per-tool authorization;
+// neither runtime variant requires a managed-assistant row for those callers.
 func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
 	switch slug {
 	case platformtools.ResearchToolsetSlug:
@@ -149,62 +168,33 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		// quietly grant them. If the runner is ever moved onto the assistant
 		// runtime, this is where its principal is checked.
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug:
+	case platformtools.PlatformMCPReadToolsetSlug, platformtools.SpeakeasySlackPlatformToolsetSlug:
 	default:
 		return nil
 	}
 
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
-	if !ok {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	}
-
-	managed, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, *authCtx.ProjectID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger)
-	}
-
-	if managed.ID != principal.AssistantID {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	}
-
-	// The two managed-only toolsets are rollout variants of each other: an org
-	// reaches exactly one, never both. The attachment decision in the
-	// assistants service resolves the same variant, but the assistant token
-	// lives inside the runner VM, so the serve path re-resolves rather than
-	// trusting attachment. A variant that cannot be resolved falls back to
-	// legacy, matching attachment, so an outage never leaves the managed
-	// assistant with no toolset at all.
-	variant := feature.VariantAssistantToolsLegacy
-	if s.features != nil {
-		resolved, err := feature.FlagVariant(ctx, s.features, feature.FlagAssistantPlatformMCP,
-			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
-		if err != nil {
-			s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
-		} else {
-			variant = feature.AssistantToolsVariant(resolved)
+	actor, agent := contextvalues.AuthenticatedActor(ctx)
+	principal, runtimeBound := contextvalues.GetAssistantPrincipal(ctx)
+	if runtimeBound || !agent || (actor.Type != urn.PrincipalTypeAgent && actor.Type != urn.PrincipalTypeWorkload) {
+		if !runtimeBound {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 		}
-	}
 
-	if slug != wantedToolsetSlug(variant) {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		managed, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, *authCtx.ProjectID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger)
+		}
+
+		if managed.ID != principal.AssistantID {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+
 	}
 
 	return nil
-}
-
-// wantedToolsetSlug maps a resolved rollout variant to the single managed-only
-// platform toolset that variant serves. Keep in lockstep with
-// assistantPlatformSlugs in the assistants service — the two must agree or a
-// toolset is attached at bootstrap and then 404s on every request.
-func wantedToolsetSlug(variant feature.Variant) string {
-	if variant == feature.VariantAssistantToolsPlatformMCP {
-		return platformtools.PlatformMCPReadToolsetSlug
-	}
-	return platformtools.ManagedAssistantPlatformToolsetSlug
 }
 
 func (s *Service) handlePlatformToolsetRequest(
@@ -224,27 +214,75 @@ func (s *Service) handlePlatformToolsetRequest(
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
 		defer func() {
-			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, time.Since(start))
+			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, "", time.Since(start))
 		}()
 	}
 
+	// The declared extensions are resolved only for an extension method: the
+	// flag behind them costs a lookup, and a core method's availability does
+	// not depend on it. Every path below evaluates the flag at most once.
+	var extensions []string
+	if mcpversions.KnownExtensionMethod(req.Method) {
+		extensions = s.platformExtensions(ctx, authCtx)
+	}
+	if !methodAvailable(req, *protocolVersion, mcpversions.SupportedPlatformToolset(), extensions) {
+		return nil, unavailableMethod(req)
+	}
+
 	switch req.Method {
-	case "ping":
+	case mcpversions.MethodPing:
 		return handlePing(ctx, s.logger, req.ID, serverInfoPlatformToolset)
-	case "initialize":
-		return handlePlatformInitialize(ctx, s.logger, s.metrics, req, protocolVersion)
-	case "notifications/initialized", "notifications/cancelled":
+	case mcpversions.MethodServerDiscover:
+		return handleServerDiscover(ctx, s.logger, req.ID, describePlatformServer(s.platformSkillsEnabled(ctx, authCtx)), mcpversions.SupportedPlatformToolset())
+	case mcpversions.MethodInitialize:
+		return handlePlatformInitialize(ctx, s.logger, s.metrics, req, protocolVersion, s.platformSkillsEnabled(ctx, authCtx))
+	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
-	case "tools/list":
-		return s.listPlatformToolsetTools(ctx, authCtx, toolset, req)
-	case "tools/call":
+	case mcpversions.MethodToolsList, mcpversions.MethodToolsCall:
+		// Listing and calling run in the same acting context, so the tools a
+		// caller is offered are exactly the ones it may call.
+		if toolset.ActingContext != nil {
+			acting, err := toolset.ActingContext(ctx)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "prepare platform toolset request").LogError(ctx, s.logger)
+			}
+			ctx = acting
+		}
+		if req.Method == mcpversions.MethodToolsList {
+			return s.listPlatformToolsetTools(ctx, authCtx, toolset, req)
+		}
 		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req, chatIDHeader)
+	case mcpversions.MethodResourcesList:
+		// The platform toolset has resources only while it declares the
+		// Skills extension, and even then lists none: skills are listed
+		// through skills/list. Without the extension there is no resources
+		// capability, and the method stays unknown.
+		if !s.platformSkillsEnabled(ctx, authCtx) {
+			return nil, unavailableMethod(req)
+		}
+		return s.listPlatformResources(ctx, req)
+	case mcpversions.MethodResourcesRead:
+		// While the extension is off the surface declares no resources, so
+		// the method stays unknown, as it was before the extension existed.
+		// While it is on, an embedded skill's SKILL.md is the only resource
+		// this surface reads, and any other URI is an unknown resource.
+		if !s.platformSkillsEnabled(ctx, authCtx) {
+			return nil, unavailableMethod(req)
+		}
+		return s.readPlatformResource(ctx, req)
+	case mcpversions.MethodSkillsList:
+		return s.listPlatformSkills(ctx, req)
+	case mcpversions.MethodSkillsGet:
+		return s.getPlatformSkill(ctx, req)
 	default:
-		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
+		return nil, unavailableMethod(req)
 	}
 }
 
-func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, protocolVersion *mcpversions.Resolution) (json.RawMessage, error) {
+// handlePlatformInitialize answers the handshake for the platform toolset.
+// skillsEnabled selects whether the Skills extension is declared among the
+// capabilities.
+func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, protocolVersion *mcpversions.Resolution, skillsEnabled bool) (json.RawMessage, error) {
 	// Malformed params must not fail the handshake, so a parse error is
 	// logged, the requested version is left unrecorded, and negotiation
 	// proceeds from an absent request — answering the unversioned default.
@@ -259,22 +297,18 @@ func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetr
 	// resolution because entry-time resolution saw a handshake with no
 	// declared version; anything downstream of dispatch must see the
 	// negotiated value.
-	negotiated := mcpversions.Negotiate(params.ProtocolVersion, mcpversions.SupportedPlatformToolset())
+	negotiated, ok := mcpversions.Negotiate(params.ProtocolVersion, mcpversions.SupportedPlatformToolset())
+	if !ok {
+		return nil, unavailableMethod(req)
+	}
 	protocolVersion.InEffect = negotiated
 
 	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, negotiated)
 	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, negotiated)
 
 	result := &result[initializeResult]{
-		ID: req.ID,
-		Result: initializeResult{
-			ProtocolVersion: negotiated,
-			Capabilities: map[string]json.RawMessage{
-				"tools": json.RawMessage("{}"),
-			},
-			ServerInfo:   serverInfoPlatformToolset,
-			Instructions: "",
-		},
+		ID:             req.ID,
+		Result:         describePlatformServer(skillsEnabled).initializeResult(negotiated),
 		serverIdentity: serverInfoPlatformToolset,
 		cacheHints:     nil,
 	}
@@ -299,6 +333,8 @@ func (s *Service) listPlatformToolsetTools(
 		return s.platformToolFeatureAvailable(ctx, authCtx.ActiveOrganizationID, feature, featureCache)
 	}
 
+	grantedScopes := s.grantedPlatformToolScopes(ctx, authCtx, toolset.Tools)
+
 	tools := make([]*toolListEntry, 0, len(toolset.Tools))
 	for _, extra := range toolset.Tools {
 		if extra.Executor == nil {
@@ -307,7 +343,10 @@ func (s *Service) listPlatformToolsetTools(
 		if !available(extra.RequiredFeature) {
 			continue
 		}
-		entry := toolToListEntry(extra.Executor.Descriptor().ToTool(*authCtx.ProjectID))
+		if extra.RequiredScope != "" && !grantedScopes[extra.RequiredScope] {
+			continue
+		}
+		entry := toolToListEntry(platformtools.DescriptorForContext(ctx, extra.Executor.Descriptor()).ToTool(*authCtx.ProjectID))
 		if entry != nil {
 			tools = append(tools, entry)
 		}
@@ -360,8 +399,11 @@ func (s *Service) callPlatformToolsetTool(
 	if !s.platformToolFeatureAvailable(ctx, authCtx.ActiveOrganizationID, matched.RequiredFeature, nil) {
 		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogError(ctx, s.logger)
 	}
+	if matched.RequiredScope != "" && !s.grantedPlatformToolScopes(ctx, authCtx, []platformtools.ExternalTool{matched})[matched.RequiredScope] {
+		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogWarn(ctx, s.logger)
+	}
 
-	desc := matched.Executor.Descriptor()
+	desc := platformtools.DescriptorForContext(ctx, matched.Executor.Descriptor())
 	descriptor := &gateway.ToolDescriptor{
 		ID:               desc.SyntheticID(),
 		Name:             desc.Name,
@@ -381,32 +423,34 @@ func (s *Service) callPlatformToolsetTool(
 		InputSchema: desc.InputSchema,
 		// The toolset slice is authoritative; the runtime's URN registry can
 		// hold a differently scoped variant of the same tool.
-		Executor: matched.Executor,
+		Executor: platformtools.WithThreadFallback(matched.Executor, s.resolvePlatformThreadContext),
 	})
 
 	ctx, logger := o11y.EnrichToolCallContext(ctx, s.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	rw := &toolCallResponseWriter{
-		headers:    make(http.Header),
-		body:       new(bytes.Buffer),
-		statusCode: http.StatusOK,
+		headers:       make(http.Header),
+		body:          new(bytes.Buffer),
+		statusCode:    http.StatusOK,
+		failure:       nil,
+		resultIsError: false,
 	}
 
 	gramEmail := conv.PtrValOrEmpty(authCtx.Email, "")
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  gramEmail,
 		GramChatID: chatIDHeader,
-		// Platform toolsets serve Gram's own tools, never customer functions.
-		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		// Platform toolsets serve Speakeasy's own tools, never customer functions.
+		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		Credentials: nil,
 	}
 
 	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		mcpURL = requestContext.Host + requestContext.ReqURL
-		s.metrics.RecordMCPToolCall(ctx, authCtx.ActiveOrganizationID, mcpURL, params.Name)
+		s.metrics.RecordMCPToolCall(ctx, authCtx.ActiveOrganizationID, mcpURL, "", params.Name)
 	}
 
 	if err := checkToolUsageLimits(ctx, logger, authCtx.ActiveOrganizationID, authCtx.AccountType, s.billingRepository); err != nil {
@@ -414,20 +458,25 @@ func (s *Service) callPlatformToolsetTool(
 	}
 
 	requestBodyBytes := params.Arguments
+	// Resolve selection once so execution and audit use the same target. This
+	// does not change caller identity; retain the original bytes for validation.
+	ctx, toolCallEnv, _, err := platformtools.PrepareThreadContext(ctx, desc, toolCallEnv, bytes.NewReader(requestBodyBytes), s.resolvePlatformThreadContext)
+	if err != nil {
+		return nil, platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
+	}
 	requestBytes := int64(len(requestBodyBytes))
 	var outputBytes int64
 	platformToolsetSlug := toolset.Slug
-	chatID := chatIDHeader
+	chatID := toolCallEnv.GramChatID
 	if chatID == "" {
-		if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		if principal, ok := contextvalues.GetAssistantToolTarget(ctx); ok {
 			chatID = principal.ThreadID.String()
 		}
 	}
 
-	// Platform toolsets are runtime-only, so every call here is assistant-
-	// initiated; record the durable audit trail entry on dispatch, regardless
-	// of how the tool execution turns out.
-	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+	// Record dispatch for automatic or explicitly selected assistant targets,
+	// retaining the authenticated caller as actor regardless of tool outcome.
+	if principal, ok := contextvalues.GetAssistantToolTarget(ctx); ok {
 		recordAssistantToolCallAudit(ctx, logger, s.auditLogger, s.db, assistantToolCallAudit{
 			organizationID: authCtx.ActiveOrganizationID,
 			projectID:      *authCtx.ProjectID,
@@ -456,6 +505,9 @@ func (s *Service) callPlatformToolsetTool(
 			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          nil,
+			MCPServerID:           nil,
+			MCPEndpointID:         nil,
+			MetaMCPServerID:       nil,
 			ChatID:                conv.PtrEmpty(chatID),
 			Type:                  plan.BillingType,
 			ResourceURI:           "",
@@ -465,10 +517,12 @@ func (s *Service) callPlatformToolsetTool(
 		})
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
+		logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(rw.statusCode, rw.resultIsError)
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		logAttrs.RecordAuthenticatedActor(ctx)
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
 
@@ -493,6 +547,32 @@ func (s *Service) callPlatformToolsetTool(
 		})
 	}()
 
+	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+		Surface:         mcpriskscan.SurfacePlatformMCP,
+		Method:          mcpriskscan.MethodToolsCall,
+		OrganizationID:  descriptor.OrganizationID,
+		ProjectID:       descriptor.ProjectID,
+		ServerID:        platformtools.PlatformToolsetID(toolset.Slug).String(),
+		MetaServerID:    "",
+		ToolsetID:       "",
+		ToolName:        descriptor.Name,
+		ResourceURI:     "",
+		PromptName:      "",
+		ChatID:          chatIDHeader,
+		ToolAnnotations: desc.Annotations,
+	}, mcpriskscan.BorrowPayload(requestBodyBytes))
+	decision := s.scanEvaluator.Scan(ctx, requestSubject)
+	if decision.HeldForApproval() {
+		// A held call is an instruction, not a refusal: the agent reads the
+		// tool result, requests approval and retries.
+		rw.resultIsError = true
+		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, serverInfoPlatformToolset)
+	}
+	if decision.Denied() {
+		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
+	}
 	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
 		failure := platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
 		recordToolCallErrorStatus(ctx, rw, failure)
@@ -500,15 +580,26 @@ func (s *Service) callPlatformToolsetTool(
 	}
 	outputBytes = int64(rw.body.Len())
 
-	chunk, structured, err := formatResult(*rw, plan.Kind)
+	responseContent, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to format platform tool call result").LogError(ctx, logger)
+	}
+	responsePayload, parseErr := mcpriskscan.ToolResultPayload(responseContent, structured)
+	if parseErr != nil {
+		responsePayload = mcpriskscan.Payload{}
+	}
+	decision = s.scanEvaluator.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+	if decision.Denied() {
+		discardWithheldBody(rw.body)
+		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
-			Content:           []json.RawMessage{chunk},
+			Content:           responseContent,
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
@@ -531,6 +622,39 @@ func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, 
 	}
 
 	return oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, args...)
+}
+
+// grantedPlatformToolScopes reports which of the tools' required scopes the
+// caller holds on the active project. One FindMatched call covers the batch,
+// so a hidden tool leaves a filter record for diagnosis without recording a
+// denied requirement: a tool the caller cannot use is simply not offered.
+// Any failure hides every scope-gated tool.
+func (s *Service) grantedPlatformToolScopes(ctx context.Context, authCtx *contextvalues.AuthContext, tools []platformtools.ExternalTool) map[string]bool {
+	granted := map[string]bool{}
+	if authCtx.ProjectID == nil {
+		return granted
+	}
+	scopes := make([]string, 0, len(tools))
+	checks := make([]authz.Check, 0, len(tools))
+	for _, tool := range tools {
+		if tool.RequiredScope == "" || slices.Contains(scopes, tool.RequiredScope) {
+			continue
+		}
+		scopes = append(scopes, tool.RequiredScope)
+		checks = append(checks, authz.Check{Scope: authz.Scope(tool.RequiredScope), ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}) //nolint:glint // norawauthzchecks: a platform tool declares its project scope as data
+	}
+	if len(checks) == 0 {
+		return granted
+	}
+	matched, err := s.authz.FindMatched(ctx, checks)
+	if err != nil {
+		s.logger.WarnContext(ctx, "match platform tool scopes; hiding scope-gated tools", attr.SlogError(err))
+		return granted
+	}
+	for i, scope := range scopes {
+		granted[scope] = matched[i]
+	}
+	return granted
 }
 
 // platformToolFeatureAvailable reports whether a platform tool gated on

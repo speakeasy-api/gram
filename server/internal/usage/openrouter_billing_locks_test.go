@@ -30,27 +30,18 @@ func TestBillingTransitionWaitsForEveryPlatformInferenceKeyLock(t *testing.T) {
 
 		transition := testenv.BeginTx(t, t.Context(), db)
 
-		acquired := make(chan error, 1)
-		go func() {
-			acquired <- acquireOpenRouterBillingLocks(t.Context(), repo.New(transition), organizationID)
-		}()
-
-		var earlyResult error
-		returnedEarly := false
-		select {
-		case earlyResult = <-acquired:
-			returnedEarly = true
-		case <-time.After(100 * time.Millisecond):
-		}
+		// probeTimeout proves each exact billing advisory key conflicts.
+		const probeTimeout = 100 * time.Millisecond
+		testenv.SetLockTimeout(t, t.Context(), transition, probeTimeout)
+		testenv.RequireLockNotAvailable(t, acquireOpenRouterBillingLocks(t.Context(), repo.New(transition), organizationID))
+		require.NoError(t, transition.Rollback(t.Context()))
 
 		unlocked, err := activitiesrepo.New(connection).ReleaseOpenRouterKeyBillingLock(t.Context(), activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(lockParams))
 		require.NoError(t, err)
 		require.True(t, unlocked)
 		connection.Release()
-		if returnedEarly {
-			require.FailNow(t, "billing transition bypassed inference-key lock", "key_type=%s err=%v", keyType, earlyResult)
-		}
-		require.NoError(t, <-acquired)
+		transition = testenv.BeginTx(t, t.Context(), db)
+		require.NoError(t, acquireOpenRouterBillingLocks(t.Context(), repo.New(transition), organizationID))
 		require.NoError(t, transition.Rollback(t.Context()))
 	}
 }

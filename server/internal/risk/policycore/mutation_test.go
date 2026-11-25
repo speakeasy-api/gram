@@ -25,6 +25,25 @@ func TestRequireFreshPolicyRejectsChangedLockedRow(t *testing.T) {
 	var stale *StalePolicyError
 	require.ErrorAs(t, err, &stale)
 }
+func TestValidateStoredMCPScopeAppliesFinalAction(t *testing.T) {
+	t.Parallel()
+
+	rawScope := []byte(`{"all_servers":true,"servers":[]}`)
+	require.NoError(t, validateStoredMCPScope(rawScope, []string{"gitleaks"}, "flag"))
+	require.NoError(t, validateStoredMCPScope(rawScope, []string{"gitleaks"}, "block"))
+	require.NoError(t, validateStoredMCPScope(nil, []string{"gitleaks"}, "warn"))
+
+	for _, action := range []string{"warn", "quarantine"} {
+		t.Run(action, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateStoredMCPScope(rawScope, []string{"gitleaks"}, action)
+			var validation *ValidationError
+			require.ErrorAs(t, err, &validation)
+			require.ErrorContains(t, err, "use flag or block")
+		})
+	}
+}
 
 func TestBlockingPolicyConflictExcludesCurrentPolicy(t *testing.T) {
 	t.Parallel()

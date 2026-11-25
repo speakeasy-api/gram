@@ -1,0 +1,77 @@
+import type { IconName } from "@/components/ui/Icon/names";
+import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
+import { useMemo } from "react";
+import { useNavigate } from "react-router";
+import { getRecentLabelOverride, useRecentlyVisited } from "../recentlyVisited";
+import type { LauncherCandidate } from "./types";
+
+/**
+ * Recently visited pages (localStorage) as candidates. Takes the same gating
+ * the palette applies today: the read only happens while the palette is open
+ * and the user id has resolved, so the shared anonymous key is never read —
+ * and until it has resolved there are no candidates at all, so entries read
+ * for an earlier user or scope never show under the next one.
+ */
+export function useRecentCandidates({
+  enabled,
+  userId,
+  orgSlug,
+  projectSlug,
+}: {
+  enabled: boolean;
+  userId: string | null;
+  orgSlug: string | undefined;
+  projectSlug: string | undefined;
+}): LauncherCandidate[] {
+  const navigate = useNavigate();
+  const assistantsAvailable = useAssistantsAvailable();
+  const resolved = enabled && Boolean(userId);
+  const recents = useRecentlyVisited(
+    userId ?? undefined,
+    orgSlug,
+    projectSlug,
+    resolved,
+  );
+
+  return useMemo(
+    () =>
+      (resolved ? recents : [])
+        // Channels is hidden from navigation; a stored visit must not
+        // resurface it.
+        .filter(
+          (recent) =>
+            !/\/projects\/[^/]+\/channels(\/|$)/.test(
+              recent.href.split("?")[0]!,
+            ),
+        )
+        // Chat and Assistants redirect away on a deployment without
+        // assistants, so stored visits must not resurface them.
+        .filter(
+          (recent) =>
+            assistantsAvailable ||
+            !/\/projects\/[^/]+\/(chat|assistants)(\/|$)/.test(
+              recent.href.split("?")[0]!,
+            ),
+        )
+        .map((recent): LauncherCandidate => {
+          // Prefer a live name override over a stored URL-derived fallback so
+          // id-keyed pages show the resource name once it has loaded.
+          const label = getRecentLabelOverride(recent.href) ?? recent.label;
+
+          return {
+            id: `recent:${recent.href}`,
+            kind: "recent",
+            title: label,
+            detail: "Recently visited",
+            keywords: [recent.href],
+            verbs: ["open"],
+            icon: recent.icon as IconName | undefined,
+            group: "Recently Visited",
+            run: () => {
+              void navigate(recent.href);
+            },
+          };
+        }),
+    [resolved, recents, navigate, assistantsAvailable],
+  );
+}

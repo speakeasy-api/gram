@@ -10,15 +10,26 @@ import (
 )
 
 type McpEndpoint struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	CustomDomainID  uuid.NullUUID
-	McpServerID     uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	CustomDomainID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
 	MetaMcpServerID uuid.NullUUID
-	Slug            string
-	IsDomainRoot    pgtype.Bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	Slug string
+	// @access: confidential
+	IsDomainRoot pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

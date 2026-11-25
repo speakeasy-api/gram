@@ -89,6 +89,10 @@ type Task struct {
 	CorrelationID     string
 	EventJSON         []byte
 	RawPayload        []byte
+
+	// ThreadBackfill, when set, asks Dispatch to add conversation messages the
+	// target has not seen to EventJSON before delivery.
+	ThreadBackfill *ThreadBackfill
 }
 
 type cronTriggerConfig struct {
@@ -133,9 +137,11 @@ func WakeConfigFields(configJSON []byte) (string, string) {
 }
 
 type wakeTriggerConfig struct {
-	FireAt        time.Time `json:"fire_at"`
-	Note          *string   `json:"note,omitempty"`
-	CorrelationID string    `json:"correlation_id"`
+	IdentityVersion int       `json:"identity_version,omitempty"`
+	RequesterUserID string    `json:"requester_user_id,omitempty"`
+	FireAt          time.Time `json:"fire_at"`
+	Note            *string   `json:"note,omitempty"`
+	CorrelationID   string    `json:"correlation_id"`
 }
 
 func (c wakeTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
@@ -161,6 +167,8 @@ type cronTriggerEvent struct {
 }
 
 type wakeTriggerEvent struct {
+	IdentityVersion   int    `json:"identity_version,omitempty" cel:"identity_version"`
+	RequesterUserID   string `json:"requester_user_id,omitempty" cel:"requester_user_id"`
 	FiredAt           string `json:"fired_at" cel:"fired_at"`
 	ScheduledAt       string `json:"scheduled_at" cel:"scheduled_at"`
 	TriggerInstanceID string `json:"trigger_instance_id" cel:"trigger_instance_id"`
@@ -175,6 +183,8 @@ var registry = map[string]Definition{
 	DefinitionSlugCron:      newCronDefinition(),
 	DefinitionSlugWake:      newWakeDefinition(),
 	DefinitionSlugDashboard: newDashboardDefinition(),
+
+	DefinitionSlugSpeakeasySlack: newSpeakeasySlackDefinition(),
 }
 
 func List() []Definition {
@@ -325,6 +335,8 @@ func newWakeDefinition() Definition {
 				note = *cfg.Note
 			}
 			event := wakeTriggerEvent{
+				IdentityVersion:   cfg.IdentityVersion,
+				RequesterUserID:   cfg.RequesterUserID,
 				FiredAt:           firedAt.UTC().Format(time.RFC3339Nano),
 				ScheduledAt:       cfg.FireAt.UTC().Format(time.RFC3339Nano),
 				TriggerInstanceID: instance.ID.String(),
@@ -374,7 +386,7 @@ func newDashboardDefinition() Definition {
 	return Definition{
 		Slug:                 DefinitionSlugDashboard,
 		Title:                "Dashboard",
-		Description:          "Direct messages from the Gram dashboard assistant sidebar.",
+		Description:          "Direct messages from the Speakeasy dashboard assistant sidebar.",
 		Kind:                 KindDirect,
 		ConfigSchema:         schema,
 		CompiledConfigSchema: compiled,
@@ -473,6 +485,14 @@ func withArrayItemsEnum(propertyName string, values ...any) inputSchemaOption {
 	}
 }
 
+func withPropertyEnum(propertyName string, values ...any) inputSchemaOption {
+	return func(config *inputSchemaConfig) {
+		config.propertyMutators[propertyName] = append(config.propertyMutators[propertyName], func(prop *gjsonschema.Schema) {
+			prop.Enum = values
+		})
+	}
+}
+
 func absInt64(value int64) int64 {
 	if value < 0 {
 		return -value
@@ -502,7 +522,7 @@ func celTypeName(t reflect.Type) string {
 	return path.Base(t.PkgPath()) + "." + t.Name()
 }
 
-func toAnySlice(ss []string) []any {
+func toAnySlice[T any](ss []T) []any {
 	out := make([]any, len(ss))
 	for i, s := range ss {
 		out[i] = s

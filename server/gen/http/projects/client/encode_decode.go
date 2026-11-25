@@ -494,6 +494,244 @@ func DecodeCreateProjectResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildUpdateProjectRequest instantiates a HTTP request object with method and
+// path set to call the "projects" service "updateProject" endpoint
+func (c *Client) BuildUpdateProjectRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateProjectProjectsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("projects", "updateProject", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateProjectRequest returns an encoder for requests sent to the
+// projects updateProject server.
+func EncodeUpdateProjectRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*projects.UpdateProjectPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("projects", "updateProject", "*projects.UpdateProjectPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateProjectRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("projects", "updateProject", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateProjectResponse returns a decoder for responses returned by the
+// projects updateProject endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeUpdateProjectResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateProjectResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateProjectResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateProject", err)
+			}
+			err = ValidateUpdateProjectResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateProject", err)
+			}
+			res := NewUpdateProjectResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateProjectUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateProject", err)
+			}
+			err = ValidateUpdateProjectUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateProject", err)
+			}
+			return nil, NewUpdateProjectUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateProjectForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateProject", err)
+			}
+			err = ValidateUpdateProjectForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateProject", err)
+			}
+			return nil, NewUpdateProjectForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateProjectBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateProject", err)
+			}
+			err = ValidateUpdateProjectBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateProject", err)
+			}
+			return nil, NewUpdateProjectBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateProjectNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateProject", err)
+			}
+			err = ValidateUpdateProjectNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateProject", err)
+			}
+			return nil, NewUpdateProjectNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateProjectConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateProject", err)
+			}
+			err = ValidateUpdateProjectConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateProject", err)
+			}
+			return nil, NewUpdateProjectConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateProjectUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateProject", err)
+			}
+			err = ValidateUpdateProjectUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateProject", err)
+			}
+			return nil, NewUpdateProjectUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateProjectInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateProject", err)
+			}
+			err = ValidateUpdateProjectInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateProject", err)
+			}
+			return nil, NewUpdateProjectInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateProjectInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "updateProject", err)
+				}
+				err = ValidateUpdateProjectInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "updateProject", err)
+				}
+				return nil, NewUpdateProjectInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateProjectUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "updateProject", err)
+				}
+				err = ValidateUpdateProjectUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "updateProject", err)
+				}
+				return nil, NewUpdateProjectUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("projects", "updateProject", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateProjectGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateProject", err)
+			}
+			err = ValidateUpdateProjectGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateProject", err)
+			}
+			return nil, NewUpdateProjectGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("projects", "updateProject", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListProjectsRequest instantiates a HTTP request object with method and
 // path set to call the "projects" service "listProjects" endpoint
 func (c *Client) BuildListProjectsRequest(ctx context.Context, v any) (*http.Request, error) {

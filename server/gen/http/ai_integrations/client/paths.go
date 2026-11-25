@@ -7,6 +7,21 @@
 
 package client
 
+// GetAnthropicInferenceConfigAiIntegrationsPath returns the URL path to the aiIntegrations service getAnthropicInferenceConfig HTTP endpoint.
+func GetAnthropicInferenceConfigAiIntegrationsPath() string {
+	return "/rpc/aiIntegrations.getAnthropicInferenceConfig"
+}
+
+// UpsertAnthropicInferenceConfigAiIntegrationsPath returns the URL path to the aiIntegrations service upsertAnthropicInferenceConfig HTTP endpoint.
+func UpsertAnthropicInferenceConfigAiIntegrationsPath() string {
+	return "/rpc/aiIntegrations.upsertAnthropicInferenceConfig"
+}
+
+// DeleteAnthropicInferenceConfigAiIntegrationsPath returns the URL path to the aiIntegrations service deleteAnthropicInferenceConfig HTTP endpoint.
+func DeleteAnthropicInferenceConfigAiIntegrationsPath() string {
+	return "/rpc/aiIntegrations.deleteAnthropicInferenceConfig"
+}
+
 // GetConfigAiIntegrationsPath returns the URL path to the aiIntegrations service getConfig HTTP endpoint.
 func GetConfigAiIntegrationsPath() string {
 	return "/rpc/aiIntegrations.getConfig"
@@ -20,6 +35,11 @@ func UpsertConfigAiIntegrationsPath() string {
 // DeleteConfigAiIntegrationsPath returns the URL path to the aiIntegrations service deleteConfig HTTP endpoint.
 func DeleteConfigAiIntegrationsPath() string {
 	return "/rpc/aiIntegrations.deleteConfig"
+}
+
+// ListOrgUnitsAiIntegrationsPath returns the URL path to the aiIntegrations service listOrgUnits HTTP endpoint.
+func ListOrgUnitsAiIntegrationsPath() string {
+	return "/rpc/aiIntegrations.listOrgUnits"
 }
 
 // ListSchedulesAiIntegrationsPath returns the URL path to the aiIntegrations service listSchedules HTTP endpoint.

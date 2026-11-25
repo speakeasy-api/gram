@@ -29,4 +29,15 @@ type CacheState struct {
 	// upstream confirmed moments ago does not contain the kid, so probing
 	// again would only spend refresh budget.
 	RefreshedAt time.Time
+
+	// LastErrorAt records a failed upstream consult without changing the
+	// successful fetch time. It bounds retry attempts during an outage.
+	LastErrorAt time.Time
+
+	// LastError is a short public-safe category from the latest failed consult.
+	LastError string
+
+	// Revision is an opaque storage version used for conditional writes.
+	// Durable caches populate it from the row; in-memory caches leave it empty.
+	Revision string
 }

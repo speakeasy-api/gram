@@ -7,14 +7,15 @@ sandbox_src=/usr/share/gram/sandbox
 mkdir -p "$workdir"
 
 # The platform may mount an extra CA bundle (e.g. the mkcert root CA during
-# local development) so the runner and its sandbox children trust the Gram
+# local development) so the runner and its sandbox children trust the Speakeasy
 # server's TLS certificate. Build a combined bundle in /tmp rather than
 # mutating the system trust store, which must stay pristine (and may sit on a
 # read-only root filesystem).
 extra_ca=/usr/local/share/gram/extra-ca.pem
 if [ -f "$extra_ca" ]; then
   ca_bundle=/tmp/gram-ca-bundle.pem
-  cat /etc/ssl/certs/ca-certificates.crt "$extra_ca" > "$ca_bundle"
+  # Preserve the explicit distrust entries when adding the local CA.
+  cat /usr/local/share/gram/bun-ca-certificates.pem "$extra_ca" > "$ca_bundle"
   export SSL_CERT_FILE="$ca_bundle"
   export NODE_EXTRA_CA_CERTS="$extra_ca"
 fi

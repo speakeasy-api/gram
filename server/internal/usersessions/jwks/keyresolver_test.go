@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -40,6 +41,9 @@ func primeRotatable(t *testing.T, cache *MemoryCache, source Source, document []
 		ETag:        "",
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}))
 }
 
@@ -129,6 +133,24 @@ func TestVerificationKey_RefreshRateLimited(t *testing.T) {
 	require.Equal(t, 1, server.Fetches())
 }
 
+func TestVerificationKey_RowCacheKeysShareURIRefreshBudget(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "new")))
+	kr, cache := newTestKeyResolver(t, server, ratelimit.PerMinute(1))
+	base := remoteSourceFor(t, server)
+	first := base.WithCacheKey("issuer-row-1|" + base.CacheKey())
+	second := base.WithCacheKey("issuer-row-2|" + base.CacheKey())
+	primeRotatable(t, cache, first, keySetJSON(t, testKey(t, "old")))
+	primeRotatable(t, cache, second, keySetJSON(t, testKey(t, "old")))
+
+	_, err := kr.VerificationKey(t.Context(), first, "new")
+	require.NoError(t, err)
+	_, err = kr.VerificationKey(t.Context(), second, "missing")
+	require.ErrorIs(t, err, ErrRefreshRateLimited)
+	require.Equal(t, 1, server.Fetches())
+}
+
 // The scope budget bounds fetches across every source a scope names. Two
 // never-seen sources in one scope with a budget of one: the first cold fetch
 // spends it and the second is refused before any request leaves. A different
@@ -212,6 +234,9 @@ func TestVerificationKey_FetchScopeBudgetCoversRescreenFailure(t *testing.T) {
 		ETag:        "",
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now(),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}))
 	_, err = kr.VerificationKey(t.Context(), source, "a")
 	require.ErrorIs(t, err, ErrFetchRateLimited)
@@ -357,6 +382,58 @@ func TestVerificationKey_FailedConsultEntersCooldown(t *testing.T) {
 	require.Equal(t, 1, server.Fetches(), "a failed consult negative-caches like a successful one")
 }
 
+func TestVerificationKey_ExpiredCacheFailureUsesBoundedRetryCooldown(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	kr, cache := newTestKeyResolver(t, server, generousRate())
+	source := remoteSourceFor(t, server)
+	lastSuccess := time.Now().Add(-time.Hour)
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), CacheState{
+		Document: keySetJSON(t, testKey(t, "a")), ETag: "", ExpiresAt: time.Now().Add(-time.Minute),
+		RefreshedAt: lastSuccess, LastErrorAt: time.Time{}, LastError: "", Revision: "",
+	}))
+	server.SetStatus(503)
+	_, err := kr.VerificationKey(t.Context(), source, "a")
+	require.ErrorIs(t, err, ErrKeySetUnavailable)
+	require.Equal(t, 1, server.Fetches())
+	stored, err := cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.Equal(t, lastSuccess, stored.RefreshedAt)
+	require.WithinDuration(t, time.Now(), stored.LastErrorAt, time.Minute)
+	require.Equal(t, "JWKS endpoint temporarily unavailable (HTTP 503)", stored.LastError)
+
+	_, err = kr.VerificationKey(t.Context(), source, "a")
+	require.ErrorIs(t, err, ErrKeySetUnavailable)
+	require.Equal(t, 1, server.Fetches(), "the failed refresh is not repeated during the cooldown")
+
+	stored.LastErrorAt = time.Now().Add(-refreshCooldown - time.Second)
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), stored))
+	server.SetStatus(0)
+	_, err = kr.VerificationKey(t.Context(), source, "a")
+	require.NoError(t, err)
+	require.Equal(t, 2, server.Fetches())
+	stored, err = cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.Empty(t, stored.LastError)
+	require.True(t, stored.LastErrorAt.IsZero())
+}
+
+func TestVerificationKey_RefreshNamespacesHaveSeparateBudgets(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	kr, cache := newTestKeyResolver(t, server, ratelimit.PerMinute(1))
+	firstIssuer := remoteSourceFor(t, server).WithCacheKey("issuer-1").WithRefreshNamespace("idjag:trusted-issuer-1")
+	secondIssuer := remoteSourceFor(t, server).WithCacheKey("issuer-2").WithRefreshNamespace("idjag:trusted-issuer-2")
+	document := keySetJSON(t, testKey(t, "a"))
+	primeRotatable(t, cache, firstIssuer, document)
+	primeRotatable(t, cache, secondIssuer, document)
+	_, err := kr.VerificationKey(t.Context(), firstIssuer, "unknown")
+	require.ErrorIs(t, err, ErrKeyNotFound)
+	_, err = kr.VerificationKey(t.Context(), secondIssuer, "unknown")
+	require.ErrorIs(t, err, ErrKeyNotFound)
+	require.Equal(t, 2, server.Fetches())
+}
+
 func TestVerificationKey_UnusableStoredValidatorIsDropped(t *testing.T) {
 	t.Parallel()
 
@@ -373,6 +450,9 @@ func TestVerificationKey_UnusableStoredValidatorIsDropped(t *testing.T) {
 		ETag:        "unquoted-validator",
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}))
 
 	// An unknown kid forces a consult; failing it exercises the cooldown
@@ -450,7 +530,7 @@ var _ Cache = (*failingCache)(nil)
 
 func (c *failingCache) Get(ctx context.Context, key string) (CacheState, error) {
 	if c.getErr != nil {
-		return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}, c.getErr
+		return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, c.getErr
 	}
 	state, err := c.inner.Get(ctx, key)
 	if err != nil {
@@ -467,6 +547,17 @@ func (c *failingCache) Put(ctx context.Context, key string, state CacheState) er
 		return fmt.Errorf("inner cache put: %w", err)
 	}
 	return nil
+}
+
+func (c *failingCache) PutIfUnchanged(ctx context.Context, key string, prior, next CacheState) (bool, error) {
+	if c.putErr != nil {
+		return false, c.putErr
+	}
+	written, err := c.inner.PutIfUnchanged(ctx, key, prior, next)
+	if err != nil {
+		return false, fmt.Errorf("inner cache conditional put: %w", err)
+	}
+	return written, nil
 }
 
 func TestVerificationKey_CacheReadErrorFailsClosed(t *testing.T) {
@@ -503,6 +594,144 @@ func TestVerificationKey_CacheWriteFailureDoesNotFailResolution(t *testing.T) {
 	key, err := kr.VerificationKey(t.Context(), remoteSourceFor(t, server), "a")
 	require.NoError(t, err)
 	require.Equal(t, "a", key.KeyID)
+}
+
+func TestStoreReconcilesKeysAfterConcurrentConsultFailure(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "rotated")))
+	kr, cache := newTestKeyResolver(t, server, generousRate())
+	source := remoteSourceFor(t, server)
+	prior := CacheState{
+		Document:    keySetJSON(t, testKey(t, "old")),
+		ETag:        `"old"`,
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "revision-1",
+	}
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), prior))
+
+	marked := prior
+	marked.LastErrorAt = time.Now()
+	marked.LastError = transientErrorReasonPrefix
+	marked.Revision = "revision-2"
+	written, err := cache.PutIfUnchanged(t.Context(), source.CacheKey(), prior, marked)
+	require.NoError(t, err)
+	require.True(t, written)
+
+	rotated := keySetJSON(t, testKey(t, "rotated"))
+	kr.store(t.Context(), source, prior, &Result{
+		Outcome:  CacheOutcomeRefreshed,
+		KeySet:   jose.JSONWebKeySet{},
+		Document: rotated,
+		ETag:     `"rotated"`,
+		TTL:      time.Hour,
+	})
+
+	stored, err := cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.JSONEq(t, string(rotated), string(stored.Document))
+	require.Equal(t, `"rotated"`, stored.ETag)
+	require.Equal(t, prior.ExpiresAt, stored.ExpiresAt)
+	require.Equal(t, prior.RefreshedAt, stored.RefreshedAt)
+	require.Equal(t, marked.LastError, stored.LastError)
+	require.Equal(t, marked.LastErrorAt, stored.LastErrorAt)
+}
+
+func TestStoreDoesNotReconcileNotModifiedAfterConcurrentConsultFailure(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "old")))
+	kr, cache := newTestKeyResolver(t, server, generousRate())
+	source := remoteSourceFor(t, server)
+	prior := CacheState{
+		Document:    keySetJSON(t, testKey(t, "old")),
+		ETag:        `"old"`,
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "revision-1",
+	}
+	marked := prior
+	marked.LastErrorAt = time.Now()
+	marked.LastError = transientErrorReasonPrefix
+	marked.Revision = "revision-2"
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), marked))
+
+	kr.store(t.Context(), source, prior, &Result{
+		Outcome:  CacheOutcomeNotModified,
+		KeySet:   jose.JSONWebKeySet{},
+		Document: prior.Document,
+		ETag:     prior.ETag,
+		TTL:      time.Hour,
+	})
+
+	stored, err := cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.Equal(t, marked, stored)
+}
+
+func TestReconcileKeysAfterConsultFailureRejectsUnchangedRefresh(t *testing.T) {
+	t.Parallel()
+
+	prior := CacheState{
+		Document:    keySetJSON(t, testKey(t, "old")),
+		ETag:        `"old"`,
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "revision-1",
+	}
+	marked := prior
+	marked.LastErrorAt = time.Now()
+	marked.LastError = transientErrorReasonPrefix
+	marked.Revision = "revision-2"
+
+	_, ok := reconcileKeysAfterConsultFailure(prior, marked, &Result{
+		Outcome:  CacheOutcomeRefreshed,
+		KeySet:   jose.JSONWebKeySet{},
+		Document: prior.Document,
+		ETag:     prior.ETag,
+		TTL:      time.Hour,
+	})
+	require.False(t, ok)
+}
+
+func TestStoreDoesNotRetryRevisionOnlyConflict(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "late")))
+	kr, cache := newTestKeyResolver(t, server, generousRate())
+	source := remoteSourceFor(t, server)
+	prior := CacheState{
+		Document:    keySetJSON(t, testKey(t, "old")),
+		ETag:        `"old"`,
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "revision-1",
+	}
+	current := prior
+	current.Revision = "revision-2"
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), current))
+
+	kr.store(t.Context(), source, prior, &Result{
+		Outcome:  CacheOutcomeRefreshed,
+		KeySet:   jose.JSONWebKeySet{},
+		Document: keySetJSON(t, testKey(t, "late")),
+		ETag:     `"late"`,
+		TTL:      time.Hour,
+	})
+
+	stored, err := cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.Equal(t, "revision-2", stored.Revision)
+	require.JSONEq(t, string(prior.Document), string(stored.Document))
 }
 
 func TestVerificationKey_LimiterErrorFailsClosed(t *testing.T) {

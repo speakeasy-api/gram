@@ -4,11 +4,11 @@ cwd: ../..
 
 # Plugins — GitHub Publishing
 
-This doc covers how the publish flow works end-to-end: what Gram generates, how the GitHub repo is managed, and how the marketplace URL is constructed and served.
+This doc covers how the publish flow works end-to-end: what Speakeasy generates, how the GitHub repo is managed, and how the marketplace URL is constructed and served.
 
 ## Overview
 
-"Publishing" is the act of generating all plugin package files and pushing them to a GitHub repo that each AI platform's marketplace can index. The GitHub repo is fully managed by Gram — it is read-only to end users and overwritten on every publish.
+"Publishing" is the act of generating all plugin package files and pushing them to a GitHub repo that each AI platform's marketplace can index. The GitHub repo is fully managed by Speakeasy — its contents are overwritten on every publish, so edits made on GitHub do not survive.
 
 ## Triggering a publish
 
@@ -24,10 +24,10 @@ Gram-Project: <project-slug>
 {}
 ```
 
-Or with a collaborator:
+Or with collaborators:
 
 ```json
-{ "github_collaborator": "octocat" }
+{ "github_usernames": ["octocat"] }
 ```
 
 ## What happens during a publish
@@ -42,7 +42,7 @@ Or with a collaborator:
 
 4. **Push to GitHub.** The server calls `CreateRepo()` (no-op if repo exists) then `PushFiles()` with a single commit. The repo name is `<project-slug>-plugins` under the configured org.
 
-5. **Mint marketplace token.** On first publish, a 256-bit base64url token is generated and stored in `plugin_github_connections.marketplace_token`. This token becomes part of the marketplace proxy URL served by Gram:
+5. **Mint marketplace token.** On first publish, a 256-bit base64url token is generated. The token is never stored in plaintext. `plugin_github_connections` stores its SHA-256 hash (`marketplace_token_hash`), which the marketplace proxy looks it up by, and a sealed copy, which the server opens to show the install URL again (see `server/internal/plugins/marketplacetokens`). This token becomes part of the marketplace proxy URL served by Speakeasy:
 
    ```
    https://app.getgram.ai/m/<token>/marketplace.json
@@ -50,7 +50,7 @@ Or with a collaborator:
 
 6. **Store connection.** The `plugin_github_connections` row is upserted with `(project_id, installation_id, repo_owner, repo_name)`.
 
-7. **Add collaborator.** If a GitHub username was provided, `AddCollaborator()` grants `push` permission to the repo.
+7. **Add collaborators.** For each GitHub username provided, `AddCollaborator()` grants `admin` permission on the repo. Admin is what the platform marketplaces need from whoever wires the repo up: Cursor only offers **Serve Marketplace From Cursor** — the synced copy that lets teammates install plugins without GitHub access to the source repo — to repository admins. Re-adding an existing collaborator upgrades them to admin, which is how a repo published before this behavior is brought up to date.
 
 > **Keys are minted before the GitHub push.** If the push fails, the keys are discarded and not persisted to the database. On retry the flow starts over.
 
@@ -66,9 +66,9 @@ Dev and test share one GitHub App and one org. This means plugin repos published
 
 ## Marketplace proxy
 
-The URL `https://app.getgram.ai/m/<token>/marketplace.json` is served by a dedicated marketplace proxy endpoint. The token resolves to a `plugin_github_connections` row, which identifies the project whose latest-published `marketplace.json` to serve.
+The URL `https://app.getgram.ai/m/<token>/marketplace.json` is served by a dedicated marketplace proxy endpoint. The proxy hashes the token and resolves the hash to a `plugin_github_connections` row, which identifies the project whose latest-published `marketplace.json` to serve. A database read alone does not yield a working install URL: the hash cannot be reversed, and opening the sealed copy needs the platform key or the organization's key. Connections published before tokens were hashed keep the token in plaintext until the marketplace token backfill moves them (see `server/cmd/tools/migrations/MARKETPLACE_TOKENS_BACKFILL.md`).
 
-Gram does **not** proxy raw GitHub traffic — it serves the cached published content (or generates it on demand from DB state). The marketplace URL token is opaque: no org or project identity is embedded.
+Speakeasy does **not** proxy raw GitHub traffic — it serves the cached published content (or generates it on demand from DB state). The marketplace URL token is opaque: no org or project identity is embedded.
 
 ## Re-publishing
 
@@ -110,8 +110,18 @@ If `configured` is false, the Publish button should be hidden (the server isn't 
 
 ## Observability plugin
 
-Every publish includes two observability plugins (one for Claude, one for Cursor) that forward hook events to Gram. These are automatically added at the top of the marketplace so they appear first.
+Every publish includes one observability plugin per supported platform, forwarding hook events to Speakeasy. Those with a marketplace are automatically added at the top so they appear first.
 
-The observability plugin slug is `<org-slug>-observability` (Claude) or `<org-slug>-observability-cursor` (Cursor). Users are shown a notice in the README that this plugin is required alongside any MCP server plugins.
+| Platform | Slug                                |
+| -------- | ----------------------------------- |
+| Claude   | `<org-slug>-observability`          |
+| Cursor   | `<org-slug>-observability-cursor`   |
+| Codex    | `<org-slug>-observability-codex`    |
+| OpenCode | `<org-slug>-observability-opencode` |
+| OpenClaw | `<org-slug>-observability-openclaw` |
+| Pi       | `<org-slug>-observability-pi`       |
+| Copilot  | `<org-slug>-observability-copilot`  |
+
+OpenCode, OpenClaw and Pi have no marketplace track, so their packages are installed directly rather than listed. Users are shown a notice in the README that the observability plugin is required alongside any MCP server plugins.
 
 See [Package Format — observability plugin](./package-format.md#observability-plugin) for the hook events registered and the hook script contents.

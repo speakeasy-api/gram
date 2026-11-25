@@ -294,6 +294,10 @@
   --text-default-information: var(--color-feedback-blue-700);
   --text-link-information: var(--color-feedback-blue-900);
 
+  /* Feature: what is new, rather than what went wrong. Violet so it is not
+     read as another severity beside the blue, green, orange and red. */
+  --text-default-feature: var(--color-feedback-violet-600);
+
   --text-default-success: var(--color-feedback-green-700);
   --text-link-success: var(--color-feedback-green-900);
 
@@ -343,6 +347,9 @@
   --border-information-muted: var(--color-feedback-blue-500-56);
   --border-information-softest: var(--color-feedback-blue-300);
 
+  /* Border Feature utilities */
+  --border-feature-default: var(--color-feedback-violet-600);
+
   /* Border Success utilities */
   --border-success-highlight: var(--color-feedback-green-600);
   --border-success-default: var(--color-feedback-green-500);
@@ -356,7 +363,7 @@
   --border-warning-softest: var(--color-feedback-orange-300);
 
   /* Border Focus utilities */
-  --border-focus: var(--color-brand-blue-600);
+  --border-focus: var(--color-neutral-900);
 
   /* ============================================
    * FILLS
@@ -542,13 +549,15 @@
   ); /* Note: conflicts with semantic token above */
   --border: var(--color-neutral-300);
   --input: var(--color-neutral-400);
-  --ring: var(--color-brand-blue-600);
+  --ring: var(--color-neutral-900);
   --chart-1: var(--color-brand-red-600);
   --chart-2: var(--color-brand-green-600);
   --chart-3: var(--color-brand-red-600);
   --chart-4: var(--color-brand-blue-600);
   --chart-5: var(--color-brand-green-600);
-  --sidebar: var(--color-neutral-100);
+  /* The nav sits on the card surface rather than the app ground, so a page
+     that recesses its own body reads as content set into the shell. */
+  --sidebar: var(--color-base-white);
   --sidebar-foreground: var(--color-neutral-900);
   --sidebar-primary: var(--color-base-black);
   --sidebar-primary-foreground: var(--color-neutral-300);
@@ -682,6 +691,8 @@
   --text-default-information: var(--color-feedback-blue-300);
   --text-link-information: var(--color-feedback-blue-100);
 
+  --text-default-feature: var(--color-feedback-violet-300);
+
   --text-default-success: var(--color-feedback-green-300);
   --text-link-success: var(--color-feedback-green-100);
 
@@ -731,6 +742,9 @@
   --border-information-muted: var(--color-feedback-blue-500-56);
   --border-information-softest: var(--color-feedback-blue-700);
 
+  /* Border Feature utilities */
+  --border-feature-default: var(--color-feedback-violet-300);
+
   /* Border Success utilities */
   --border-success-highlight: var(--color-feedback-green-400);
   --border-success-default: var(--color-feedback-green-500);
@@ -744,7 +758,7 @@
   --border-warning-softest: var(--color-feedback-orange-700);
 
   /* Border Focus utilities */
-  --border-focus: var(--color-brand-blue-300);
+  --border-focus: var(--color-neutral-100);
 
   /* ============================================
    * FILLS
@@ -933,7 +947,7 @@
   ); /* Note: conflicts with semantic token above */
   --border: var(--color-neutral-700);
   --input: var(--color-neutral-700);
-  --ring: var(--color-brand-blue-600);
+  --ring: var(--color-neutral-100);
   --chart-1: var(--color-brand-red-600);
   --chart-2: var(--color-brand-green-600);
   --chart-3: var(--color-brand-red-600);

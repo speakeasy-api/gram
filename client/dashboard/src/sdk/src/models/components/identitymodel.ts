@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -25,7 +26,7 @@ export const IdentityModelKind = {
 /**
  * What sort of subject this is: 'user' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.
  */
-export type IdentityModelKind = ClosedEnum<typeof IdentityModelKind>;
+export type IdentityModelKind = OpenEnum<typeof IdentityModelKind>;
 
 /**
  * One subject with every identifier its activity is keyed under, so a client can query each subsystem with the identifier that subsystem expects.
@@ -60,7 +61,7 @@ export type IdentityModel = {
    */
   photoUrl?: string | undefined;
   /**
-   * The Gram user ids this identity resolves to, the first being the directory owner. Empty when the subject matches no directory row. Audit logs, chats, user sessions and plugin assignments key on these.
+   * The Speakeasy user ids this identity resolves to, the first being the directory owner. Empty when the subject matches no directory row. Audit logs, chats, user sessions and plugin assignments key on these.
    */
   userIds: Array<string>;
   /**
@@ -70,9 +71,10 @@ export type IdentityModel = {
 };
 
 /** @internal */
-export const IdentityModelKind$inboundSchema: z.ZodMiniEnum<
-  typeof IdentityModelKind
-> = z.enum(IdentityModelKind);
+export const IdentityModelKind$inboundSchema: z.ZodMiniType<
+  IdentityModelKind,
+  unknown
+> = openEnums.inboundSchema(IdentityModelKind);
 
 /** @internal */
 export const IdentityModel$inboundSchema: z.ZodMiniType<

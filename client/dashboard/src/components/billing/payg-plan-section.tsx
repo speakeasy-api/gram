@@ -1,5 +1,5 @@
+import { useBillingState } from "./use-billing-state";
 import { CancelPaygDialog } from "@/components/billing/cancel-payg-dialog";
-import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
 import {
   canCancelPaygPlan,
   canResumePaygPlan,
@@ -10,101 +10,45 @@ import {
 } from "@/components/billing/payg-plan-state";
 import { PaygPortalButton } from "@/components/billing/payg-portal-button";
 import { ResumePaygButton } from "@/components/billing/resume-payg-button";
-import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
-import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
-import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useProductTier } from "@/hooks/useProductTier";
-import { isNotFoundError } from "@/lib/route-errors";
 import type { ReactNode } from "react";
+import { Heading } from "../ui/Heading";
 
-/**
- * The organization's payment relationship, in either of its two states.
- *
- * With no payment method attached — an active product trial, before checkout
- * has run — the section offers the checkout CTA that attaches one. With a
- * payment method attached, it reports what Stripe is doing right now, the way
- * into the customer portal, and the in-product cancel and resume controls.
- * Which state applies also decides the section's description.
- *
- * The rules live here rather than at the call site so the billing page can
- * place the section without re-deriving which payment state the organization
- * is in.
- *
- * During an active product trial there is no Stripe subscription to report on
- * even when the account type already reads as PAYG: checkout hasn't run, so
- * asking for one would answer 404 — which the attached state would render as
- * "billing isn't managed through Stripe" directly beside the checkout button
- * that is about to set it up. The trial lifecycle comes from the same hook
- * the checkout CTA gates on, so the frame and the CTA inside it read one
- * clock.
- */
+/** Manages an attached subscription; the billing route owns setup redirects. */
 export function PaygPlanSection(): JSX.Element | null {
-  const productTier = useProductTier();
-  const { eligible, trialLifecycle } = usePaygCheckoutAccess("active-trial");
-
-  if (trialLifecycle === "active") {
-    // The eligibility gate (flag, admin scope) decides whether there is
-    // anything to offer; a section whose only content is an action the viewer
-    // cannot take would just be announcing a dead end.
-    if (!eligible) return null;
-    return (
-      <PaymentSection description="Add a payment method to start pay as you go when your trial ends.">
-        <StartPaygCheckoutCTA label="Add payment method" />
-      </PaymentSection>
-    );
-  }
-
-  if (productTier !== "payg") return null;
-
+  const billing = useBillingState();
+  if (billing.status === "unavailable" || billing.status === "needs-setup")
+    return null;
   return (
-    <PaymentSection description="Your pay-as-you-go subscription, payment method, and invoices.">
-      <PaygPlanBody />
+    <PaymentSection>
+      <PaygPlanBody billing={billing} />
     </PaymentSection>
   );
 }
 
-function PaymentSection({
-  description,
-  children,
-}: {
-  description: string;
-  children: ReactNode;
-}): JSX.Element {
+function PaymentSection({ children }: { children: ReactNode }): JSX.Element {
   return (
-    <Page.Section>
-      {/* Secondary section: suppress the area eyebrow. */}
-      <Page.Section.Title area="">Payment</Page.Section.Title>
-      <Page.Section.Description>{description}</Page.Section.Description>
-      <Page.Section.Body>{children}</Page.Section.Body>
-    </Page.Section>
+    <section className="space-y-6">
+      <div className="border-b border-border pb-2">
+        <Heading variant="h3">Payment</Heading>
+      </div>
+      {children}
+    </section>
   );
 }
 
-// The query lives below the tier gate so it never fires for an organization
-// that has no self-serve subscription to report on.
-function PaygPlanBody(): JSX.Element {
-  const { data, error, isError, isFetching, refetch } = useStripeSubscription();
-
-  // A 404 is an answer, not an outage: the pay-as-you-go tier predates Stripe,
-  // so an organization can be on it without a Stripe subscription behind it.
-  // That answer is stable, so it outranks a cached subscription and gets no
-  // retry — there is nothing here that trying again would find.
-  if (isNotFoundError(error)) {
-    return (
-      <Stack gap={1}>
-        <Text className="font-medium">No Stripe subscription</Text>
-        <Text muted small>
-          This organization's billing isn't managed through Stripe, so there's
-          no payment method or invoice history to manage here.
-        </Text>
-      </Stack>
-    );
-  }
+// Keep the existing PAYG subscription management and checkout recovery path.
+function PaygPlanBody({
+  billing,
+}: {
+  billing: ReturnType<typeof useBillingState>;
+}): JSX.Element {
+  const { data, isError, isFetching, refetch } = billing.subscription;
 
   // A refetch that fails leaves the last successful subscription in the cache,
   // so the query reports data and an error together. The state and its actions
@@ -161,16 +105,17 @@ function PaygPlanDetails({
   subscription: StripeSubscriptionLike;
 }): JSX.Element {
   const state = paygPlanState(subscription);
-  const copy = planCopy(state);
+  const copy = planCopy(state, subscription);
 
   return (
-    <Stack gap={4}>
-      <Stack gap={1}>
+    <Stack gap={6}>
+      <Stack gap={2}>
         <Text className="font-medium">{copy.headline}</Text>
         <Text muted small>
           {copy.detail}
         </Text>
       </Stack>
+      <AppliedDiscount subscription={subscription} />
       {/* A failed payment is reported by the banner heading this page, where it
           can't be scrolled past — not by a line of body text down here. */}
       {/* A member reads the state above but gets no controls: every action
@@ -202,7 +147,31 @@ function trialingHeadline(on: string | null): string {
   return `Trial — converts to pay as you go on ${on}`;
 }
 
-function activeDetail(on: string | null): string {
+// Checkout anchors the first paid month to the next UTC midnight, so the
+// period right after activation is only that short interval. Two days is
+// longer than that interval and shorter than any real month, so the end date
+// stays once the subscription is on a monthly period.
+const INITIAL_PAYG_PERIOD_MAX_MS = 2 * 24 * 60 * 60 * 1000;
+
+function isInitialPaygBillingInterval(
+  start: Date | null | undefined,
+  end: Date | null | undefined,
+): boolean {
+  if (!(start instanceof Date) || !(end instanceof Date)) return false;
+  const length = end.getTime() - start.getTime();
+  return (
+    Number.isFinite(length) && length > 0 && length < INITIAL_PAYG_PERIOD_MAX_MS
+  );
+}
+
+function activeDetail(
+  start: Date | null | undefined,
+  end: Date | null | undefined,
+): string {
+  const on = formatBillingDate(end);
+  if (on !== null && isInitialPaygBillingInterval(start, end)) {
+    return "You're billed monthly for what you use.";
+  }
   const base = "You're billed for the usage in each billing period.";
   if (on === null) return base;
   return `${base} The current period ends on ${on}.`;
@@ -227,7 +196,10 @@ function endingDetail(trialing: boolean): string {
 }
 
 /** The headline and supporting line for each plan state. */
-function planCopy(state: PaygPlanState): { headline: string; detail: string } {
+function planCopy(
+  state: PaygPlanState,
+  subscription: StripeSubscriptionLike,
+): { headline: string; detail: string } {
   const on = formatBillingDate(state.date);
 
   switch (state.kind) {
@@ -238,7 +210,13 @@ function planCopy(state: PaygPlanState): { headline: string; detail: string } {
           "Your payment method is on file. Billing starts when the trial converts.",
       };
     case "active":
-      return { headline: "Pay as you go", detail: activeDetail(on) };
+      return {
+        headline: "Pay as you go",
+        detail: activeDetail(
+          subscription.currentPeriodStart,
+          subscription.currentPeriodEnd,
+        ),
+      };
     case "ending":
       return {
         headline: endingHeadline(on, state.trialing),
@@ -257,4 +235,39 @@ function planCopy(state: PaygPlanState): { headline: string; detail: string } {
           "Stripe hasn't started billing this subscription. Open the billing portal to finish setting up your payment method.",
       };
   }
+}
+
+// Attribution is not proof of a discount: only the live subscription supplies
+// these verified terms. Recheck expiration to avoid showing an expired cache entry.
+function AppliedDiscount({
+  subscription,
+}: {
+  subscription: StripeSubscriptionLike;
+}) {
+  const { discountDescription, discountEndsAt, gatewayPromotionApplied } =
+    subscription;
+  if (
+    !discountDescription ||
+    !["active", "past_due"].includes(subscription.status) ||
+    (discountEndsAt &&
+      (!Number.isFinite(discountEndsAt.getTime()) ||
+        discountEndsAt.getTime() <= Date.now()))
+  )
+    return null;
+  const end = formatBillingDate(discountEndsAt);
+  return (
+    <Alert variant="info">
+      <Stack>
+        <Text variant="subheading">
+          {gatewayPromotionApplied
+            ? "Partner promotion applied"
+            : "Discount applied"}
+        </Text>
+        <Text variant="small">
+          {discountDescription}
+          {end ? ` Discount ends ${end}.` : ""}
+        </Text>
+      </Stack>
+    </Alert>
+  );
 }

@@ -2,8 +2,8 @@ import { useProject } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
 import type { DomainDNSConfig } from "@gram/client/models/components/domaindnsconfig.js";
-import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
-import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useListDomains } from "@gram/client/react-query/listDomains.js";
 import { useMemo } from "react";
 
@@ -31,21 +31,26 @@ export function useCustomDomain(enabled = true): {
 export function useCustomDomains(enabled = true): {
   domains: CustomDomain[];
   isLoading: boolean;
+  isError: boolean;
   refetch: ReturnType<typeof useListDomains>["refetch"];
 } {
-  const { data, isLoading, refetch } = useListDomains(undefined, undefined, {
-    refetchOnWindowFocus: false,
-    retry: false,
-    throwOnError: false,
-    enabled,
-  });
+  const { data, isLoading, isError, refetch } = useListDomains(
+    undefined,
+    undefined,
+    {
+      refetchOnWindowFocus: false,
+      retry: false,
+      throwOnError: false,
+      enabled,
+    },
+  );
 
-  return { domains: data?.domains ?? [], isLoading, refetch };
+  return { domains: data?.domains ?? [], isLoading, isError, refetch };
 }
 
 // useMcpEndpointUrl resolves the runtime install URL for a single mcp_endpoint
 // row. Platform-domain endpoints (`custom_domain_id` empty) resolve under the
-// Gram-hosted `/mcp/<slug>` runtime path; custom-domain endpoints resolve
+// Speakeasy-hosted `/mcp/<slug>` runtime path; custom-domain endpoints resolve
 // under the matching `custom_domains.domain` value with the same suffix.
 // Returns `undefined` when the endpoint has no slug or when its custom domain
 // hasn't resolved yet (loading or denied), so callers can gracefully render an
@@ -67,7 +72,7 @@ function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
     const match = domains.find((d) => d?.id === endpoint.customDomainId);
     if (!match) {
       // Domain not yet resolved (loading or denied); avoid emitting a partial
-      // URL that points at the Gram domain when the customer expected their
+      // URL that points at the Speakeasy domain when the customer expected their
       // custom domain.
       return { mcpUrl: undefined, installPageUrl: undefined };
     }
@@ -78,10 +83,33 @@ function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
   return { mcpUrl, installPageUrl: `${mcpUrl}/install` };
 }
 
+// Slug registered on the Speakeasy origin. Custom-domain endpoints share the slug
+// column but live in another namespace, so using one of those slugs on
+// getServerURL() 404s — including the first-party connect route.
+export function platformEndpointSlug(
+  endpoints: Array<Pick<McpEndpoint, "slug" | "customDomainId">>,
+): string | undefined {
+  return endpoints.find((endpoint) => endpoint.slug && !endpoint.customDomainId)
+    ?.slug;
+}
+
+// Gateway install pages are session-gated and the session cookie is host-only,
+// so they open on the Speakeasy origin; ?domain=custom resolves a custom-domain slug there.
+export function gatewayInstallPageUrl(
+  endpoints: Array<Pick<McpEndpoint, "slug" | "customDomainId">>,
+): string | undefined {
+  const platformSlug = platformEndpointSlug(endpoints);
+  if (platformSlug) return `${getServerURL()}/mcp/${platformSlug}/install`;
+  const customSlug = endpoints.find((endpoint) => endpoint.slug)?.slug;
+  if (!customSlug) return undefined;
+  return `${getServerURL()}/mcp/${customSlug}/install?domain=custom`;
+}
+
 // useResolvedMcpServerUrl resolves the runtime MCP URL for an mcp_server from
-// its endpoints, preferring a custom-domain endpoint. While the custom domain
-// is still resolving it falls back to the Gram-hosted `/mcp/<slug>` path so
-// callers always have a usable URL once a slug exists.
+// its endpoints, preferring a custom-domain endpoint. While that domain is
+// unresolved, it falls back only to a separately registered platform endpoint;
+// custom-domain slugs are not valid on the Speakeasy origin. First-party connect
+// still needs a platform slug directly — use platformEndpointSlug.
 export function useResolvedMcpServerUrl(
   endpoints: McpEndpoint[],
   isLoadingEndpoints: boolean,
@@ -90,15 +118,17 @@ export function useResolvedMcpServerUrl(
   installPageUrl: string | undefined;
   loading: boolean;
 } {
-  const endpoint = useMemo(
-    () => endpoints.find((e) => e.customDomainId) ?? endpoints[0],
+  const customEndpoint = useMemo(
+    () => endpoints.find((endpoint) => endpoint.customDomainId),
     [endpoints],
   );
-  const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
-  const fallbackUrl = endpoint?.slug
-    ? `${getServerURL()}/mcp/${endpoint.slug}`
-    : undefined;
-  const mcpUrl = resolvedUrl ?? fallbackUrl;
+  const platformEndpoint = useMemo(
+    () => endpoints.find((endpoint) => !endpoint.customDomainId),
+    [endpoints],
+  );
+  const { mcpUrl: customUrl } = useMcpEndpointUrl(customEndpoint);
+  const { mcpUrl: platformUrl } = useMcpEndpointUrl(platformEndpoint);
+  const mcpUrl = customUrl ?? platformUrl;
 
   return {
     mcpUrl,
@@ -111,7 +141,7 @@ export function useResolvedMcpServerUrl(
 // legacy form requires the default environment — without both there is no
 // routable MCP URL, so return undefined rather than an invalid
 // /mcp/<project>/<toolset> path.
-function mcpUrlSuffix(
+export function mcpUrlSuffix(
   project: { slug: string },
   toolset: Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">,
 ): string | undefined {
@@ -173,22 +203,7 @@ export function useMcpUrl(
 }
 
 /**
- * Returns an MCP URL that always uses the Gram domain, ignoring any custom domain.
- * Use this for internal tools like the playground where we want consistent routing.
- */
-export function useInternalMcpUrl(
-  toolset:
-    | Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">
-    | undefined,
-): string | undefined {
-  const project = useProject();
-  if (!toolset) return undefined;
-  return internalMcpUrl({ slug: project.slug }, toolset);
-}
-
-/**
- * Non-hook variant of {@link useInternalMcpUrl}. Use this when the project and
- * toolset are already in scope (e.g. when mapping over an array of toolsets).
+ * Formats the legacy toolset address without resolving a server identity.
  * Returns undefined when the toolset has no routable MCP URL (no mcpSlug and
  * no default environment).
  */
@@ -211,4 +226,51 @@ export function customDomainMcpEndpointUrl(
   slug: string,
 ): string {
   return `https://${domain}/mcp/${slug}`;
+}
+
+/** One address a server answers on, and what kind it is. */
+export interface McpServerAddress {
+  url: string;
+  label: string;
+}
+
+/**
+ * Every public address a server's endpoints give it: its custom domains
+ * first, then the Speakeasy one. A custom domain still resolving is left out
+ * rather than shown on the wrong host.
+ */
+export function useMcpEndpointAddresses(
+  endpoints: McpEndpoint[],
+): McpServerAddress[] {
+  const hasCustom = endpoints.some((endpoint) => endpoint.customDomainId);
+  const { domains } = useCustomDomains(hasCustom);
+  return useMemo(() => {
+    const custom: McpServerAddress[] = [];
+    const platform: McpServerAddress[] = [];
+    for (const endpoint of endpoints) {
+      if (!endpoint.slug) continue;
+      if (endpoint.customDomainId) {
+        const match = domains.find((d) => d?.id === endpoint.customDomainId);
+        if (match) {
+          // A domain-root endpoint also answers at the domain itself.
+          if (endpoint.isDomainRoot) {
+            custom.push({
+              url: `https://${match.domain}/`,
+              label: "Custom domain",
+            });
+          }
+          custom.push({
+            url: customDomainMcpEndpointUrl(match.domain, endpoint.slug),
+            label: "Custom domain",
+          });
+        }
+      } else {
+        platform.push({
+          url: `${getServerURL()}/mcp/${endpoint.slug}`,
+          label: "Speakeasy URL",
+        });
+      }
+    }
+    return [...custom, ...platform];
+  }, [endpoints, domains]);
 }

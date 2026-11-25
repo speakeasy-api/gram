@@ -11,7 +11,9 @@ type Outcome string
 const (
 	OutcomeSuccess Outcome = "success"
 	OutcomeFailure Outcome = "failure"
-	// OutcomeTimeout is a failure that is specifically a timeout — a deadline
+	// OutcomeCanceled is work abandoned because the caller canceled it.
+	OutcomeCanceled Outcome = "canceled"
+	// OutcomeTimeout is a failure that is specifically a timeout: a deadline
 	// exceeded or a network-level timeout. It is split out from OutcomeFailure so
 	// timeouts are alertable on their own, distinct from the many other reasons a
 	// call can fail (e.g. a socket hang up). Use OutcomeFromErrorWithTimeout to
@@ -27,13 +29,15 @@ func OutcomeFromError(err error) Outcome {
 	return OutcomeFailure
 }
 
-// OutcomeFromErrorWithTimeout is like OutcomeFromError but returns OutcomeTimeout
-// for deadline-exceeded and network timeout errors, so callers that impose their
-// own call deadline (e.g. the LLM judges) can alert on timeouts distinctly. A
-// canceled context (caller gave up) is not a timeout and stays OutcomeFailure.
+// OutcomeFromErrorWithTimeout classifies canceled, deadline-exceeded, and
+// network timeout errors distinctly. OutcomeFromError still collapses all
+// non-nil errors into OutcomeFailure.
 func OutcomeFromErrorWithTimeout(err error) Outcome {
 	if err == nil {
 		return OutcomeSuccess
+	}
+	if errors.Is(err, context.Canceled) {
+		return OutcomeCanceled
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return OutcomeTimeout

@@ -4,18 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -45,6 +52,10 @@ func (s *Service) GetInferenceKeys(ctx context.Context, payload *gen.GetInferenc
 		return nil, oops.E(oops.CodeUnavailable, ErrOpenRouterUnavailable, "OpenRouter usage is temporarily unavailable").LogWarn(ctx, s.logger)
 	}
 
+	org, err := s.canonicalAdminOrganization(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
 	result := make([]*gen.AdminInferenceKey, len(keys))
 	group, groupCtx := errgroup.WithContext(ctx)
 	for index, key := range keys {
@@ -58,10 +69,13 @@ func (s *Service) GetInferenceKeys(ctx context.Context, payload *gen.GetInferenc
 				return fmt.Errorf("read %s inference key usage: %w", keyType, err)
 			}
 			result[index] = &gen.AdminInferenceKey{
-				KeyType:        key.KeyType,
-				CreditsUsed:    creditsUsed,
-				MonthlyCredits: key.MonthlyCredits,
-				Disabled:       key.Disabled,
+				KeyType:                 key.KeyType,
+				CreditsUsed:             creditsUsed,
+				MonthlyCredits:          key.MonthlyCredits,
+				Disabled:                key.Disabled,
+				DisableCauses:           key.DisableCauses,
+				DisableCausesClassified: key.DisableCausesClassified,
+				CauseDiagnostics:        s.inferenceKeyCauseDiagnostics(groupCtx, org, key.DisableCauses, key.DisableCausesClassified),
 			}
 			return nil
 		})
@@ -168,6 +182,283 @@ func (s *Service) GetPaygBillingSummary(ctx context.Context, payload *gen.GetPay
 		EstimatedTotalUsd: summary.EstimatedTotalUsd,
 	}, nil
 }
+func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsagePayload) (*gen.AdminMeterUsageResponse, error) {
+	organization, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        payload.OrganizationID,
+		AllowSlug: true,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve meter usage organization").LogError(ctx, s.logger)
+	}
+	if s.billing == nil {
+		return nil, oops.E(oops.CodeUnavailable, nil, "billing operations are temporarily unavailable").LogWarn(ctx, s.logger)
+	}
+
+	report, err := s.billing.GetMeterUsageForOrganization(ctx, organization.ID, &usagegen.GetMeterUsagePayload{
+		SessionToken: nil,
+		Family:       payload.Family,
+		From:         payload.From,
+		To:           payload.To,
+		Breakdown:    conv.PtrEmpty("total"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get organization meter usage: %w", err)
+	}
+
+	billingCycles := make([]*gen.MeterUsageWindow, len(report.BillingCycles))
+	for index, cycle := range report.BillingCycles {
+		billingCycles[index] = &gen.MeterUsageWindow{From: cycle.From, To: cycle.To}
+	}
+	buckets := make([]*gen.AdminMeterUsageBucket, len(report.Buckets))
+	for index, bucket := range report.Buckets {
+		buckets[index] = &gen.AdminMeterUsageBucket{From: bucket.From, To: bucket.To, Total: bucket.Total}
+	}
+	return &gen.AdminMeterUsageResponse{
+		Family: report.Family,
+		Window: &gen.MeterUsageWindow{
+			From: report.Window.From,
+			To:   report.Window.To,
+		},
+		BillingCycles:     billingCycles,
+		Unit:              report.Unit,
+		Total:             report.Total,
+		Buckets:           buckets,
+		QueriedAt:         report.QueriedAt,
+		MeasurementMethod: report.MeasurementMethod,
+	}, nil
+}
+
+func (s *Service) GetSpendBreakdown(ctx context.Context, payload *gen.GetSpendBreakdownPayload) (*gen.AdminSpendBreakdownResponse, error) {
+	organization, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        payload.OrganizationID,
+		AllowSlug: true,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve spend breakdown organization").LogError(ctx, s.logger)
+	}
+	if s.billing == nil {
+		return nil, oops.E(oops.CodeUnavailable, nil, "billing operations are temporarily unavailable").LogWarn(ctx, s.logger)
+	}
+
+	report, err := s.billing.GetSpendBreakdownForOrganization(ctx, organization.ID, &usagegen.GetSpendBreakdownPayload{
+		SessionToken: nil,
+		From:         payload.From,
+		To:           payload.To,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get organization spend breakdown: %w", err)
+	}
+
+	billingCycles := make([]*gen.MeterUsageWindow, len(report.BillingCycles))
+	for index, cycle := range report.BillingCycles {
+		billingCycles[index] = &gen.MeterUsageWindow{From: cycle.From, To: cycle.To}
+	}
+	products := make([]*gen.SpendProduct, len(report.Products))
+	for productIndex, product := range report.Products {
+		buckets := make([]*gen.SpendBucket, len(product.Buckets))
+		for bucketIndex, bucket := range product.Buckets {
+			buckets[bucketIndex] = &gen.SpendBucket{
+				From: bucket.From, To: bucket.To, Quantity: bucket.Quantity, CostUsd: bucket.CostUsd,
+			}
+		}
+		products[productIndex] = &gen.SpendProduct{
+			ID: product.ID, Label: product.Label, Unit: product.Unit, Quantity: product.Quantity,
+			RateQuantity: product.RateQuantity, RateUsd: product.RateUsd, CostUsd: product.CostUsd, Buckets: buckets,
+		}
+	}
+	return &gen.AdminSpendBreakdownResponse{
+		Window: &gen.MeterUsageWindow{
+			From: report.Window.From,
+			To:   report.Window.To,
+		},
+		BillingCycles: billingCycles,
+		Currency:      report.Currency,
+		PricingBasis:  report.PricingBasis,
+		QueriedAt:     report.QueriedAt,
+		TotalCostUsd:  report.TotalCostUsd,
+		Products:      products,
+	}, nil
+}
+
+var stripeCustomerIDPattern = regexp.MustCompile(`^cus_[A-Za-z0-9_]+$`)
+
+var stripeSubscriptionIDPattern = regexp.MustCompile(`^sub_[A-Za-z0-9_]+$`)
+
+func (s *Service) GetStripeCustomer(ctx context.Context, payload *gen.GetStripeCustomerPayload) (*gen.AdminStripeCustomer, error) {
+	if err := validateStripeCustomerID(payload.StripeCustomerID); err != nil {
+		return nil, err
+	}
+	if _, err := s.stripeCustomerAssignmentOrganization(ctx, payload.OrganizationID); err != nil {
+		return nil, err
+	}
+
+	customer, err := s.billing.GetStripeCustomer(ctx, payload.StripeCustomerID)
+	if err != nil {
+		return nil, fmt.Errorf("get Stripe customer: %w", err)
+	}
+
+	return &gen.AdminStripeCustomer{
+		ID:          customer.ID,
+		Name:        conv.PtrEmpty(customer.Name),
+		Email:       conv.PtrEmpty(customer.Email),
+		Description: conv.PtrEmpty(customer.Description),
+		Livemode:    customer.LiveMode,
+	}, nil
+}
+
+func (s *Service) SetStripeCustomer(ctx context.Context, payload *gen.SetStripeCustomerPayload) (*gen.AdminOrganization, error) {
+	if err := validateStripeCustomerID(payload.StripeCustomerID); err != nil {
+		return nil, err
+	}
+
+	eligibleOrganization, err := s.stripeCustomerAssignmentOrganization(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.billing.GetStripeCustomer(ctx, payload.StripeCustomerID); err != nil {
+		return nil, fmt.Errorf("get Stripe customer before assignment: %w", err)
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin Stripe customer transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := repo.New(tx)
+	_, err = queries.AdminSetStripeCustomer(ctx, repo.AdminSetStripeCustomerParams{
+		OrganizationID:   eligibleOrganization.ID,
+		StripeCustomerID: payload.StripeCustomerID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeConflict, nil, "organization already has Stripe billing identity")
+	}
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.As(err, &pgErr) &&
+		pgErr.Code == pgerrcode.UniqueViolation &&
+		pgErr.ConstraintName == "billing_metadata_stripe_customer_id_key":
+		return nil, oops.E(oops.CodeConflict, nil, "Stripe customer is already assigned")
+	case errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation:
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "set Stripe customer").LogError(ctx, s.logger)
+	}
+
+	organization, err := queries.AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        eligibleOrganization.ID,
+		AllowSlug: false,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read organization after setting Stripe customer").LogError(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit Stripe customer transaction").LogError(ctx, s.logger)
+	}
+
+	return s.adminOrganizationFromGetRow(organization), nil
+}
+
+func (s *Service) GetStripeSubscriptionCandidate(ctx context.Context, payload *gen.GetStripeSubscriptionCandidatePayload) (*gen.AdminStripeSubscriptionCandidate, error) {
+	_, state, err := s.verifiedStripeSubscription(ctx, payload.OrganizationID, payload.StripeSubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	return &gen.AdminStripeSubscriptionCandidate{
+		ID:         state.ID,
+		CustomerID: state.CustomerID,
+		Status:     state.Status,
+	}, nil
+}
+
+func (s *Service) SetStripeSubscription(ctx context.Context, payload *gen.SetStripeSubscriptionPayload) (*gen.AdminOrganization, error) {
+	return s.linkStripeSubscription(ctx, payload)
+}
+
+func (s *Service) verifiedStripeSubscription(ctx context.Context, organizationID, subscriptionID string) (repo.AdminGetOrganizationRow, *stripeclient.SubscriptionState, error) {
+	if err := validateStripeSubscriptionID(subscriptionID); err != nil {
+		return repo.AdminGetOrganizationRow{}, nil, err
+	}
+	organization, err := s.canonicalBillingOrganization(ctx, organizationID)
+	if err != nil {
+		return repo.AdminGetOrganizationRow{}, nil, err
+	}
+	if err := requireStripeSubscriptionAssignment(organization, subscriptionID); err != nil {
+		return repo.AdminGetOrganizationRow{}, nil, err
+	}
+	state, err := s.liveStripeSubscriptionForOrganization(ctx, organization, subscriptionID, stripeclient.RequireAdoptionEligibility)
+	if err != nil {
+		return repo.AdminGetOrganizationRow{}, nil, err
+	}
+	if err := requireStripeActivationStatus(state); err != nil {
+		return repo.AdminGetOrganizationRow{}, nil, err
+	}
+	return organization, state, nil
+}
+
+func (s *Service) liveStripeSubscriptionForOrganization(ctx context.Context, organization repo.AdminGetOrganizationRow, subscriptionID string, options ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
+	lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	state, err := s.billing.GetStripeSubscriptionByID(lookupCtx, subscriptionID, options...)
+	if err != nil {
+		return nil, fmt.Errorf("get Stripe subscription: %w", err)
+	}
+	if state == nil || state.CustomerID != organization.StripeCustomerID.String || state.ID != subscriptionID {
+		return nil, oops.E(oops.CodeConflict, nil, "Stripe subscription does not belong to the organization's Stripe customer")
+	}
+	if state.BillingCycleAnchor.IsZero() {
+		return nil, oops.E(oops.CodeConflict, nil, "Stripe subscription is missing a billing cycle anchor")
+	}
+	return state, nil
+}
+
+func requireStripeSubscriptionAssignment(organization repo.AdminGetOrganizationRow, subscriptionID string) error {
+	switch organization.AccountType {
+	case string(billing.TierPayg):
+		if organization.TrialTier.Valid && !organization.TrialConvertedAt.Valid {
+			return oops.E(oops.CodeConflict, nil, "PAYG organization has an unconverted trial; repair its trial lifecycle before linking a subscription")
+		}
+	case string(billing.TierBase):
+	case string(billing.TierEnterprise):
+		if organization.TrialTier.String != "enterprise" || organization.TrialConvertedAt.Valid {
+			return oops.E(oops.CodeConflict, nil, "paid enterprise organizations cannot be converted by linking a subscription")
+		}
+	default:
+		return oops.E(oops.CodeConflict, nil, "subscription linking requires a free, PAYG, or unconverted enterprise trial organization")
+	}
+	if organization.TrialTier.String == "enterprise" && !organization.TrialConvertedAt.Valid &&
+		((organization.AccountType == string(billing.TierEnterprise) && !organization.Whitelisted) ||
+			(organization.AccountType == string(billing.TierBase) && organization.Whitelisted)) {
+		return oops.E(oops.CodeConflict, nil, "enterprise trial has incompatible organization access")
+	}
+	if !organization.StripeCustomerID.Valid || organization.StripeCustomerID.String == "" {
+		return oops.E(oops.CodeConflict, nil, "set a Stripe customer ID before setting a subscription ID")
+	}
+	if organization.StripeSubscriptionID.Valid && organization.StripeSubscriptionID.String != "" &&
+		(organization.StripeSubscriptionID.String != subscriptionID || organization.AccountType != string(billing.TierPayg)) {
+		return oops.E(oops.CodeConflict, nil, "organization already has a Stripe subscription")
+	}
+	return nil
+}
+
+func requireStripeActivationStatus(state *stripeclient.SubscriptionState) error {
+	switch state.Status {
+	case "active", "trialing", "past_due":
+		return nil
+	default:
+		return oops.E(oops.CodeConflict, nil, "Stripe subscription is not eligible for activation")
+	}
+}
 
 func (s *Service) GetStripeSubscription(ctx context.Context, payload *gen.GetStripeSubscriptionPayload) (*gen.AdminStripeSubscription, error) {
 	organizationID, err := s.canonicalBillingOrganizationID(ctx, payload.OrganizationID)
@@ -204,22 +495,63 @@ func (s *Service) setStripeSubscriptionCancelAtPeriodEnd(ctx context.Context, re
 	return adminStripeSubscription(subscription), nil
 }
 
-func (s *Service) canonicalBillingOrganizationID(ctx context.Context, organizationID string) (string, error) {
-	if s.billing == nil {
-		return "", oops.E(oops.CodeUnavailable, nil, "billing operations are temporarily unavailable").LogWarn(ctx, s.logger)
+func validateStripeCustomerID(customerID string) error {
+	if len(customerID) > 255 || !stripeCustomerIDPattern.MatchString(customerID) {
+		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe customer ID")
 	}
-	return s.canonicalAdminOrganizationID(ctx, organizationID)
+	return nil
+}
+
+func validateStripeSubscriptionID(subscriptionID string) error {
+	if len(subscriptionID) > 255 || !stripeSubscriptionIDPattern.MatchString(subscriptionID) {
+		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe subscription ID")
+	}
+	return nil
+}
+
+func (s *Service) stripeCustomerAssignmentOrganization(ctx context.Context, organizationID string) (repo.AdminGetOrganizationRow, error) {
+	organization, err := s.canonicalBillingOrganization(ctx, organizationID)
+	if err != nil {
+		return repo.AdminGetOrganizationRow{}, err
+	}
+	if organization.StripeCustomerID.Valid || organization.StripeSubscriptionID.Valid {
+		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeConflict, nil, "organization already has Stripe billing identity")
+	}
+	return organization, nil
+}
+
+func (s *Service) canonicalBillingOrganization(ctx context.Context, organizationID string) (repo.AdminGetOrganizationRow, error) {
+	if s.billing == nil {
+		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeUnavailable, nil, "billing operations are temporarily unavailable").LogWarn(ctx, s.logger)
+	}
+	return s.canonicalAdminOrganization(ctx, organizationID)
+}
+
+func (s *Service) canonicalBillingOrganizationID(ctx context.Context, organizationID string) (string, error) {
+	organization, err := s.canonicalBillingOrganization(ctx, organizationID)
+	if err != nil {
+		return "", err
+	}
+	return organization.ID, nil
 }
 
 func (s *Service) canonicalAdminOrganizationID(ctx context.Context, organizationID string) (string, error) {
+	organization, err := s.canonicalAdminOrganization(ctx, organizationID)
+	if err != nil {
+		return "", err
+	}
+	return organization.ID, nil
+}
+
+func (s *Service) canonicalAdminOrganization(ctx context.Context, organizationID string) (repo.AdminGetOrganizationRow, error) {
 	organization, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{ID: organizationID, AllowSlug: false})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return "", oops.C(oops.CodeNotFound)
+		return repo.AdminGetOrganizationRow{}, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return "", oops.E(oops.CodeUnexpected, err, "resolve billing organization").LogError(ctx, s.logger)
+		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeUnexpected, err, "resolve admin organization").LogError(ctx, s.logger)
 	default:
-		return organization.ID, nil
+		return organization, nil
 	}
 }
 

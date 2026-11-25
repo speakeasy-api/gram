@@ -106,12 +106,30 @@ func TestActingIdentityFromContext_Derivation(t *testing.T) {
 			surface: SurfacePlatformMCP,
 		},
 		{
+			name: "Admin MCP is a distinct closed surface",
+			ctx: func(t *testing.T) context.Context {
+				t.Helper()
+				return contextvalues.SetActingSurface(sessionContext(t, sessionID), string(SurfaceAdminMCP))
+			},
+			surface: SurfaceAdminMCP,
+		},
+		{
 			name: "platform break glass is a distinct closed surface",
 			ctx: func(t *testing.T) context.Context {
 				t.Helper()
 				return contextvalues.SetActingSurface(sessionContext(t, sessionID), string(SurfacePlatformBreakGlass))
 			},
 			surface: SurfacePlatformBreakGlass,
+		},
+		{
+			name: "background work marks itself system rather than falling to unknown",
+			ctx: func(t *testing.T) context.Context {
+				t.Helper()
+				// A Temporal activity's context carries no request identity,
+				// so without the mark this would derive SurfaceUnknown.
+				return contextvalues.SetActingSurface(t.Context(), string(SurfaceSystem))
+			},
+			surface: SurfaceSystem,
 		},
 	}
 
@@ -171,14 +189,36 @@ func TestActingIdentityFromContext_ClientIDOnlyFromOAuthClient(t *testing.T) {
 	})
 }
 
+// TestSurfaceFromContext_MatchesDerivation guards the exported accessor against
+// drifting from the derivation it wraps. Callers use it to carry a surface
+// across a Temporal boundary, so a divergence here would silently mislabel
+// every write on the far side.
+func TestSurfaceFromContext_MatchesDerivation(t *testing.T) {
+	t.Parallel()
+
+	for _, ctx := range []context.Context{
+		t.Context(),
+		sessionContext(t, "session_test"),
+		contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+			ActiveOrganizationID: "org_test",
+			APIKeyID:             "key_test",
+		}),
+		contextvalues.SetActingSurface(t.Context(), string(SurfaceSystem)),
+	} {
+		require.Equal(t, actingIdentityFromContext(ctx).Surface, SurfaceFromContext(ctx))
+	}
+}
+
 // TestKnownSurfaces_AreLowCardinality pins the size of the set. The column is
 // faceted in the audit feed, so growth here is a product decision rather than
 // something a new surface should pick up silently.
 func TestKnownSurfaces_AreLowCardinality(t *testing.T) {
 	t.Parallel()
 
-	require.Len(t, knownSurfaces, 7)
+	require.Len(t, knownSurfaces, 10)
 	require.Contains(t, knownSurfaces, SurfaceUnknown)
+	require.Contains(t, knownSurfaces, SurfaceSystem)
 	require.Contains(t, knownSurfaces, SurfaceAdmin)
+	require.Contains(t, knownSurfaces, SurfaceAdminMCP)
 	require.Contains(t, knownSurfaces, SurfacePlatformBreakGlass)
 }

@@ -1,8 +1,28 @@
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 
-export function Spinner({ className }: { className?: string }): JSX.Element {
-  return <Loader2 className={cn("mr-2 h-4 w-4 animate-spin", className)} />;
+/**
+ * The inline loading indicator for buttons, icons and small fields. Full
+ * pages use `SplashScreen` and sections use skeletons.
+ *
+ * Pass `label` when the spinner is the only sign of what is happening, so
+ * screen readers announce it; otherwise it is hidden from them.
+ */
+export function Spinner({
+  className,
+  label,
+}: {
+  className?: string;
+  label?: string;
+}): JSX.Element {
+  return (
+    <Loader2
+      className={cn("mr-2 h-4 w-4 animate-spin", className)}
+      role={label ? "status" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+    />
+  );
 }
 
 const RAINBOW_GRADIENT =

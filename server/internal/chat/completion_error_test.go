@@ -11,7 +11,7 @@ import (
 )
 
 // A locked-down platform key must reach the user as its own code. Falling back
-// to a gateway error would tell an expired trial that Gram is broken.
+// to a gateway error would tell an expired trial that Speakeasy is broken.
 func TestClassifyCompletionError_InferenceDisabled(t *testing.T) {
 	t.Parallel()
 

@@ -3,25 +3,39 @@ package admin
 import (
 	"context"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 var infra *testenv.Environment
 
+// The compiled registry schema is immutable, so every fixture shares one
+// instead of paying for a compile per test.
+var loadRegistryValidator = sync.OnceValues(mcpregistry.LoadValidator)
+
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}
@@ -45,11 +59,20 @@ func TestMain(m *testing.M) {
 func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool) {
 	t.Helper()
 
+	conn, err := infra.CloneTestDatabase(t, "admintestdb")
+	require.NoError(t, err)
+
+	return newTestAdminServiceOnDB(t, conn)
+}
+
+// newTestAdminServiceOnDB is newTestAdminService on a database the caller
+// already cloned. Parallel cases that share one must not share organizations.
+func newTestAdminServiceOnDB(t *testing.T, conn *pgxpool.Pool) (context.Context, *Service, *pgxpool.Pool) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
-	conn, err := infra.CloneTestDatabase(t, "admintestdb")
-	require.NoError(t, err)
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
@@ -61,14 +84,20 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 		enc,
 	)
 	tracerProvider := testenv.NewTracerProvider(t)
+	validator, err := loadRegistryValidator()
+	require.NoError(t, err)
 	svc := &Service{
-		logger:          logger,
-		db:              conn,
-		audit:           audit.NewLogger(),
-		trial:           trialemails.NoopNotifier{},
-		sessions:        sessions,
-		loginStates:     cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
-		productFeatures: productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
+		registry:         mcpregistry.New(conn, validator),
+		tracer:           tracerProvider.Tracer("admin_test"),
+		logger:           logger,
+		db:               conn,
+		audit:            audit.NewLogger(),
+		scopes:           remotemcp.NewStaffScopes(logger, conn, audit.NewLogger()),
+		trial:            trialemails.NoopNotifier{},
+		sessions:         sessions,
+		loginStates:      cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
+		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
+		productFeatures:  productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
 	}
 	svc.oidc = newTestOIDCClient(t, userinfoOK("sub-admin", "operator@example.com"))
 	svc.verifier = NewVerifier(logger, sessions, svc.oidc, adminCache)
@@ -76,9 +105,19 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 	return ctx, svc, conn
 }
 
+func newTestAdminMeterService(t *testing.T) (context.Context, *Service, *pgxpool.Pool, clickhouse.Conn) {
+	t.Helper()
+
+	ctx, svc, db := newTestAdminService(t)
+	meterConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	svc.billing = usage.NewBillingOperations(svc.logger, db, nil, nil, svc.audit, meterConn, staff.Organization{})
+	return ctx, svc, db, meterConn
+}
+
 // newTestAdminServiceWithWorkOS is newTestAdminService with an identity provider
 // attached, for the handlers that write to one.
-func newTestAdminServiceWithWorkOS(t *testing.T, workos orgprovision.WorkOSOrganizationCreator) (context.Context, *Service, *pgxpool.Pool) {
+func newTestAdminServiceWithWorkOS(t *testing.T, workos orgprovision.WorkOSVerifiedDomainCreator) (context.Context, *Service, *pgxpool.Pool) {
 	t.Helper()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -91,6 +130,15 @@ type fakeTrialNotifier struct {
 	started     []string
 	inactive    []string
 	inactiveErr error
+}
+
+func newAdminWorkOSHTTPClient(t *testing.T, handler http.HandlerFunc) *workos.Client {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	return workos.NewClient(policy, "test-api-key", workos.ClientOpts{Endpoint: server.URL, ClientID: "test-client"})
 }
 
 func (f *fakeTrialNotifier) TrialStarted(_ context.Context, organizationID string) error {

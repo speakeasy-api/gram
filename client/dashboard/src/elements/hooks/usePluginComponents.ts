@@ -1,9 +1,10 @@
-import {
+import type {
   CodeHeaderProps,
   SyntaxHighlighterProps,
 } from "@assistant-ui/react-markdown";
-import { ComponentType, useMemo } from "react";
-import { Plugin } from "@/elements/types/plugins";
+import type { ComponentType } from "react";
+import { useMemo } from "react";
+import type { Plugin } from "@/elements/types/plugins";
 
 type ComponentsByLanguage =
   | Record<

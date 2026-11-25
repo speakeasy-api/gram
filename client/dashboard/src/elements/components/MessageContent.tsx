@@ -1,6 +1,7 @@
 "use client";
 
-import { FC, useMemo } from "react";
+import type { FC } from "react";
+import { useMemo } from "react";
 import { ElementsContext } from "@/elements/contexts/contexts";
 import { ToolExecutionProvider } from "@/elements/contexts/ToolExecutionContext";
 import type {

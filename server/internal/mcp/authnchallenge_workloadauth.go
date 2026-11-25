@@ -8,55 +8,57 @@ package mcp
 import (
 	"fmt"
 
-	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
+	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
-// workloadIssuerKeySource builds the key source a trusted workload issuer's
-// assertions verify against.
+// workloadIssuerKeySource builds the key source a workload issuer's assertions
+// verify against.
 //
-// Only one shape exists here, unlike clientKeySource's two: a workload
-// issuer publishes its keys and never registers them with us, so there is no
-// inline key set to consider. The jwks_uri arrives on the row from the RFC
-// 8414 / OIDC discovery the management API runs when an issuer is created or
-// refreshed, which is why nothing is fetched or probed on this path.
+// One shape only, unlike clientKeySource's two: a workload issuer publishes its
+// keys and never registers them with us. jwks_uri is stored on the row at
+// discovery time, so nothing is fetched or probed here.
 //
-// An issuer row with no jwks_uri is a setup error, not a bad assertion, and
-// says so: discovery either never ran or the issuer's document omitted the
-// field. Answering it like a rejected workload would send an operator
-// hunting through their platform's configuration for a problem that is on
-// ours.
-func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *remotesessions_repo.RemoteSessionIssuer) (jwks.Source, error) {
-	if !issuer.JwksUri.Valid || issuer.JwksUri.String == "" {
-		return jwks.Source{}, fmt.Errorf("trusted issuer %q records no jwks_uri: re-run discovery for it", issuer.Slug)
+// jwks_uri is NOT NULL on workload_issuers but carries no non-empty CHECK, so
+// the empty check guards invalid persisted data rather than an unstorable row.
+//
+// A plain-http jwks_uri is refused here, before anything is fetched, with an
+// error wrapping jwks.ErrURINotHTTPS. The table does not constrain the scheme,
+// so the stored value is not trusted to be https.
+//
+// Errors name the issuer by name; a workload issuer has no slug, its URL being
+// its canonical name.
+func workloadIssuerKeySource(tenancy workloadTenancy, issuer *workloadidentity_repo.WorkloadIssuer) (jwks.Source, error) {
+	if issuer.JwksUri == "" {
+		return jwks.Source{}, fmt.Errorf("workload issuer %q records no jwks_uri", issuer.Name)
 	}
 
-	source, err := jwks.NewRemoteSource(issuer.JwksUri.String)
+	source, err := jwks.NewRemoteSource(issuer.JwksUri)
 	if err != nil {
-		return jwks.Source{}, fmt.Errorf("trusted issuer %q jwks_uri: %w", issuer.Slug, err)
+		return jwks.Source{}, fmt.Errorf("workload issuer %q jwks_uri: %w", issuer.Name, err)
 	}
 
-	return source.WithFetchScope(workloadFetchScope(endpoint)), nil
+	return source.WithFetchScope(workloadFetchScope(tenancy)), nil
 }
 
 // workloadFetchScope names the budget a workload issuer's key fetches are
 // charged to.
 //
 // The authorization server's own identifier is the tenant boundary the fetch
-// limiter documents, and every issuer trusted on that endpoint shares the one
-// budget deliberately. The limiter exists so that no number of registrations
-// buys more fetches; keying per issuer row would hand an operator a fresh
-// budget for each issuer they add, which is the amplification it closes. One
-// tenant's issuers contending for that tenant's own budget is the accepted
-// trade. Never the issuer URL, which two organizations may legitimately
-// share, and never a value derived from the request.
+// limiter documents, and every issuer trusted on that authorization server
+// shares the one budget deliberately. The limiter exists so that no number of
+// registrations buys more fetches; keying per issuer row would hand an
+// operator a fresh budget for each issuer they add, which is the amplification
+// it closes. One tenant's issuers contending for that tenant's own budget is
+// the accepted trade. Never the issuer URL, which two organizations may
+// legitimately share, and never a value derived from the request.
 //
 // The prefix keeps this grant's budget separate from the client
 // authentication running against the same key resolver on the same
-// endpoint. Client assertions only reach the resolver behind a registered
-// client, while this grant is reachable by anyone, so an unauthenticated
-// path must not be able to spend the budget an authenticated one depends
-// on.
-func workloadFetchScope(endpoint *ResolvedMcpEndpoint) string {
-	return "workload:" + endpoint.UserSessionIssuerID.String()
+// authorization server. Client assertions only reach the resolver behind a
+// registered client, while this grant is reachable by anyone, so an
+// unauthenticated path must not be able to spend the budget an authenticated
+// one depends on.
+func workloadFetchScope(tenancy workloadTenancy) string {
+	return "workload:" + tenancy.UserSessionIssuerID.String()
 }

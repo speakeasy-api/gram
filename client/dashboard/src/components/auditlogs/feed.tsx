@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import {
   Select,
@@ -14,7 +15,6 @@ import {
   type TimestampMode,
 } from "@/lib/audit-log-feed";
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui/Icon";
 import React from "react";
 
 export function DateGroupHeader({
@@ -25,8 +25,14 @@ export function DateGroupHeader({
   mode: TimestampMode;
 }): React.JSX.Element {
   return (
-    <div className="flex items-center gap-3 px-4 py-2">
-      <span className="text-eyebrow shrink-0">
+    // bg-inherit, not bg-background: the header has to be opaque so pinned
+    // rows do not show through it, but the audit feeds render it on a card and
+    // the page ground would stripe every group.
+    <div className="flex items-center gap-3 bg-inherit px-4 py-2">
+      {/* Short leading stub so the rule reads as one line the date sits on,
+          rather than a label with a tail hanging off its right. */}
+      <div className="bg-border h-px w-2.5 shrink-0" />
+      <span className="text-eyebrow text-foreground shrink-0 font-semibold">
         {formatDateHeader(date, mode)}
       </span>
       <div className="bg-border h-px flex-1" />
@@ -151,7 +157,7 @@ export function AuditFeedFooter({
         >
           {isFetchingNextPage ? (
             <>
-              <Icon name="loader-circle" className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
               Loading...
             </>
           ) : (

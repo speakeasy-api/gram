@@ -1,4 +1,3 @@
-import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useMemo } from "react";
@@ -57,9 +56,6 @@ export function AssistantActivitySparkline({
   assistantId: string;
   className?: string;
 }): JSX.Element | null {
-  const { hasScope } = useRBAC();
-  const canRead = hasScope("project:read");
-
   const { data } = useListChats(
     {
       assistantId,
@@ -68,7 +64,7 @@ export function AssistantActivitySparkline({
       limit: SESSION_SAMPLE,
     },
     undefined,
-    { enabled: canRead, retry: false, throwOnError: false },
+    { retry: false, throwOnError: false },
   );
 
   const counts = useMemo(() => {
@@ -78,12 +74,6 @@ export function AssistantActivitySparkline({
     }));
     return bucketByDay(events, WINDOW_DAYS);
   }, [data]);
-
-  // Without project:read we can't fetch sessions, so render nothing. When we
-  // can read but the assistant has no recent sessions, still draw a flat
-  // baseline so the metric is visibly present (and populates as activity
-  // arrives) rather than mysteriously absent.
-  if (!canRead) return null;
 
   const hasActivity = counts.some((count) => count > 0);
   const max = Math.max(...counts, 1);

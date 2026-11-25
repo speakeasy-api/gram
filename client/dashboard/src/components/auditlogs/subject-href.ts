@@ -1,4 +1,6 @@
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
+import { agentSessionHref } from "@/pages/chatLogs/agentSessionLink";
+import { mcpServerRouteParam } from "@/lib/sources";
 
 // Builds the dashboard path to an audit subject's detail page, or null when the
 // subject has no navigable page (or is missing the slug/id needed to route to
@@ -18,11 +20,11 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
       return projectBase ? `${projectBase}/deployments/${log.subjectId}` : null;
     case "toolset":
       return projectBase && log.subjectSlug
-        ? `${projectBase}/mcp/${log.subjectSlug}`
+        ? `${projectBase}/toolsets/${log.subjectSlug}`
         : null;
     case "mcp_server":
       return projectBase && log.subjectSlug
-        ? `${projectBase}/mcp/x/${log.subjectSlug}`
+        ? `${projectBase}/mcp/${mcpServerRouteParam({ id: log.subjectId, slug: log.subjectSlug })}`
         : null;
     case "environment":
       return projectBase && log.subjectSlug
@@ -36,10 +38,9 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
         ? `${projectBase}/risk-policies?policy=${log.subjectId}`
         : null;
     case "chat_session":
-      // The agent-sessions list opens the session's transcript drawer via
-      // `?chatId=<id>`; subjectId is the chat session UUID.
+      // subjectId is the chat session UUID.
       return projectBase
-        ? `${projectBase}/agent-sessions?chatId=${log.subjectId}`
+        ? agentSessionHref(`${projectBase}/agent-sessions`, log.subjectId)
         : null;
     case "project":
       return log.subjectSlug ? `/${orgSlug}/projects/${log.subjectSlug}` : null;
@@ -52,15 +53,22 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
       return `/${orgSlug}/access/roles?editRole=${log.subjectId}`;
     case "access_member":
       return `/${orgSlug}/access/members`;
-    case "mcp_collection":
-      return log.subjectSlug
-        ? `/${orgSlug}/collections/${log.subjectSlug}`
-        : null;
+    case "killswitch_prescription":
+      // The stable prescription id is sufficient. Do not fetch detail while
+      // formatting the feed, which could expose private notes or create N+1s.
+      return log.subjectId ? `/${orgSlug}/killswitch/${log.subjectId}` : null;
     case "api_key":
       return `/${orgSlug}/api-keys`;
+    case "internal_session_issuer":
+      return speakeasyProviderHref(orgSlug);
     case "json_web_key_set":
+      // The Speakeasy issuer's set isn't listed on the signing-keys pages.
+      if (log.metadata?.["internal_session_issuer"] === true)
+        return speakeasyProviderHref(orgSlug);
       return `/${orgSlug}/signing-keys/${log.subjectId}/overview`;
     case "json_web_key": {
+      if (log.metadata?.["internal_session_issuer"] === true)
+        return speakeasyProviderHref(orgSlug);
       // A key event names the key as its subject; the set it belongs to rides
       // along in metadata, and the Keys tab is where the key is listed.
       const setId = log.metadata?.["json_web_key_set_id"];
@@ -71,4 +79,8 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
     default:
       return null;
   }
+}
+
+function speakeasyProviderHref(orgSlug: string): string {
+  return `/${orgSlug}/identity?tab=identity-providers&provider=speakeasy`;
 }

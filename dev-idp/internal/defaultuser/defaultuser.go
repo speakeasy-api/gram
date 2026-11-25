@@ -3,13 +3,12 @@
 // called /rpc/devIdp.setCurrentUser, the dev-idp falls back to a user
 // derived from the local git committer config.
 //
-// Local modes (mock-workos / oauth2-1 / oauth2) synthesize a row in
-// the dev-idp's users table with the committer email + name and place it
-// in a default organization. Each mode's currentUser is then upserted
-// to point at that user, so the bootstrap fires at most once per mode
-// per dev-idp database.
+// The local backend synthesizes a row in the dev-idp's users table with the
+// committer email + name and places it in a default organization. The
+// oauth2-1 currentUser slot is then upserted to point at that user, so the
+// bootstrap fires at most once per dev-idp database.
 //
-// The workos mode does its own bootstrap path (it can't synthesize -- its
+// The workos backend does its own bootstrap path (it can't synthesize -- its
 // identity universe is the live WorkOS account) and only borrows the
 // GitCommitter helper from this package.
 package defaultuser
@@ -29,7 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
 )
 
-// Re-exported from devidentity, which the Gram server's local seed also
+// Re-exported from devidentity, which the Speakeasy server's local seed also
 // imports so both sides agree on who you are and which org you land in.
 const (
 	DefaultOrgName     = devidentity.DefaultOrgName
@@ -115,7 +114,7 @@ func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID
 		return uuid.Nil, fmt.Errorf("upsert default organization: %w", err)
 	}
 
-	// Stamp a WorkOS-style org ID so the Gram-side identity resolver
+	// Stamp a WorkOS-style org ID so the Speakeasy-side identity resolver
 	// sees a production-shaped workos_id in organization_metadata.
 	if !org.WorkosID.Valid {
 		org, err = queries.UpdateOrganization(ctx, repo.UpdateOrganizationParams{
@@ -129,7 +128,7 @@ func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID
 	}
 
 	// Seed the two default roles WorkOS provisions on every org so the
-	// mock-workos WorkOS-emulation endpoints have something to return
+	// WorkOS-emulation endpoints have something to return
 	// from /authorization/organizations/{id}/roles even before any test
 	// calls CreateRole.
 	for _, r := range []struct {

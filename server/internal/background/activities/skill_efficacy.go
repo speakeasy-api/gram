@@ -198,8 +198,6 @@ func (s *SkillEfficacyScorer) PublishSkillEfficacyBatch(ctx context.Context, par
 		return nil, fmt.Errorf("publish skill efficacy batch: %w", err)
 	case err != nil:
 		return nil, temporal.NewNonRetryableApplicationError("publish skill efficacy batch", "skill_efficacy_publish_error", err)
-	case result.ModelFailures > 0:
-		return nil, fmt.Errorf("retry %d skill efficacy model failures: %w", result.ModelFailures, efficacy.ErrRetryable)
 	}
 
 	return &result, nil

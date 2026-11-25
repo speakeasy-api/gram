@@ -32,7 +32,7 @@ type toolCallBlockParams struct {
 	ProjectID      uuid.UUID
 	Reason         string
 	ToolName       string
-	// UserID is the Gram user whose agent was blocked, used to authorize the
+	// UserID is the Speakeasy user whose agent was blocked, used to authorize the
 	// block page. Empty string when the user could not be resolved at deny time.
 	UserID        string
 	RiskPolicyID  uuid.NullUUID
@@ -44,20 +44,23 @@ type toolCallBlockParams struct {
 // blockViewURL builds the durable block-page URL for a pre-minted block id. The
 // id is minted on the hot path so the URL can go in the deny response
 // immediately, while the backing row is inserted off the hot path (see
-// insertToolCallBlock). Returns "" when no site URL is configured.
-func (s *Service) blockViewURL(blockID uuid.UUID) string {
-	if s.siteURL == nil {
+// insertToolCallBlock). The link is on the organization's default host.
+// Returns "" when no dashboard URL is available.
+func (s *Service) blockViewURL(ctx context.Context, organizationID string, blockID uuid.UUID) string {
+	siteURL := s.orgSiteURL(ctx, organizationID)
+	if siteURL == nil {
 		return ""
 	}
-	return s.siteURL.JoinPath("blocks", blockID.String()).String()
+	return siteURL.JoinPath("blocks", blockID.String()).String()
 }
 
 // insertToolCallBlock persists the durable block row for a pre-minted id. It is
 // meant to run detached (the deny response doesn't wait on it); the row becomes
 // visible to the block page within moments. Best-effort: logs and returns on
-// failure.
+// failure. Skipped when the event was already answered as a pass-through
+// (isVerdictSuperseded), since no block reached the user.
 func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p toolCallBlockParams) {
-	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
+	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil || isVerdictSuperseded(ctx) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, toolCallBlockWriteTimeout)
@@ -168,7 +171,8 @@ func clearRejectedBlockLink(links []blockLink, err error) (string, bool) {
 func (s *Service) recordToolCallBlockAsync(ctx context.Context, p toolCallBlockParams) string {
 	// Only mint a URL when the block row can actually be persisted; otherwise
 	// the link would resolve to a /blocks/<id> page with no backing row. These
-	// preconditions must mirror insertToolCallBlock's guard.
+	// preconditions must mirror insertToolCallBlock's guard (except
+	// isVerdictSuperseded, which only the legacy Claude path sets).
 	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
 		return ""
 	}
@@ -178,7 +182,7 @@ func (s *Service) recordToolCallBlockAsync(ctx context.Context, p toolCallBlockP
 		return ""
 	}
 	go s.insertToolCallBlock(context.WithoutCancel(ctx), blockID, p)
-	return s.blockViewURL(blockID)
+	return s.blockViewURL(ctx, p.OrganizationID, blockID)
 }
 
 // chatIDForBlock derives the chat a blocked tool call belongs to from its

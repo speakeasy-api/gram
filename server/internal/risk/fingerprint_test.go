@@ -104,6 +104,11 @@ func TestParsePepperKeyRing_Errors(t *testing.T) {
 			payload: []byte(`{"current":"v9","keys":{"v1":"00112233"}}`),
 			wantErr: risk.ErrInvalidFingerprintPepperKeyRing,
 		},
+		{
+			name:    "current pepper shorter than 16 bytes",
+			payload: []byte(`{"current":"v1","keys":{"v1":"c2hvcnQ="}}`),
+			wantErr: risk.ErrInvalidFingerprintPepperKeyRing,
+		},
 	}
 
 	for _, tt := range tests {
@@ -120,7 +125,7 @@ func TestParsePepperKeyRing_Errors(t *testing.T) {
 func TestFingerprinter_HS256WithVersion_UnknownVersion(t *testing.T) {
 	t.Parallel()
 
-	payload := keyRingJSON(t, "v1", map[string][]byte{"v1": []byte("k")})
+	payload := keyRingJSON(t, "v1", map[string][]byte{"v1": []byte("key-material-for-v1")})
 	fp, err := risk.ParsePepperKeyRing(payload)
 	require.NoError(t, err)
 
@@ -226,7 +231,7 @@ func TestFingerprinter_TenantedHS256_WithKeyCache(t *testing.T) {
 func TestFingerprinter_TenantedHS256WithVersion_UnknownVersion(t *testing.T) {
 	t.Parallel()
 
-	payload := keyRingJSON(t, "v1", map[string][]byte{"v1": []byte("k")})
+	payload := keyRingJSON(t, "v1", map[string][]byte{"v1": []byte("key-material-for-v1")})
 	fp, err := risk.ParsePepperKeyRing(payload)
 	require.NoError(t, err)
 
@@ -259,4 +264,48 @@ func TestFingerprinter_Versions(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"v1", "v2"}, fp.Versions())
+}
+
+func TestDeriveCurrentKey_IsSeparatePerPurposeAndTenant(t *testing.T) {
+	t.Parallel()
+
+	ring, err := risk.ParsePepperKeyRing([]byte(`{"current":"v1","keys":{"v1":"` + base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef")) + `"}}`))
+	require.NoError(t, err)
+
+	key, err := ring.DeriveCurrentKey("gram/connection/device", "org-a")
+	require.NoError(t, err)
+	require.Len(t, key, 32)
+
+	same, err := ring.DeriveCurrentKey("gram/connection/device", "org-a")
+	require.NoError(t, err)
+	require.Equal(t, key, same, "stable until the pepper rotates")
+
+	otherTenant, err := ring.DeriveCurrentKey("gram/connection/device", "org-b")
+	require.NoError(t, err)
+	require.NotEqual(t, key, otherTenant)
+
+	otherPurpose, err := ring.DeriveCurrentKey("gram/risk/fingerprint/tenant-other", "org-a")
+	require.NoError(t, err)
+	require.NotEqual(t, key, otherPurpose)
+}
+
+// A process with no keyring gets an error, never a panic, so its device key stays empty.
+func TestDeriveCurrentKey_ZeroFingerprinterErrors(t *testing.T) {
+	t.Parallel()
+
+	var ring risk.Fingerprinter
+	_, err := ring.DeriveCurrentKey("gram/connection/device", "org-a")
+	require.Error(t, err)
+}
+
+// The fingerprint key must never come back through this path.
+func TestDeriveCurrentKey_RefusesTheFingerprintLabel(t *testing.T) {
+	t.Parallel()
+
+	ring, err := risk.ParsePepperKeyRing([]byte(`{"current":"v1","keys":{"v1":"` + base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef")) + `"}}`))
+	require.NoError(t, err)
+
+	key, err := ring.DeriveCurrentKey("gram/risk/fingerprint/tenant", "org-a")
+	require.ErrorIs(t, err, risk.ErrReservedKeyInfo)
+	require.Nil(t, key)
 }

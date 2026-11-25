@@ -100,4 +100,10 @@ type BreakerResult struct {
 // [BreakerResult.Report].
 type Breaker interface {
 	Allow(ctx context.Context, key Partition, policy BreakerPolicy) (BreakerResult, error)
+
+	// RemainingDelay reports how long an open circuit will reject executions.
+	// It returns zero when closed, half-open, or ready to half-open. It does
+	// not acquire a trial permit or record an execution; callers must still
+	// use Allow immediately before execution.
+	RemainingDelay(ctx context.Context, key Partition, policy BreakerPolicy) (time.Duration, error)
 }

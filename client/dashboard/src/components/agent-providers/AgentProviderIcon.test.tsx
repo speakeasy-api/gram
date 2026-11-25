@@ -14,12 +14,9 @@ describe("CopilotIcon", () => {
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
 
-    const { container } = render(<CopilotIcon />);
+    render(<CopilotIcon />);
 
     expect(consoleError).not.toHaveBeenCalled();
-    expect(
-      container.querySelector('svg[viewBox="0 0 24 24"]')?.getAttribute("fill"),
-    ).toBe("currentColor");
   });
 });
 
@@ -33,7 +30,33 @@ describe("AgentProviderIcon", () => {
       "opencode",
       "openclaw",
       "copilot",
+      "pi",
     ]);
+  });
+
+  it("offers Copilot CLI in device-agent setup", () => {
+    expect(ACTIVE_AGENT_PROVIDER_IDS.setup).toContain("copilot");
+    expect(AGENT_PROVIDERS.copilot.name).toBe("GitHub Copilot CLI");
+  });
+
+  it("renders distinct GitHub and Microsoft Copilot marks", () => {
+    const { container, rerender } = render(
+      <AgentProviderIcon source="copilot" />,
+    );
+    expect(container.querySelector("svg")?.getAttribute("viewBox")).toBe(
+      "0 0 16 16",
+    );
+    expect(container.querySelector("svg")?.getAttribute("fill")).toBe(
+      "currentColor",
+    );
+    rerender(<AgentProviderIcon source="github-copilot" />);
+    expect(container.querySelector("svg")?.getAttribute("viewBox")).toBe(
+      "0 0 16 16",
+    );
+    rerender(<AgentProviderIcon source="microsoft-copilot" />);
+    expect(container.querySelector("svg")?.getAttribute("viewBox")).toBe(
+      "0 0 48 48",
+    );
   });
 
   it("includes LiteLLM in the shared provider catalog", () => {
@@ -57,8 +80,18 @@ describe("AgentProviderIcon", () => {
     ["aws", "bedrock"],
     ["aws-bedrock", "bedrock"],
     ["github-copilot", "copilot"],
-    ["microsoft", "copilot"],
+    ["microsoft", "microsoft-copilot"],
+    ["microsoft-copilot", "microsoft-copilot"],
+    ["copilot-cli", "copilot"],
     ["opencode", "opencode"],
+    ["pi", "pi"],
+    ["kit", "kit"],
+    [" Kit ", "kit"],
+    ["ahp-harness:kit", "kit"],
+    ["toolkit", "unknown"],
+    ["kit-fork", "unknown"],
+    // "copilot" contains "pi": the Pi mapping must not steal it.
+    ["copilot", "copilot"],
     ["LiteLLM", "litellm"],
     ["devin", "devin"],
     ["mistral", "mistral"],
@@ -72,6 +105,28 @@ describe("AgentProviderIcon", () => {
       expect(agentProviderIconKind(provider.iconSource)).not.toBe("unknown");
     }
   });
+
+  it.each(["kit", "ahp-harness:kit"])(
+    "renders the Kit mark for %s",
+    (source) => {
+      const { container } = render(
+        <AgentProviderIcon source={source} className="size-4" />,
+      );
+      const image = container.querySelector(
+        'img[src="/icons/platforms/kit.png"]',
+      );
+      expect(image).toBeTruthy();
+      expect(image?.getAttribute("class")).toBe("block dark:hidden size-4");
+      expect(image?.getAttribute("alt")).toBe("");
+
+      const darkImage = container.querySelector(
+        'img[src="/icons/platforms/kit-dark.png"]',
+      );
+      expect(darkImage).toBeTruthy();
+      expect(darkImage?.getAttribute("class")).toBe("hidden dark:block size-4");
+      expect(darkImage?.getAttribute("alt")).toBe("");
+    },
+  );
 
   it("renders the LiteLLM logo", () => {
     const { container } = render(<AgentProviderIcon source="litellm" />);

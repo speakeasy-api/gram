@@ -30,6 +30,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -142,7 +143,10 @@ type httpClientOptions struct {
 	retryConfig       *RetryConfig
 	resolver          *net.Resolver
 	allowedCIDRBlocks []*net.IPNet
+	dialTimeout       *time.Duration
 	resilience        *resilienceOptions
+	checkRedirect     func(req *http.Request, via []*http.Request) error
+	internalCatalog   bool
 }
 
 // ClientOption configures a single [Policy.Client] / [Policy.PooledClient]
@@ -188,6 +192,66 @@ func WithAllowedCIDRBlocks(cidrs ...string) func(*httpClientOptions) {
 	}
 }
 
+// WithDialTimeout bounds only the TCP connect phase for this client,
+// replacing the policy dialer's default. A non-positive value disables the
+// dial timeout, leaving connects bounded only by request contexts. A raw
+// negative [net.Dialer.Timeout] would instead fail every dial with an
+// already-expired deadline, so it is normalized to zero here.
+func WithDialTimeout(timeout time.Duration) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
+		if timeout < 0 {
+			timeout = 0
+		}
+		o.dialTimeout = &timeout
+	}
+}
+
+// WithCheckRedirect installs the client's redirect policy, the same hook as
+// [http.Client.CheckRedirect]. It is invoked once per redirect by the client
+// that follows them, which sits inside the retry layer when
+// [WithRetryConfig] is also set. Return [http.ErrUseLastResponse] to hand
+// 3xx responses back to the caller untouched; any other error fails the
+// request without a retry, since the refusal would repeat.
+func WithCheckRedirect(fn func(req *http.Request, via []*http.Request) error) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
+		o.checkRedirect = fn
+	}
+}
+
+// redirectRefusedError marks a redirect the client's [WithCheckRedirect]
+// policy rejected. The refusal is deterministic, so the retry layer never
+// re-sends the request.
+type redirectRefusedError struct{ err error }
+
+func (e *redirectRefusedError) Error() string { return e.err.Error() }
+func (e *redirectRefusedError) Unwrap() error { return e.err }
+
+// markRedirectRefusals wraps a redirect policy so every refusal other than
+// [http.ErrUseLastResponse] is recognisable to noRetryOnRedirectRefusal.
+func markRedirectRefusals(fn func(req *http.Request, via []*http.Request) error) func(req *http.Request, via []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		err := fn(req, via)
+		if err == nil || errors.Is(err, http.ErrUseLastResponse) {
+			return err
+		}
+		return &redirectRefusedError{err: err}
+	}
+}
+
+// noRetryOnRedirectRefusal stops the retry policy from re-sending a request
+// whose redirect the client's policy refused.
+func noRetryOnRedirectRefusal(next retryablehttp.CheckRetry) retryablehttp.CheckRetry {
+	if next == nil {
+		next = retryablehttp.DefaultRetryPolicy
+	}
+	return func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		if _, ok := errors.AsType[*redirectRefusedError](err); ok {
+			return false, err
+		}
+		return next(ctx, resp, err)
+	}
+}
+
 // WithRetryConfig enables retry behaviour using the provided [RetryConfig].
 func WithRetryConfig(config *RetryConfig) func(*httpClientOptions) {
 	return func(o *httpClientOptions) {
@@ -202,6 +266,7 @@ type Policy struct {
 	limiter           Limiter
 	breaker           Breaker
 	tlsRootCAs        *x509.CertPool
+	internalCatalog   *net.IPNet
 }
 
 // WithResolver is a functional option that sets the Policy's resolver.
@@ -210,6 +275,19 @@ type Policy struct {
 func WithResolver(resolver dns.Resolver) func(*Policy) {
 	return func(p *Policy) {
 		p.resolver = resolver
+	}
+}
+
+// WithBlockedCIDRBlocks adds refused blocks for tests; invalid CIDRs are ignored.
+func WithBlockedCIDRBlocks(cidrs ...string) func(*Policy) {
+	return func(p *Policy) {
+		blocks := slices.Clone(p.blockedCIDRBlocks)
+		for _, cidr := range cidrs {
+			if block, err := parseCIDR(cidr); err == nil {
+				blocks = append(blocks, block)
+			}
+		}
+		p.blockedCIDRBlocks = blocks
 	}
 }
 
@@ -266,6 +344,7 @@ func newPolicy(tracerProvider trace.TracerProvider, blockedCIDRBlocks []*net.IPN
 		limiter:           nil,
 		breaker:           nil,
 		tlsRootCAs:        nil,
+		internalCatalog:   nil,
 	}
 
 	for _, option := range options {
@@ -328,6 +407,9 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	for _, option := range options {
 		option(&opts)
 	}
+	if opts.internalCatalog && p.internalCatalog != nil {
+		opts.allowedCIDRBlocks = append(opts.allowedCIDRBlocks, p.internalCatalog)
+	}
 
 	dialOpts := []func(*dialerOptions){}
 	if opts.resolver != nil {
@@ -336,7 +418,11 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	if len(opts.allowedCIDRBlocks) > 0 {
 		dialOpts = append(dialOpts, WithDialerAllowedCIDRBlocks(opts.allowedCIDRBlocks))
 	}
-	transport.DialContext = p.Dialer(dialOpts...).DialContext
+	dialer := p.Dialer(dialOpts...)
+	if opts.dialTimeout != nil {
+		dialer.Timeout = *opts.dialTimeout
+	}
+	transport.DialContext = dialer.DialContext
 
 	// Merge into any existing transport TLS config rather than replacing
 	// it, so a future option that sets client certificates or pinning is
@@ -355,9 +441,9 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	// The annotator sits inside otelhttp, where the request context carries
 	// the outbound HTTP span, and stamps the gram.resilience.* dimensions
 	// derived per request by the resilience transport.
-	var base http.RoundTripper = transport
+	var base http.RoundTripper = redirectHopMarker{next: transport}
 	if opts.resilience != nil {
-		base = &resilienceSpanAnnotator{next: transport}
+		base = &resilienceSpanAnnotator{next: base}
 	}
 
 	// Retries sit outside the resilience layer so every attempt is admitted
@@ -379,18 +465,23 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 
 	if opts.retryConfig == nil {
-		return &http.Client{Transport: roundTripper}
+		return &http.Client{Transport: roundTripper, CheckRedirect: opts.checkRedirect}
 	}
 
 	retryClient := retryablehttp.NewClient()
 	retryClient.Logger = nil // avoid noisy logs from retryablehttp
 	retryClient.HTTPClient = &http.Client{
-		Transport: roundTripper,
+		Transport:     roundTripper,
+		CheckRedirect: opts.checkRedirect,
 	}
 
 	checkRetry := opts.retryConfig.CheckRetry
 	if opts.resilience != nil {
 		checkRetry = noRetryOnResilienceDenial(checkRetry)
+	}
+	if opts.checkRedirect != nil {
+		retryClient.HTTPClient.CheckRedirect = markRedirectRefusals(opts.checkRedirect)
+		checkRetry = noRetryOnRedirectRefusal(checkRetry)
 	}
 
 	retryClient.RetryWaitMin = opts.retryConfig.WaitMin
@@ -409,6 +500,14 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 
 	client := retryClient.StandardClient()
+	// The inner client owns the redirect policy, so the only 3xx that reaches
+	// this layer is one the callback already chose to hand back; stop here
+	// without invoking the callback a second time.
+	if opts.checkRedirect != nil {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
 	client.Transport = &closeIdleRoundTripper{
 		RoundTripper:         client.Transport,
 		closeIdleConnections: transport.CloseIdleConnections,
@@ -471,15 +570,7 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 				return fmt.Errorf("%s: %w: bad ip", address, ErrBadHost)
 			}
 
-			// A client-scoped allowlist overrides the blocklist for trusted,
-			// non-user-controlled destinations (e.g. GKE runner pod IPs).
-			for _, block := range opts.allowedCIDRBlocks {
-				if block.Contains(ip) {
-					return nil
-				}
-			}
-
-			return p.checkIP(ip)
+			return p.checkIP(ip, opts.allowedCIDRBlocks...)
 		},
 	}
 }
@@ -490,6 +581,7 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 // checked. Returns [ErrBlockedIP] when any address falls within a blocked
 // CIDR, and [ErrBadHost] when host is empty, fails to resolve, or resolves to
 // no addresses.
+// CIDR allowance options apply as they do to Client; other options are ignored.
 //
 // ValidateHost is intended for management-time URL validation so that callers
 // reject blocked hosts before persisting them. Runtime enforcement still
@@ -501,13 +593,21 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 // address. The asymmetry is intentional — validation should not persist a row
 // whose host points anywhere blocked, even if a public address happens to be
 // tried first at dial time.
-func (p *Policy) ValidateHost(ctx context.Context, host string) error {
+func (p *Policy) ValidateHost(ctx context.Context, host string, options ...ClientOption) error {
 	if host == "" {
 		return fmt.Errorf("%w: empty host", ErrBadHost)
 	}
 
+	var opts httpClientOptions
+	for _, option := range options {
+		option(&opts)
+	}
+	if opts.internalCatalog && p.internalCatalog != nil {
+		opts.allowedCIDRBlocks = append(opts.allowedCIDRBlocks, p.internalCatalog)
+	}
+
 	if ip := net.ParseIP(host); ip != nil {
-		return p.checkIP(ip)
+		return p.checkIP(ip, opts.allowedCIDRBlocks...)
 	}
 
 	ips, err := p.resolver.LookupIP(ctx, "ip", host)
@@ -519,7 +619,7 @@ func (p *Policy) ValidateHost(ctx context.Context, host string) error {
 	}
 
 	for _, ip := range ips {
-		if err := p.checkIP(ip); err != nil {
+		if err := p.checkIP(ip, opts.allowedCIDRBlocks...); err != nil {
 			return err
 		}
 	}
@@ -533,18 +633,19 @@ func (p *Policy) ValidateHost(ctx context.Context, host string) error {
 // happens via [Policy.Dialer] on the subsequent request, including each
 // redirect. Callers that fetch user-supplied content (OpenAPI specs, images)
 // should use [Policy.ValidateHTTPSURL] instead so the body cannot travel in
-// the clear.
-func (p *Policy) ValidateHTTPURL(ctx context.Context, rawURL string) (*url.URL, error) {
-	return p.validateAbsoluteURL(ctx, rawURL, []string{"http", "https"})
+// the clear. CIDR allowance options apply as they do to Client;
+// other client options do not affect URL validation.
+func (p *Policy) ValidateHTTPURL(ctx context.Context, rawURL string, options ...ClientOption) (*url.URL, error) {
+	return p.validateAbsoluteURL(ctx, rawURL, []string{"http", "https"}, options...)
 }
 
 // ValidateHTTPSURL is [Policy.ValidateHTTPURL] restricted to https. Use it for
 // user-supplied fetch URLs so the request cannot be MITM'd in transit.
-func (p *Policy) ValidateHTTPSURL(ctx context.Context, rawURL string) (*url.URL, error) {
-	return p.validateAbsoluteURL(ctx, rawURL, []string{"https"})
+func (p *Policy) ValidateHTTPSURL(ctx context.Context, rawURL string, options ...ClientOption) (*url.URL, error) {
+	return p.validateAbsoluteURL(ctx, rawURL, []string{"https"}, options...)
 }
 
-func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes []string) (*url.URL, error) {
+func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes []string, options ...ClientOption) (*url.URL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse url: %w", err)
@@ -561,19 +662,24 @@ func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes
 		return nil, fmt.Errorf("url must include a host")
 	}
 
-	if err := p.ValidateHost(ctx, u.Hostname()); err != nil {
+	if err := p.ValidateHost(ctx, u.Hostname(), options...); err != nil {
 		return nil, fmt.Errorf("validate host: %w", err)
 	}
 
 	return u, nil
 }
 
-// checkIP returns [ErrBlockedIP] if ip falls within any of the policy's
-// blocked CIDR ranges, and nil otherwise. It is the shared CIDR-membership
+// checkIP applies explicit CIDR allowances before the policy's blocklist,
+// returning [ErrBlockedIP] for blocked addresses. It is the shared CIDR-membership
 // test used by both [Policy.Dialer]'s ControlContext callback and
 // [Policy.ValidateHost], so that runtime and management-time enforcement stay
 // in sync.
-func (p *Policy) checkIP(ip net.IP) error {
+func (p *Policy) checkIP(ip net.IP, allowedCIDRBlocks ...*net.IPNet) error {
+	for _, block := range allowedCIDRBlocks {
+		if block.Contains(ip) {
+			return nil
+		}
+	}
 	for _, block := range p.blockedCIDRBlocks {
 		if block.Contains(ip) {
 			return fmt.Errorf("%s: %w", ip, ErrBlockedIP)

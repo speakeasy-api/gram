@@ -8,6 +8,7 @@ import { Navigate, useSearchParams } from "react-router";
 export default function SignUp(): JSX.Element {
   const session = useSession();
   const [searchParams] = useSearchParams();
+  const partnerCode = searchParams.get("partner_code") ?? "";
   const redirect = searchParams.get("redirect");
   const redirectTo = safeSameOriginUrl(redirect);
 
@@ -17,9 +18,9 @@ export default function SignUp(): JSX.Element {
 
   const panel =
     session.session === "" ? (
-      <SignUpPanel redirectTo={redirectTo} />
+      <SignUpPanel redirectTo={redirectTo} partnerCode={partnerCode} />
     ) : (
-      <RegisterPanel redirectTo={redirectTo} />
+      <RegisterPanel redirectTo={redirectTo} partnerCode={partnerCode} />
     );
 
   return (

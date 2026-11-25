@@ -46,3 +46,13 @@ func ListDeploymentsDeploymentsPath() string {
 func GetDeploymentLogsDeploymentsPath() string {
 	return "/rpc/deployments.logs"
 }
+
+// EvaluateOpenAPIv3DeploymentsPath returns the URL path to the deployments service evaluateOpenAPIv3 HTTP endpoint.
+func EvaluateOpenAPIv3DeploymentsPath() string {
+	return "/rpc/deployments.evaluateOpenAPIv3"
+}
+
+// GetDeploymentEvaluationDeploymentsPath returns the URL path to the deployments service getDeploymentEvaluation HTTP endpoint.
+func GetDeploymentEvaluationDeploymentsPath() string {
+	return "/rpc/deployments.evaluation"
+}

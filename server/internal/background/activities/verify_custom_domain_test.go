@@ -69,7 +69,7 @@ func newActivity(t *testing.T, ti *testInstance) *activities.VerifyCustomDomain 
 	t.Helper()
 
 	logger := testenv.NewLogger(t)
-	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger(), testTargetCNAME, nil)
+	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger())
 	activity.SetResolver(ti.resolver)
 
 	return activity
@@ -433,7 +433,7 @@ func TestVerifyCustomDomain_DNSLookupFailsNoARecord(t *testing.T) {
 	row := createDomainRow(t, ctx, ti, orgID, domain)
 	activity := newActivity(t, ti)
 
-	_, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
 		OrgID:           orgID,
 		Domain:          domain,
 		CustomDomainID:  row.ID,
@@ -442,8 +442,8 @@ func TestVerifyCustomDomain_DNSLookupFailsNoARecord(t *testing.T) {
 		ProvisionerKind: "",
 		IPAllowlist:     nil,
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to find custom domain mapping")
+	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusVerified, result.Status)
 }
 
 func TestVerifyCustomDomain_CNAMEFailsButARecordExists(t *testing.T) {
@@ -505,7 +505,7 @@ func TestVerifyCustomDomain_ApexMatchesConfiguredARecords(t *testing.T) {
 
 	row := createDomainRow(t, ctx, ti, orgID, domain)
 	logger := testenv.NewLogger(t)
-	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger(), testTargetCNAME, []netip.Addr{netip.MustParseAddr("34.127.46.134")})
+	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger())
 	activity.SetResolver(ti.resolver)
 
 	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
@@ -644,7 +644,7 @@ func TestVerifyCustomDomain_TXTLookupError(t *testing.T) {
 	require.Contains(t, err.Error(), "failed to find TXT record")
 }
 
-func TestVerifyCustomDomain_NXDOMAINOnCNAMEAndAIsPending(t *testing.T) {
+func TestVerifyCustomDomain_RoutingNXDOMAINDoesNotBlockOwnership(t *testing.T) {
 	t.Parallel()
 
 	const orgID = "org-nxdomain-cname"
@@ -670,7 +670,7 @@ func TestVerifyCustomDomain_NXDOMAINOnCNAMEAndAIsPending(t *testing.T) {
 		IPAllowlist:     nil,
 	})
 	require.NoError(t, err, "NXDOMAIN is in-flight propagation, not a failure")
-	require.Equal(t, activities.VerifyStatusDNSPending, result.Status)
+	require.Equal(t, activities.VerifyStatusVerified, result.Status)
 }
 
 func TestVerifyCustomDomain_NXDOMAINOnTXTIsPending(t *testing.T) {

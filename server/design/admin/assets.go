@@ -1,0 +1,55 @@
+package admin
+
+import (
+	assetsdesign "github.com/speakeasy-api/gram/server/design/assets"
+	"github.com/speakeasy-api/gram/server/design/security"
+	. "goa.design/goa/v3/dsl"
+)
+
+func platformAssetMethods() {
+	Method("uploadPlatformImage", func() {
+		Description("Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.")
+		Payload(func() { security.AdminAuthPayload(); Attribute("content_type", String); Required("content_type") })
+		Result(AdminUploadImageResult)
+		declareUnavailable()
+		HTTP(func() {
+			POST("/admin/assets.uploadImage")
+			declareUnavailableResponse()
+			Header("content_type:Content-Type")
+			SkipRequestBodyEncodeDecode()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminUploadPlatformImage")
+		Meta("openapi:extension:x-speakeasy-name-override", "uploadPlatformImage")
+	})
+	Method("serveImage", func() {
+		Description("Serve a public image, preserving the existing image serving contract.")
+		NoSecurity()
+		Payload(assetsdesign.ServeImageForm)
+		Result(assetsdesign.ServeImageResult)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/assets.serveImage")
+			declareUnavailableResponse()
+			Param("id")
+			Response(StatusOK, func() {
+				Header("content_type:Content-Type")
+				Header("content_length:Content-Length")
+				Header("last_modified:Last-Modified")
+				Header("access_control_allow_origin:Access-Control-Allow-Origin")
+				Header("cross_origin_resource_policy:Cross-Origin-Resource-Policy")
+				Header("content_security_policy:Content-Security-Policy")
+				Header("x_content_type_options:X-Content-Type-Options")
+			})
+			SkipResponseBodyEncodeDecode()
+		})
+		Meta("openapi:operationId", "adminServeImage")
+		Meta("openapi:extension:x-speakeasy-name-override", "serveImage")
+	})
+}
+
+var AdminUploadImageResult = Type("AdminUploadImageResult", func() {
+	Attribute("asset", assetsdesign.Asset, "The uploaded platform image asset")
+	Attribute("url", String, "Canonical public URL for the uploaded image")
+	Required("asset", "url")
+})

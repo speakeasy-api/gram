@@ -77,6 +77,15 @@ local linters = new Mapping<String, Step> {
     check = "aube exec oxfmt -- --check --no-error-on-unmatched-pattern {{files}}"
     fix = "aube exec oxfmt -- --write --no-error-on-unmatched-pattern {{files}}"
   }
+  ["zizmor"] {
+    // Audits GitHub Actions; config and the rules it enforces (SHA-pinned
+    // actions, digest-pinned images) are in .github/zizmor.yml. The globs only
+    // decide when it runs: zizmor audits the whole repo in well under a
+    // second, and resolves its config from the repo root that way.
+    // --offline skips the audits that call the GitHub API.
+    glob = List(".github/**/*.yml", ".github/**/*.yaml", "**/action.yml", "**/action.yaml")
+    check = "zizmor --offline --pedantic --quiet ."
+  }
   ["ruff-format"] = (Builtins.ruff_format) {
     batch = true
     exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
@@ -91,7 +100,13 @@ hooks {
   ["pre-commit"] {
     fix = true
     stash = "git"
-    steps = linters
+    steps = (linters) {
+      // Diff-based, so it only makes sense against the staged change. CI runs
+      // the same task against the PR merge base.
+      ["brand"] {
+        check = "mise run -q lint:brand --staged"
+      }
+    }
   }
   ["fix"] {
     fix = true

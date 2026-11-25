@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/functions/repo"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -79,7 +80,7 @@ type FlyRunner struct {
 	defaultOrg      string
 	defaultRegion   string
 	imgSelector     ImageSelector
-	encryption      *encryption.Client
+	keys            *runnerkeys.Keys
 	ua              string
 }
 
@@ -97,7 +98,7 @@ func NewFlyRunner(
 	assetStorage assets.BlobStore,
 	tigrisStore *assets.TigrisStore,
 	imageSelector ImageSelector,
-	encryption *encryption.Client,
+	keys *runnerkeys.Keys,
 	o FlyRunnerOptions,
 ) *FlyRunner {
 	ua := fmt.Sprintf("%s/%s", o.ServiceName, o.ServiceVersion)
@@ -136,7 +137,7 @@ func NewFlyRunner(
 		defaultOrg:      o.DefaultFlyOrg,
 		defaultRegion:   o.DefaultFlyRegion,
 		imgSelector:     imageSelector,
-		encryption:      encryption,
+		keys:            keys,
 		ua:              ua,
 	}
 }
@@ -156,17 +157,19 @@ func (f *FlyRunner) prepareFunctionAuth(ctx context.Context, logger *slog.Logger
 		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function runner").LogError(ctx, logger)
 	}
 
-	format := row.BearerFormat.String
-	sec := row.EncryptionKey.Reveal()
-	if format == "" || len(sec) == 0 {
+	if row.BearerFormat.String == "" {
 		return "", nil, oops.E(oops.CodeInvariantViolation, nil, "function runner does not have credentials").LogError(ctx, logger)
 	}
 
-	unsealedAuthKey, err := f.encryption.Decrypt(string(sec))
+	unsealedAuthKey, err := f.keys.Open(ctx, runnerkeys.Stored{
+		OrganizationID: row.OrganizationID,
+		Platform:       row.EncryptionKey,
+		Org:            row.EncryptionKeyOrgEncrypted,
+	})
 	if err != nil {
-		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to access credentials").LogError(ctx, logger)
+		return "", nil, runnerkeys.Error(ctx, logger, err, "failed to access credentials")
 	}
-	enc, err = encryption.NewWithBytes([]byte(unsealedAuthKey))
+	enc, err = encryption.NewWithBytes(unsealedAuthKey)
 	if err != nil {
 		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to create encryption client").LogError(ctx, logger)
 	}
@@ -603,7 +606,7 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 	if err != nil {
 		return fmt.Errorf("send delete app request: %w", err)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return res.Body.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close fly delete app response body", func() error { return res.Body.Close() })
 
 	if res.StatusCode == http.StatusNotFound {
 		logger.InfoContext(ctx, "app not found during delete, assuming already deleted")
@@ -863,7 +866,7 @@ func (f *FlyRunner) setSecrets(ctx context.Context, logger *slog.Logger, appName
 		if err != nil {
 			return nil, fmt.Errorf("%s: send set secret request: %w", k, err)
 		}
-		defer o11y.LogDefer(ctx, logger, func() error { return res.Body.Close() })
+		defer o11y.LogDefer(ctx, logger, "failed to close fly set secret response body", func() error { return res.Body.Close() })
 
 		if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
 			return nil, fmt.Errorf("%s: unexpected set secret response code: %d", k, res.StatusCode)
@@ -914,7 +917,7 @@ func (f *FlyRunner) serializeAssets(
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function asset").LogError(ctx, logger)
 		}
-		defer o11y.LogDefer(ctx, f.logger, func() error {
+		defer o11y.LogDefer(ctx, f.logger, "failed to close function asset reader", func() error {
 			if cerr := rdr.Close(); cerr != nil {
 				return fmt.Errorf("close function asset reader: %w", cerr)
 			}
@@ -927,7 +930,7 @@ func (f *FlyRunner) serializeAssets(
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to create writer for function asset").LogError(ctx, logger)
 			}
-			defer o11y.LogDefer(ctx, f.logger, func() error {
+			defer o11y.LogDefer(ctx, f.logger, "failed to close function asset tigris writer", func() error {
 				if werr := wr.Close(); werr != nil {
 					return fmt.Errorf("close function asset tigris writer: %w", werr)
 				}

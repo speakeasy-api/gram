@@ -1,6 +1,6 @@
 /**
  * CenteredPage — the shell for full-viewport, standalone pages rendered outside
- * the main app layout: auth (login/register/signup), demo redirects, access
+ * the main app layout: auth (login/signup), demo redirects, access
  * requests, not-found, policy acknowledgements.
  *
  * These already share two shells; this names them as the canonical choice so a

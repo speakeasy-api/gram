@@ -3,25 +3,41 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import { MCPCollection, MCPCollection$inboundSchema } from "./mcpcollection.js";
+import {
+  SlackDirectoryConnection,
+  SlackDirectoryConnection$inboundSchema,
+} from "./slackdirectoryconnection.js";
 
 export type ListResponseBody = {
   /**
-   * List of collections
+   * Whether the deployment can start Slack OAuth.
    */
-  collections: Array<MCPCollection>;
+  authorizationConfigured: boolean;
+  /**
+   * Workspace connections in creation order.
+   */
+  connections: Array<SlackDirectoryConnection>;
 };
 
 /** @internal */
 export const ListResponseBody$inboundSchema: z.ZodMiniType<
   ListResponseBody,
   unknown
-> = z.object({
-  collections: z.array(MCPCollection$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    authorization_configured: z.boolean(),
+    connections: z.array(SlackDirectoryConnection$inboundSchema),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "authorization_configured": "authorizationConfigured",
+    });
+  }),
+);
 
 export function listResponseBodyFromJSON(
   jsonString: string,

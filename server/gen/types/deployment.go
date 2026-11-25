@@ -43,13 +43,12 @@ type Deployment struct {
 	Openapiv3Assets []*OpenAPIv3DeploymentAsset
 	// The number of tools in the deployment generated from Functions.
 	FunctionsToolCount int64
-	// The number of tools in the deployment generated from external MCP servers.
-	ExternalMcpToolCount int64
+	// Always 0: deployments no longer include external MCP servers. Optional, and
+	// kept so older clients that required it keep working.
+	ExternalMcpToolCount *int64
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	FunctionsAssets []*DeploymentFunctions
 	// The packages that were deployed.
 	Packages []*DeploymentPackage
-	// The external MCP servers that were deployed.
-	ExternalMcps []*DeploymentExternalMCP
 }

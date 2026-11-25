@@ -141,7 +141,9 @@ type policyBypassPrincipalKey struct {
 }
 
 func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, organizationID string, userID string, policyID string) ([]authz.Grant, bool) {
-	principals, err := authz.ResolveUserPrincipals(ctx, e.db, organizationID, userID)
+	// An agent, or a workload acting for one, is evaluated as that agent and its
+	// roles, never as a supplied user.
+	principals, err := authz.ResolveActorPrincipals(ctx, e.db, organizationID, userID)
 	if err != nil {
 		e.logger.WarnContext(ctx, "failed to resolve principals for risk policy bypass",
 			attr.SlogError(err),

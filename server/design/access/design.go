@@ -5,6 +5,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 var _ = Service("access", func() {
@@ -148,6 +150,324 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteRole"}`)
 	})
 
+	Method("listDirectoryRoleMappings", func() {
+		Description("List the organization's directory groups and attribute values, and the roles mapped to them.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListDirectoryRoleMappingsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listDirectoryRoleMappings")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDirectoryRoleMappings")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDirectoryRoleMappings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryRoleMappings"}`)
+	})
+
+	Method("listDirectoryPeople", func() {
+		Description("List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("limit", Int, "Maximum number of people to return.", func() {
+				Default(500)
+				Minimum(1)
+				Maximum(1000)
+			})
+			Attribute("cursor", String, "Cursor for the next page of results.")
+			security.SessionPayload()
+		})
+
+		Result(ListDirectoryPeopleResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listDirectoryPeople")
+			Param("limit")
+			Param("cursor")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDirectoryPeople")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDirectoryPeople")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryPeople"}`)
+	})
+
+	Method("syncDirectoryGroups", func() {
+		Description("Fetch the organization's directory groups from WorkOS and save any that are new or changed.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(SyncDirectoryGroupsResult)
+
+		HTTP(func() {
+			POST("/rpc/access.syncDirectoryGroups")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "syncDirectoryGroups")
+		Meta("openapi:extension:x-speakeasy-name-override", "syncDirectoryGroups")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SyncDirectoryGroups", "type": "mutation"}`)
+	})
+
+	Method("setDirectoryRoleMapping", func() {
+		Description("Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.")
+		Security(security.ByKey, func() { Scope("producer") })
+		Security(security.Session)
+		Payload(func() {
+			Extend(SetDirectoryRoleMappingForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+		Result(DirectoryRoleMappingModel)
+		HTTP(func() {
+			POST("/rpc/access.setDirectoryRoleMapping")
+			Deprecated()
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "setDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-name-override", "setDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetDirectoryRoleMapping", "type": "mutation"}`)
+	})
+
+	Method("setDirectoryRoleMappings", func() {
+		Description("Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetDirectoryRoleMappingsForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ArrayOf(DirectoryRoleMappingModel))
+
+		HTTP(func() {
+			POST("/rpc/access.setDirectoryRoleMappings")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setDirectoryRoleMappings")
+		Meta("openapi:extension:x-speakeasy-name-override", "setDirectoryRoleMappings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetDirectoryRoleMappings", "type": "mutation"}`)
+	})
+
+	Method("deleteDirectoryRoleMapping", func() {
+		Description("Remove a directory role mapping.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the mapping to remove.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/access.deleteDirectoryRoleMapping")
+			Param("id")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "deleteDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteDirectoryRoleMapping", "type": "mutation"}`)
+	})
+
+	Method("previewDirectoryRoleSetup", func() {
+		Description("Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryRoleSetupPreviewResult)
+
+		HTTP(func() {
+			GET("/rpc/access.previewDirectoryRoleSetup")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "previewDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-name-override", "previewDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryRoleSetupPreview"}`)
+	})
+
+	Method("applyDirectoryRoleSetup", func() {
+		Description("Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source's role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item's version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ApplyDirectoryRoleSetupForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ApplyDirectoryRoleSetupResult)
+
+		HTTP(func() {
+			POST("/rpc/access.applyDirectoryRoleSetup")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "applyDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-name-override", "applyDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ApplyDirectoryRoleSetup", "type": "mutation"}`)
+	})
+
+	Method("listDirectoryReviewItems", func() {
+		Description("List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListDirectoryReviewItemsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listDirectoryReviewItems")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDirectoryReviewItems")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDirectoryReviewItems")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryReviewItems"}`)
+	})
+
+	Method("resolveDirectoryReviewItem", func() {
+		Description("Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ResolveDirectoryReviewItemForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResolveDirectoryReviewItemResult)
+
+		HTTP(func() {
+			POST("/rpc/access.resolveDirectoryReviewItem")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "resolveDirectoryReviewItem")
+		Meta("openapi:extension:x-speakeasy-name-override", "resolveDirectoryReviewItem")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveDirectoryReviewItem", "type": "mutation"}`)
+	})
+
+	Method("getDirectoryReviewSettings", func() {
+		Description("Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryReviewSettingsModel)
+
+		HTTP(func() {
+			GET("/rpc/access.getDirectoryReviewSettings")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryReviewSettings"}`)
+	})
+
+	Method("updateDirectoryReviewSettings", func() {
+		Description("Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(DirectoryReviewSettingsModel)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryReviewSettingsModel)
+
+		HTTP(func() {
+			POST("/rpc/access.updateDirectoryReviewSettings")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateDirectoryReviewSettings", "type": "mutation"}`)
+	})
+
 	Method("listScopes", func() {
 		Description("List all available scopes and their resource types.")
 		Security(security.ByKey, func() {
@@ -172,6 +492,27 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "listScopes")
 		Meta("openapi:extension:x-speakeasy-name-override", "listScopes")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListScopes"}`)
+	})
+
+	Method("listAgentPolicyScopes", func() {
+		Description("List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListAgentPolicyScopesResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAgentPolicyScopes")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAgentPolicyScopes")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAgentPolicyScopes")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAgentPolicyScopes"}`)
 	})
 
 	Method("listMembers", func() {
@@ -254,7 +595,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("listShadowMCPInventory", func() {
-		Description("List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.")
+		Description("List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -285,10 +626,11 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "listShadowMCPInventory")
 		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventory")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventory"}`)
+		shared.CursorPagination()
 	})
 
 	Method("getShadowMCPInventoryServer", func() {
-		Description("Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.")
+		Description("Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -315,6 +657,37 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryServer"}`)
 	})
 
+	Method("findShadowMCPInventoryServers", func() {
+		Description("Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_urls", ArrayOf(String), "The upstream URLs to look for.", func() {
+				MinLength(1)
+				MaxLength(50)
+			})
+			Required("project_id", "server_urls")
+			security.SessionPayload()
+		})
+
+		Result(FindShadowMCPInventoryServersResult)
+
+		HTTP(func() {
+			GET("/rpc/access.findShadowMCPInventoryServers")
+			Param("project_id")
+			Param("server_urls")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "findShadowMCPInventoryServers")
+		Meta("openapi:extension:x-speakeasy-name-override", "findShadowMCPInventoryServers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FindShadowMCPInventoryServers"}`)
+	})
+
 	Method("updateShadowMCPInventoryServerName", func() {
 		Description("Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.")
 		Security(security.Session)
@@ -333,6 +706,26 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "updateShadowMCPInventoryServerName")
 		Meta("openapi:extension:x-speakeasy-name-override", "updateShadowMCPInventoryServerName")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateShadowMCPInventoryServerName", "type": "mutation"}`)
+	})
+
+	Method("setShadowMCPOfficialServer", func() {
+		Description("Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is made official automatically (the oldest, when several do). While an official server exists and has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the official server; an official server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is made official instead; with keep_shadow no server is official, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic choice applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetShadowMCPOfficialServerForm)
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/access.setShadowMCPOfficialServer")
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "setShadowMCPOfficialServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "setShadowMCPOfficialServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetShadowMCPOfficialServer", "type": "mutation"}`)
 	})
 
 	Method("listShadowMCPInventoryUsers", func() {
@@ -385,6 +778,12 @@ var _ = Service("access", func() {
 				MinLength(1)
 				MaxLength(200)
 			})
+			Attribute("from", String, "Inclusive start of the window to attribute calls from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window to attribute calls from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("limit", Int, func() {
 				Default(50)
 				Minimum(1)
@@ -400,6 +799,8 @@ var _ = Service("access", func() {
 			GET("/rpc/access.listShadowMCPInventoryServersForUser")
 			Param("project_id")
 			Param("user_keys")
+			Param("from")
+			Param("to")
 			Param("limit")
 			security.SessionHeader()
 			Response(StatusOK)
@@ -432,8 +833,240 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveShadowMCPInventoryRequest", "type": "mutation"}`)
 	})
 
+	Method("listAIDetections", func() {
+		Description("List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("category", String, "Filter to detection targets of one category.", func() {
+				Enum("harness", "assistant", "local_model")
+			})
+			Attribute("directory_group_id", String, "Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list.", func() {
+				Format(FormatUUID)
+			})
+			security.SessionPayload()
+		})
+
+		Result(ListAIDetectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAIDetections")
+			Param("category")
+			Param("directory_group_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAIDetections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAIDetections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIDetections"}`)
+	})
+
+	Method("listEmployeeAIDetections", func() {
+		Description("List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.")
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Attribute("user_email", String, "Canonical enrolled-employee email to list detections for.", func() {
+				Format(FormatEmail)
+				MaxLength(320)
+			})
+			Required("user_email")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListAIDetectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listEmployeeAIDetections")
+			Param("user_email")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listEmployeeAIDetections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listEmployeeAIDetections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EmployeeAIDetections"}`)
+	})
+
+	Method("listAIDetectionUsers", func() {
+		Description("List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("target_id", String, "Id of the detection target to expand. Accepted exactly as agents report it, under the same length bound the scan-report ingest stores it with, so every id in the inventory can be expanded.", func() {
+				MinLength(1)
+				MaxLength(64)
+			})
+			Required("target_id")
+			security.SessionPayload()
+		})
+
+		Result(ListAIDetectionUsersResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAIDetectionUsers")
+			Param("target_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAIDetectionUsers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAIDetectionUsers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIDetectionUsers"}`)
+	})
+
+	Method("setAIToolDecision", func() {
+		Description("Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Speakeasy can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("target_id", String, "Id of the detection target to decide on, as agents report it.", func() {
+				Pattern(`^[a-z0-9][a-z0-9-]{0,63}$`)
+			})
+			Attribute("decision", String, "The decision to record. unreviewed clears an earlier one.", func() {
+				Enum("unreviewed", "approved", "blocked")
+			})
+			Attribute("rationale", String, "Why the decision was made. Shown beside it and carried into the audit trail.", func() {
+				MaxLength(1024)
+			})
+			Required("target_id", "decision")
+			security.SessionPayload()
+		})
+
+		Result(SetAIToolDecisionResult)
+
+		HTTP(func() {
+			POST("/rpc/access.setAIToolDecision")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setAIToolDecision")
+		Meta("openapi:extension:x-speakeasy-name-override", "setAIToolDecision")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetAIToolDecision", "type": "mutation"}`)
+	})
+
+	Method("listResourceAudience", func() {
+		Description("List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("resource_kind", String, "The kind of resource to describe.", func() {
+				Enum("mcp")
+			})
+			Attribute("resource_id", String, "The resource to describe.")
+			Required("resource_kind", "resource_id")
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResourceAudienceResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listResourceAudience")
+			Param("resource_kind")
+			Param("resource_id")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listResourceAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "listResourceAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResourceAudience"}`)
+	})
+
+	Method("setResourceAudience", func() {
+		Description("Replace the rules that name one resource. Organization-wide rules are left untouched.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetResourceAudienceForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResourceAudienceResult)
+
+		HTTP(func() {
+			POST("/rpc/access.setResourceAudience")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setResourceAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "setResourceAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetResourceAudience", "type": "mutation"}`)
+	})
+
+	Method("listAudienceOptions", func() {
+		Description("List the principals that can be given access: everyone, roles, people, and agents.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListAudienceOptionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAudienceOptions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAudienceOptions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAudienceOptions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AudienceOptions"}`)
+	})
+
+	Method("explainResourceAccess", func() {
+		Description("Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("resource_kind", String, "The kind of resource to explain.", func() {
+				Enum("mcp")
+			})
+			Attribute("resource_id", String, "The resource to explain.")
+			Attribute("user_id", String, "The organization member whose access to explain.")
+			Required("resource_kind", "resource_id", "user_id")
+			security.SessionPayload()
+		})
+
+		Result(ExplainResourceAccessResult)
+
+		HTTP(func() {
+			GET("/rpc/access.explainResourceAccess")
+			Param("resource_kind")
+			Param("resource_id")
+			Param("user_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "explainResourceAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "explainResourceAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ExplainResourceAccess"}`)
+	})
+
 	Method("requestAccess", func() {
-		Description("Request access to a scope by sending an email notification to organization administrators.")
+		Description("Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.")
 		Security(security.ByKey, func() {
 			Scope("consumer")
 		})
@@ -473,9 +1106,18 @@ var _ = Service("access", func() {
 			})
 			Attribute("principal_urn", String, "Filter by principal URN.")
 			Attribute("scope", String, "Filter by scope.")
+			Attribute("exclude_scopes", ArrayOf(String), "Leave out checks of these scopes, from the rows and from the total.", func() {
+				MaxLength(20)
+			})
 			Attribute("project_id", String, "Filter to a specific project.")
 			Attribute("resolved", Boolean, "Filter by resolution state. True = only resolved, false = only unresolved.")
 			Attribute("ids", ArrayOf(String), "Fetch specific challenges by ID. When set, other filters and pagination are ignored.")
+			Attribute("from", String, "Inclusive start of the window to list challenges from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window to list challenges from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("limit", Int, func() {
 				Description("Maximum number of results to return.")
 				Default(50)
@@ -498,9 +1140,12 @@ var _ = Service("access", func() {
 			Param("outcome")
 			Param("principal_urn")
 			Param("scope")
+			Param("exclude_scopes")
 			Param("project_id")
 			Param("resolved")
 			Param("ids")
+			Param("from")
+			Param("to")
 			Param("limit")
 			Param("offset")
 			security.ByKeyHeader()
@@ -566,7 +1211,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("resolveChallenge", func() {
-		Description("Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.")
+		Description("Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.")
 		Security(security.ByKey, func() {
 			Scope("producer")
 		})
@@ -592,6 +1237,203 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveChallenge"}`)
 	})
 
+	Method("listIdentityAccess", func() {
+		Description("List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("user_id", String, func() {
+				Description("The Speakeasy user ID to look up accessible resources for.")
+			})
+			Required("user_id")
+			security.SessionPayload()
+		})
+
+		Result(ListIdentityAccessResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listIdentityAccess")
+			Param("user_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listIdentityAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "listIdentityAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "IdentityAccess"}`)
+	})
+
+	Method("createTemporaryGrant", func() {
+		Description("Give one principal (a member, role, agent, or everyone) a scope on a resource or activity boundary until a deadline, without changing role assignments. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the principal already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(CreateTemporaryGrantForm)
+			security.SessionPayload()
+		})
+
+		Result(TemporaryGrantModel)
+
+		HTTP(func() {
+			POST("/rpc/access.createTemporaryGrant")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "createTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateTemporaryGrant", "type": "mutation"}`)
+	})
+
+	Method("listTemporaryGrants", func() {
+		Description("List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("principal_urn", String, "The principal whose grants to list, e.g. user:<id>, role:organization:<id> or agent:<id>. Members who are not organization administrators may only pass their own user URN.")
+			Attribute("include_expired", Boolean, "Include grants whose deadline has passed.", func() {
+				Default(false)
+			})
+			Required("principal_urn")
+			security.SessionPayload()
+		})
+
+		Result(ListTemporaryGrantsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listTemporaryGrants")
+			Param("principal_urn")
+			Param("include_expired")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listTemporaryGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "listTemporaryGrants")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TemporaryGrants"}`)
+	})
+
+	Method("renewTemporaryGrant", func() {
+		Description("Move an active temporary grant's deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(RenewTemporaryGrantForm)
+			security.SessionPayload()
+		})
+
+		Result(TemporaryGrantModel)
+
+		HTTP(func() {
+			POST("/rpc/access.renewTemporaryGrant")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "renewTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "renewTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RenewTemporaryGrant", "type": "mutation"}`)
+	})
+
+	Method("revokeTemporaryGrant", func() {
+		Description("End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("id", String, "The temporary grant to end.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(TemporaryGrantModel)
+
+		HTTP(func() {
+			POST("/rpc/access.revokeTemporaryGrant")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeTemporaryGrant", "type": "mutation"}`)
+	})
+
+	Method("listAccessRequests", func() {
+		Description("List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("status", String, "Only requests with this status: pending, approved, denied, expired or withdrawn.")
+			Attribute("mine", Boolean, "Only requests made by the signed-in member, even for an administrator.", func() {
+				Default(false)
+			})
+			security.SessionPayload()
+		})
+
+		Result(ListAccessRequestsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAccessRequests")
+			Param("status")
+			Param("mine")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAccessRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAccessRequests")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AccessRequests"}`)
+	})
+
+	Method("decideAccessRequest", func() {
+		Description("Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(DecideAccessRequestForm)
+			security.SessionPayload()
+		})
+
+		Result(AccessRequestModel)
+
+		HTTP(func() {
+			POST("/rpc/access.decideAccessRequest")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "decideAccessRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "decideAccessRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DecideAccessRequest", "type": "mutation"}`)
+	})
+
+	Method("withdrawAccessRequest", func() {
+		Description("Withdraw a pending access request you made. Only the requester can withdraw it.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("id", String, "The access request to withdraw.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(AccessRequestModel)
+
+		HTTP(func() {
+			POST("/rpc/access.withdrawAccessRequest")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "withdrawAccessRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "withdrawAccessRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WithdrawAccessRequest", "type": "mutation"}`)
+	})
+
 })
 
 var SelectorModel = Type("Selector", func() {
@@ -600,20 +1442,30 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "*")
+		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "workload", "mcp_auth_client", "*")
 	})
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
 	})
+	Attribute("client_type", String, func() {
+		Description("Auth client type filter (mcp:auth and mcp:blocked_auth only).")
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "*")
+	})
+	Attribute("connection_owner", String, func() {
+		Description("Personal connection owner filter (mcp:auth and mcp:blocked_auth on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.")
+	})
+	Attribute("upstream_client", String, func() {
+		Description("Upstream OAuth client filter (mcp:auth and mcp:blocked_auth on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")
+	})
 	Attribute("disposition", String, func() {
 		Description("Tool disposition filter (MCP scopes only).")
-		Enum("read_only", "destructive", "idempotent", "open_world")
+		Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
 	})
 	Attribute("tool", String, func() {
 		Description("Specific tool name filter (MCP scopes only).")
 	})
 	Attribute("project_id", String, func() {
-		Description("Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.")
+		Description("Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.")
 	})
 	Attribute("server_url", String, func() {
 		Description("Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.")
@@ -626,7 +1478,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+		Enum(conv.AnySlice(authz.ScopeNames())...)
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -640,18 +1492,22 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+		Enum(conv.AnySlice(authz.ScopeNames())...)
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+			Enum(conv.AnySlice(authz.ScopeNames())...)
 		})
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
 		Description("Selector constraints. Null means unrestricted.")
+	})
+
+	Attribute("direct_selectors", ArrayOf(SelectorModel), func() {
+		Description("The subset of this scope's selectors granted to the calling user by name rather than through a role or everyone. For allow scopes it holds only selectors naming a concrete resource, which outrank blocks inherited from roles or everyone on that resource. For blocked scopes it holds the caller's own blocks, which always apply. Omitted when empty.")
 	})
 })
 
@@ -666,6 +1522,7 @@ var RoleModel = Type("Role", func() {
 	Attribute("is_system", Boolean, "Whether this is a built-in system role that cannot be deleted.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants assigned to this role.")
 	Attribute("member_count", Int, "Number of members assigned to this role.")
+	Attribute("agent_ids", ArrayOf(String), "IDs of the agent principals assigned to this role.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -680,30 +1537,65 @@ var ListRolesResult = Type("ListRolesResult", func() {
 })
 
 var ScopeModel = Type("ScopeDefinition", func() {
-	Required("slug", "description", "resource_type", "visibility")
+	Required("slug", "label", "description", "resource_type", "category", "visibility", "agent_eligible", "temporary_grantable", "sensitive", "sub_scopes")
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+		Enum(conv.AnySlice(authz.ScopeNames())...)
 	})
-	Attribute("description", String, "What this scope protects.")
+	Attribute("label", String, "Short name for the permission as people see it, e.g. \"View tool logs\".")
+	Attribute("description", String, "What a holder of this scope can do and, where it matters, what the scope does not include.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "environment", "skill", "risk_policy", "chat")
+		Enum("org", "project", "mcp", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "workload", "mcp_auth_client")
 	})
+	Attribute("category", String, func() {
+		Description("How the dashboard groups the permission. Differs from resource_type where one resource type carries several permission families: plugins and tool logs are checked against a project but are not project permissions.")
+		Enum("org", "project", "mcp", "mcp_auth_client", "environment", "skill", "plugin", "assistant", "risk_policy", "session", "inference", "log", "agent", "workload")
+	})
+	Attribute("sensitive", Boolean, "Whether granting this scope exposes other members' private activity or allows destructive administration. Clients warn before granting it.")
+	Attribute("sensitivity", String, func() {
+		Description("Why the scope is sensitive. Absent when sensitive is false.")
+		Enum("conversations", "tool_logs", "destructive_admin")
+	})
+	Attribute("sub_scopes", ArrayOf(String), "User-visible scopes a grant of this scope also satisfies, one step down: org:admin also satisfies org:read. Empty when the scope implies nothing else.")
 	Attribute("visibility", String, func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
 		Enum("user_visible", "internal")
 	})
+	Attribute("agent_eligible", Boolean, "Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.")
+	Attribute("temporary_grantable", Boolean, "Whether an administrator can give this scope for a limited time with createTemporaryGrant.")
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")
-		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "risk_policy:bypass")
+		Enum(conv.AnySlice(authz.ExclusionScopeNames())...)
+	})
+})
+
+var ScopeTaskModel = Type("ScopeTask", func() {
+	Required("slug", "label", "scopes")
+
+	Attribute("slug", String, "Stable identifier of the task.", func() {
+		Example("session_review")
+	})
+	Attribute("label", String, "What a person is trying to do.", func() {
+		Example("Review other members' sessions")
+	})
+	Attribute("scopes", ArrayOf(String, func() {
+		Enum(conv.AnySlice(authz.ScopeNames())...)
+	}), "Every scope the task needs end to end.", func() {
+		Example([]string{"chat:read", "log:read"})
 	})
 })
 
 var ListScopesResult = Type("ListScopesResult", func() {
-	Required("scopes")
+	Required("scopes", "tasks")
 	Attribute("scopes", ArrayOf(ScopeModel), "The scopes available in access control.")
+	Attribute("tasks", ArrayOf(ScopeTaskModel), "Tasks that need more than one scope, so a missing scope can be explained in context.")
+})
+
+var ListAgentPolicyScopesResult = Type("ListAgentPolicyScopesResult", func() {
+	Required("scopes")
+	Attribute("scopes", ArrayOf(ScopeModel), "The scopes an agent policy may hold, in catalogue order.")
 })
 
 var CreateRoleForm = Type("CreateRoleForm", func() {
@@ -713,6 +1605,9 @@ var CreateRoleForm = Type("CreateRoleForm", func() {
 	Attribute("description", String, "Optional description of what this role can do.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role on creation.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "Optional agent IDs to assign to this role on creation. Scopes an agent cannot hold at runtime are simply not granted to it.")
 })
 
 var UpdateRoleForm = Type("UpdateRoleForm", func() {
@@ -724,20 +1619,249 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("add_grants", ArrayOf(RoleGrantModel), "Scope grants to add.")
 	Attribute("remove_grants", ArrayOf(RoleGrantModel), "Scope grants to remove.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role. Existing assignments are preserved.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "The complete set of agent IDs assigned to this role. Unlike member_ids this replaces the role's agent membership, because agents have no other surface to be removed from a role on. Omit to leave agent membership untouched.")
+})
+
+// One principal's standing on a single resource. `level` is the access it has,
+// or one of the "blocked_" levels when a rule takes access away; `applies_to`
+// says whether the rule names this resource or covers every resource of its
+// kind.
+var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
+	Required("principal_urn", "kind", "display_name", "level", "applies_to")
+
+	Attribute("principal_urn", String, "Canonical principal URN this rule belongs to.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "agent", "directory_group", "directory_attribute", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
+	Attribute("member_count", Int64, "How many people the principal reaches, when known.")
+	Attribute("level", String, "Access this principal has on the resource, or the access a rule takes away.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage")
+	})
+	Attribute("applies_to", String, "Whether the rule names this resource or every resource of its kind.", func() {
+		Enum("resource", "all_resources")
+	})
+	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
+	Attribute("member_ids", ArrayOf(String), "User ids of the organization members this rule currently reaches.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "Ids of the agents this rule currently reaches, whether it names them or a role they hold.")
+	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
+		})
+	})
+})
+
+var ResourceAudienceRolePlugin = Type("ResourceAudienceRolePlugin", func() {
+	Required("principal_urn", "plugin_id", "name", "slug")
+	Attribute("principal_urn", String, "Exact role assigned to the plugin.")
+	Attribute("plugin_id", String, "Plugin ID.")
+	Attribute("name", String, "Plugin name.")
+	Attribute("slug", String, "Plugin slug.")
+})
+
+var ResourceAudienceResult = Type("ResourceAudienceResult", func() {
+	Required("entries", "version")
+	Attribute("role_plugins", ArrayOf(ResourceAudienceRolePlugin), "Live plugins containing this resource and assigned to an exact audience role. Omitted without plugin read and administrator access; not evidence of authorization or installation.", func() {
+		Meta("struct:tag:json", "role_plugins,omitzero")
+	})
+	Attribute("entries", ArrayOf(ResourceAudienceEntryModel), "Rules deciding access to this resource, widest first.")
+	Attribute("version", String, "Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.")
+})
+
+var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {
+	Required("principal_urn", "level")
+
+	Attribute("principal_urn", String, "Principal to grant or block. Use '*' for everyone in the organization.")
+	Attribute("level", String, "Access to give the principal on this resource. The \"blocked_\" levels take access away, one scope each and nothing else: \"blocked\" removes connect, \"blocked_view\" removes view, \"blocked_manage\" removes manage. Taking a principal off a resource entirely means writing all three.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage")
+	})
+	Attribute("tools", ArrayOf(String), "Narrow the access to these tool names. Omit for the whole resource.")
+	Attribute("dispositions", ArrayOf(String), "Narrow the access to tools carrying these annotations. Omit for the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
+		})
+	})
+})
+
+var SetResourceAudienceForm = Type("SetResourceAudienceForm", func() {
+	Required("resource_kind", "resource_id", "entries", "expected_version")
+
+	Attribute("resource_kind", String, "The kind of resource being changed.", func() {
+		Enum("mcp")
+	})
+	Attribute("resource_id", String, "The resource being changed.")
+	Attribute("entries", ArrayOf(SetResourceAudienceEntryModel), "The complete set of rules that name this resource. Rules covering every resource are not affected.")
+	Attribute("expected_version", String, "The version this edit was based on, from the last read. The save is refused if the rules changed since.")
+})
+
+var AudienceOptionModel = Type("AudienceOption", func() {
+	Required("principal_urn", "kind", "display_name")
+
+	Attribute("principal_urn", String, "Canonical principal URN to grant access to.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "agent")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
+	Attribute("member_count", Int64, "How many people the principal reaches, when known.")
+})
+
+var ListAudienceOptionsResult = Type("ListAudienceOptionsResult", func() {
+	Required("options")
+	Attribute("options", ArrayOf(AudienceOptionModel), "Principals that can be given access.")
+})
+
+var ExplainedAccessDirectorySourceModel = Type("ExplainedAccessDirectorySource", func() {
+	Required("source_kind")
+
+	Attribute("source_kind", String, "Whether membership of a directory group or a directory attribute value mapped the role.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_name", String, "The directory group, for a group mapping.")
+	Attribute("attribute_key", String, "The directory attribute, for an attribute mapping.")
+	Attribute("attribute_value", String, "The attribute value the member's profile matched, for an attribute mapping.")
+})
+
+// One loaded grant that matched an access check, and how it shaped the
+// decision.
+var ExplainedAccessRuleModel = Type("ExplainedAccessRule", func() {
+	Required("principal_urn", "kind", "display_name", "level", "applies_to", "effect", "via_directory_mapping")
+
+	Attribute("principal_urn", String, "Canonical principal URN holding the rule.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("level", String, "The access the rule gives, or the access a \"blocked_\" rule takes away. \"all\" is a grant covering every permission.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage", "all")
+	})
+	Attribute("applies_to", String, "Whether the rule names this resource, every resource in its project, or every resource of its kind.", func() {
+		Enum("resource", "project", "all_resources")
+	})
+	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
+	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
+		})
+	})
+	Attribute("effect", String, "How the rule shaped the decision. allows: proves the access. overrides: a rule made directly to the member that proves the access despite a block from a role or everyone. overridden: a block such a rule overrides. blocks: takes the access away. blocked: an allow that matches but that a block keeps from counting. limits: a block taking away some of the resource's tools.", func() {
+		Enum("allows", "overrides", "overridden", "blocks", "blocked", "limits")
+	})
+	Attribute("reason", String, "Why a blocked rule made directly to the member did not override the block. wildcard_direct_grant: it covers every resource. narrower_direct_grant: it constrains something the tool does not carry. own_exclusion: the member's own block applies.", func() {
+		Enum("wildcard_direct_grant", "narrower_direct_grant", "own_exclusion")
+	})
+	Attribute("via_directory_mapping", Boolean, "Whether the member holds this role only through a directory role mapping.")
+	Attribute("directory_sources", ArrayOf(ExplainedAccessDirectorySourceModel), "The directory role mappings giving the member this role, including when they also hold it directly. Returned only to organization administrators, because attribute values can carry personal data.")
+})
+
+var ExplainedAccessLevelModel = Type("ExplainedAccessLevel", func() {
+	Required("level", "allowed", "rules")
+
+	Attribute("level", String, "The access being explained.", func() {
+		Enum("use", "view", "manage")
+	})
+	Attribute("allowed", Boolean, "Whether the rules give the member this access.")
+	Attribute("tool_access", String, "For use: whether every tool, only some, or none are reachable.", func() {
+		Enum("all", "some", "none")
+	})
+	Attribute("rules", ArrayOf(ExplainedAccessRuleModel), "Every rule matching this access, deciding rules first.")
+})
+
+// One loaded grant that matched a member's use of one upstream credential.
+var ExplainedCredentialRuleModel = Type("ExplainedCredentialRule", func() {
+	Required("principal_urn", "kind", "display_name", "applies_to", "effect", "via_directory_mapping")
+
+	Attribute("principal_urn", String, "Canonical principal URN holding the rule.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("applies_to", String, "Whether the rule names this credential (credential), every credential of its kind (credential_type), or every credential (all_credentials).")
+	Attribute("project_bound", Boolean, "Whether the rule applies only on servers in this server's project.")
+	Attribute("effect", String, "How the rule shaped the decision: allows, overrides, overridden, blocks or blocked, with the same meanings as an access rule's effect.")
+	Attribute("reason", String, "Why a blocked rule made directly to the member did not override the block: wildcard_direct_grant, narrower_direct_grant or own_exclusion.")
+	Attribute("via_directory_mapping", Boolean, "Whether the member holds this role only through a directory role mapping.")
+})
+
+// Whether a member may use one upstream credential the server offers.
+var ExplainedCredentialAccessModel = Type("ExplainedCredentialAccess", func() {
+	Required("auth_client_id", "name", "client_type", "enabled", "allowed", "rules")
+
+	Attribute("auth_client_id", String, "The credential's auth client ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The credential's name.")
+	Attribute("client_type", String, "The kind of credential.", func() {
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema")
+	})
+	Attribute("enabled", Boolean, "Whether the credential is turned on. A turned-off credential is unusable whatever the rules say.")
+	Attribute("allowed", Boolean, "Whether the member's rules let them use it, with their own connection for a personal credential.")
+	Attribute("rules", ArrayOf(ExplainedCredentialRuleModel), "Every rule matching this use, deciding rules first.")
+})
+
+var ExplainResourceAccessResult = Type("ExplainResourceAccessResult", func() {
+	Required("visibility", "levels", "credentials")
+
+	Attribute("visibility", String, "Who may connect without a rule. public: connecting is not checked against rules. private: rules decide. disabled: nobody can connect.", func() {
+		Enum("public", "private", "disabled")
+	})
+	Attribute("levels", ArrayOf(ExplainedAccessLevelModel), "The decision for use, view and manage, in that order.")
+	Attribute("credentials", ArrayOf(ExplainedCredentialAccessModel), "For each upstream credential the server offers, whether the member may use it. A caller needs both use access to the server and one usable credential to reach an upstream that requires sign-in.")
 })
 
 var MemberModel = Type("AccessMember", func() {
-	Required("id", "principal_urn", "name", "email", "role_ids", "joined_at")
+	Required("id", "principal_urn", "name", "email", "role_ids", "directory_role_ids", "joined_at")
 
 	Attribute("id", String, "User ID.")
 	Attribute("principal_urn", String, "Canonical principal URN for this member.")
 	Attribute("name", String, "Display name.")
 	Attribute("email", String, "Email address.")
 	Attribute("photo_url", String, "Avatar URL.")
-	Attribute("role_ids", ArrayOf(String), "All role IDs assigned to this member.")
+	Attribute("role_ids", ArrayOf(String), "Role IDs assigned directly to this member.")
+	Attribute("directory_role_ids", ArrayOf(String), "Role IDs this member holds through directory role mappings. They follow the member's directory groups and attributes, so updating the member's roles does not change them.")
 	Attribute("joined_at", String, func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
+	})
+	// Directory profile, from the org's synced identity provider. Every field
+	// except in_directory is absent when no directory is connected, when the
+	// member has no profile in it, or when the provider does not report that
+	// attribute. listMembers sets in_directory to false in those cases.
+	Attribute("department", String, "Department name as reported by the identity provider.")
+	Attribute("groups", ArrayOf(String), "Names of the directory groups the member belongs to.")
+	Attribute("directory_groups", ArrayOf(MemberDirectoryGroupModel), "The directory groups the member belongs to, by stable ID. Prefer this to groups when matching a member to a group, since two groups can share a name.")
+	Attribute("in_directory", Boolean, "Whether the member has a live profile in the organization's synced directory. Set by listMembers.")
+	Attribute("directory_role_sources", ArrayOf(MemberDirectoryRoleSourceModel), "Where each role in directory_role_ids comes from: one entry per directory role mapping that currently gives the member that role, so a role reached through two groups appears twice. Set by listMembers.")
+})
+
+var MemberDirectoryGroupModel = Type("AccessMemberDirectoryGroup", func() {
+	Description("A live directory group a member belongs to.")
+	Required("id", "name")
+
+	Attribute("id", String, "Directory group identifier.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Directory group name.")
+})
+
+var MemberDirectoryRoleSourceModel = Type("AccessMemberDirectoryRoleSource", func() {
+	Description("One directory role mapping that currently gives a member a role. Attribute keys and values are not included: they can carry personal directory data, so admins resolve them through listDirectoryRoleMappings by mapping_id.")
+	Required("role_id", "mapping_id", "source_kind")
+
+	Attribute("role_id", String, "The role the mapping grants.")
+	Attribute("mapping_id", String, "The directory role mapping.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("source_kind", String, "What the mapping matches: a directory group or an attribute value.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "The mapped directory group. Set when source_kind is group.", func() {
+		Format(FormatUUID)
 	})
 })
 
@@ -822,8 +1946,11 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("observed_use_count", Int)
-	Attribute("user_count", Int)
-	Attribute("top_users", ArrayOf(String))
+	Attribute("blocked_call_count", Int, "Calls to this server that a Speakeasy hook blocked, within the telemetry retention window. Included in observed_use_count. Optional for one release so a dashboard deployed ahead of the server still loads the inventory; the server always sends it.", func() {
+		Default(0)
+	})
+	Attribute("user_count", Int, "Distinct users who reached this server.")
+	Attribute("top_users", ArrayOf(String), "The users who reached this server most.")
 	Attribute("access", String, func() {
 		Description("Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.")
 		Enum("none", "allowed", "blocked", "restricted")
@@ -836,12 +1963,71 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
+	Attribute("official_server", ShadowMCPOfficialServerModel, func() {
+		Description("The MCP server that is this Shadow MCP server's official version. While it is official, direct use is blocked wherever a Shadow MCP policy applies, and the block points agents here.")
+	})
+	Attribute("suggested_official_server", ShadowMCPSuggestedOfficialServerModel, func() {
+		Description("A project MCP server that proxies to the same upstream URL, offered as the server to make official. Present only while no official server is set.")
+	})
+	Attribute("official_server_declined", Boolean, func() {
+		Description("True when an administrator chose to keep using the Shadow MCP server directly, so no official server is chosen automatically.")
+	})
+})
+
+var ShadowMCPSuggestedOfficialServerModel = Type("ShadowMCPSuggestedOfficialServer", func() {
+	Description("A project MCP server that already serves a Shadow MCP server's upstream URL and can be made its official version.")
+	Required("mcp_server_id", "name")
+
+	Attribute("mcp_server_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The server's display name.")
+	Attribute("slug", String, "The server's slug, when it has one.")
+})
+
+var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
+	Description("The official, Speakeasy-served version of a Shadow MCP server: a project MCP server that proxies to its URL, or one an administrator chose.")
+	Required("mcp_server_id", "name")
+
+	Attribute("mcp_server_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The official server's display name.")
+	Attribute("slug", String, "The official server's slug, when it has one.")
+	Attribute("url", String, "Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.")
+	Attribute("gateway_name", String, "The gateway that serves the official server, when url is a gateway's address.")
+	Attribute("automatic", Boolean, "True when the server was made official automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.")
+	Attribute("direct_access_allowed", Boolean, func() {
+		Description("Deprecated: official servers no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.")
+	})
+})
+
+var SetShadowMCPOfficialServerForm = Type("SetShadowMCPOfficialServerForm", func() {
+	Required("project_id", "server_url")
+
+	Attribute("project_id", String, func() { Format(FormatUUID) })
+	Attribute("server_url", String, "The Shadow MCP server's URL.", func() { Format(FormatURI) })
+	Attribute("mcp_server_id", String, "The MCP server to make the official version. Omit it, with keep_shadow unset, to go back to the automatic choice.", func() { Format(FormatUUID) })
+	Attribute("keep_shadow", Boolean, "Keep using the Shadow MCP server directly: no server is made official, not even automatically. Cannot be combined with mcp_server_id.")
 })
 
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
 	Required("servers")
 	Attribute("servers", ArrayOf(ShadowMCPInventoryServerModel))
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPInventoryServerMatchModel = Type("ShadowMCPInventoryServerMatch", func() {
+	Description("A Shadow MCP server in use whose upstream URL matches one of the URLs looked up.")
+	Required("server_url", "server")
+
+	Attribute("server_url", String, "The URL that was looked up, exactly as given.")
+	Attribute("server", ShadowMCPInventoryServerModel)
+})
+
+var FindShadowMCPInventoryServersResult = Type("FindShadowMCPInventoryServersResult", func() {
+	Required("matches")
+	Attribute("matches", ArrayOf(ShadowMCPInventoryServerMatchModel), "One entry per looked-up URL that matches a Shadow MCP server in use. URLs without a match are left out.")
 })
 
 var ShadowMCPInventoryUserSourceModel = Type("ShadowMCPInventoryUserSource", func() {
@@ -867,6 +2053,79 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 	Required("users")
 	Attribute("users", ArrayOf(ShadowMCPInventoryUserModel))
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var AIDetectionModel = Type("AIDetection", func() {
+	Description("One AI detection target aggregated across an organization's device-agent scan reports.")
+	// access is optional for one release rather than required. The endpoint
+	// predates it, so a dashboard from this revision can meet a server that
+	// does not send it yet, during a deploy or after a rollback, and a required
+	// member would fail SDK validation on every row and blank the page. The
+	// server always sends it; only the client's tolerance is relaxed. Make it
+	// required in the release after this one ships, as access_summary was.
+	Required("target_id", "display_name", "category", "user_count", "device_count", "signals", "versions", "first_seen", "last_seen")
+
+	Attribute("target_id", String, "Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).")
+	Attribute("display_name", String, "Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.")
+	Attribute("category", String, "Detection target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally). From the catalog for ids it knows, otherwise as recorded at detection time.", func() {
+		Enum("harness", "assistant", "local_model")
+	})
+	Attribute("user_count", Int64, "Distinct enrolled users this tool was detected for.")
+	Attribute("device_count", Int64, "Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.")
+	Attribute("signals", ArrayOf(String), "Detection signals observed for this target across all reports: installed and/or running.", func() {
+		Elem(func() {
+			Enum("installed", "running")
+		})
+	})
+	Attribute("versions", ArrayOf(String), "Unique non-empty detected versions for this target.")
+	Attribute("first_seen", String, func() {
+		Description("When this tool was first detected anywhere in the organization.")
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, func() {
+		Description("When this tool was most recently detected.")
+		Format(FormatDateTime)
+	})
+	Attribute("access", shared.AIToolAccessSummaryModel)
+})
+
+var SetAIToolDecisionResult = Type("SetAIToolDecisionResult", func() {
+	Required("target_id", "access")
+	Attribute("target_id", String, "The detection target the decision was recorded for.")
+	Attribute("access", shared.AIToolAccessSummaryModel)
+})
+
+var ListAIDetectionsResult = Type("ListAIDetectionsResult", func() {
+	Required("detections")
+	Attribute("detections", ArrayOf(AIDetectionModel), "Detected AI tools aggregated per target, most recently seen first.")
+})
+
+var AIDetectionUserModel = Type("AIDetectionUser", func() {
+	Description("One enrolled user a detection target was found for, with that user's share of the organization's scan reports: the evidence AIDetection carries for the whole organization, narrowed to one person.")
+	Required("user_email", "device_count", "signals", "versions", "first_seen", "last_seen")
+
+	Attribute("user_email", String, "Canonical email of the enrolled user the detections are attributed to. Linked alias emails are folded into it.")
+	Attribute("device_count", Int64, "Distinct devices, by hardware serial, this tool was detected on for this user. Devices that report no serial are not counted.")
+	Attribute("signals", ArrayOf(String), "Detection signals observed for this user: installed and/or running.", func() {
+		Elem(func() {
+			Enum("installed", "running")
+		})
+	})
+	Attribute("versions", ArrayOf(String), "Unique non-empty detected versions for this user.")
+	Attribute("first_seen", String, func() {
+		Description("When this tool was first detected for this user.")
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, func() {
+		Description("When this tool was most recently detected for this user.")
+		Format(FormatDateTime)
+	})
+})
+
+var ListAIDetectionUsersResult = Type("ListAIDetectionUsersResult", func() {
+	Required("detection", "users")
+	Attribute("detection", AIDetectionModel, "The target as the inventory lists it, so a page reached by link needs no second read for its name, category and access decision.")
+	Attribute("users", ArrayOf(AIDetectionUserModel), "Users the target was detected for, most recently seen first.")
 })
 
 var ShadowMCPAccessSummaryModel = Type("ShadowMCPAccessSummary", func() {
@@ -970,7 +2229,7 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 	Attribute("principal_urn", String, "Principal URN e.g. user:<uuid> or api_key:<id>.")
 	Attribute("principal_type", String, func() {
 		Description("Kind of principal.")
-		Enum("user", "api_key", "assistant")
+		Enum("user", "api_key", "assistant", "agent", "workload")
 	})
 	Attribute("user_email", String, "Email when available.")
 	Attribute("photo_url", String, "User avatar URL when available.")
@@ -981,11 +2240,12 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 		Enum("allow", "deny", "error")
 	})
 	Attribute("reason", String, func() {
-		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override")
+		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override", "connection_owner_mismatch")
 	})
 	Attribute("scope", String, "Scope that was checked.")
 	Attribute("resource_kind", String, "Resource kind of the check.")
 	Attribute("resource_id", String, "Resource ID of the check.")
+	Attribute("selector", MapOf(String, String), "Complete selector captured for the check. Omitted for legacy or malformed challenge data.")
 	Attribute("role_slugs", ArrayOf(String), "Roles the principal had loaded.")
 	Attribute("evaluated_grant_count", Int, "Total grants evaluated.")
 	Attribute("matched_grant_count", Int, "Number of grants that matched.")
@@ -997,10 +2257,25 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 	})
 	Attribute("resolution_type", String, func() {
 		Description("How the challenge was resolved.")
-		Enum("role_assigned", "dismissed")
+		Enum("role_assigned", "temporary_grant", "dismissed")
 	})
 	Attribute("resolved_by", String, "URN of the admin who resolved.")
 	Attribute("resolution_role_slug", String, "Role slug assigned (when resolution_type=role_assigned).")
+	Attribute("resolution_temporary_grant", ChallengeTemporaryGrantModel, "The temporary grant given (when resolution_type=temporary_grant).")
+})
+
+var ChallengeTemporaryGrantModel = Type("ChallengeTemporaryGrant", func() {
+	Required("id", "status")
+
+	Attribute("id", String, "Temporary grant ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("status", String, "active: authorizing requests. expired: its deadline passed, or the same access was given again later as a new grant. revoked: ended early, so the grant no longer exists.", func() {
+		Enum("active", "expired", "revoked")
+	})
+	Attribute("expires_at", String, "When the grant stops, or stopped, authorizing new requests. Absent once revoked, and once the same access was given again later.", func() {
+		Format(FormatDateTime)
+	})
 })
 
 var ListChallengesResult = Type("ListChallengesResult", func() {
@@ -1030,7 +2305,7 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 	Attribute("principal_urn", String, "Principal URN e.g. user:<uuid> or api_key:<id>.")
 	Attribute("principal_type", String, func() {
 		Description("Kind of principal.")
-		Enum("user", "api_key", "assistant")
+		Enum("user", "api_key", "assistant", "agent", "workload")
 	})
 	Attribute("user_email", String, "Email when available.")
 	Attribute("photo_url", String, "User avatar URL when available.")
@@ -1041,7 +2316,7 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 		Enum("allow", "deny", "error")
 	})
 	Attribute("reason", String, func() {
-		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override")
+		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override", "connection_owner_mismatch")
 	})
 	Attribute("scope", String, "Scope that was checked.")
 	Attribute("resource_kind", String, "Resource kind of the check.")
@@ -1059,10 +2334,11 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 	})
 	Attribute("resolution_type", String, func() {
 		Description("How the bucket was resolved.")
-		Enum("role_assigned", "dismissed")
+		Enum("role_assigned", "temporary_grant", "dismissed")
 	})
 	Attribute("resolved_by", String, "URN of the admin who resolved.")
 	Attribute("resolution_role_slug", String, "Role slug assigned (when resolution_type=role_assigned).")
+	Attribute("resolution_temporary_grant", ChallengeTemporaryGrantModel, "The temporary grant given (when resolution_type=temporary_grant).")
 })
 
 var ListChallengeBucketsResult = Type("ListChallengeBucketsResult", func() {
@@ -1074,7 +2350,9 @@ var ListChallengeBucketsResult = Type("ListChallengeBucketsResult", func() {
 var ResolveChallengeForm = Type("ResolveChallengeForm", func() {
 	Required("challenge_ids", "principal_urn", "scope", "resolution_type")
 
-	Attribute("challenge_ids", ArrayOf(String), "IDs of the challenges in ClickHouse to resolve.")
+	Attribute("challenge_ids", ArrayOf(String), "IDs of the challenges in ClickHouse to resolve.", func() {
+		MinLength(1)
+	})
 	Attribute("principal_urn", String, "Principal that was denied.")
 	Attribute("scope", String, "Scope that was denied.")
 	Attribute("resource_kind", String, "Resource kind from the challenge.")
@@ -1083,7 +2361,8 @@ var ResolveChallengeForm = Type("ResolveChallengeForm", func() {
 		Description("How the challenge is being resolved.")
 		Enum("role_assigned", "dismissed")
 	})
-	Attribute("role_slug", String, "Role slug to assign (required when resolution_type=role_assigned).")
+	Attribute("role_slug", String, "Custom role slug to add to the denied user before resolving (required when resolution_type=role_assigned).")
+	Attribute("role_assignment_confirmed", Boolean, "Confirms the administrator reviewed and accepts every permission granted by the complete role. Must be true when resolution_type=role_assigned.")
 })
 
 var ChallengeResolutionModel = Type("ChallengeResolution", func() {
@@ -1098,7 +2377,7 @@ var ChallengeResolutionModel = Type("ChallengeResolution", func() {
 	Attribute("resource_kind", String, "Resource kind.")
 	Attribute("resource_id", String, "Resource ID.")
 	Attribute("resolution_type", String, func() {
-		Enum("role_assigned", "dismissed")
+		Enum("role_assigned", "temporary_grant", "dismissed")
 	})
 	Attribute("role_slug", String, "Assigned role slug.")
 	Attribute("resolved_by", String, "Admin who resolved.")
@@ -1118,7 +2397,7 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope being requested.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all")
 	})
 	Attribute("resource_id", String, "Optional resource ID the scope applies to.")
 	Attribute("resource_name", String, "Optional human-readable name for the resource (e.g. project name, MCP server name).")
@@ -1126,9 +2405,455 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 		Description("Optional message from the requester explaining why they need access.")
 		MaxLength(1000)
 	})
+	Attribute("duration", String, func() {
+		Description("How long the requester would like the access for, counted from approval: 1h, 2h or 4h. A suggestion shown to the approver, who still picks the window. Stored only when the request is stored. Cannot be sent with requested_until.")
+		Enum("1h", "2h", "4h")
+	})
+	Attribute("requested_until", String, func() {
+		Description("When the requester would like the access until, such as the end of their day as their own clock reads it. Must be in the future and at most 24 hours away. A suggestion shown to the approver, who still picks the window. Cannot be sent with duration.")
+		Format(FormatDateTime)
+	})
 })
 
 var RequestAccessResult = Type("RequestAccessResult", func() {
 	Required("sent_to_count")
-	Attribute("sent_to_count", Int, "Number of administrators who were notified.")
+	Attribute("sent_to_count", Int, "Number of administrators who were emailed.")
+	Attribute("request", AccessRequestModel, "The stored request administrators decide, returned when the access requests rollout is on for the organization and the caller is a signed-in member. API keys and agents get no stored request. Its id is the request id. Asking again while a request for the same access is pending returns that request without notifying anyone again.")
+})
+
+var AccessibleMCPServerModel = Type("AccessibleMCPServer", func() {
+	Description("An MCP server an identity is authorized to reach.")
+	Required("id", "name", "slug", "project_id", "project_slug")
+
+	Attribute("id", String, func() {
+		Description("Unique server identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Display name of the server.")
+	Attribute("slug", String, "URL-safe server slug.")
+	Attribute("project_id", String, func() {
+		Description("Project the server belongs to.")
+		Format(FormatUUID)
+	})
+	Attribute("project_slug", String, "Slug of the project the server belongs to.")
+})
+
+var AccessibleSkillModel = Type("AccessibleSkill", func() {
+	Description("A skill an identity is authorized to reach.")
+	Required("id", "name", "project_id", "project_slug")
+
+	Attribute("id", String, func() {
+		Description("Unique skill identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Internal name of the skill.")
+	Attribute("display_name", String, "Human-readable display name, when set.")
+	Attribute("project_id", String, func() {
+		Description("Project the skill belongs to.")
+		Format(FormatUUID)
+	})
+	Attribute("project_slug", String, "Slug of the project the skill belongs to.")
+})
+
+var ListIdentityAccessResult = Type("ListIdentityAccessResult", func() {
+	Required("servers", "skills")
+	Attribute("servers", ArrayOf(AccessibleMCPServerModel), "MCP servers accessible to this identity.")
+	Attribute("skills", ArrayOf(AccessibleSkillModel), "Skills accessible to this identity.")
+})
+
+var DirectoryRoleMappingModel = Type("DirectoryRoleMapping", func() {
+	Required("id", "source_kind", "source_status", "role_urn", "created_at", "updated_at")
+
+	Attribute("id", String, "Unique mapping identifier.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("source_kind", String, "What the mapping matches: a directory group or an attribute value.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "The mapped directory group. Set when source_kind is group.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("directory_group_name", String, "Display name of the mapped directory group.")
+	Attribute("attribute_key", String, "The directory attribute key. Set when source_kind is attribute.")
+	Attribute("attribute_value", String, "The directory attribute value. Set when source_kind is attribute.")
+	Attribute("source_status", String, func() {
+		Description("Whether the mapped source still exists. missing means the group was deleted from the directory, or no live directory user has the attribute value. A missing source matches nobody, so the mapping grants nothing until the source returns.")
+		Enum("active", "missing")
+	})
+	Attribute("role_urn", String, "Principal URN of the role granted to matching members.")
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var DirectoryGroupOptionModel = Type("DirectoryGroupOption", func() {
+	Required("id", "name", "member_count")
+
+	Attribute("id", String, "Directory group identifier.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Directory group name.")
+	Attribute("member_count", Int64, "Number of directory users in the group.")
+})
+
+var DirectoryAttributeOptionModel = Type("DirectoryAttributeOption", func() {
+	Required("key", "value", "member_count")
+
+	Attribute("key", String, "Directory attribute key, e.g. department_name.")
+	Attribute("value", String, "Directory attribute value.")
+	Attribute("member_count", Int64, "Number of directory users with this value.")
+})
+
+var ListDirectoryRoleMappingsResult = Type("ListDirectoryRoleMappingsResult", func() {
+	Required("groups", "attributes", "mappings")
+
+	Attribute("groups", ArrayOf(DirectoryGroupOptionModel), "Active directory groups in the organization.")
+	Attribute("attributes", ArrayOf(DirectoryAttributeOptionModel), "Distinct attribute values set on active directory users.")
+	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "Live directory role mappings.")
+})
+
+var DirectoryPersonGroupModel = Type("DirectoryPersonGroup", func() {
+	Required("id", "name")
+
+	Attribute("id", String, "Directory group ID.", func() { Format(FormatUUID) })
+	Attribute("name", String, "Directory group name.")
+})
+
+var DirectoryPersonModel = Type("DirectoryPerson", func() {
+	Required("id", "email", "state", "groups")
+
+	Attribute("id", String, "Directory profile ID.", func() { Format(FormatUUID) })
+	Attribute("email", String, "Email the directory reports for the profile. Empty when the directory reports none.")
+	Attribute("first_name", String, "First name the directory reports, when it reports one.")
+	Attribute("last_name", String, "Last name the directory reports, when it reports one.")
+	Attribute("state", String, "How the profile relates to Speakeasy accounts. member: linked to, or the only email match of, a member of this organization. account_not_member: an account exists but is not a member here. not_signed_in: no matching account. ambiguous_email: the email matches more than one profile or account, so it is never matched.", func() {
+		Enum("member", "account_not_member", "not_signed_in", "ambiguous_email")
+	})
+	Attribute("user_id", String, "The matched Speakeasy user ID. Present only for member and account_not_member.")
+	Attribute("groups", ArrayOf(DirectoryPersonGroupModel), "Live directory groups the profile belongs to.")
+})
+
+var DirectoryPeopleStateCountsModel = Type("DirectoryPeopleStateCounts", func() {
+	Required("member", "account_not_member", "not_signed_in", "ambiguous_email")
+
+	Attribute("member", Int64, "Profiles in the member state.")
+	Attribute("account_not_member", Int64, "Profiles in the account_not_member state.")
+	Attribute("not_signed_in", Int64, "Profiles in the not_signed_in state.")
+	Attribute("ambiguous_email", Int64, "Profiles in the ambiguous_email state.")
+})
+
+var ListDirectoryPeopleResult = Type("ListDirectoryPeopleResult", func() {
+	Required("people", "counts")
+
+	Attribute("people", ArrayOf(DirectoryPersonModel), "One page of directory profiles, ordered by profile ID.")
+	Attribute("counts", DirectoryPeopleStateCountsModel, "Profiles per state across the whole organization, not just this page.")
+	Attribute("next_cursor", String, "Cursor for the next page. Absent on the last page.")
+})
+
+var SyncDirectoryGroupsResult = Type("SyncDirectoryGroupsResult", func() {
+	Required("group_count")
+
+	Attribute("group_count", Int, "Number of groups WorkOS returned across the organization's directories.")
+})
+
+var SetDirectoryRoleMappingForm = Type("SetDirectoryRoleMappingForm", func() {
+	Required("source_kind", "role_urn")
+	Attribute("source_kind", String, "What the mapping matches.", func() { Enum("group", "attribute") })
+	Attribute("directory_group_id", String, "Directory group to map. Required when source_kind is group.", func() { Format(FormatUUID) })
+	Attribute("attribute_key", String, "Attribute key to match. Required when source_kind is attribute.", func() { MinLength(1) })
+	Attribute("attribute_value", String, "Attribute value to match. Required when source_kind is attribute.", func() { MinLength(1) })
+	Attribute("role_urn", String, "Role principal URN to grant.")
+})
+
+var SetDirectoryRoleMappingsForm = Type("SetDirectoryRoleMappingsForm", func() {
+	Required("source_kind", "role_urns")
+
+	Attribute("source_kind", String, "What the mapping matches.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "Directory group to map. Required when source_kind is group.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("attribute_key", String, "Attribute key to match. Required when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+	Attribute("attribute_value", String, "Attribute value to match. Required when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+	Attribute("expected_role_urns", ArrayOf(String), "Optional compare-and-set precondition. The normalized current role set must match or the request returns conflict without changes. Omit for unconditional replacement; an empty array requires an unmapped source.")
+	Attribute("role_urns", ArrayOf(String), "The complete set of role principal URNs to grant, from Role.principal_urn. Empty removes every mapping for the source.")
+})
+
+var DirectoryRoleSetupSourceModel = Type("DirectoryRoleSetupSource", func() {
+	Required("source_kind")
+
+	Attribute("source_kind", String, "What the source is: a directory group or an attribute value.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "The directory group. Set when source_kind is group.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("attribute_key", String, "The directory attribute key. Set when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+	Attribute("attribute_value", String, "The directory attribute value. Set when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+})
+
+var DirectoryRoleSetupProposedRoleModel = Type("DirectoryRoleSetupProposedRole", func() {
+	Required("role_action", "role_name", "current_grants")
+
+	Attribute("role_action", String, "reuse an existing role, or create a new one.", func() {
+		Enum("reuse", "create")
+	})
+	Attribute("role_id", String, "The existing role. Set when role_action is reuse.")
+	Attribute("role_urn", String, "Principal URN of the existing role. Set when role_action is reuse.")
+	Attribute("role_name", String, "The existing role's name, or the name a new role would get.")
+	Attribute("current_grants", ArrayOf(RoleGrantModel), "Grants the existing role already has. Applying the proposal approves them for the source's members. Empty for a new role.")
+})
+
+var DirectoryRoleSetupPreviewItemModel = Type("DirectoryRoleSetupPreviewItem", func() {
+	Required("source", "source_name", "directory_people", "existing_role_urns", "proposed_roles", "version")
+
+	Attribute("source", DirectoryRoleSetupSourceModel)
+	Attribute("source_name", String, "The group name, or key=value for an attribute value.")
+	Attribute("directory_people", Int64, "People with a live directory profile that matches the source, counted once per email address, so someone with profiles in two directories counts once and a profile with no email is not counted. These are directory people, not organization members or role members.")
+	Attribute("existing_role_urns", ArrayOf(String), "Roles the source already maps to. Empty for an unmapped source.")
+	Attribute("proposed_roles", ArrayOf(DirectoryRoleSetupProposedRoleModel), "The suggested role set. For a mapped source this is its current set; for an unmapped source, one reused or new role.")
+	Attribute("version", String, "Opaque version of the source and its current mappings. Send it back with applyDirectoryRoleSetup.")
+})
+
+var DirectoryRoleSetupHiddenAttributeKeyModel = Type("DirectoryRoleSetupHiddenAttributeKey", func() {
+	Required("key", "value_count")
+
+	Attribute("key", String, "Directory attribute key with too many distinct values to offer in bulk setup.")
+	Attribute("value_count", Int64, "Number of distinct values the key has on live directory profiles.")
+})
+
+var DirectoryRoleSetupPreviewResult = Type("DirectoryRoleSetupPreviewResult", func() {
+	Required("items", "hidden_attribute_keys", "max_values_per_attribute_key")
+
+	Attribute("items", ArrayOf(DirectoryRoleSetupPreviewItemModel), "One item per live directory group and mappable attribute value.")
+	Attribute("hidden_attribute_keys", ArrayOf(DirectoryRoleSetupHiddenAttributeKeyModel), "Attribute keys left out of items because they have more than max_values_per_attribute_key distinct values. Their values can still be mapped one at a time with setDirectoryRoleMappings.")
+	Attribute("max_values_per_attribute_key", Int64, "The limit on distinct values above which an attribute key is left out.")
+})
+
+var ApplyDirectoryRoleSetupRoleModel = Type("ApplyDirectoryRoleSetupRole", func() {
+	Description("One role in an item's role set: an existing role by principal URN, or a new role by name. Set exactly one.")
+
+	Attribute("role_urn", String, "Principal URN of an existing role.")
+	Attribute("create_name", String, "Name of a role to create. Items in the batch that name the same new role share it.", func() {
+		MinLength(1)
+	})
+})
+
+var ApplyDirectoryRoleSetupItemModel = Type("ApplyDirectoryRoleSetupItem", func() {
+	Required("source", "version", "roles")
+
+	Attribute("source", DirectoryRoleSetupSourceModel)
+	Attribute("version", String, "The item version from previewDirectoryRoleSetup.")
+	Attribute("roles", ArrayOf(ApplyDirectoryRoleSetupRoleModel), "The complete role set for the source. Empty removes every mapping for the source.")
+})
+
+var ApplyDirectoryRoleSetupForm = Type("ApplyDirectoryRoleSetupForm", func() {
+	Required("items")
+
+	Attribute("items", ArrayOf(ApplyDirectoryRoleSetupItemModel), "The sources to set up. Each source may appear once.", func() {
+		MinLength(1)
+		MaxLength(500)
+	})
+	Attribute("grant_set", ArrayOf(RoleGrantModel), "Optional grants given to every role this request creates. Omit to create roles with no grants. Existing roles are never changed.")
+})
+
+var DirectoryRoleSetupSideEffectModel = Type("DirectoryRoleSetupSideEffect", func() {
+	Required("kind", "role_id", "request_status")
+
+	Attribute("kind", String, "What was requested.", func() {
+		Enum("workos_role_sync")
+	})
+	Attribute("role_id", String, "The role the request is for.")
+	Attribute("request_status", String, "Requested work runs after the response and is never reported as done.", func() {
+		Enum("requested")
+	})
+})
+
+var ApplyDirectoryRoleSetupResult = Type("ApplyDirectoryRoleSetupResult", func() {
+	Required("created_roles", "mappings", "side_effects")
+
+	Attribute("created_roles", ArrayOf(RoleModel), "Roles this request created.")
+	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "The resulting mappings of every source in the request.")
+	Attribute("side_effects", ArrayOf(DirectoryRoleSetupSideEffectModel), "Work requested after commit.")
+})
+
+var DirectoryReviewItemModel = Type("DirectoryReviewItem", func() {
+	Required("id", "kind", "occurrence", "created_at", "item")
+
+	Attribute("id", String, "The review item.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("kind", String, "new_group: an unmapped group first seen after review started. new_attribute_value: a new value of an attribute key that has mappings. source_missing: a mapped group or attribute value that has gone.", func() {
+		Enum("new_group", "new_attribute_value", "source_missing")
+	})
+	Attribute("occurrence", Int32, "1 the first time a source is raised for this kind, then one more each time it recurs.")
+	Attribute("created_at", String, "When the item was raised.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("item", DirectoryRoleSetupPreviewItemModel, "The source with its current roles, proposal and version. For a missing source, directory_people is 0 and proposed_roles are the roles approving would remove.")
+})
+
+var ListDirectoryReviewItemsResult = Type("ListDirectoryReviewItemsResult", func() {
+	Required("items")
+
+	Attribute("items", ArrayOf(DirectoryReviewItemModel), "Pending items, oldest first.")
+})
+
+var ResolveDirectoryReviewItemForm = Type("ResolveDirectoryReviewItemForm", func() {
+	Required("id", "decision")
+
+	Attribute("id", String, "The review item.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("decision", String, "approve, dismiss, or opt_out_key (new attribute values only).", func() {
+		Enum("approve", "dismiss", "opt_out_key")
+	})
+	Attribute("version", String, "The item version from listDirectoryReviewItems. Required to approve.")
+	Attribute("roles", ArrayOf(ApplyDirectoryRoleSetupRoleModel), "The role set to map a new source to. Required and non-empty to approve a new source; must be empty or omitted otherwise.")
+	Attribute("grant_set", ArrayOf(RoleGrantModel), "Optional grants given to every role the approval creates. Existing roles are never changed.")
+})
+
+var ResolveDirectoryReviewItemResult = Type("ResolveDirectoryReviewItemResult", func() {
+	Required("state", "created_roles", "mappings", "side_effects")
+
+	Attribute("state", String, "The item's state after the decision.", func() {
+		Enum("approved", "dismissed")
+	})
+	Attribute("created_roles", ArrayOf(RoleModel), "Roles the approval created.")
+	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "The mappings an approval of a new source wrote. Empty for every other decision.")
+	Attribute("side_effects", ArrayOf(DirectoryRoleSetupSideEffectModel), "Work requested after commit.")
+})
+
+var DirectoryReviewSettingsModel = Type("DirectoryReviewSettings", func() {
+	Required("emails_enabled")
+
+	Attribute("emails_enabled", Boolean, "Whether organization admins are emailed when directory changes are waiting for a decision. On by default.")
+})
+
+var CreateTemporaryGrantForm = Type("CreateTemporaryGrantForm", func() {
+	Required("principal_urn", "scope", "expires_at")
+
+	Attribute("principal_urn", String, "The principal receiving the access: an organization member (user:<id>), everyone (user:all), a role (role:organization:<id> or role:global:<id>) or an active agent (agent:<id>).")
+	Attribute("scope", String, "The scope to give, e.g. chat:read or log:read. Only scopes that grant access to read, use or manage resources can be given temporarily; org:admin, blocklist, auth client, risk policy and machine scopes cannot.")
+	Attribute("selector", SelectorModel, "The resource or activity boundary. Omit to cover every resource of the scope's kind.")
+	Attribute("expires_at", String, "When the grant stops authorizing new requests. At least five minutes and at most 24 hours from now.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("reason", String, "Why the access is needed, recorded in the audit log.", func() {
+		MaxLength(1000)
+	})
+	Attribute("challenge_ids", ArrayOf(String), "Denied authorization challenges this grant answers. Each must be an unresolved deny of this scope by this principal that the grant's selector covers and that no exclusion still blocks; they are resolved as temporary_grant in the same transaction. Only accepted with a grant to one member (user:<id>).", func() {
+		MaxLength(200)
+	})
+})
+
+var RenewTemporaryGrantForm = Type("RenewTemporaryGrantForm", func() {
+	Required("id", "expires_at")
+
+	Attribute("id", String, "The temporary grant to renew.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("expires_at", String, "The new deadline. At least five minutes and at most 24 hours from now.", func() {
+		Format(FormatDateTime)
+	})
+})
+
+var TemporaryGrantModel = Type("TemporaryGrant", func() {
+	Required("id", "principal_urn", "scope", "selector", "expires_at", "status", "remaining_seconds", "other_access", "created_at", "updated_at")
+
+	Attribute("id", String, "Temporary grant ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("principal_urn", String, "Canonical principal URN holding the access.")
+	Attribute("scope", String, "The scope given.")
+	Attribute("selector", SelectorModel, "The resource or activity boundary.")
+	Attribute("expires_at", String, "When the grant stops, or stopped, authorizing new requests.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("status", String, "active: authorizing requests. expired: its deadline passed. revoked: ended early by this request.", func() {
+		Enum("active", "expired", "revoked")
+	})
+	Attribute("remaining_seconds", Int64, "Seconds until the deadline while active; 0 once ended.")
+	Attribute("other_access", ArrayOf(String), "For an active grant, the principal URNs of the holder's other grants that already give the same access: for a member or agent, a role, everyone (user:all), or the holder itself for a grant made to it directly; for a role or everyone, only that principal's own other grants. Access through these remains when this grant ends. Empty for ended grants and when this grant is the only route.")
+	Attribute("created_at", String, "When the grant was given, or restarted after expiring.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListTemporaryGrantsResult = Type("ListTemporaryGrantsResult", func() {
+	Required("grants")
+	Attribute("grants", ArrayOf(TemporaryGrantModel), "Temporary grants, soonest deadline first. At most 500 are returned.")
+})
+
+var AccessRequestModel = Type("AccessRequest", func() {
+	Description("A member's request for access they were denied, decided by an organization administrator.")
+	Required("id", "requester_user_id", "requester_name", "scope", "selector", "status", "expires_at", "created_at", "updated_at")
+
+	Attribute("id", String, "Access request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("requester_user_id", String, "The member who asked.")
+	Attribute("requester_name", String, "The requester's display name, or their email when they have none.")
+	Attribute("scope", String, "The scope asked for.")
+	Attribute("selector", SelectorModel, "The resource or activity boundary asked for.")
+	Attribute("resource_name", String, "Name of the resource, as it was when the request was made.")
+	Attribute("message", String, "The requester's note to the administrators.")
+	Attribute("requested_duration_seconds", Int, "How long the requester asked to have the access, in seconds counted from approval. A suggestion; the approver picks the window. Absent when none was asked for.")
+	Attribute("requested_until", String, "When the requester asked to have the access until. A suggestion; the approver picks the window. Absent when none was asked for.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("status", String, "pending: waiting for a decision. approved: a temporary grant was given. denied, expired or withdrawn: no access was given.")
+	Attribute("decided_by_user_id", String, "The administrator who approved or denied the request.")
+	Attribute("decided_by_name", String, "The deciding administrator's display name, or their email.")
+	Attribute("decided_via", String, "Where the decision was made: dashboard or slack.")
+	Attribute("decided_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("temporary_grant_id", String, "The temporary grant an approval gave.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("grant_expires_at", String, "When the temporary grant an approval gave stops, or stopped, authorizing requests.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("expires_at", String, "When a pending request lapses.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListAccessRequestsResult = Type("ListAccessRequestsResult", func() {
+	Required("requests")
+	Attribute("requests", ArrayOf(AccessRequestModel), "Access requests, newest first. At most 200 are returned.")
+})
+
+var DecideAccessRequestForm = Type("DecideAccessRequestForm", func() {
+	Required("id", "approve")
+
+	Attribute("id", String, "The access request to decide.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("approve", Boolean, "True gives the access as a temporary grant; false denies the request.")
+	Attribute("expires_at", String, "When the temporary grant stops authorizing new requests. Required to approve: at least five minutes and at most 24 hours from now.", func() {
+		Format(FormatDateTime)
+	})
 })

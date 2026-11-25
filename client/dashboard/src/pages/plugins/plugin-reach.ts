@@ -3,6 +3,7 @@ import type { PluginAssignment } from "@gram/client/models/components/pluginassi
 import type { Role } from "@gram/client/models/components/role.js";
 import type { SyncedAgentUser } from "@gram/client/models/components/syncedagentuser.js";
 import { WILDCARD_PRINCIPAL } from "./principals";
+import { allMemberRoleIds } from "@/lib/member-roles";
 
 const EMAIL_PREFIX = "email:";
 const ROLE_PREFIX = "role:";
@@ -86,7 +87,9 @@ export function countPluginInstalls(
       covered++;
       continue;
     }
-    if (member.roleIds.some((roleId) => assignedRoleIds.has(roleId))) {
+    if (
+      allMemberRoleIds(member).some((roleId) => assignedRoleIds.has(roleId))
+    ) {
       covered++;
     }
   }

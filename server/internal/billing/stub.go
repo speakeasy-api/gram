@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -20,16 +21,18 @@ import (
 )
 
 type StubClient struct {
-	mut    sync.Mutex
-	logger *slog.Logger
-	tracer trace.Tracer
+	mut           sync.Mutex
+	logger        *slog.Logger
+	tracer        trace.Tracer
+	localProfiles LocalProfileReader
 }
 
 func NewStubClient(logger *slog.Logger, tracerProvider trace.TracerProvider) *StubClient {
 	return &StubClient{
-		mut:    sync.Mutex{},
-		logger: logger.With(attr.SlogComponent("billing_stub")),
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/billing"),
+		mut:           sync.Mutex{},
+		logger:        logger.With(attr.SlogComponent("billing_stub")),
+		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/billing"),
+		localProfiles: nil,
 	}
 }
 
@@ -37,10 +40,19 @@ var _ Tracker = (*StubClient)(nil)
 var _ Repository = (*StubClient)(nil)
 
 func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, bool, error) {
-	_, span := s.tracer.Start(ctx, "stub_client.get_customer")
+	ctx, span := s.tracer.Start(ctx, "stub_client.get_customer")
 	defer span.End()
 
-	return new(TierPro), true, nil
+	if s.localProfiles != nil {
+		tier, active, err := s.getLocalCustomerTier(ctx, orgID)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			return nil, false, fmt.Errorf("get local customer tier: %w", err)
+		}
+		return tier, active, nil
+	}
+	// Report no tier so reconciliation keeps the persisted tier.
+	return nil, false, nil
 }
 
 func (s *StubClient) ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*PolarWebhookPayload, error) {
@@ -56,14 +68,6 @@ func (s *StubClient) InvalidateBillingCustomerCaches(ctx context.Context, orgID 
 	defer span.End()
 
 	return nil
-}
-
-func (s *StubClient) CreateCheckout(ctx context.Context, orgID string, serverURL string, successURL string) (string, error) {
-	_, span := s.tracer.Start(ctx, "stub_client.create_checkout")
-	span.SetStatus(codes.Error, "not implemented")
-	defer span.End()
-
-	return "", fmt.Errorf("not implemented")
 }
 
 func (s *StubClient) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
@@ -185,7 +189,7 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"Custom tool creation",
 				"Hosted server deployments",
 				"14 day log retention",
-				"Built in MCP Playground",
+				"Built in MCP Inspect",
 				"Connect to Claude, Cursor, Gemini and more",
 			},
 			IncludedBullets: []string{
@@ -194,8 +198,10 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"25 chat based credits / month",
 				"Slack community support",
 			},
-			AddOnBullets:          []string{},
-			TumPricePerMillionUsd: nil,
+			AddOnBullets:               []string{},
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  500,
@@ -220,7 +226,9 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"$0.05 / month / additional 5000 tool calls",
 				"$11 per 10 additional chat based credits",
 			},
-			TumPricePerMillionUsd: nil,
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 		Payg: NewPaygTierLimits(),
 		Enterprise: &gen.TierLimits{
@@ -234,7 +242,7 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"Oauth 2.1 proxy support",
 				"SSO",
 				"Audit logs",
-				"Self-hosting Gram dataplane",
+				"Self-hosting Speakeasy dataplane",
 			},
 			IncludedBullets: []string{
 				"Dedicated slack channel",
@@ -242,8 +250,10 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"Tool design support",
 				"SLA-backed support",
 			},
-			AddOnBullets:          []string{},
-			TumPricePerMillionUsd: nil,
+			AddOnBullets:               []string{},
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 	}, nil
 }
@@ -335,7 +345,31 @@ func (s *StubClient) TrackToolCallUsage(ctx context.Context, event ToolCallUsage
 	}
 }
 
+// testDataDir is the directory usage files go to under "go test": one
+// temporary directory per test binary. Writing them to the package directory,
+// as a local server does, makes "go test" treat the files as test inputs that
+// changed during the run, so it never caches the package's result.
+var testDataDir = sync.OnceValues(func() (string, error) {
+	return os.MkdirTemp("", "gram-billing-stub-")
+})
+
 func (s *StubClient) ensureDataDir() (string, error) {
+	return StubDataDir()
+}
+
+// StubDataDir returns the directory the stub client keeps its per-organization
+// usage files in, creating it if needed: scratch/ under the working directory
+// for a local server, and a temporary directory under "go test". Tests that
+// seed a usage file write it here.
+func StubDataDir() (string, error) {
+	if testing.Testing() {
+		dir, err := testDataDir()
+		if err != nil {
+			return "", fmt.Errorf("create billing test directory: %w", err)
+		}
+		return dir, nil
+	}
+
 	wd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("get working directory: %w", err)
@@ -401,7 +435,7 @@ func (s *StubClient) writePeriodUsage(ctx context.Context, orgID string, pu *gen
 	if err != nil {
 		return fmt.Errorf("open local billing file: %w", err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close local billing usage file", func() error {
 		return f.Close()
 	})
 
@@ -476,7 +510,7 @@ func (s *StubClient) writeModelUsage(ctx context.Context, orgID string, usage *m
 	if err != nil {
 		return fmt.Errorf("open local model usage file: %w", err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close local model usage file", func() error {
 		return f.Close()
 	})
 

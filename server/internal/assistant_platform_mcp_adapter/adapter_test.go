@@ -2,15 +2,23 @@ package assistant_platform_mcp_adapter
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func projectPolicy() TargetPolicy {
-	return TargetPolicy{ProjectID: "11111111-1111-4111-8111-111111111111", ProjectSlug: "default"}
+	return TargetPolicy{ProjectSlug: "default"}
 }
 
 // The assistant is provisioned per project and only ever acts in its own, so
@@ -22,18 +30,35 @@ func TestTargetPolicyReplacesTheProjectArgument(t *testing.T) {
 	tool := Tool{
 		descriptor: platformmcp.Descriptor{
 			Name:        "find_mcp",
-			InputSchema: []byte(`{"type":"object","properties":{"project_id":{"type":"string"},"project_slug":{"type":"string"},"query":{"type":"string"}},"required":[]}`),
+			InputSchema: []byte(`{"type":"object","properties":{"project_slug":{"type":"string"},"query":{"type":"string"}},"required":[]}`),
 			Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeExplicit},
 		},
 	}
 
-	arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_id":"someone-elses-project","query":"server"}`))
+	arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_slug":"someone-elses-project","query":"server"}`))
 	require.NoError(t, err)
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(arguments, &decoded))
-	require.Equal(t, projectPolicy().ProjectID, decoded["project_id"], "the policy's project wins over the model's")
+	require.Equal(t, projectPolicy().ProjectSlug, decoded["project_slug"], "the policy's project wins over the model's")
 	require.Equal(t, "server", decoded["query"], "other arguments are untouched")
+}
+
+// Every project-scoped tool takes the project by slug, so a turn whose auth
+// context carries no project slug has nothing to scope the call to.
+func TestTargetPolicyRequiresTheAssistantProjectSlug(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	slug := "assistant-project"
+	withSlug := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ProjectID: &projectID, ProjectSlug: &slug})
+	policy, err := targetPolicyFromContext(withSlug)
+	require.NoError(t, err)
+	require.Equal(t, TargetPolicy{ProjectSlug: slug}, policy)
+
+	withoutSlug := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ProjectID: &projectID})
+	_, err = targetPolicyFromContext(withoutSlug)
+	require.Error(t, err)
 }
 
 // A field the policy fills must not be advertised: asking for it invites a
@@ -45,14 +70,14 @@ func TestDefaultableTargetPolicyInjectsAssistantProject(t *testing.T) {
 	tool := Tool{
 		descriptor: platformmcp.Descriptor{
 			Name:        "list_risk_policies",
-			InputSchema: []byte(`{"type":"object","properties":{"project_id":{"type":"string"},"project_slug":{"type":"string"},"cursor":{"type":"string"}},"required":[]}`),
+			InputSchema: []byte(`{"type":"object","properties":{"project_slug":{"type":"string"},"cursor":{"type":"string"}},"required":[]}`),
 			Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeDefaultable},
 		},
 	}
 
 	arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_slug":"other","cursor":"next"}`))
 	require.NoError(t, err)
-	require.JSONEq(t, `{"project_id":"11111111-1111-4111-8111-111111111111","cursor":"next"}`, string(arguments))
+	require.JSONEq(t, `{"project_slug":"default","cursor":"next"}`, string(arguments))
 
 	var schema struct {
 		Properties map[string]json.RawMessage `json:"properties"`
@@ -204,4 +229,131 @@ func TestOnlyAdmittedDescriptorsAreComposed(t *testing.T) {
 	require.Equal(t, []string{"list_projects", "get_platform_context"}, names)
 
 	require.Empty(t, Tools(nil, nil), "an empty admission list composes no tools")
+}
+
+// The assistant resolves people's names through list_access_members, which
+// took over from the managed toolset's organization user lookup. Composing from
+// the real catalogue proves the admission end to end: the descriptor is in the
+// assistant audience, it is not project scoped so its schema is served
+// verbatim, and the other access reads stay external-only.
+func TestComposedAssistantToolsetIncludesListAccessMembers(t *testing.T) {
+	t.Parallel()
+
+	runtime := platformmcp.NewRuntimeWithLifecycle(nil, nil, nil, nil, "", "", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, platformmcp.CatalogDescriptor{}).WithAICatalog(aivendorstest.NewStore())
+	tools := ExternalTools(runtime.AssistantTools(), nil)
+
+	composed := map[string]platformtools.ExternalTool{}
+	for _, tool := range tools {
+		composed[tool.Executor.Descriptor().Name] = tool
+	}
+	require.NotContains(t, composed, "list_access_roles")
+	require.NotContains(t, composed, "get_mcp_access")
+
+	members, ok := composed["list_access_members"]
+	require.True(t, ok, "list_access_members must be composed for the assistant")
+	descriptor := members.Executor.Descriptor()
+	require.True(t, descriptor.Managed)
+	require.NotNil(t, descriptor.Annotations)
+	require.NotNil(t, descriptor.Annotations.ReadOnlyHint)
+	require.True(t, *descriptor.Annotations.ReadOnlyHint)
+
+	var schema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
+	require.Contains(t, schema.Properties, "query")
+	require.Contains(t, schema.Properties, "role_reference")
+	require.NotContains(t, schema.Properties, "project_id")
+	require.NotContains(t, schema.Properties, "project_slug")
+}
+
+// The assistant's composed toolset follows the catalogue's audience
+// declarations: plugin reads are listed while plugin mutations stay
+// external-only.
+func TestAssistantToolsetListsPluginReadsAndWithholdsPluginMutations(t *testing.T) {
+	t.Parallel()
+
+	runtime := platformmcp.NewRuntime(testenv.NewLogger(t), nil, nil, nil, "", "", nil, nil, nil, nil, nil).WithAICatalog(aivendorstest.NewStore())
+	composed := ExternalTools(runtime.AssistantTools(), nil)
+
+	listed := map[string]platformtools.ToolDescriptor{}
+	for _, tool := range composed {
+		descriptor := tool.Executor.Descriptor()
+		listed[descriptor.Name] = descriptor
+	}
+
+	for _, name := range []string{"list_plugins", "get_plugin", "list_plugin_assignments"} {
+		require.Contains(t, listed, name, "assistant toolset lists %q", name)
+	}
+	for _, name := range []string{"set_plugin_assignments", "distribute_mcp_to_plugin", "remove_mcp_from_plugin"} {
+		require.NotContains(t, listed, name, "assistant toolset must not list %q", name)
+	}
+}
+
+// The live plugin reads take the project as an explicit argument. Composed for
+// the assistant, that field is supplied by policy: hidden from the model and
+// overwritten on every call. The schemas here are inferred from the same input
+// types the live registration infers from, so a read that stopped declaring
+// project_slug would fail the precondition rather than pass vacuously.
+func TestPluginReadSchemasHideAndInjectTheAssistantProject(t *testing.T) {
+	t.Parallel()
+
+	for _, read := range []struct {
+		name  string
+		input any
+	}{
+		{name: "list_plugins", input: platformmcp.ListPluginsInput{}},
+		{name: "get_plugin", input: platformmcp.GetPluginInput{}},
+		{name: "list_plugin_assignments", input: platformmcp.ListPluginAssignmentsInput{}},
+	} {
+		inferred, err := jsonschema.ForType(reflect.TypeOf(read.input), nil)
+		require.NoError(t, err, read.name)
+		inputSchema, err := json.Marshal(inferred)
+		require.NoError(t, err, read.name)
+
+		var live struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+			Required   []string                   `json:"required"`
+		}
+		require.NoError(t, json.Unmarshal(inputSchema, &live))
+		require.Contains(t, live.Properties, "project_slug", "%q declares the project it reads", read.name)
+		require.Contains(t, live.Required, "project_slug", read.name)
+		require.NotContains(t, live.Properties, "project_id", "%q names its project by slug only", read.name)
+
+		tool := Tool{descriptor: platformmcp.Descriptor{
+			Name:        read.name,
+			InputSchema: inputSchema,
+			Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeExplicit},
+		}}
+
+		var advertised struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+			Required   []string                   `json:"required"`
+		}
+		require.NoError(t, json.Unmarshal(tool.assistantInputSchema(), &advertised))
+		require.NotContains(t, advertised.Properties, "project_slug", "%q takes its project from the assistant's policy", read.name)
+		require.NotContains(t, advertised.Required, "project_slug", read.name)
+
+		arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_slug":"someone-elses-project"}`))
+		require.NoError(t, err)
+		var decoded map[string]any
+		require.NoError(t, json.Unmarshal(arguments, &decoded))
+		require.Equal(t, projectPolicy().ProjectSlug, decoded["project_slug"], "%q acts in the assistant's project, not the model's", read.name)
+	}
+}
+
+// Platform MCP tools that list individual tool calls need log:read on the
+// project for every call, so the assistant is only offered them when it holds
+// it. Coarse discovery scopes on other tools are not carried over.
+func TestExternalToolsCarryLogReadRequirement(t *testing.T) {
+	t.Parallel()
+
+	tools := ExternalTools([]platformmcp.Descriptor{
+		{Name: "search_tool_calls", Meta: platformmcp.ToolMeta{DiscoveryScopes: []authz.Scope{authz.ScopeLogRead}}},
+		{Name: "get_project_overview", Meta: platformmcp.ToolMeta{DiscoveryScopes: []authz.Scope{authz.ScopeProjectRead}}},
+	}, nil)
+
+	require.Len(t, tools, 2)
+	require.Equal(t, string(authz.ScopeLogRead), tools[0].RequiredScope)
+	require.Empty(t, tools[1].RequiredScope)
 }

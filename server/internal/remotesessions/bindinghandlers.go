@@ -1,0 +1,339 @@
+package remotesessions
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+)
+
+// SetBindingAuthorizer wires the human-only agent management authorizer without
+// creating an import cycle with agentmanagement's session revocation support.
+// Configure before serving requests. The callback must use the supplied transaction
+// to require agent write permission for mutations and authorize or write for reads, retaining membership
+// and agent locks through commit. An unconfigured service fails closed.
+func (s *Service) SetBindingAuthorizer(authorize func(context.Context, pgx.Tx, uuid.UUID, bool) error) {
+	s.bindingAuthorizer = authorize
+}
+
+type bindingOperation struct {
+	tx             pgx.Tx
+	queries        *repo.Queries
+	projectID      uuid.UUID
+	organizationID string
+	principalID    uuid.UUID
+	issuerID       uuid.UUID
+	subject        urn.SessionSubject
+}
+
+func bindingHuman(ctx context.Context) (*contextvalues.AuthContext, error) {
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	_, consent := contextvalues.GetConsentBindingAuthorization(ctx)
+	if !ok || auth == nil || auth.ProjectID == nil || (!consent && (!contextvalues.HasValidatedGramSession(ctx) || auth.SessionID == nil || *auth.SessionID == "")) || auth.UserID == "" || auth.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if auth.APIKeyID != "" || auth.APIKeyName != "" || len(auth.APIKeyScopes) > 0 || auth.OrgWidePluginHooksKey || contextvalues.IsSupportSession(ctx) || contextvalues.IsLegacyImpersonatedSession(ctx) {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	if _, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	if _, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	if _, ok := contextvalues.GetOAuthClientID(ctx); ok {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	if _, ok := contextvalues.GetActingSurface(ctx); ok {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	// A platform admin's role preview (X-Gram-Scope-Override) is not refused
+	// here: the binding authorizer checks it together with the live grants, so
+	// it can only narrow what this person may do, as on every other agent page.
+	return auth, nil
+}
+
+func (s *Service) beginBindingOperation(ctx context.Context, principal, issuer string, write bool) (*bindingOperation, error) {
+	auth, err := bindingHuman(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.bindingAuthorizer == nil {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	principalID, err := uuid.Parse(principal)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid principal_id")
+	}
+	issuerID, err := uuid.Parse(issuer)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id")
+	}
+	if consent, ok := contextvalues.GetConsentBindingAuthorization(ctx); ok && (consent.AgentID != principalID || consent.IssuerID != issuerID) {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin remote session attachment operation")
+	}
+	if err := s.bindingAuthorizer(ctx, tx, principalID, write); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, err
+	}
+	return &bindingOperation{tx: tx, queries: repo.New(tx), projectID: *auth.ProjectID, organizationID: auth.ActiveOrganizationID, principalID: principalID, issuerID: issuerID, subject: urn.NewUserSubject(auth.UserID)}, nil
+}
+
+func (op *bindingOperation) candidates(ctx context.Context) ([]repo.ListPrincipalRemoteSessionCandidatesRow, error) {
+	rows, err := op.queries.ListPrincipalRemoteSessionCandidates(ctx, repo.ListPrincipalRemoteSessionCandidatesParams{
+		ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject,
+		Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ClientFilter: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: pgtype.Int4{Int32: 0, Valid: false},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list attachment candidates: %w", err)
+	}
+	return rows, nil
+}
+
+func (s *Service) ListBindings(ctx context.Context, payload *gen.ListBindingsPayload) (*gen.ListBindingsResult, error) {
+	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID, false)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = op.tx.Rollback(ctx) }()
+	rows, err := op.queries.ListPrincipalRemoteSessionBindings(ctx, repo.ListPrincipalRemoteSessionBindingsParams{
+		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list remote session attachments")
+	}
+	sources, err := op.queries.ListEligiblePrincipalRemoteSessionBindings(ctx, repo.ListEligiblePrincipalRemoteSessionBindingsParams{
+		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve attached connections")
+	}
+	available := make(map[uuid.UUID]repo.RemoteSession, len(sources))
+	for _, source := range sources {
+		available[source.ID] = source
+	}
+	items := make([]*gen.PrincipalRemoteSessionBinding, 0, len(rows))
+	for _, row := range rows {
+		view := bindingView(row.ID, row.PrincipalID, row.UserSessionIssuerID, row.RemoteSessionClientID, row.RemoteSessionID)
+		if source, ok := available[row.RemoteSessionID]; ok {
+			view.RemoteSession = mv.BuildRemoteSessionView(source, conv.FromPGText[string](row.SubjectDisplayName), conv.FromPGText[string](row.SubjectEmail))
+		}
+		items = append(items, view)
+	}
+	return &gen.ListBindingsResult{Items: items}, nil
+}
+
+func (op *bindingOperation) lockAttachmentIssuer(ctx context.Context) error {
+	issuer := repo.GetUserSessionIssuerForProjectParams{ID: op.issuerID, ProjectID: op.projectID, OrganizationID: op.organizationID}
+	if _, err := op.queries.GetUserSessionIssuerForProject(ctx, issuer); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.C(oops.CodeNotFound)
+		}
+		return oops.E(oops.CodeUnexpected, err, "check attachment sign-in issuer")
+	}
+	// Legacy writers take the same stable issuer advisory lock. Validate
+	// before the lock and recheck under a row lock afterwards.
+	if err := usersessionsrepo.New(op.tx).LockUserSessionIssuerForOwnerBinding(ctx, op.issuerID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "serialize attachment sign-in issuer")
+	}
+	_, err := op.queries.LockPrincipalAttachmentIssuer(ctx, repo.LockPrincipalAttachmentIssuerParams{ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock attachment sign-in issuer")
+	}
+	return nil
+}
+
+func (op *bindingOperation) lockAttachmentRegistration(ctx context.Context, clientID uuid.UUID) error {
+	if _, err := op.queries.LockRegistrationForAttachmentPublication(ctx, clientID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeConflict, err, "attachment registration is no longer available")
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock attachment registration")
+	}
+	return nil
+}
+
+func (op *bindingOperation) ensureAttachmentParent(ctx context.Context, clientID uuid.UUID) error {
+	if err := op.queries.EnsurePrincipalAttachmentParents(ctx, repo.EnsurePrincipalAttachmentParentsParams{ClientIds: []uuid.UUID{clientID}, UserSessionIssuerID: op.issuerID, OrganizationID: op.organizationID, ProjectID: conv.ToNullUUID(op.projectID)}); err != nil {
+		return fmt.Errorf("ensure compatibility link for attachment: %w", err)
+	}
+	return nil
+}
+
+// lockAttachmentParentForUnlink protects active attachments while the legacy
+// link mutation API coexists with the composite FK. The caller must hold this
+// lock through the delete and commit in the same transaction.
+func lockAttachmentParentForUnlink(ctx context.Context, q *repo.Queries, orgID string, clientID, issuerID uuid.UUID) (bool, error) {
+	if err := q.LockRemoteSessionClientUserSessionIssuerLink(ctx, repo.LockRemoteSessionClientUserSessionIssuerLinkParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID, OrganizationID: orgID}); err != nil {
+		return false, fmt.Errorf("lock attachment parent: %w", err)
+	}
+	attached, err := q.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{OrganizationID: orgID, RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID})
+	if err != nil {
+		return false, fmt.Errorf("find active attachments for parent: %w", err)
+	}
+	return attached, nil
+}
+
+func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingPayload) (*gen.PrincipalRemoteSessionBinding, error) {
+	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID, true)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = op.tx.Rollback(ctx) }()
+	sessionID, err := uuid.Parse(payload.RemoteSessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_id")
+	}
+	if err := op.lockAttachmentIssuer(ctx); err != nil {
+		return nil, err
+	}
+	candidates, err := op.candidates(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "validate attachment candidate")
+	}
+	var generation int64
+	var clientID uuid.UUID
+	var account string
+	var sessionView *types.RemoteSession
+	for _, candidate := range candidates {
+		if candidate.RemoteSession.ID == sessionID {
+			generation = candidate.RemoteSession.GrantGeneration
+			clientID = candidate.RemoteSession.RemoteSessionClientID
+			account = upstreamAccount(candidate.RemoteSession)
+			sessionView = mv.BuildRemoteSessionView(candidate.RemoteSession, conv.FromPGText[string](candidate.SubjectDisplayName), conv.FromPGText[string](candidate.SubjectEmail))
+			break
+		}
+	}
+	if sessionView == nil {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	if err := op.lockAttachmentRegistration(ctx, clientID); err != nil {
+		return nil, err
+	}
+	if err := op.ensureAttachmentParent(ctx, clientID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "ensure attachment parent")
+	}
+	row, err := op.queries.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{
+		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String(), RemoteSessionID: sessionID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeConflict, err, "attachment unavailable or client already attached; detach before replacing")
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "attach remote session")
+	}
+	if row.GrantGeneration != generation || row.RemoteSessionClientID != clientID {
+		return nil, oops.E(oops.CodeConflict, nil, "session changed while attaching; retry")
+	}
+	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionAttach, audit.ActionAgentConnectionAttach, row.ID, row.RemoteSessionID, row.RemoteSessionClientID, row.GrantGeneration, account); err != nil {
+		return nil, err
+	}
+	if err := op.tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit remote session attachment")
+	}
+	view := bindingView(row.ID, row.PrincipalID, row.UserSessionIssuerID, row.RemoteSessionClientID, row.RemoteSessionID)
+	view.RemoteSession = sessionView
+	return view, nil
+}
+
+func (s *Service) DetachBinding(ctx context.Context, payload *gen.DetachBindingPayload) error {
+	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID, true)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = op.tx.Rollback(ctx) }()
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid binding id")
+	}
+	row, err := op.queries.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{
+		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, ID: id,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "detach remote session")
+	}
+	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionDetach, audit.ActionAgentConnectionDetach, id, row.RemoteSessionID, row.RemoteSessionClientID, row.GrantGeneration, row.UpstreamAccount); err != nil {
+		return err
+	}
+	if err := op.tx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit remote session detachment")
+	}
+	return nil
+}
+
+// upstreamAccount names the account a connection signed in as: its email, or
+// its display name when the upstream reports no email.
+func upstreamAccount(session repo.RemoteSession) string {
+	if session.UpstreamEmail.Valid {
+		return session.UpstreamEmail.String
+	}
+	return session.UpstreamDisplayName.String
+}
+
+func bindingView(id, principalID, issuerID, clientID, sessionID uuid.UUID) *gen.PrincipalRemoteSessionBinding {
+	return &gen.PrincipalRemoteSessionBinding{ID: id.String(), PrincipalID: principalID.String(), UserSessionIssuerID: issuerID.String(), RemoteSessionClientID: clientID.String(), RemoteSessionID: sessionID.String(), RemoteSession: nil}
+}
+
+// logBinding records a binding change twice: on the connection, and on the
+// agent it is attached to, as agentAction, so the agent's history shows it.
+func (s *Service) logBinding(ctx context.Context, op *bindingOperation, action, agentAction audit.Action, bindingID, sessionID, clientID uuid.UUID, generation int64, upstreamAccount string) error {
+	auth, err := bindingHuman(ctx)
+	if err != nil {
+		return err
+	}
+	if err := s.auditLogger.LogRemoteSessionBinding(ctx, op.tx, action, audit.LogRemoteSessionBindingEvent{
+		OrganizationID: op.organizationID, ProjectID: op.projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID),
+		RemoteSessionURN: urn.NewRemoteSession(sessionID),
+		Metadata:         audit.RemoteSessionBindingMetadata{BindingID: bindingID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, RemoteSessionClientID: clientID, GrantGeneration: generation},
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log remote session binding")
+	}
+	agentName, err := op.queries.GetBindingAgentName(ctx, repo.GetBindingAgentNameParams{ID: op.principalID, OrganizationID: op.organizationID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read attached agent")
+	}
+	if err := s.auditLogger.LogAgentConnection(ctx, op.tx, audit.LogAgentConnectionEvent{
+		OrganizationID:   op.organizationID,
+		ProjectID:        op.projectID,
+		AgentURN:         urn.NewAgentIdentity(op.principalID.String()),
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID),
+		ActorDisplayName: auth.Email,
+		Action:           agentAction,
+		Name:             agentName,
+		Metadata: audit.AgentConnectionMetadata{
+			BindingID:             bindingID,
+			RemoteSessionID:       sessionID,
+			RemoteSessionClientID: clientID,
+			UserSessionIssuerID:   op.issuerID,
+			UpstreamAccount:       upstreamAccount,
+		},
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log agent connection")
+	}
+	return nil
+}

@@ -1,10 +1,13 @@
 import { useMemo } from "react";
-import { useProject } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { AppRoute, useRoutes } from "@/routes";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { AppRoute } from "@/routes";
+import { useRoutes } from "@/routes";
+import { useAssistantsAvailable } from "./useAssistantsAvailability";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
 /** A project nav page plus the scopes that grant access to it. */
 export interface ProjectNavRoute {
@@ -13,11 +16,14 @@ export interface ProjectNavRoute {
    * Scopes that grant access — the user needs ANY one of them. Mirrors the
    * per-item `scope` props on `app-sidebar.tsx`'s `ScopeGatedNavItem`s so the
    * command palette gates the same pages the sidebar does. Keep these in sync
-   * with the sidebar when scopes change there.
+   * with the sidebar when scopes change there. An empty array means the page
+   * uses server-side ownership authorization and needs no navigation scope.
    */
   scope: Scope[];
   /** Resource selected for this route's scope check, when applicable. */
   resourceId?: string;
+  /** Project the route's resources belong to, for project-wide grants. */
+  projectId?: string;
 }
 
 /**
@@ -26,8 +32,7 @@ export interface ProjectNavRoute {
  * Single source of truth shared by the sidebar (`AppSidebar`) and the command
  * palette so the two never drift — the palette only lists pages a user can
  * actually reach from the nav, in the same order, behind the same scopes.
- * Honors the same feature flags the sidebar uses to gate Deployments,
- * Assistants, and demo pages.
+ * Honors the remaining feature flags that control navigation.
  *
  * The returned array is memoized so consumers can safely use it as a `useEffect`
  * dependency without re-running every render (this hook feeds the command
@@ -36,43 +41,73 @@ export interface ProjectNavRoute {
 export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const { id: projectId } = useProject();
-  const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
-  const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
-  const riskWatchdogFlag = useFeatureFlag(FEATURE_FLAGS.riskWatchdog);
+  const organization = useOrganization();
+  const productFeatures = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  const isSignalsIntelligenceEnabled =
+    productFeatures.isSuccess &&
+    productFeatures.data.signalsIntelligenceEnabled === true;
+  // Assistants are off for the whole deployment when its runtime is disabled;
+  // the pages stay hidden until that is confirmed either way.
+  const isAssistantsAvailable = useAssistantsAvailable();
+  const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
+  const intentPoliciesFlag = useFeatureFlag(FEATURE_FLAGS.intentPolicies);
 
-  // Assistants is opt-in: unavailable flags remain hidden.
-  const isAssistantsEnabled = assistantsFlag.status === "enabled";
-  // Deployments is opt-out: it remains visible unless PostHog explicitly
-  // resolves the flag to disabled.
-  const isDeploymentsPageEnabled = deploymentsPageFlag.status !== "disabled";
-  // Watchdog is opt-in like Assistants: unavailable flags remain hidden.
-  const isRiskWatchdogEnabled = riskWatchdogFlag.status === "enabled";
+  // Explore is opt-in while it is dogfooded: the flag is released to the
+  // organizations trying it, and everyone else never sees the page.
+  const isExploreEnabled = exploreFlag.status === "enabled";
+  const isIntentPoliciesEnabled = intentPoliciesFlag.status === "enabled";
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
     const readWrite: Scope[] = ["project:read", "project:write"];
-    // The Observe surface is gated on org:admin at the page level (each page
-    // renders an "Access restricted" notice for non-admins, like the Secure
-    // section). The nav items themselves stay visible to any project member
-    // (project:read) so the group isn't silently hidden — mirrors Secure's
-    // riskOverview.
+    // Observe navigation stays visible to project readers. The Identities
+    // roster uses that scope; identity detail resolution separately requires
+    // org:read, and the remaining Observe pages render an org-admin notice.
+    // Tool Logs included: without log:read on the project it shows the
+    // member's own sessions and agents, so the page is reachable by all.
     const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },
-      { route: routes.chat, scope: read },
-      { route: routes.sources, scope: readWrite },
-      { route: routes.catalog, scope: ["project:read", "mcp:write"] },
-      {
-        route: routes.playground,
-        scope: ["mcp:read", "mcp:write", "mcp:connect"],
-      },
-      ...(isDeploymentsPageEnabled
-        ? [{ route: routes.deployments, scope: readWrite }]
+      ...(isAssistantsAvailable
+        ? [
+            {
+              route: routes.chat,
+              scope: ["assistant:read"] as Scope[],
+              projectId,
+            },
+          ]
         : []),
+      // Two rosters, two entries: a person arrives from the identity
+      // provider, an agent is registered here. The bare identities URL
+      // redirects to the people.
+      { route: routes.identities.people, scope: observe },
+      { route: routes.identities.agents, scope: observe },
+      {
+        route: routes.mcpSessions,
+        scope: read,
+        resourceId: projectId,
+      },
+      {
+        route: routes.remoteIdentityProviders,
+        scope: ["org:read", "org:admin"],
+      },
+      { route: routes.deployments, scope: readWrite },
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
-      ...(isAssistantsEnabled
-        ? [{ route: routes.assistants, scope: read }]
+      // Channels is deliberately absent: while it is hidden it is reachable
+      // only by direct URL, so neither the sidebar nor Command K offers it.
+      ...(isAssistantsAvailable
+        ? [
+            {
+              route: routes.assistants,
+              scope: ["assistant:read"] as Scope[],
+              projectId,
+            },
+          ]
         : []),
       {
         route: routes.skills,
@@ -81,32 +116,45 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
-      { route: routes.employees, scope: observe },
+      { route: routes.watchdog, scope: ["org:admin"] as Scope[] },
+      { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
+      { route: routes.policyCenter, scope: readWrite },
+      { route: routes.shadowMCP, scope: ["org:admin"] as Scope[] },
+      // Rollout-gated per person; the server enforces the same flag and chat RBAC.
+      ...(isIntentPoliciesEnabled
+        ? [{ route: routes.intentPolicies, scope: ["chat:read"] as Scope[] }]
+        : []),
       { route: routes.costs, scope: observe },
+      ...(isExploreEnabled
+        ? [
+            { route: routes.explore, scope: observe },
+            { route: routes.dashboards, scope: observe },
+          ]
+        : []),
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },
+      ...(isSignalsIntelligenceEnabled
+        ? [
+            {
+              route: routes.signalsIntelligence,
+              scope: read,
+              resourceId: projectId,
+            },
+          ]
+        : []),
       ...(isOrgMemoryEnabled
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
-      { route: routes.logs, scope: observe },
-      // Watchdog supersedes the Risk Overview page: with the flag on, it is
-      // the Secure section's landing surface and the legacy overview nav item
-      // hides (its route stays reachable by direct URL). Risk Events shows in
-      // both modes, directly below the landing surface.
-      ...(isRiskWatchdogEnabled
-        ? [{ route: routes.watchdog, scope: read }]
-        : [{ route: routes.riskOverview, scope: read }]),
-      { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
-      { route: routes.policyCenter, scope: readWrite },
-      { route: routes.shadowMCP, scope: readWrite },
+      { route: routes.logs, scope: observe, resourceId: projectId },
       { route: routes.settings, scope: ["project:write"] },
     ];
   }, [
     routes,
     projectId,
-    isAssistantsEnabled,
-    isDeploymentsPageEnabled,
+    isAssistantsAvailable,
+    isExploreEnabled,
     isOrgMemoryEnabled,
-    isRiskWatchdogEnabled,
+    isIntentPoliciesEnabled,
+    isSignalsIntelligenceEnabled,
   ]);
 }

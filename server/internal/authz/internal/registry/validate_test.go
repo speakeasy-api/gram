@@ -1,0 +1,398 @@
+package registry
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestDefinitions_IsValid(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, Definitions.Validate())
+}
+
+func validTestPermission(action Action) Permission {
+	return Permission{
+		Action:        action,
+		LegacyScope:   "",
+		Implies:       nil,
+		Exclusions:    nil,
+		Dimensions:    nil,
+		Source:        GrantSourceRoles,
+		DimensionSets: nil,
+		Open:          nil,
+		Category:      "",
+		Label:         "Label",
+		Description:   "Description.",
+		Sensitivity:   SensitivityNone,
+		Agent:         AgentUnsafe(),
+	}
+}
+
+func validTestType(kind Kind, permissions ...Permission) ResourceType {
+	return ResourceType{
+		Kind:        kind,
+		Parent:      "",
+		Category:    ScopeCategoryProject,
+		Dimensions:  nil,
+		Permissions: permissions,
+	}
+}
+
+func validTestRegistry(types ...ResourceType) Registry {
+	return Registry{
+		Root:        RootPermission{Scope: Scope("root"), Agent: AgentUnsafe()},
+		Types:       types,
+		SystemRoles: nil,
+		Retired:     nil,
+	}
+}
+
+func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
+	t.Parallel()
+
+	withImplies := func(p Permission, implies ...Action) Permission { p.Implies = implies; return p }
+	withAgent := func(p Permission, a AgentEligibility) Permission { p.Agent = a; return p }
+	withScope := func(p Permission, s Scope) Permission { p.LegacyScope = s; return p }
+	withExclusions := func(p Permission, x ...Exclusion) Permission { p.Exclusions = x; return p }
+	withSet := func(p Permission, method string, keys ...string) Permission {
+		p.DimensionSets = append(p.DimensionSets, DimensionSet{Method: method, Keys: keys})
+		return p
+	}
+	withOpen := func(p Permission, on OpenOn, keys ...string) Permission {
+		p.Open = append(p.Open, OpenKeys{On: on, Keys: keys})
+		return p
+	}
+	withDims := func(t ResourceType, keys ...string) ResourceType {
+		for _, key := range keys {
+			t.Dimensions = append(t.Dimensions, Dimension{Key: key, Values: nil, Required: false})
+		}
+		return t
+	}
+
+	cases := []struct {
+		name  string
+		model Registry
+		want  string
+	}{
+		{
+			name:  "open key that is not a dimension",
+			model: validTestRegistry(validTestType("thing", withOpen(validTestPermission("read"), OpenOnProbe, "part"))),
+			want:  `thing.read: open key "part" is not a dimension of the permission or its type`,
+		},
+		{
+			name:  "open keys with no key",
+			model: validTestRegistry(validTestType("thing", withOpen(validTestPermission("read"), OpenOnProbe))),
+			want:  `thing.read: open keys on a probe list no key`,
+		},
+		{
+			name:  "open keys declared twice for one kind of check",
+			model: validTestRegistry(withDims(validTestType("thing", withOpen(withOpen(validTestPermission("read"), OpenOnProbe, "part"), OpenOnProbe, "part")), "part")),
+			want:  `thing.read: open keys on a probe are declared twice`,
+		},
+		{
+			name:  "connection opening a key no dimension set carries",
+			model: validTestRegistry(withDims(validTestType("thing", withOpen(withSet(validTestPermission("read"), "ReadPart", "part"), OpenOnConnection, "other")), "part", "other")),
+			want:  `thing.read: a connection may only open keys a dimension set carries, not "other"`,
+		},
+		{
+			name:  "connection opened without a dimension set",
+			model: validTestRegistry(withDims(validTestType("thing", withOpen(validTestPermission("read"), OpenOnConnection, "part")), "part")),
+			want:  `thing.read: only a permission with dimension sets has a connection to open keys on`,
+		},
+		{
+			name:  "dimension set with an undeclared key",
+			model: validTestRegistry(validTestType("thing", withSet(validTestPermission("read"), "ReadPart", "part"))),
+			want:  `thing.read: dimension set ReadPart uses "part", which is not a dimension of thing`,
+		},
+		{
+			name:  "dimension set reusing an action's method",
+			model: validTestRegistry(withDims(validTestType("thing", validTestPermission("write"), withSet(validTestPermission("read"), "Write", "part")), "part")),
+			want:  `thing.read: dimension set method "Write" clashes with another method on thing`,
+		},
+		{
+			name:  "dimension set without keys",
+			model: validTestRegistry(validTestType("thing", withSet(validTestPermission("read"), "ReadPart"))),
+			want:  `thing.read: a dimension set needs a method name and at least one key`,
+		},
+		{
+			name:  "duplicate action",
+			model: validTestRegistry(validTestType("thing", validTestPermission("read"), validTestPermission("read"))),
+			want:  `thing: action "read" is declared twice`,
+		},
+		{
+			name:  "action outside the closed list",
+			model: validTestRegistry(validTestType("thing", validTestPermission("delete"))),
+			want:  `thing: action "delete" is not in registry.Actions; add it to scopes.go`,
+		},
+		{
+			name:  "legacy action on a type that never had it",
+			model: validTestRegistry(validTestType("thing", validTestPermission(ActionPluginWrite))),
+			want:  `thing: action "plugin_write" is not in registry.Actions; add it to scopes.go`,
+		},
+		{
+			name: "duplicate scope across types",
+			model: validTestRegistry(
+				validTestType("a", withScope(validTestPermission("read"), "shared:read")),
+				validTestType("b", withScope(validTestPermission("read"), "shared:read")),
+			),
+			want: `scope "shared:read" is declared by both a.read and b.read`,
+		},
+		{
+			name: "block twin collides with a declared scope",
+			model: validTestRegistry(validTestType("thing",
+				withExclusions(validTestPermission("read"), Blocked(AgentUnsafe(), "thing read access")...),
+				withScope(validTestPermission("other"), "thing:blocked_read"),
+			)),
+			want: `scope "thing:blocked_read" is declared by both`,
+		},
+		{
+			name:  "implies unknown action",
+			model: validTestRegistry(validTestType("thing", withImplies(validTestPermission("write"), "read"))),
+			want:  `thing.write: implies unknown action "read"`,
+		},
+		{
+			name: "implies cycle",
+			model: validTestRegistry(validTestType("thing",
+				withImplies(validTestPermission("read"), "write"),
+				withImplies(validTestPermission("write"), "read"),
+			)),
+			want: `thing: Implies has a cycle`,
+		},
+		{
+			name: "agent-safe permission implies an unsafe one",
+			model: validTestRegistry(validTestType("thing",
+				withAgent(withImplies(validTestPermission("write"), "read"), SafeSince(1)),
+				validTestPermission("read"),
+			)),
+			want: `thing.write: agent-safe since v1 but implies read, which is not`,
+		},
+		{
+			name: "agent-safe permission implies one that became safe later",
+			model: validTestRegistry(validTestType("thing",
+				withAgent(withImplies(validTestPermission("write"), "read"), SafeSince(1)),
+				withAgent(validTestPermission("read"), SafeSince(3)),
+			)),
+			want: `thing.write: agent-safe since v1 but implies read`,
+		},
+		{
+			name: "exemption names an unknown action",
+			model: validTestRegistry(validTestType("thing",
+				withExclusions(validTestPermission("evaluate"), Exclusion{Kind: ExclusionExemption, Action: "bypass", Agent: AgentUnsafe(), Subject: ""}),
+			)),
+			want: `thing.evaluate: exemption names unknown action "bypass"`,
+		},
+		{
+			name: "declared blocked_ action",
+			model: validTestRegistry(validTestType("thing",
+				validTestPermission("blocked_read"),
+			)),
+			want: `thing.blocked_read: blocked_ actions are generated, not declared`,
+		},
+		{
+			name: "system role names an unknown scope",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
+				r.SystemRoles = map[string][]Scope{"admin": {"thing:read", "thing:write"}}
+				return r
+			}(),
+			want: `system role "admin" names unknown scope "thing:write"`,
+		},
+		{
+			name: "system role names a block",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", withExclusions(validTestPermission("read"), Blocked(AgentUnsafe(), "thing read access")...)))
+				r.SystemRoles = map[string][]Scope{"admin": {"thing:blocked_read"}}
+				return r
+			}(),
+			want: `system role "admin" names "thing:blocked_read", which is not a grantable permission`,
+		},
+		{
+			name: "retired scope reused",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
+				r.Retired = []Scope{"thing:read"}
+				return r
+			}(),
+			want: `retired scope "thing:read" is reused by thing.read`,
+		},
+		{
+			name: "unknown parent",
+			model: func() Registry {
+				typ := validTestType("thing", validTestPermission("read"))
+				typ.Parent = "nowhere"
+				return validTestRegistry(typ)
+			}(),
+			want: `thing: parent "nowhere" is not a declared resource type`,
+		},
+		{
+			name: "wildcard listed as a dimension value",
+			model: func() Registry {
+				typ := validTestType("thing", validTestPermission("read"))
+				typ.Dimensions = []Dimension{{Key: "mode", Values: []string{"a", WildcardResource}, Required: false}}
+				return validTestRegistry(typ)
+			}(),
+			want: `thing: dimension "mode" lists "*" as a value`,
+		},
+		{
+			name:  "new permission with a legacy scope",
+			model: validTestRegistry(validTestType("thing", withScope(validTestPermission("read"), "other:read"))),
+			want:  `thing.read: legacy scope "other:read" is not one of the historical scopes`,
+		},
+		{
+			name:  "scope with more than one separator",
+			model: validTestRegistry(validTestType("thing", withScope(validTestPermission("read"), "thing:read:extra"))),
+			want:  `thing.read: scope "thing:read:extra" is not resource:action`,
+		},
+		{
+			name: "permission declares a dimension twice",
+			model: func() Registry {
+				p := validTestPermission("read")
+				p.Dimensions = []Dimension{{Key: "mode", Values: nil, Required: false}, {Key: "mode", Values: nil, Required: false}}
+				return validTestRegistry(validTestType("thing", p))
+			}(),
+			want: `thing.read: dimension "mode" is declared twice`,
+		},
+		{
+			name: "unknown type category",
+			model: func() Registry {
+				typ := validTestType("thing", validTestPermission("read"))
+				typ.Category = "nowhere"
+				return validTestRegistry(typ)
+			}(),
+			want: `thing: unknown category "nowhere"`,
+		},
+		{
+			name: "permission exempts itself",
+			model: validTestRegistry(validTestType("thing",
+				withExclusions(validTestPermission("evaluate"), Exclusion{Kind: ExclusionExemption, Action: "evaluate", Agent: AgentUnsafe(), Subject: ""}),
+			)),
+			want: `thing.evaluate: a permission cannot exempt itself`,
+		},
+		{
+			name: "exemption with another grant source",
+			model: func() Registry {
+				bypass := validTestPermission("bypass")
+				bypass.Source = GrantSourceRiskPolicy
+				return validTestRegistry(validTestType("thing",
+					withExclusions(validTestPermission("evaluate"), Exclusion{Kind: ExclusionExemption, Action: "bypass", Agent: AgentUnsafe(), Subject: ""}),
+					bypass,
+				))
+			}(),
+			want: `thing.evaluate: exemption "bypass" has a different grant source`,
+		},
+		{
+			name: "two blocks on one permission",
+			model: validTestRegistry(validTestType("thing",
+				withExclusions(validTestPermission("read"), append(Blocked(AgentUnsafe(), "thing read access"), Blocked(AgentUnsafe(), "thing read access")...)...),
+			)),
+			want: `thing.read: at most one block per permission`,
+		},
+		{
+			name: "block and exemption on one permission",
+			model: validTestRegistry(validTestType("thing",
+				withExclusions(validTestPermission("evaluate"), append(Blocked(AgentUnsafe(), "thing evaluate access"), Exclusion{Kind: ExclusionExemption, Action: "bypass", Agent: AgentUnsafe(), Subject: ""})...),
+				validTestPermission("bypass"),
+			)),
+			want: `thing.evaluate: at most one exclusion per permission`,
+		},
+		{
+			name: "system role names a scope twice",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
+				r.SystemRoles = map[string][]Scope{"admin": {"thing:read", "thing:read"}}
+				return r
+			}(),
+			want: `system role "admin" names "thing:read" twice`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := tc.model.Validate()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.want)
+		})
+	}
+}
+
+// Source has no default: a permission that leaves it unset is rejected.
+func TestRegistryValidate_RequiresSource(t *testing.T) {
+	t.Parallel()
+
+	read := validTestPermission("read")
+	read.Source = ""
+	err := validTestRegistry(validTestType("thing", read)).Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `thing.read: Source must be GrantSourceRoles or GrantSourceRiskPolicy, got ""`)
+}
+
+func TestSafeSince_RejectsVersionsBelowOne(t *testing.T) {
+	t.Parallel()
+	require.Panics(t, func() { SafeSince(0) })
+	require.Panics(t, func() { SafeSince(-1) })
+}
+
+func TestResourceType_Scopes(t *testing.T) {
+	t.Parallel()
+
+	project := validTestType("project")
+	require.Equal(t, Scope("project:write"), project.ScopeFor(validTestPermission("write")))
+	require.Equal(t, Scope("project:blocked_write"), project.BlockScopeFor(validTestPermission("write")))
+
+	// A historical scope keeps its own prefix for the block too.
+	plugin := withTestScope(validTestPermission("plugin_write"), Scope("plugin:write"))
+	require.Equal(t, Scope("plugin:write"), project.ScopeFor(plugin))
+	require.Equal(t, Scope("plugin:blocked_write"), project.BlockScopeFor(plugin))
+}
+
+func withTestScope(p Permission, s Scope) Permission {
+	p.LegacyScope = s
+	return p
+}
+
+// No check may leave a type's parent key out, whether the type or one of its
+// permissions declares the key, and whether or not it is Required.
+func TestRegistryValidate_NeverOpensParentDimension(t *testing.T) {
+	t.Parallel()
+
+	project := validTestType("project", validTestPermission("read"))
+	opening := func(onPermission, required bool) ResourceType {
+		read := validTestPermission("read")
+		read.Open = []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}}
+		dim := Dimension{Key: SelectorKeyProjectID, Values: nil, Required: required}
+		thing := validTestType("thing")
+		if onPermission {
+			read.Dimensions = []Dimension{dim}
+		} else {
+			thing.Dimensions = []Dimension{dim}
+		}
+		thing.Permissions = []Permission{read}
+		thing.Parent = "project"
+		return thing
+	}
+	for _, tc := range []struct{ onPermission, required bool }{{false, false}, {false, true}, {true, false}} {
+		err := validTestRegistry(project, opening(tc.onPermission, tc.required)).Validate()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), `thing.read: "project_id" names the parent project and must never be opened`)
+	}
+
+	unopened := validTestType("thing", validTestPermission("read"))
+	unopened.Parent = "project"
+	unopened.Dimensions = []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}}
+	require.NoError(t, validTestRegistry(project, unopened).Validate())
+}
+
+// The member role is seeded with a subset of the admin role.
+func TestDefinitions_MemberIsASubsetOfAdmin(t *testing.T) {
+	t.Parallel()
+
+	admin := Definitions.SystemRoles[SystemRoleAdmin]
+	member := Definitions.SystemRoles[SystemRoleMember]
+	require.NotEmpty(t, admin, "the admin role is seeded with nothing")
+	require.NotEmpty(t, member, "the member role is seeded with nothing")
+	for _, scope := range member {
+		require.Contains(t, admin, scope, "member is seeded with %s, which admin is not", scope)
+	}
+}

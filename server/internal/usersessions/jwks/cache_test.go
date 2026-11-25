@@ -19,6 +19,9 @@ func TestMemoryCache_PutGet(t *testing.T) {
 		ETag:        `"v1"`,
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now(),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}
 	require.NoError(t, cache.Put(t.Context(), "https://example.com/jwks.json", state))
 
@@ -42,6 +45,9 @@ func TestMemoryCache_ExpiredEntriesStillReturned(t *testing.T) {
 		ETag:        `"v1"`,
 		ExpiresAt:   time.Now().Add(-time.Hour),
 		RefreshedAt: time.Now().Add(-2 * time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}
 	require.NoError(t, cache.Put(t.Context(), "k", state))
 
@@ -54,8 +60,8 @@ func TestMemoryCache_EvictsEarliestExpiryAtCapacity(t *testing.T) {
 	t.Parallel()
 
 	cache := &MemoryCache{mu: sync.RWMutex{}, entries: make(map[string]CacheState), maxEntries: 2, maxBytes: defaultMemoryCacheBytes, totalBytes: 0}
-	older := CacheState{Document: nil, ETag: "", ExpiresAt: time.Now().Add(time.Minute), RefreshedAt: time.Now()}
-	newer := CacheState{Document: nil, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now()}
+	older := CacheState{Document: nil, ETag: "", ExpiresAt: time.Now().Add(time.Minute), RefreshedAt: time.Now(), LastErrorAt: time.Time{}, LastError: "", Revision: ""}
+	newer := CacheState{Document: nil, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now(), LastErrorAt: time.Time{}, LastError: "", Revision: ""}
 	require.NoError(t, cache.Put(t.Context(), "older", older))
 	require.NoError(t, cache.Put(t.Context(), "newer", newer))
 
@@ -81,8 +87,8 @@ func TestMemoryCache_EvictsOverByteBudget(t *testing.T) {
 	// the byte budget evicts earliest-expiry entries until the sum fits.
 	cache := &MemoryCache{mu: sync.RWMutex{}, entries: make(map[string]CacheState), maxEntries: 1024, maxBytes: 1024, totalBytes: 0}
 	bigDoc := json.RawMessage(bytes.Repeat([]byte("a"), 600))
-	older := CacheState{Document: bigDoc, ETag: "", ExpiresAt: time.Now().Add(time.Minute), RefreshedAt: time.Now()}
-	newer := CacheState{Document: bigDoc, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now()}
+	older := CacheState{Document: bigDoc, ETag: "", ExpiresAt: time.Now().Add(time.Minute), RefreshedAt: time.Now(), LastErrorAt: time.Time{}, LastError: "", Revision: ""}
+	newer := CacheState{Document: bigDoc, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now(), LastErrorAt: time.Time{}, LastError: "", Revision: ""}
 	require.NoError(t, cache.Put(t.Context(), "older", older))
 
 	require.NoError(t, cache.Put(t.Context(), "newer", newer))
@@ -104,8 +110,8 @@ func TestMemoryCache_ReplacementAdjustsByteBudget(t *testing.T) {
 	// second small entry survives.
 	cache := &MemoryCache{mu: sync.RWMutex{}, entries: make(map[string]CacheState), maxEntries: 1024, maxBytes: 1024, totalBytes: 0}
 	bigDoc := json.RawMessage(bytes.Repeat([]byte("a"), 600))
-	small := CacheState{Document: json.RawMessage(`{"keys":[]}`), ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now()}
-	big := CacheState{Document: bigDoc, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now()}
+	small := CacheState{Document: json.RawMessage(`{"keys":[]}`), ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now(), LastErrorAt: time.Time{}, LastError: "", Revision: ""}
+	big := CacheState{Document: bigDoc, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now(), LastErrorAt: time.Time{}, LastError: "", Revision: ""}
 	require.NoError(t, cache.Put(t.Context(), "small", small))
 	require.NoError(t, cache.Put(t.Context(), "big", big))
 	require.NoError(t, cache.Put(t.Context(), "big", big))
@@ -119,7 +125,7 @@ func TestMemoryCache_ReplacingExistingKeyDoesNotEvict(t *testing.T) {
 	t.Parallel()
 
 	cache := &MemoryCache{mu: sync.RWMutex{}, entries: make(map[string]CacheState), maxEntries: 2, maxBytes: defaultMemoryCacheBytes, totalBytes: 0}
-	state := CacheState{Document: nil, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now()}
+	state := CacheState{Document: nil, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now(), LastErrorAt: time.Time{}, LastError: "", Revision: ""}
 	require.NoError(t, cache.Put(t.Context(), "a", state))
 	require.NoError(t, cache.Put(t.Context(), "b", state))
 

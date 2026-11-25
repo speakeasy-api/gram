@@ -21,8 +21,14 @@ func (e *RateLimitError) Error() string {
 type HTTPError struct {
 	StatusCode int
 	Status     string
+	// Body is the leading part of the response body: Cursor explains a
+	// rejected request there, and the status alone does not say why.
+	Body string
 }
 
 func (e *HTTPError) Error() string {
-	return fmt.Sprintf("cursor usage request failed with status %s", e.Status)
+	if e.Body == "" {
+		return fmt.Sprintf("cursor usage request failed with status %s", e.Status)
+	}
+	return fmt.Sprintf("cursor usage request failed with status %s: %s", e.Status, e.Body)
 }

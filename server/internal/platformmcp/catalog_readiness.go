@@ -1,4 +1,4 @@
-//nolint:exhaustruct,wrapcheck // Readiness probes intentionally omit documented optional fields and preserve typed errors.
+//nolint:exhaustruct_v5,wrapcheck // Readiness probes intentionally omit documented optional fields and preserve typed errors.
 package platformmcp
 
 import (
@@ -8,6 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -16,28 +18,99 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
+	// Bound paginated discovery even when an upstream repeats or invents cursors.
+	catalogProbeMaxPages = 100
+	// Leave headroom above catalog server sizes while bounding accumulated results.
+	catalogProbeMaxTools    = 10000
 	catalogProbeTimeout     = 15 * time.Second
 	catalogProbeMaxResponse = 1 << 20
 	catalogReadinessTTL     = time.Minute
+
+	// catalogProbeMaxLoggedError bounds the provider-influenced error detail a
+	// failed probe logs. 512 bytes holds an SDK error and a short JSON-RPC
+	// message without letting a provider fill the log line.
+	catalogProbeMaxLoggedError = 512
 )
 
 var errCatalogProbeResponseTooLarge = errors.New("platform mcp catalogue readiness response too large")
+
+// ReadinessEvidenceIdentityChainingConfigured marks an upstream with no
+// interactive session that identity chaining is configured to serve. It is
+// configuration evidence only: the provider has not answered.
+const ReadinessEvidenceIdentityChainingConfigured = "identity_chaining_configured"
+
+// ReadinessEvidenceIdentityChainingActive marks an upstream with no
+// interactive session that the caller reaches through a usable chained
+// credential, one the provider already issued.
+const ReadinessEvidenceIdentityChainingActive = "identity_chaining_active"
+
+// IdentityChainingGovernor answers identity chaining configuration questions
+// from stored state and read-only resource metadata discovery. It never acquires a token.
+type IdentityChainingGovernor interface {
+	Serves(ctx context.Context, req identitychaining.Request) (uuid.UUID, bool)
+	HasUsableCredential(ctx context.Context, req identitychaining.Request) bool
+	ProviderOrder(ctx context.Context, req identitychaining.Request) (remotesessions.EMAProviderOrder, bool, error)
+}
+
+// IdentityChainingReadiness is readiness for a direct remote upstream the
+// caller has no interactive session for, judged as the MCP runtime does.
+type IdentityChainingReadiness struct {
+	State                 ReadinessState
+	EvidenceCode          string
+	Absence               string
+	RemoteSessionIssuerID uuid.UUID
+}
+
+// ResolveIdentityChainingReadiness reports ready when the caller holds a usable
+// chained credential, and needs-authorization with configuration evidence when
+// chaining serves the upstream without one. ok is false when chaining does not
+// serve it.
+func ResolveIdentityChainingReadiness(ctx context.Context, governor IdentityChainingGovernor, organizationID, userID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string) (IdentityChainingReadiness, bool) {
+	return resolveIdentityChainingReadiness(ctx, governor, organizationID, userID, projectID, userSessionIssuerID, upstreamResource, uuid.NullUUID{})
+}
+
+func resolveIdentityChainingReadiness(ctx context.Context, governor IdentityChainingGovernor, organizationID, userID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, clientID uuid.NullUUID) (IdentityChainingReadiness, bool) {
+	var none IdentityChainingReadiness
+	if governor == nil {
+		return none, false
+	}
+	req, ok := identitychaining.NewRequest(organizationID, projectID, userSessionIssuerID, userID, upstreamResource, false, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	if !ok {
+		return none, false
+	}
+	req.RemoteSessionClientID = clientID
+	issuer, served := governor.Serves(ctx, req)
+	if !served || issuer == uuid.Nil {
+		return none, false
+	}
+	if governor.HasUsableCredential(ctx, req) {
+		return IdentityChainingReadiness{State: ReadinessReady, EvidenceCode: ReadinessEvidenceIdentityChainingActive, Absence: ProviderAuthorizationIdentityChaining, RemoteSessionIssuerID: issuer}, true
+	}
+	return IdentityChainingReadiness{State: ReadinessNeedsGramAuthorization, EvidenceCode: ReadinessEvidenceIdentityChainingConfigured, Absence: "no_session", RemoteSessionIssuerID: issuer}, true
+}
 
 // CatalogReadinessProber verifies a browser-catalogue registration through the
 // same persisted Remote MCP source and remote-session authorization used at
 // normal runtime. Its inputs come exclusively from a lifecycle-owned
 // registration, never from an MCP caller.
 type CatalogReadinessProber interface {
-	ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error)
+	ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, mcpServerID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error)
 }
 
 // RemoteMCPReadinessProber is the generic browser-catalogue readiness path. It
@@ -50,14 +123,31 @@ type RemoteMCPReadinessProber struct {
 	enc      *encryption.Client
 	policy   *guardian.Policy
 	sessions *remotesessions.ChallengeManager
+	chaining IdentityChainingGovernor
+
+	// aiCatalog names the admitted client app in connection attribution.
+	aiCatalog *aivendors.Store
 }
 
-func NewRemoteMCPReadinessProber(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, sessions *remotesessions.ChallengeManager) *RemoteMCPReadinessProber {
-	return &RemoteMCPReadinessProber{logger: logger, db: db, enc: enc, policy: policy, sessions: sessions}
+func NewRemoteMCPReadinessProber(aiCatalog *aivendors.Store, logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, sessions *remotesessions.ChallengeManager) *RemoteMCPReadinessProber {
+	if aiCatalog == nil {
+		panic("platformmcp: readiness prober requires an AI client catalog store")
+	}
+	return &RemoteMCPReadinessProber{logger: logger, db: db, enc: enc, policy: policy, sessions: sessions, chaining: nil, aiCatalog: aiCatalog}
 }
 
-func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error) {
-	if p == nil || p.db == nil || p.enc == nil || p.policy == nil || p.sessions == nil || principal.UserID == "" || principal.OrganizationID == "" || projectID == uuid.Nil || registrationID == uuid.Nil || remoteMCPServerID == uuid.Nil || userSessionIssuerID == uuid.Nil || connectionID == uuid.Nil || generation == uuid.Nil {
+// WithIdentityChaining judges upstreams without an interactive session by
+// identity chaining: ready on a usable chained credential, otherwise marked
+// configured.
+func (p *RemoteMCPReadinessProber) WithIdentityChaining(governor IdentityChainingGovernor) *RemoteMCPReadinessProber {
+	if p != nil {
+		p.chaining = governor
+	}
+	return p
+}
+
+func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, mcpServerID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error) {
+	if p == nil || p.db == nil || p.enc == nil || p.policy == nil || p.sessions == nil || principal.UserID == "" || principal.OrganizationID == "" || projectID == uuid.Nil || registrationID == uuid.Nil || mcpServerID == uuid.Nil || remoteMCPServerID == uuid.Nil || userSessionIssuerID == uuid.Nil || connectionID == uuid.Nil || generation == uuid.Nil {
 		return ProviderReadinessProbeResult{}, ErrReadinessInvalid
 	}
 	if _, err := projectsrepo.New(p.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: principal.OrganizationID}); err != nil {
@@ -76,6 +166,9 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	if remote.TransportType != "streamable-http" || !validCatalogReadinessURL(remote.Url) {
 		return ProviderReadinessProbeResult{}, ErrReadinessInvalid
 	}
+	if err := validateRemoteOfferTarget(ctx, p.db, projectID, mcpServerID, remoteMCPServerID, userSessionIssuerID); err != nil {
+		return ProviderReadinessProbeResult{}, err
+	}
 	headers, err := p.loadHeaders(ctx, remote.ID)
 	if err != nil {
 		return ProviderReadinessProbeResult{}, fmt.Errorf("load registered Remote MCP headers: %w", err)
@@ -89,33 +182,80 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		}
 	}
 
-	clients, err := p.sessions.ListClients(ctx, projectID, principal.OrganizationID, userSessionIssuerID)
+	clients, incomplete, err := p.offeredRegistrations(ctx, principal.OrganizationID, projectID, mcpServerID, []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeServiceAccount, authz.AuthClientTypeEMA})
 	if err != nil {
-		return ProviderReadinessProbeResult{}, fmt.Errorf("list configured upstream identity providers: %w", err)
+		return ProviderReadinessProbeResult{}, err
 	}
 	if len(clients) == 0 {
+		if incomplete {
+			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{}, "no_client"), nil
+		}
 		state, evidence := p.probe(ctx, remote.Url, headers, "")
 		if state == ReadinessUnauthorized {
 			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{}, "no_client"), nil
 		}
 		return p.result(principal, registrationID, state, evidence, remotesessions.ResolvedAuthorization{}, "anonymous"), nil
 	}
-	if len(clients) != 1 {
-		return p.result(principal, registrationID, ReadinessNeedsConfiguration, "multiple_upstream_identity_providers", remotesessions.ResolvedAuthorization{}, "no_client"), nil
+	subject := urn.NewUserSubject(principal.UserID)
+	app := mcpconnectionattempts.AppOf(p.aiCatalog.SnapshotFor(ctx), principal.ClientID, mcpconnectionattempts.ClientIDAdmitted)
+	var authorization remotesessions.ResolvedAuthorization
+	chosen := clients[0]
+	// A server may offer several registrations for its callers to choose
+	// among; the caller is ready through the first that yields a credential,
+	// and the first registration's failure is reported when none does.
+	var firstErr error
+	for i, client := range clients {
+		tokens, resolveErr := p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false, Attribution: remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, app))})
+		token := tokens[client.RemoteSessionIssuerID]
+		if resolveErr == nil && token.Token == "" {
+			resolveErr = remotesessions.ErrNoValidToken
+		}
+		if i == 0 {
+			firstErr = resolveErr
+		}
+		if resolveErr == nil {
+			chosen = client
+			authorization = remotesessions.ResolvedAuthorization{AccessToken: token.Token, RemoteSessionID: token.RemoteSessionID, RemoteSessionUpdatedAt: token.RemoteSessionUpdatedAt, RemoteSessionClientID: client.ID, RemoteSessionIssuerID: client.RemoteSessionIssuerID, CredentialOwner: token.CredentialOwner}
+			break
+		}
 	}
-	authorization, err := p.sessions.ResolveAuthorization(ctx, projectID, principal.OrganizationID, userSessionIssuerID, clients[0].RemoteSessionIssuerID, urn.NewUserSubject(principal.UserID), remote.Url)
-	if errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding) {
-		return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID}, "no_client"), nil
+	if authorization.AccessToken == "" {
+		err = firstErr
+	}
+	if errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding) || errors.Is(err, remotesessions.ErrChosenClientUnbound) {
+		return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_client"), nil
+	}
+	if state, evidence, ok := ClientCredentialReadiness(err); ok {
+		return p.result(principal, registrationID, state, evidence, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_session"), nil
 	}
 	if errors.Is(err, remotesessions.ErrNoValidToken) {
-		return p.result(principal, registrationID, ReadinessNeedsGramAuthorization, "upstream_authorization_required", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID}, "no_session"), nil
+		var firstConfigured *IdentityChainingReadiness
+		var firstClientID uuid.UUID
+		for _, client := range clients {
+			chained, ok := resolveIdentityChainingReadiness(ctx, p.chaining, principal.OrganizationID, principal.UserID, projectID, userSessionIssuerID, remote.Url, conv.ToNullUUID(client.ID))
+			if !ok {
+				continue
+			}
+			if chained.State == ReadinessReady {
+				return p.result(principal, registrationID, chained.State, chained.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionClientID: client.ID, RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
+			}
+			if firstConfigured == nil {
+				firstConfigured = &chained
+				firstClientID = client.ID
+			}
+		}
+		if firstConfigured != nil {
+			return p.result(principal, registrationID, firstConfigured.State, firstConfigured.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionClientID: firstClientID, RemoteSessionIssuerID: firstConfigured.RemoteSessionIssuerID}, firstConfigured.Absence), nil
+		}
+		return p.result(principal, registrationID, ReadinessNeedsGramAuthorization, "upstream_authorization_required", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_session"), nil
 	}
 	if err != nil {
 		return ProviderReadinessProbeResult{}, fmt.Errorf("resolve registered Remote MCP authorization: %w", err)
 	}
 
 	state, evidence := p.probe(ctx, remote.Url, headers, authorization.AccessToken)
-	return p.result(principal, registrationID, state, evidence, authorization, ""), nil
+	state, evidence = ClientCredentialProbeReadiness(authorization, state, evidence)
+	return p.result(principal, registrationID, state, evidence, authorization, ProviderAuthorizationAbsence(authorization)), nil
 }
 
 func validCatalogReadinessURL(raw string) bool {
@@ -146,9 +286,14 @@ func (p *RemoteMCPReadinessProber) result(principal Principal, registrationID uu
 }
 
 func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, headers []remotemcprepo.RemoteMcpServerHeader, token string) (ReadinessState, string) {
+	state, evidence, _ := p.probeTools(ctx, remoteURL, headers, token)
+	return state, evidence
+}
+
+func (p *RemoteMCPReadinessProber) probeTools(ctx context.Context, remoteURL string, headers []remotemcprepo.RemoteMcpServerHeader, token string) (ReadinessState, string, int) {
 	ctx, cancel := context.WithTimeout(ctx, catalogProbeTimeout)
 	defer cancel()
-	httpClient := p.policy.Client()
+	httpClient := p.policy.Client(guardian.WithInternalCatalog())
 	httpClient.Timeout = catalogProbeTimeout
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	baseTransport := httpClient.Transport
@@ -161,29 +306,122 @@ func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, 
 		headers:      headers,
 		unauthorized: atomic.Bool{},
 		tooLarge:     atomic.Bool{},
+		responded:    atomic.Bool{},
+		transient:    atomic.Bool{},
 	}
 	httpClient.Transport = roundTripper
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "platform-mcp-readiness", Version: "1.0.0"}, nil)
-	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: remoteURL, HTTPClient: httpClient, MaxRetries: 0, DisableStandaloneSSE: true}, nil)
+	// The SDK treats MaxRetries == 0 as its default of 5 reconnect attempts; a
+	// negative value disables retries so one probe is one attempt.
+	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: remoteURL, HTTPClient: httpClient, MaxRetries: -1, DisableStandaloneSSE: true}, nil)
 	if err != nil {
-		return catalogProbeFailure(err, roundTripper)
+		state, evidence := p.probeFailure(ctx, remoteURL, err, roundTripper, catalogProbeStageInitialize)
+		return state, evidence, 0
 	}
-	defer func() { _ = session.Close() }()
-	if _, err := session.ListTools(ctx, nil); err != nil {
-		return catalogProbeFailure(err, roundTripper)
+	defer o11y.NoLogDefer(session.Close)
+	count := 0
+	cursor := ""
+	seen := make(map[string]bool)
+	for range catalogProbeMaxPages {
+		tools, err := session.ListTools(ctx, &mcp.ListToolsParams{Cursor: cursor, Meta: nil})
+		if err != nil {
+			state, evidence := p.probeFailure(ctx, remoteURL, err, roundTripper, catalogProbeStageToolsList)
+			return state, evidence, 0
+		}
+		count += len(tools.Tools)
+		if count > catalogProbeMaxTools {
+			return ReadinessDegraded, "tools_list_limit_exceeded", 0
+		}
+		if tools.NextCursor == "" {
+			return ReadinessReady, "tools_list_ok", count
+		}
+		if seen[tools.NextCursor] {
+			return ReadinessDegraded, "tools_list_cursor_repeated", 0
+		}
+		cursor = tools.NextCursor
+		seen[cursor] = true
 	}
-	return ReadinessReady, "tools_list_ok"
+	return ReadinessDegraded, "tools_list_limit_exceeded", 0
 }
 
-func catalogProbeFailure(err error, roundTripper *catalogAuthorizationRoundTripper) (ReadinessState, string) {
+// probeFailure classifies a failed probe and logs the underlying error. The
+// caller-visible result is only the closed state and evidence code; the
+// server-side log keeps a redacted, bounded SDK error and the last failing
+// HTTP status so an operator can tell why a provider's response was rejected.
+func (p *RemoteMCPReadinessProber) probeFailure(ctx context.Context, remoteURL string, err error, roundTripper *catalogAuthorizationRoundTripper, stage catalogProbeStage) (ReadinessState, string) {
+	state, evidence := catalogProbeFailure(err, roundTripper, stage)
+	attrs := []any{
+		attr.SlogOutcome(evidence),
+		attr.SlogReason(string(stage)),
+		attr.SlogError(errors.New(redactProbeError(err.Error(), remoteURL, roundTripper))),
+	}
+	if parsed, parseErr := url.Parse(remoteURL); parseErr == nil {
+		attrs = append(attrs, attr.SlogServerAddress(parsed.Host))
+	}
+	if status := roundTripper.failedStatus.Load(); status != 0 {
+		attrs = append(attrs, attr.SlogHTTPResponseStatusCode(int(status)))
+	}
+	p.logger.WarnContext(ctx, "remote mcp readiness probe failed", attrs...)
+	return state, evidence
+}
+
+// redactProbeError removes the endpoint's query string and every credential
+// the probe sent from an SDK error, then bounds its length. Go HTTP errors
+// embed the full request URL, and JSON-RPC errors carry provider-authored text.
+func redactProbeError(detail, remoteURL string, roundTripper *catalogAuthorizationRoundTripper) string {
+	secrets := []string{roundTripper.token}
+	if parsed, err := url.Parse(remoteURL); err == nil {
+		secrets = append(secrets, parsed.RawQuery)
+	}
+	for _, header := range roundTripper.headers {
+		secrets = append(secrets, header.Value.String)
+	}
+	for _, secret := range secrets {
+		if secret != "" {
+			detail = strings.ReplaceAll(detail, secret, "[REDACTED]")
+		}
+	}
+	if len(detail) > catalogProbeMaxLoggedError {
+		detail = detail[:catalogProbeMaxLoggedError] + "…"
+	}
+	return detail
+}
+
+type catalogProbeStage string
+
+const (
+	catalogProbeStageInitialize catalogProbeStage = "initialize"
+	catalogProbeStageToolsList  catalogProbeStage = "tools_list"
+)
+
+func catalogProbeFailure(err error, roundTripper *catalogAuthorizationRoundTripper, stage catalogProbeStage) (ReadinessState, string) {
+	if roundTripper == nil {
+		return ReadinessUnsupported, "invalid_mcp_response"
+	}
 	if roundTripper.unauthorized.Load() {
 		return ReadinessUnauthorized, "upstream_authorization_rejected"
 	}
-	if roundTripper.tooLarge.Load() || errors.Is(err, errCatalogProbeResponseTooLarge) {
-		return ReadinessUnsupported, "response_too_large"
+	if roundTripper.transient.Load() {
+		return ReadinessDegraded, "probe_temporarily_unavailable"
 	}
-	return ReadinessUnreachable, "probe_failed"
+	if roundTripper.tooLarge.Load() || errors.Is(err, errCatalogProbeResponseTooLarge) {
+		if stage == catalogProbeStageToolsList {
+			return ReadinessDegraded, "tools_list_response_too_large"
+		}
+		return ReadinessUnsupported, "initialize_response_too_large"
+	}
+	if roundTripper.redirected.Load() {
+		return ReadinessUnsupported, "redirect_rejected"
+	}
+	state, evidence := ClassifyReadinessProbeFailure(err)
+	if evidence == "probe_timeout" || evidence == "probe_unreachable" {
+		return state, evidence
+	}
+	if evidence == "probe_failed" && roundTripper.responded.Load() && !IsReadinessMCPErrorResponse(err) {
+		return ReadinessUnsupported, "invalid_mcp_response"
+	}
+	return state, evidence
 }
 
 type catalogAuthorizationRoundTripper struct {
@@ -192,6 +430,13 @@ type catalogAuthorizationRoundTripper struct {
 	headers      []remotemcprepo.RemoteMcpServerHeader
 	unauthorized atomic.Bool
 	tooLarge     atomic.Bool
+	responded    atomic.Bool
+	transient    atomic.Bool
+	redirected   atomic.Bool
+
+	// failedStatus is the most recent non-2xx HTTP status the provider
+	// returned, or zero when every response succeeded. It is logged only.
+	failedStatus atomic.Int32
 }
 
 func (rt *catalogAuthorizationRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -208,8 +453,18 @@ func (rt *catalogAuthorizationRoundTripper) RoundTrip(request *http.Request) (*h
 	if err != nil {
 		return nil, fmt.Errorf("send registered Remote MCP readiness request: %w", err)
 	}
+	rt.responded.Store(true)
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		rt.failedStatus.Store(int32(response.StatusCode)) //nolint:gosec // HTTP status codes are three-digit values
+	}
 	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
 		rt.unauthorized.Store(true)
+	}
+	if response.StatusCode >= http.StatusMultipleChoices && response.StatusCode < http.StatusBadRequest {
+		rt.redirected.Store(true)
+	}
+	if transientCatalogProbeStatus(response.StatusCode) {
+		rt.transient.Store(true)
 	}
 	if response.ContentLength > catalogProbeMaxResponse {
 		rt.tooLarge.Store(true)
@@ -218,6 +473,10 @@ func (rt *catalogAuthorizationRoundTripper) RoundTrip(request *http.Request) (*h
 	}
 	response.Body = &catalogBoundedReadCloser{ReadCloser: response.Body, remaining: catalogProbeMaxResponse, exceeded: &rt.tooLarge}
 	return response, nil
+}
+
+func transientCatalogProbeStatus(status int) bool {
+	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status == http.StatusInternalServerError || status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout
 }
 
 type catalogBoundedReadCloser struct {

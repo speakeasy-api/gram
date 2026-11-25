@@ -142,14 +142,7 @@ func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpM
 	{
 		err = json.Unmarshal([]byte(mcpMetadataExportMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_slug\": \"aaa\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", body.McpSlug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(body.McpSlug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", body.McpSlug, utf8.RuneCountInString(body.McpSlug), 40, false))
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_slug\": \"aaa\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -171,7 +164,11 @@ func BuildExportMcpMetadataPayload(mcpMetadataExportMcpMetadataBody string, mcpM
 		}
 	}
 	v := &mcpmetadata.ExportMcpMetadataPayload{
-		McpSlug: types.Slug(body.McpSlug),
+		McpServerID: body.McpServerID,
+	}
+	if body.McpSlug != nil {
+		mcpSlug := types.Slug(*body.McpSlug)
+		v.McpSlug = &mcpSlug
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

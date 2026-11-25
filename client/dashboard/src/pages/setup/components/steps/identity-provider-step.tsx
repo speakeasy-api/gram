@@ -1,0 +1,642 @@
+import { useMemo, useState } from "react";
+import { Check, ChevronDown, ExternalLink } from "lucide-react";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
+import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
+import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
+import { toast } from "sonner";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
+import { cn, getServerURL } from "@/lib/utils";
+import { StepContainer } from "../step-container";
+import { StepSection } from "../step-section";
+import { IDP_PROVIDERS } from "../../providers";
+import type { IdpProvider } from "../../types";
+import { Spinner } from "@/components/ui/Spinner";
+
+const INITIAL_VISIBLE = 6;
+
+interface IdentityProviderStepProps {
+  onComplete: () => void;
+}
+
+// One card for the whole identity outcome: domain verification, single
+// sign-on, and directory sync are three round trips through the WorkOS admin
+// portal, but what the admin is setting up is "our identity provider runs
+// sign-in and membership". Each sub-step carries its own inline action and
+// flips to done from the server's onboarding status, so the card's Continue
+// is always available.
+export function IdentityProviderStep({
+  onComplete,
+}: IdentityProviderStepProps): JSX.Element {
+  const {
+    data: onboardingStatus,
+    isLoading,
+    isError,
+    refetch,
+  } = useOnboardingStatus(undefined, undefined, { throwOnError: false });
+
+  return (
+    <StepContainer
+      title="Set up identity provider"
+      description="Verify your email domain, connect your SSO provider so your team signs in with existing credentials, then sync its directory so users, groups, and roles stay in step with your identity provider. All can be finished later from organization settings."
+      onContinue={onComplete}
+    >
+      <div className="space-y-8">
+        {isError && <StatusUnavailableAlert onRetry={() => void refetch()} />}
+        <DomainVerificationSection
+          index={1}
+          // Active SSO proves a domain was verified, even for orgs set up
+          // before verified domains were tracked.
+          configured={
+            !!onboardingStatus?.domainVerified ||
+            !!onboardingStatus?.ssoConfigured
+          }
+          verifiedDomains={onboardingStatus?.verifiedDomains ?? []}
+          isLoading={isLoading}
+        />
+        <SingleSignOnSection
+          index={2}
+          configured={!!onboardingStatus?.ssoConfigured}
+          // Only a status response can say the domain is unverified; while
+          // loading or after an error, WorkOS still enforces the rule.
+          domainVerified={onboardingStatus?.domainVerified !== false}
+          isLoading={isLoading}
+        />
+        <DirectorySyncSection
+          index={3}
+          configured={!!onboardingStatus?.dsyncConfigured}
+          isLoading={isLoading}
+        />
+      </div>
+    </StepContainer>
+  );
+}
+
+/**
+ * Every sub-step reads its done state off one onboarding status call, which
+ * reaches WorkOS for the domains, the SSO connections and the directory. When
+ * that call fails the card would otherwise render a confident "not set up" for
+ * setup that may already exist, so say the state is unknown and offer a retry.
+ */
+function StatusUnavailableAlert({
+  onRetry,
+}: {
+  onRetry: () => void;
+}): JSX.Element {
+  return (
+    <Alert variant="warning">
+      <div className="text-sm">
+        <p className="font-medium">Setup status unavailable</p>
+        <p className="mt-1">
+          We could not check which of these steps are already done, so the
+          states below may be out of date.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onRetry}
+          className="mt-3"
+        >
+          Try again
+        </Button>
+      </div>
+    </Alert>
+  );
+}
+
+type PortalIntent = "domain_verification" | "sso" | "dsync";
+
+// `noun` names the thing being set up mid-sentence, so the messages that only
+// differ by subject share one shape. `missing` is spelled out per intent
+// instead: "No domain verification detected yet" is the wrong sentence for a
+// step whose whole job is verifying, and these three already read well.
+const PORTAL_COPY: Record<PortalIntent, { noun: string; missing: string }> = {
+  domain_verification: {
+    noun: "domain verification",
+    missing: "Domain not verified yet.",
+  },
+  sso: {
+    noun: "single sign-on",
+    missing: "SSO connection not detected yet.",
+  },
+  dsync: {
+    noun: "directory sync",
+    missing: "Directory sync not detected yet.",
+  },
+};
+
+const CONFIGURED_KEY: Record<
+  PortalIntent,
+  "domainVerified" | "ssoConfigured" | "dsyncConfigured"
+> = {
+  domain_verification: "domainVerified",
+  sso: "ssoConfigured",
+  dsync: "dsyncConfigured",
+};
+
+/**
+ * Drives one WorkOS admin portal round trip: mint the link, hand the admin a
+ * tab, then re-check onboarding status when they come back. Every stage
+ * reports its own failure, because an admin looking at an unchanged sub-step
+ * cannot tell a refused portal link from one they have yet to finish — and a
+ * status check that never completed is not the same as setup WorkOS says is
+ * missing.
+ */
+function usePortalSetup(intent: PortalIntent) {
+  const { noun, missing } = PORTAL_COPY[intent];
+  const [portalOpened, setPortalOpened] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
+
+  const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
+    onError: (error) => {
+      // The server explains the WorkOS failures it can classify; anything it
+      // cannot still needs copy, or the click reads as a no-op.
+      const detail = error instanceof Error ? error.message.trim() : "";
+      toast.error(
+        detail ||
+          `Could not start ${noun} setup. Try again, and contact support if it keeps failing.`,
+      );
+    },
+  });
+
+  const connect = () => {
+    generatePortalLink.mutate(
+      {
+        request: {
+          generateWorkOSAdminPortalLinkRequestBody: {
+            intent,
+            successUrl: `${getServerURL()}/v1/setup/callback?intent=${intent}`,
+            returnUrl: window.location.href,
+            // NOTE: intent_options.sso.provider_type is intentionally omitted.
+            // WorkOS currently only accepts "GoogleSAML" here and 422s on every
+            // other provider, breaking non-Google onboarding. Omitting it lets
+            // WorkOS open its own provider picker so all providers work. Restore
+            // the selected provider type once WorkOS supports the full set:
+            // https://speakeasyapi.slack.com/archives/C079KDQDY9X/p1781722173272439
+          },
+        },
+      },
+      {
+        onSuccess: (data) => {
+          if (openSafeExternalUrl(data.url)) {
+            setPortalOpened(true);
+            return;
+          }
+          toast.error(
+            "Unable to open the WorkOS portal. Allow popups and try again.",
+          );
+        },
+      },
+    );
+  };
+
+  // Verifying refetches the shared onboarding status, so a successful check
+  // flips the calling section to done through the parent's query data.
+  const verify = async () => {
+    setVerifying(true);
+    try {
+      const result = await refetchOnboardingStatus();
+      // A refetch that fails keeps the last successful data, which on this
+      // screen is always populated — the sub-step rendered from it. So the
+      // error flag, not the absence of data, is what separates "could not
+      // check" from "checked, and the setup is not there".
+      if (result.isError || result.data === undefined) {
+        toast.error(`Could not check ${noun}. Try again in a moment.`);
+        return;
+      }
+      if (result.data[CONFIGURED_KEY[intent]]) return;
+      toast.error(`${missing} Finish setup in the WorkOS tab, then try again.`);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  return {
+    connect,
+    verify,
+    verifying,
+    portalOpened,
+    isPending: generatePortalLink.isPending,
+  };
+}
+
+function ConnectedBadge(): JSX.Element {
+  return (
+    <Badge variant="success" background>
+      <Badge.LeftIcon>
+        <Check className="h-3 w-3" />
+      </Badge.LeftIcon>
+      <Badge.Text>Connected</Badge.Text>
+    </Badge>
+  );
+}
+
+function ConnectedNote({
+  title,
+  children,
+}: {
+  title: string;
+  children: string;
+}): JSX.Element {
+  return (
+    <div className="border-border bg-card border p-4">
+      <p className="text-foreground text-sm font-medium">{title}</p>
+      <p className="text-muted-foreground mt-1 text-sm">{children}</p>
+    </div>
+  );
+}
+
+function PortalNote({ children }: { children: string }): JSX.Element {
+  return (
+    <div className="bg-card border-border border p-4">
+      <div className="flex items-start gap-3">
+        <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
+          <ExternalLink className="text-muted-foreground h-4 w-4" />
+        </div>
+        <div>
+          <p className="text-foreground text-sm font-medium">
+            Setup opens in a new tab
+          </p>
+          <p className="text-muted-foreground mt-1 text-sm">{children}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionSkeleton(): JSX.Element {
+  return (
+    <Skeleton>
+      <div className="h-[74px] w-full" />
+    </Skeleton>
+  );
+}
+
+function ProviderIcon({
+  provider,
+  className,
+}: {
+  provider: IdpProvider;
+  className?: string;
+}): JSX.Element {
+  const { theme } = useMoonshineConfig();
+  const variant = theme === "dark" ? "dark" : "light";
+  return (
+    <img
+      src={`https://cdn.workos.com/provider-icons/${variant}/${provider.iconSlug}.svg`}
+      alt={provider.name}
+      className={cn("h-6 w-6", className)}
+    />
+  );
+}
+
+interface SectionProps {
+  index: number;
+  configured: boolean;
+  isLoading: boolean;
+}
+
+// WorkOS only lets an organization set up single sign-on once it has proved
+// it owns an email domain (a DNS record added in the WorkOS admin portal).
+function DomainVerificationSection({
+  index,
+  configured,
+  verifiedDomains,
+  isLoading,
+}: SectionProps & { verifiedDomains: string[] }): JSX.Element {
+  const { connect, verify, verifying, portalOpened, isPending } =
+    usePortalSetup("domain_verification");
+
+  let body: JSX.Element;
+  if (isLoading) {
+    body = <SectionSkeleton />;
+  } else if (configured) {
+    body = (
+      <div className="border-border bg-card border p-4">
+        <p className="text-foreground text-sm font-medium">
+          Your domain is verified
+        </p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          You can now connect your identity provider for single sign-on.
+        </p>
+        {verifiedDomains.length > 0 && (
+          <>
+            <p className="text-muted-foreground mt-3 text-sm">
+              SSO applies to users on these domains:
+            </p>
+            <ul
+              aria-label="Verified domains"
+              className="mt-2 flex flex-wrap gap-2"
+            >
+              {verifiedDomains.map((domain) => (
+                <li key={domain}>
+                  <Badge variant="neutral" background>
+                    <Badge.Text>{domain}</Badge.Text>
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    );
+  } else {
+    body = (
+      <div className="space-y-4">
+        <PortalNote>
+          {portalOpened
+            ? "Add the DNS record shown in the WorkOS tab, then verify it here."
+            : "After clicking Verify domain, the WorkOS portal opens in a new browser tab. Add the DNS record it shows, then come back and verify."}
+        </PortalNote>
+        <div className="flex justify-end">
+          {portalOpened ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => void verify()}
+              disabled={verifying}
+            >
+              {verifying ? "Verifying..." : "Check verification"}
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={connect}
+              disabled={isPending}
+            >
+              {isPending ? "Opening..." : "Verify domain"}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <StepSection
+      index={index}
+      slug="verify-domain"
+      title="Verify domain"
+      description="Add a DNS record to prove you own your email domain. Single sign-on needs a verified domain."
+      complete={configured}
+      aside={
+        configured ? (
+          <Badge variant="success" background>
+            <Badge.LeftIcon>
+              <Check className="h-3 w-3" />
+            </Badge.LeftIcon>
+            <Badge.Text>Verified</Badge.Text>
+          </Badge>
+        ) : null
+      }
+    >
+      {body}
+    </StepSection>
+  );
+}
+
+function SingleSignOnSection({
+  index,
+  configured,
+  domainVerified,
+  isLoading,
+}: SectionProps & { domainVerified: boolean }): JSX.Element {
+  // WorkOS rejects a new SSO connection until the org has a verified domain.
+  const needsDomain = !domainVerified && !configured;
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [query, setQuery] = useState("");
+  const { connect, verify, verifying, portalOpened, isPending } =
+    usePortalSetup("sso");
+
+  const filteredProviders = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return IDP_PROVIDERS;
+    return IDP_PROVIDERS.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.protocol.toLowerCase().includes(q),
+    );
+  }, [query]);
+
+  const isSearching = query.trim().length > 0;
+  let visibleProviders = IDP_PROVIDERS.slice(0, INITIAL_VISIBLE);
+  if (isSearching) visibleProviders = filteredProviders;
+  else if (showAll) visibleProviders = IDP_PROVIDERS;
+
+  const provider = IDP_PROVIDERS.find((p) => p.id === selectedProvider);
+
+  const handleConnect = () => {
+    if (!provider) return;
+    connect();
+  };
+
+  let body: JSX.Element;
+  if (isLoading) {
+    body = <SectionSkeleton />;
+  } else if (configured) {
+    body = (
+      <ConnectedNote title="Single sign-on is connected">
+        Your team signs in through your identity provider. Manage the connection
+        from organization settings.
+      </ConnectedNote>
+    );
+  } else {
+    body = (
+      <div className="space-y-4">
+        <div>
+          <label className="text-foreground text-sm font-medium">
+            Select provider<span className="text-accent">*</span>
+          </label>
+          <div className="mt-3">
+            <Input
+              type="search"
+              value={query}
+              onChange={setQuery}
+              placeholder="Search providers"
+              icon="search"
+              disabled={isPending}
+            />
+          </div>
+          {isSearching && filteredProviders.length === 0 && (
+            <p className="text-muted-foreground mt-3 text-sm">
+              No providers match &quot;{query}&quot;.
+            </p>
+          )}
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            {visibleProviders.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setSelectedProvider(p.id)}
+                disabled={isPending}
+                className={cn(
+                  "flex items-center gap-3 border p-4 text-left transition-all",
+                  selectedProvider === p.id
+                    ? "border-foreground bg-secondary"
+                    : "border-border bg-card hover:border-foreground/30",
+                  isPending &&
+                    selectedProvider !== p.id &&
+                    "cursor-not-allowed opacity-50",
+                )}
+              >
+                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
+                  <ProviderIcon provider={p} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-foreground truncate text-sm font-medium">
+                      {p.name}
+                    </span>
+                    {selectedProvider === p.id && isPending && (
+                      <Spinner className="text-muted-foreground mr-0 h-3.5 w-3.5" />
+                    )}
+                  </div>
+                  <span className="text-muted-foreground text-xs">
+                    {p.protocol}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+          {!isSearching &&
+            !showAll &&
+            IDP_PROVIDERS.length > INITIAL_VISIBLE && (
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors"
+              >
+                <ChevronDown className="h-4 w-4" />
+                Show {IDP_PROVIDERS.length - INITIAL_VISIBLE} more providers
+              </button>
+            )}
+        </div>
+
+        {provider && !isPending && (
+          <PortalNote>
+            {portalOpened
+              ? `Finish configuring your ${provider.name} SSO connection in the WorkOS tab, then verify it here.`
+              : `After clicking Connect, the WorkOS portal opens in a new browser tab to configure your ${provider.name} SSO connection. Finish setup there, then come back and verify.`}
+          </PortalNote>
+        )}
+
+        {needsDomain && (
+          <p className="text-muted-foreground text-sm">
+            Verify a domain above first.
+          </p>
+        )}
+
+        <div className="flex justify-end">
+          {portalOpened ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => void verify()}
+              disabled={verifying}
+            >
+              {verifying ? "Verifying..." : "Verify connection"}
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleConnect}
+              disabled={!provider || isPending || needsDomain}
+            >
+              {isPending ? "Opening..." : "Connect"}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <StepSection
+      index={index}
+      slug="single-sign-on"
+      title="Single sign-on"
+      description="Let your team sign in with the credentials they already have."
+      complete={configured}
+      aside={configured ? <ConnectedBadge /> : null}
+    >
+      {body}
+    </StepSection>
+  );
+}
+
+function DirectorySyncSection({
+  index,
+  configured,
+  isLoading,
+}: SectionProps): JSX.Element {
+  const { connect, verify, verifying, portalOpened, isPending } =
+    usePortalSetup("dsync");
+
+  let body: JSX.Element;
+  if (isLoading) {
+    body = <SectionSkeleton />;
+  } else if (configured) {
+    body = (
+      <ConnectedNote title="Directory sync is connected">
+        Users, groups, and roles now follow your identity provider. Manage the
+        connection from organization settings.
+      </ConnectedNote>
+    );
+  } else {
+    body = (
+      <div className="space-y-4">
+        <PortalNote>
+          {portalOpened
+            ? "Finish configuring the directory connection in the WorkOS tab, then verify it here."
+            : "After clicking Connect directory, the WorkOS portal opens in a new browser tab. Finish configuring the connection there, then come back and verify."}
+        </PortalNote>
+        <div className="flex justify-end">
+          {portalOpened ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => void verify()}
+              disabled={verifying}
+            >
+              {verifying ? "Verifying..." : "Verify connection"}
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={connect}
+              disabled={isPending}
+            >
+              {isPending ? "Opening..." : "Connect directory"}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <StepSection
+      index={index}
+      slug="directory-sync"
+      title="Directory sync"
+      description="Keep users, groups, and roles in step with your identity provider automatically."
+      complete={configured}
+      aside={configured ? <ConnectedBadge /> : null}
+    >
+      {body}
+    </StepSection>
+  );
+}

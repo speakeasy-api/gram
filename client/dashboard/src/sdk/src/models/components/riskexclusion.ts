@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -22,7 +23,7 @@ export const RiskExclusionMatchType = {
 /**
  * How match_value is interpreted: exact (finding text), regex (RE2 pattern over finding text), rule_id, source, or entity_type (presidio entity, matched as rule_id 'pii.<entity>').
  */
-export type RiskExclusionMatchType = ClosedEnum<typeof RiskExclusionMatchType>;
+export type RiskExclusionMatchType = OpenEnum<typeof RiskExclusionMatchType>;
 
 export type RiskExclusion = {
   /**
@@ -68,9 +69,10 @@ export type RiskExclusion = {
 };
 
 /** @internal */
-export const RiskExclusionMatchType$inboundSchema: z.ZodMiniEnum<
-  typeof RiskExclusionMatchType
-> = z.enum(RiskExclusionMatchType);
+export const RiskExclusionMatchType$inboundSchema: z.ZodMiniType<
+  RiskExclusionMatchType,
+  unknown
+> = openEnums.inboundSchema(RiskExclusionMatchType);
 
 /** @internal */
 export const RiskExclusion$inboundSchema: z.ZodMiniType<

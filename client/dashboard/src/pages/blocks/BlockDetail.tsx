@@ -4,6 +4,7 @@ import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { formatPlatform } from "@/lib/formatPlatform";
+import { recordOrganizationSwitch } from "@/lib/organization-host";
 import { useRoutes } from "@/routes";
 import { useRiskGetBlock } from "@gram/client/react-query/riskGetBlock.js";
 import { useRiskSubmitBlockFeedbackMutation } from "@gram/client/react-query/riskSubmitBlockFeedback.js";
@@ -21,7 +22,7 @@ type Sentiment = "up" | "down";
  * BlockPage is the standalone durable tool call block page served at
  * /blocks/:id, deliberately rendered OUTSIDE the dashboard shell (no sidebar /
  * header) so it can be opened directly from the slug-free link an agent embeds
- * in its block message. It requires a Gram session but NOT org-admin: the
+ * in its block message. It requires a Speakeasy session but NOT org-admin: the
  * person whose agent was blocked is usually a regular org member, and the
  * backend scopes access to their active organization.
  */
@@ -122,6 +123,7 @@ function BlockBody({ id }: { id: string | undefined }) {
     setIsSwitchingOrganization(true);
     try {
       await client.auth.switchScopes({ organizationId: organization.id });
+      recordOrganizationSwitch(organization.id);
       window.location.assign(routes.riskEvents.href());
     } catch {
       setIsSwitchingOrganization(false);

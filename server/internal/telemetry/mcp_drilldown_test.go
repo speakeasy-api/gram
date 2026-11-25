@@ -1,6 +1,8 @@
 package telemetry_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,7 +11,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func toolOutcomeCounts(rows []telemetryRepo.MCPToolOutcomeBreakdownRow) map[string]map[string]uint64 {
@@ -59,8 +60,6 @@ func TestGetMCPToolOutcomeBreakdown_SplitsFailuresByTool(t *testing.T) {
 		statusCode:  500,
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	rows, err := ti.chClient.GetMCPToolOutcomeBreakdown(ctx, telemetryRepo.GetMCPToolOutcomeBreakdownParams{
 		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{
 			GramProjectIDs: []string{projectID},
@@ -95,8 +94,6 @@ func TestListMCPTraceReferences_NewestFirstAndFilterable(t *testing.T) {
 			statusCode:  status,
 		})
 	}
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	base := telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
@@ -148,8 +145,6 @@ func TestListMCPTraceReferences_PagesBackwardsInTime(t *testing.T) {
 		})
 	}
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	base := telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
 		ToolsetSlugs:   []string{"billing"},
@@ -168,6 +163,7 @@ func TestListMCPTraceReferences_PagesBackwardsInTime(t *testing.T) {
 		GetMCPOutcomeBreakdownParams: base,
 		BeforeUnixNano:               first[len(first)-1].OccurredAt,
 		BeforeTraceID:                first[len(first)-1].TraceID,
+		BeforeEventID:                first[len(first)-1].EventID,
 		Limit:                        2,
 	})
 	require.NoError(t, err)
@@ -214,7 +210,6 @@ func TestListMCPTraceReferences_CapsThePageSize(t *testing.T) {
 		userEmail:   "alice@example.com",
 		statusCode:  200,
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// An unbounded or oversized request is clamped rather than honoured, so a
 	// caller cannot turn drill-down into a bulk export.
@@ -229,6 +224,112 @@ func TestListMCPTraceReferences_CapsThePageSize(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
+}
+
+// TestGetMCPToolOutcomeBreakdown_HookObservedSharedSessionStaysServerScoped
+// pins that a session containing several MCP calls is filtered at the call,
+// before any dimensions or outcomes are aggregated.
+func TestGetMCPToolOutcomeBreakdown_HookObservedSharedSessionStaysServerScoped(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+	sharedTraceID := strings.ReplaceAll(uuid.NewString(), "-", "")
+
+	insert := func(serverURL, toolName, toolCallID string, hasError bool) {
+		attrs := map[string]any{
+			"gram.event.source":       "hook",
+			"gram.hook.source":        "claude-code",
+			"gram.mcp.server_url":     serverURL,
+			"gram.tool.name":          toolName,
+			"gen_ai.tool.call.id":     toolCallID,
+			"gen_ai.tool.call.result": `"ok"`,
+			"user.email":              "user@example.com",
+		}
+		if hasError {
+			delete(attrs, "gen_ai.tool.call.result")
+			attrs["gram.hook.error"] = "redacted failure"
+		}
+		encoded, err := json.Marshal(attrs)
+		require.NoError(t, err)
+		spanID := uuid.NewString()[:16]
+		// Query fixtures must be committed before reading; do not depend on the shared async queue.
+		require.NoError(t, ti.chClient.InsertTelemetryLogsSync(ctx, []telemetryRepo.InsertTelemetryLogParams{{
+			ID:                   uuid.NewString(),
+			TimeUnixNano:         now.Add(-time.Minute).UnixNano(),
+			ObservedTimeUnixNano: now.Add(-time.Minute).UnixNano(),
+			SeverityText:         nil,
+			Body:                 "hook tool event",
+			TraceID:              &sharedTraceID,
+			SpanID:               &spanID,
+			Attributes:           string(encoded),
+			ResourceAttributes:   "{}",
+			GramProjectID:        projectID,
+			GramDeploymentID:     nil,
+			GramFunctionID:       nil,
+			GramURN:              "hooks:" + toolName,
+			ServiceName:          "gram-hooks",
+			ServiceVersion:       nil,
+			GramChatID:           nil,
+		}}))
+	}
+	insert("https://gram.example/mcp/billing", "charge", "call-billing-1", false)
+	insert("https://gram.example/mcp/billing", "refund", "call-billing-2", true)
+	insert("https://gram.example/mcp/shipping", "dispatch", "call-shipping-1", false)
+
+	rows, err := ti.chClient.GetMCPToolOutcomeBreakdown(ctx, telemetryRepo.GetMCPToolOutcomeBreakdownParams{
+		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{
+			GramProjectIDs:       []string{projectID},
+			MCPServerURLSuffixes: []string{"/mcp/billing"},
+			TimeStart:            now.Add(-time.Hour).UnixNano(),
+			TimeEnd:              now.UnixNano(),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]map[string]uint64{
+		"charge": {telemetryRepo.MCPOutcomeSuccess: 1},
+		"refund": {telemetryRepo.MCPOutcomeFailed: 1},
+	}, toolOutcomeCounts(rows))
+
+	hostedOnly, err := ti.chClient.GetMCPToolOutcomeBreakdown(ctx, telemetryRepo.GetMCPToolOutcomeBreakdownParams{
+		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{
+			GramProjectIDs: []string{projectID},
+			ToolsetSlugs:   []string{"billing"},
+			TimeStart:      now.Add(-time.Hour).UnixNano(),
+			TimeEnd:        now.UnixNano(),
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, hostedOnly, "a hosted-only selector must exclude the unfilterable hook lane")
+
+	directOnly, err := ti.chClient.ListMCPTraceReferences(ctx, telemetryRepo.ListMCPTraceReferencesParams{
+		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{
+			GramProjectIDs:       []string{projectID},
+			MCPServerURLSuffixes: []string{"/mcp/billing"},
+			TimeStart:            now.Add(-time.Hour).UnixNano(),
+			TimeEnd:              now.UnixNano(),
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, directOnly, 2, "a URL-only selector must exclude the unfilterable direct lane")
+
+	users, err := ti.chClient.ListMCPUsageUsers(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
+		GramProjectIDs:       []string{projectID},
+		MCPServerURLSuffixes: []string{"/mcp/billing"},
+		TimeStart:            now.Add(-time.Hour).UnixNano(),
+		TimeEnd:              now.UnixNano(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []telemetryRepo.MCPUsageUserRow{{
+		IdentityKind: "email",
+		Identifier:   "user@example.com",
+		HasSuccess:   true,
+		HasError:     true,
+		HasBlocked:   false,
+		LastUsedAt:   now.Add(-time.Minute).UnixNano(),
+	}}, users)
 }
 
 // TestMCPDrilldownTraceIDsAreStable pins that the same occurrence keeps its
@@ -249,7 +350,6 @@ func TestMCPDrilldownTraceIDsAreStable(t *testing.T) {
 		userEmail:   uuid.New().String() + "@example.com",
 		statusCode:  403,
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	params := telemetryRepo.ListMCPTraceReferencesParams{
 		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{

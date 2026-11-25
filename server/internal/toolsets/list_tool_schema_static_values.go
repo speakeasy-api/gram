@@ -35,7 +35,7 @@ func (s *Service) ListToolSchemaStaticValues(ctx context.Context, payload *gen.L
 		return nil, oops.E(oops.CodeUnexpected, err, "get toolset").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, toolset.ID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -59,10 +59,6 @@ func (s *Service) ListToolSchemaStaticValues(ctx context.Context, payload *gen.L
 
 	tools := make([]*gen.ToolSchemaStaticValues, 0)
 	for _, tool := range described.Tools {
-		if conv.IsProxyTool(tool) {
-			return nil, oops.E(oops.CodeConflict, nil, "toolset contains live external MCP tool schemas that cannot be reviewed")
-		}
-
 		base, err := conv.ToBaseTool(tool)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "read tool schema").LogError(ctx, s.logger)

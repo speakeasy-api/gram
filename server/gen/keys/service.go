@@ -18,10 +18,26 @@ import (
 type Service interface {
 	// Create a new api key
 	CreateKey(context.Context, *CreateKeyPayload) (res *Key, err error)
-	// List all api keys for an organization
+	// Rotate an API key. Agent-key rotation replaces immutable delegation and
+	// directly revokes the old row.
+	RotateKey(context.Context, *RotateKeyPayload) (res *Key, err error)
+	// Add mcp:connect grants to every live key the caller issued for an agent, so
+	// servers the agent is given reach the keys it already runs with. Each key's
+	// new policy is checked like issuance: the agent, its owner and the caller
+	// must all allow it. Keys issued by someone else are left as they are. The
+	// result lists only the keys this call changed: keys that already held the
+	// grants, expired keys and other people's keys are not in it.
+	ExtendAgentKeys(context.Context, *ExtendAgentKeysPayload) (res *ListKeysResult, err error)
+	// List an organization's api keys, newest first. Send limit to get one page at
+	// a time and follow next_cursor for the rest. Without limit, every matching
+	// key is returned in one response.
 	ListKeys(context.Context, *ListKeysPayload) (res *ListKeysResult, err error)
 	// Revoke a api key
 	RevokeKey(context.Context, *RevokeKeyPayload) (err error)
+	// Replace an ordinary key's own policy: the mcp:connect and mcp:auth grants,
+	// and their blocks, its server and auth client access is evaluated against.
+	// Agent keys keep their delegated grants. Requires org admin.
+	UpdateKeyPolicy(context.Context, *UpdateKeyPolicyPayload) (res *Key, err error)
 	// Verify an api key
 	VerifyKey(context.Context, *VerifyKeyPayload) (res *ValidateKeyResult, err error)
 }
@@ -46,15 +62,136 @@ const ServiceName = "keys"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"createKey", "listKeys", "revokeKey", "verifyKey"}
+var MethodNames = [7]string{"createKey", "rotateKey", "extendAgentKeys", "listKeys", "revokeKey", "updateKeyPolicy", "verifyKey"}
+
+type APIKeyPolicyGrant struct {
+	// mcp:connect, mcp:auth, or a block: mcp:blocked_connect, mcp:blocked_auth
+	Scope    string
+	Selector *APIKeyPolicySelector
+}
+
+// What an API key policy grant covers: servers (mcp) or auth clients
+// (mcp_auth_client).
+type APIKeyPolicySelector struct {
+	// mcp for mcp:connect grants, mcp_auth_client for mcp:auth grants
+	ResourceKind string
+	// A server or auth client ID, or '*' for every server in project_id. mcp:auth
+	// grants must name their client.
+	ResourceID string
+	// The project the servers are in; required when resource_id is '*', and the
+	// key's own project when it is bound to one.
+	ProjectID *string
+	// Auth client type filter (mcp:auth only).
+	ClientType *string
+}
+
+type AgentDelegatedGrant struct {
+	Scope    string
+	Selector *AgentPolicySelector
+}
+
+type AgentDelegatedPolicy struct {
+	Requested []*AgentDelegatedGrant
+	Effective []*AgentDelegatedGrant
+}
+
+// The upstream credential an agent key uses on one MCP server.
+type AgentKeyAuthClientChoice struct {
+	// The MCP server.
+	McpServerID string
+	// The auth client the key uses there. Omit for a server whose upstream needs
+	// no authentication.
+	AuthClientID *string
+}
+
+type AgentPolicyGrantForm struct {
+	// Agent-runtime-safe scope to grant
+	Scope string
+	// Grant effect; direct agent policy is allow-only
+	Effect   string
+	Selector *AgentPolicySelector
+}
+
+// A constraint that narrows which resources an agent grant applies to.
+type AgentPolicySelector struct {
+	// The kind of resource this selector targets.
+	ResourceKind string
+	// The resource identifier, or '*' for all resources of this kind.
+	ResourceID string
+	// Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
+	ClientType *string
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only): a user ID, '*', or '$represented_user'.
+	ConnectionOwner *string
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
+	UpstreamClient *string
+	// Tool disposition filter (MCP scopes only).
+	Disposition *string
+	// Specific tool name filter (MCP scopes only).
+	Tool *string
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
+	ProjectID *string
+	// Server URL filter (risk policy scopes only).
+	ServerURL *string
+	// Server identity filter (risk policy scopes only).
+	ServerIdentity *string
+}
 
 // CreateKeyPayload is the payload type of the keys service createKey method.
 type CreateKeyPayload struct {
 	SessionToken *string
 	// The name of the key
 	Name string
-	// The scopes of the key that determines its permissions.
+	// Optional project binding. Omit for an organization-wide key; independent of
+	// permission scopes and the Gram-Project header.
+	ProjectID *string
+	// Legacy transport scopes. Omitted or empty defaults to consumer for ordinary
+	// keys; agent keys require no scopes.
 	Scopes []string
+	// First-class agent subject. Omit for an ordinary API key.
+	AgentID *string
+	// Delegated policy format version. Required for agent keys.
+	DelegatedGrantsVersion *int
+	// Exact allow grants approved for an agent credential
+	RequestedGrants []*AgentPolicyGrantForm
+	// Agent credential expiry; defaults to 90 days and cannot exceed one year
+	ExpiresAt *string
+	// Optional policy for an ordinary key: mcp:connect and mcp:auth grants, and
+	// mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth
+	// client access is evaluated against. Not yet enforced. Requires org admin.
+	PolicyGrants []*APIKeyPolicyGrant
+	// For an agent key: the upstream credential the key uses on each MCP server it
+	// names. Where typed upstream authentication is enforced, the key is served on
+	// a server with the credential chosen here, checked again on every request.
+	// Shared credentials only: an agent reaches a person's own connection when it
+	// acts for them.
+	AuthClientChoices []*AgentKeyAuthClientChoice
+}
+
+// A server grant an agent key gains. Anything broader is a new delegation,
+// made by issuing a key.
+type ExtendAgentKeyGrantForm struct {
+	// The grant's scope
+	Scope string
+	// Grant effect
+	Effect   string
+	Selector *AgentPolicySelector
+}
+
+// ExtendAgentKeysPayload is the payload type of the keys service
+// extendAgentKeys method.
+type ExtendAgentKeysPayload struct {
+	SessionToken *string
+	// The agent whose keys gain the grants
+	AgentID string
+	// Server grants to add to each key
+	RequestedGrants []*ExtendAgentKeyGrantForm
+	// The upstream credential each key uses on the servers it gains, checked as at
+	// issuance. Recorded only on keys that gain that server.
+	AuthClientChoices []*AgentKeyAuthClientChoice
 }
 
 // Key is the result type of the keys service createKey method.
@@ -65,16 +202,26 @@ type Key struct {
 	OrganizationID string
 	// The optional project ID this key is scoped to
 	ProjectID *string
-	// The ID of the user who created this key
+	// The human creator; immutable authorizer for agent keys
 	CreatedByUserID string
 	// The name of the key
 	Name string
 	// The store prefix of the api key for recognition
 	KeyPrefix string
-	// The token of the api key (only returned on key creation)
+	// The token of the api key (only returned on key creation or rotation)
 	Key *string
-	// List of permission scopes for this key
+	// Legacy transport scopes; always empty for agent keys
 	Scopes []string
+	// Principal authenticated by this key; agent keys use agent:<uuid>
+	SubjectUrn *string
+	// Immutable delegated policy approved for this credential
+	DelegatedGrants *AgentDelegatedPolicy
+	// Delegated policy format version
+	DelegatedGrantsVersion *int
+	// An ordinary key's own policy
+	PolicyGrants []*APIKeyPolicyGrant
+	// Required expiry for an agent key; legacy keys may not expire.
+	ExpiresAt *string
 	// The creation date of the key.
 	CreatedAt string
 	// When the key was last updated.
@@ -85,18 +232,59 @@ type Key struct {
 
 // ListKeysPayload is the payload type of the keys service listKeys method.
 type ListKeysPayload struct {
+	// When set, list keys for this first-class agent. Cannot be combined with
+	// cursor, limit or search.
+	AgentID *string
+	// Opaque cursor from a previous response's next_cursor. Returns the keys after
+	// that page.
+	Cursor *string
+	// Page size. When omitted, every matching key is returned and next_cursor is
+	// never set.
+	Limit *int
+	// Only return keys whose name contains this text, ignoring case.
+	Search       *string
 	SessionToken *string
 }
 
-// ListKeysResult is the result type of the keys service listKeys method.
+// ListKeysResult is the result type of the keys service extendAgentKeys method.
 type ListKeysResult struct {
 	Keys []*Key
+	// Cursor for the next page of keys.list. Absent on the last page and when no
+	// limit was sent.
+	NextCursor *string
 }
 
 // RevokeKeyPayload is the payload type of the keys service revokeKey method.
 type RevokeKeyPayload struct {
 	// The ID of the key to revoke
 	ID           string
+	SessionToken *string
+}
+
+// RotateKeyPayload is the payload type of the keys service rotateKey method.
+type RotateKeyPayload struct {
+	SessionToken *string
+	// API key identifier to replace
+	ID string
+	// The name of the replacement key
+	Name string
+	// Legacy transport scopes; agent rotation requires an empty array
+	Scopes []string
+	// Delegated policy format version
+	DelegatedGrantsVersion int
+	// New exact allow grants approved for the replacement credential
+	RequestedGrants []*AgentPolicyGrantForm
+	// Replacement expiry; defaults to 90 days and cannot exceed one year
+	ExpiresAt *string
+}
+
+// UpdateKeyPolicyPayload is the payload type of the keys service
+// updateKeyPolicy method.
+type UpdateKeyPolicyPayload struct {
+	// The ID of the key.
+	ID string
+	// The key's complete policy. An empty list removes every grant.
+	PolicyGrants []*APIKeyPolicyGrant
 	SessionToken *string
 }
 

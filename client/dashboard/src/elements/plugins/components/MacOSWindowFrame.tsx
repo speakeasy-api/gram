@@ -2,7 +2,7 @@
 
 import { useRadius } from "@/elements/hooks/useRadius";
 import { cn } from "@/lib/utils";
-import { FC, ReactNode } from "react";
+import type { FC, ReactNode } from "react";
 
 interface MacOSWindowFrameProps {
   children: ReactNode;

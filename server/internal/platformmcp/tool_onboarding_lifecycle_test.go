@@ -12,13 +12,13 @@ func TestIdentityProviderAttachmentOutputPresentsExactAuthorizationLink(t *testi
 
 	output := identityProviderAttachmentOutput(
 		"project",
-		"registration",
+		"mcp",
 		CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: "https://provider.example"},
-		"https://dashboard.example/organization/projects/project/mcp/x/server/inspect",
+		"https://dashboard.example/organization/projects/project/mcp/server/inspect",
 	)
 
 	require.Equal(t, "open_authorization_url", output.NextAction)
-	require.Equal(t, "https://dashboard.example/organization/projects/project/mcp/x/server/inspect", output.AuthorizationURL)
+	require.Equal(t, "https://dashboard.example/organization/projects/project/mcp/server/inspect", output.AuthorizationURL)
 	require.Contains(t, output.Message, "Open this link to authorize it: "+output.AuthorizationURL)
 	require.Contains(t, output.Message, "Connect or Authorize")
 	require.NotContains(t, output.Message, "above")
@@ -37,13 +37,13 @@ func TestIdentityProviderAttachmentReturnsOnlyBoundedResults(t *testing.T) {
 			name:    "unsupported provider contract",
 			err:     ErrIdentityProviderAttachmentUnsupported,
 			code:    "automatic_identity_provider_attachment_unsupported",
-			message: "This MCP server does not advertise exactly one sign-in provider with the OAuth metadata and dynamic client registration needed to set it up automatically, so nothing was changed. Explain that to the user and ask how they want to proceed.",
+			message: "This MCP server's sign-in provider could not be set up automatically, so nothing was changed: either the server does not advertise exactly one sign-in provider with the OAuth metadata and automatic client registration (dynamic client registration or a client ID metadata document) this needs, or that provider refused the registration. Explain that to the user and ask how they want to proceed.",
 		},
 		{
 			name:    "existing attachment conflict",
 			err:     ErrIdentityProviderAttachmentConflict,
 			code:    "identity_provider_attachment_conflict",
-			message: "This MCP server already has a different or unclear sign-in provider set up, so nothing was changed. Ask the user how they want to proceed.",
+			message: "The server or its provider configuration changed, or the existing OAuth client is not offered on this server. No attachment was made. Check this exact server and configure its User Identity offer before retrying.",
 		},
 	}
 

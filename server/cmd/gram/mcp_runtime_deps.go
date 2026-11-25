@@ -1,0 +1,94 @@
+package gram
+
+import (
+	"net"
+
+	"github.com/urfave/cli/v2"
+
+	"context"
+	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/tunnel/route"
+	"log/slog"
+	"net/url"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientcredentials"
+)
+
+type mcpRemoteSessionDependencies struct {
+	Verifier   remotesessions.IDTokenVerifier
+	Refresher  *remotesessions.IssuerMetadataRefresher
+	Enricher   *remotesessions.SessionEnricher
+	Challenges *remotesessions.ChallengeManager
+
+	// OrgEncryption is the process's organization encryption. Every process
+	// serving OAuth flows builds it, so a missing configuration stops that
+	// process at startup.
+	// TODO(AIM-1001): seal and open OAuth credentials with it.
+	OrgEncryption orgEncryptionDeps
+}
+
+// Both listener processes must use identical identity verification and private
+// authority checks when resuming the OAuth flows that cross their boundary.
+// newTunnelHTTPClient builds the transport that carries back-channel OAuth
+// calls (token exchange, refresh, revocation, dynamic client registration) for
+// remote session issuers bound to a tunneled MCP server, instead of dialing
+// them from cloud egress.
+func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, redisClient *redis.Client) (*tunnelrouting.HTTPClient, error) {
+	// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a typo
+	// here would strand tunnels fail-closed with no signal. Reject
+	// misconfiguration at startup instead.
+	cidrs := c.StringSlice("tunnel-gateway-cidr-blocks")
+	for _, cidr := range cidrs {
+		if _, _, err := net.ParseCIDR(cidr); err != nil {
+			return nil, fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
+		}
+	}
+	return tunnelrouting.NewHTTPClient(route.NewRedis(redisClient), c.String("tunnel-forward-token"), guardianPolicy, cidrs), nil
+}
+
+func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, redisClient *redis.Client, serverURL *url.URL, callbackOrigins remotesessions.CallbackOrigins, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner, protectedResources *protectedresource.Prober, features feature.Provider, connections *mcpconnectionattempts.Recorder, orgEncryption orgEncryptionDeps) (*mcpRemoteSessionDependencies, error) {
+	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
+	if err != nil {
+		return nil, fmt.Errorf("initialize remote session id token key resolver: %w", err)
+	}
+	verifier := remotesessions.NewIDTokenVerifier(idTokenKeys)
+	refresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnels, auditLogger)
+	enricher := remotesessions.NewSessionEnricher(logger, enc, guardianPolicy, idTokenKeys,
+		ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), tunnels, refresher)
+	sharedCache := cache.NewRedisCacheAdapter(redisClient)
+	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, sharedCache, serverURL,
+		remotesessions.WithClientCredentialSource(func(m *remotesessions.ChallengeManager) remotesessions.ClientCredentialSource {
+			return clientcredentials.New(logger, db, enc, m, sharedCache)
+		}),
+		remotesessions.WithPrivateAuthorityValidator(func(ctx context.Context, state remotesessions.RemoteLoginState) error {
+			return mcp.ValidateRemoteLoginPrivateAuthority(ctx, db, logger, state)
+		}),
+		remotesessions.WithIDTokenVerifier(verifier),
+		remotesessions.WithIssuerMetadataRefresher(refresher),
+		remotesessions.WithSessionEnricher(enricher),
+		remotesessions.WithRegistrationAuditLogger(auditLogger),
+		remotesessions.WithTokenEndpointAssertionSigner(assertionSigner),
+		remotesessions.WithCallbackOrigins(callbackOrigins),
+		remotesessions.WithConnectionRecorder(connections),
+		remotesessions.WithProtectedResourceProber(protectedResources),
+		remotesessions.WithFeatureFlags(features),
+		remotesessions.WithClientSecrets(orgEncryption.ClientSecrets(logger, enc)),
+		remotesessions.WithUpstreamTokens(orgEncryption.UpstreamTokens(logger, enc)))
+	return &mcpRemoteSessionDependencies{Verifier: verifier, Refresher: refresher, Enricher: enricher, Challenges: challenges, OrgEncryption: orgEncryption}, nil
+}

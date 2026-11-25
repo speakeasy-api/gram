@@ -7,9 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -21,7 +25,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	variations_repo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
@@ -35,7 +41,7 @@ func makeInitializeBody() []byte {
 	reqBody := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
-		"method":  "initialize",
+		"method":  mcpversions.MethodInitialize,
 		"params": map[string]any{
 			"protocolVersion": "2025-03-26",
 			"capabilities":    map[string]any{},
@@ -61,7 +67,68 @@ func servePublicHTTP(
 ) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(body))
+	return servePublicHTTPWithBody(t, ctx, ti, mcpSlug, io.NopCloser(bytes.NewReader(body)), int64(len(body)), authToken, extraHeaders)
+}
+
+// unservedProtocolVersion is a well-formed revision identifier that no Speakeasy
+// surface supports, for exercising UnsupportedProtocolVersionError. It is
+// unrecognized rather than a published revision so that raising a surface's
+// ceiling cannot quietly make it supported.
+const unservedProtocolVersion = "2031-01-01"
+
+func requireUnsupportedProtocolVersionResponse(t *testing.T, w *httptest.ResponseRecorder, requested string, supported []string) {
+	t.Helper()
+
+	require.Equal(t, http.StatusBadRequest, w.Code, "body=%s", w.Body.String())
+	var response struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      json.RawMessage `json:"id"`
+		Error   struct {
+			Code    oops.MCPCode `json:"code"`
+			Message string       `json:"message"`
+			Data    struct {
+				Supported []string `json:"supported"`
+				Requested string   `json:"requested"`
+			} `json:"data"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Equal(t, "2.0", response.JSONRPC)
+	require.JSONEq(t, `1`, string(response.ID))
+	require.Equal(t, oops.MCPCodeUnsupportedProtocolVersion, response.Error.Code)
+	require.Equal(t, oops.MCPCodeUnsupportedProtocolVersion.Message(), response.Error.Message)
+	require.Equal(t, supported, response.Error.Data.Supported)
+	require.Equal(t, requested, response.Error.Data.Requested)
+}
+
+// eofOnCloseBody stands in for the request body net/http hands a handler.
+// Closing a server request body that the handler left unconsumed returns
+// io.EOF (see (*body).Close in net/http/transfer.go, which sets sawEOF without
+// clearing err), but httptest.NewRequest wraps a plain reader in io.NopCloser,
+// whose Close returns nil. Tests that care what a handler does with that EOF
+// have to supply it themselves.
+type eofOnCloseBody struct {
+	io.Reader
+}
+
+func (eofOnCloseBody) Close() error { return io.EOF }
+
+// servePublicHTTPWithBody is servePublicHTTP over a caller-supplied body, for
+// tests that need control over what Read and Close return.
+func servePublicHTTPWithBody(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	mcpSlug string,
+	body io.ReadCloser,
+	contentLength int64,
+	authToken string,
+	extraHeaders map[string]string,
+) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, body)
+	req.ContentLength = contentLength
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	if authToken != "" {
@@ -82,41 +149,27 @@ func servePublicHTTP(
 	return w, nil
 }
 
-// createPublicMCPToolset creates a public MCP toolset for testing.
+// createPublicMCPToolset creates a public MCP toolset served at a platform endpoint at slug.
 func createPublicMCPToolset(
 	t *testing.T,
 	ctx context.Context,
-	toolsetsRepo *toolsets_repo.Queries,
+	ti *testInstance,
 	authCtx *contextvalues.AuthContext,
 	slug string,
-) toolsets_repo.Toolset {
+) hostedToolset {
 	t.Helper()
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Test Public MCP " + slug,
 		Slug:                   slug,
 		Description:            conv.ToPGText("A test public MCP for auth testing"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
-
-	return toolset
+	return hostToolset(t, ctx, ti, toolset, slug, "public", noIssuer())
 }
 
 // ---------------------------------------------------------------------------
@@ -133,29 +186,16 @@ func TestServePublic_InitializeSucceeds(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Test MCP Server",
 		Slug:                   "test-mcp",
 		Description:            conv.ToPGText("A test MCP server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("test-mcp"),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "test-mcp", "public", noIssuer())
 
 	mcpSlug := toolset.McpSlug.String
 	w, err := servePublicHTTP(t, ctx, ti, mcpSlug, makeInitializeBody(), "", nil)
@@ -191,29 +231,16 @@ func TestServePublic_InitializeWithMalformedParamsSucceeds(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Malformed Params MCP",
 		Slug:                   "malformed-params-mcp",
 		Description:            conv.ToPGText("A test MCP server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("malformed-params-mcp"),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "malformed-params-mcp", "public", noIssuer())
 
 	// params is an array rather than the expected object, so decoding into our
 	// recorded shape fails — but the RPC must still succeed.
@@ -250,8 +277,6 @@ func TestServePublic_PrivateDisabledMCP_Returns404(t *testing.T) {
 		Slug:                   "private-mcp",
 		Description:            conv.ToPGText("A private MCP server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 
@@ -260,38 +285,25 @@ func TestServePublic_PrivateDisabledMCP_Returns404(t *testing.T) {
 	require.Contains(t, err.Error(), "not found")
 }
 
-// TestServePublic_DisabledPublicLegacyToolset_Returns404 verifies that a
-// legacy toolset-backed MCP server (mcp_slug set, no mcp_endpoints row)
-// stops serving once disabled, even when it was public — mcp_enabled false
-// must surface as not-found on the serve path, not just on the metadata
-// surfaces.
-func TestServePublic_DisabledPublicLegacyToolset_Returns404(t *testing.T) {
+// A public toolset stops serving at its endpoint once its canonical server is disabled.
+func TestServePublic_DisabledPublicToolset_Returns404(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
 	slug := "disabled-public-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 
 	// Serves anonymously while enabled.
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 
-	// Disable via the same flag the dashboard/API writes, deliberately
-	// leaving mcp_is_public true — the state that kept serving anonymously
-	// before the fix.
-	err = toolsetsRepo.SetToolsetMCPEnabledByID(ctx, toolsets_repo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false,
-		ID:         toolset.ID,
-		ProjectID:  *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "disabled"})
 
 	_, err = servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
 	require.Error(t, err, "disabled toolset must not serve")
@@ -308,20 +320,19 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private Auth Error MCP",
 		Slug:                   "private-auth-error-mcp",
 		Description:            conv.ToPGText("A private MCP that rejects unauthenticated requests"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("private-auth-error-mcp"),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "private-auth-error-mcp", "private", noIssuer())
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, bytes.NewReader(makeInitializeBody()))
 	req.Header.Set("Accept", "application/json")
@@ -346,13 +357,27 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 	require.Contains(t, errorBody["message"], "expired or invalid access token")
 }
 
+func TestServePublic_PrivateEmptyBodyRequiresAuthentication(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "private-empty-body-"+uuid.NewString()[:8])
+
+	_, err := servePublicHTTP(t, t.Context(), ti, toolset.McpSlug.String, nil, "", nil)
+	require.Error(t, err)
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+}
+
 func TestServePublic_AttachedNotFoundReturnsMCPErrorWithNullID(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestMCPService(t)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/bad-slug", bytes.NewReader(makeInitializeBody()))
 	req.Header.Set("Accept", "application/json")
@@ -395,26 +420,17 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 		Slug:                   "test-mcp-instructions",
 		Description:            conv.ToPGText("A test MCP server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("test-mcp-instructions"),
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
-
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
 	})
 	require.NoError(t, err)
 
 	instructions := "You have tools for searching the Test Hub. Use them wisely."
-	_, err = metadataRepo.UpsertMetadata(ctx, metadata_repo.UpsertMetadataParams{
-		ToolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
+	_, err = testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+		ID: toolset.ID, ProjectID: toolset.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "public",
+	})
+	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Slug: "test-mcp-instructions", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+	_, err = metadataRepo.UpsertMetadataByMcpServerID(ctx, metadata_repo.UpsertMetadataByMcpServerIDParams{
+		McpServerID:              toolset.ID,
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
 		LogoID:                   uuid.NullUUID{Valid: false},
@@ -422,8 +438,7 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mcpSlug := toolset.McpSlug.String
-	w, err := servePublicHTTP(t, ctx, ti, mcpSlug, makeInitializeBody(), "", nil)
+	w, err := servePublicHTTP(t, ctx, ti, "test-mcp-instructions", makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 
@@ -447,13 +462,13 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "pub-batch-reject")
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "pub-batch-reject")
 
 	batchBody := []map[string]any{
 		{
 			"jsonrpc": "2.0",
 			"id":      1,
-			"method":  "initialize",
+			"method":  mcpversions.MethodInitialize,
 		},
 	}
 	bodyBytes, err := json.Marshal(batchBody)
@@ -463,6 +478,53 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, bodyBytes, "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "batch requests are not supported")
+}
+
+// A body that is not valid JSON is a JSON-RPC parse error (-32700), not an
+// invalid request (-32600).
+func TestServePublic_MalformedBodyIsParseError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "pub-parse-error")
+
+	unauthCtx := context.Background()
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, []byte("{not valid json"), "", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to decode request body")
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeParseError, shareable.Code)
+	require.Equal(t, oops.MCPCodeParseError, shareable.Code.MCPCode())
+}
+
+// Valid JSON of the wrong shape (a type error, not a syntax error) stays an
+// invalid request (-32600), not a parse error (-32700).
+func TestServePublic_WrongTypeBodyIsInvalidRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "pub-type-error")
+
+	unauthCtx := context.Background()
+	// `method` is a number where a string is expected: syntactically valid JSON,
+	// so json.Unmarshal returns a type error, not a syntax error.
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, []byte(`{"jsonrpc":"2.0","id":1,"method":123}`), "", nil)
+	require.Error(t, err)
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
+	require.Equal(t, oops.MCPCodeInvalidRequest, shareable.Code.MCPCode())
 }
 
 // requireCacheHints asserts the caching members MCP 2026-07-28 requires on a
@@ -511,7 +573,7 @@ func makeToolsCallBody(toolName string) []byte {
 	bs, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      3,
-		"method":  "tools/call",
+		"method":  mcpversions.MethodToolsCall,
 		"params": map[string]any{
 			"name":      toolName,
 			"arguments": map[string]any{},
@@ -533,8 +595,7 @@ func setupTagFilterToolset(t *testing.T, ctx context.Context, ti *testInstance) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "tag-filter-"+uuid.New().String()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "tag-filter-"+uuid.New().String()[:8])
 
 	urns := addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID,
 		"tool_alpha", "tool_beta", "tool_gamma")
@@ -587,8 +648,7 @@ func setupSourceTagFilterToolset(t *testing.T, ctx context.Context, ti *testInst
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "src-tag-filter-"+uuid.New().String()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "src-tag-filter-"+uuid.New().String()[:8])
 
 	urns := addHTTPToolsWithSourceTags(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID,
 		map[string][]string{
@@ -735,7 +795,7 @@ func TestServePublic_ToolsCall_AmbiguousToolName_Rejected(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "ambiguous-"+uuid.New().String()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "ambiguous-"+uuid.New().String()[:8])
 	urns := addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "alpha_tool", "beta_tool", "gamma_tool")
 
 	variationsRepo := variations_repo.New(ti.conn)
@@ -794,7 +854,7 @@ func makeInitializeBodyWithVersion(version string) []byte {
 	bs, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
-		"method":  "initialize",
+		"method":  mcpversions.MethodInitialize,
 		"params":  params,
 	})
 	return bs
@@ -819,13 +879,15 @@ func TestServePublic_InitializeEchoesEverySupportedVersion(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-echo-mcp")
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "negotiate-echo-mcp")
 
 	for _, v := range mcpversions.SupportedHostedToolset() {
+		if !mcpversions.DefinesMethod(mcpversions.MethodInitialize, v) {
+			continue
+		}
 		w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(v), "", nil)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code, "requested %s, body: %s", v, w.Body.String())
@@ -837,24 +899,23 @@ func TestServePublic_InitializeAnswersUnsupportedVersionWithNewestSupported(t *t
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-down-mcp")
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "negotiate-down-mcp")
 
 	// The expected value is pinned rather than derived from the supported
-	// set, so raising the ceiling breaks this test and forces choosing new
-	// out-of-set requested versions that keep the fallback arm exercised.
+	// set: it is the newest revision defining initialize, which answers any
+	// proposal outside the handshake revisions.
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(mcpversions.Version20260728), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "an unsupported requested version is answered with the newest supported one")
+	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "a supported revision without initialize is answered with the newest handshake revision")
 
-	w, err = servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion("1999-12-31"), "", nil)
+	w, err = servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(unservedProtocolVersion), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "an unrecognized requested version is answered with the newest supported one")
+	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "an unrecognized requested version is answered with the newest handshake revision")
 }
 
 // TestServePublic_InitializeAnswersAbsentVersionWithDefault pins that the
@@ -864,16 +925,118 @@ func TestServePublic_InitializeAnswersAbsentVersionWithDefault(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-absent-mcp")
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "negotiate-absent-mcp")
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(""), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, mcpversions.DefaultInEffect, answeredProtocolVersion(t, w))
+}
+
+func TestServePublic_UnsupportedRequestVersionReturnsSpecificationError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "unsupported-request-version")
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, toolsListBody(), "", map[string]string{
+		mcpversions.HTTPHeader: unservedProtocolVersion,
+	})
+	require.NoError(t, err)
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedHostedToolset())
+}
+
+func TestServePublic_UnsupportedBodyMetaVersionReturnsSpecificationError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "unsupported-body-version")
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  mcpversions.MethodToolsList,
+		"params": map[string]any{
+			"_meta": map[string]any{
+				"io.modelcontextprotocol/protocolVersion": unservedProtocolVersion,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, body, "", nil)
+	require.NoError(t, err)
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedHostedToolset())
+}
+
+func TestServePublic_UnsupportedVersionPrecedesPrivateAuthentication(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "unsupported-before-auth-"+uuid.NewString()[:8])
+
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service.Service, nil)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, bytes.NewReader(toolsListBody()))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(mcpversions.HTTPHeader, unservedProtocolVersion)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedHostedToolset())
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+}
+
+// A notification declaring an unsupported revision is refused with an HTTP
+// error status, as every revision requires for a notification the server
+// cannot accept, and its JSON-RPC error carries a null id because it answers no
+// request.
+func TestServePublic_UnsupportedVersionNotificationIsRefused(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "unsupported-version-notification")
+	body := []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, body, "", map[string]string{
+		mcpversions.HTTPHeader: unservedProtocolVersion,
+	})
+	require.NoError(t, err)
+	requireRefusedNotification(t, w, unservedProtocolVersion, mcpversions.SupportedHostedToolset())
+}
+
+// requireRefusedNotification asserts the refusal of a notification declaring
+// the unsupported revision requested: UnsupportedProtocolVersionError under a
+// null id, carried by HTTP 400.
+func requireRefusedNotification(t *testing.T, w *httptest.ResponseRecorder, requested string, supported []string) {
+	t.Helper()
+
+	require.Equal(t, http.StatusBadRequest, w.Code, "body=%s", w.Body.String())
+	var response struct {
+		ID    json.RawMessage `json:"id"`
+		Error struct {
+			Code oops.MCPCode `json:"code"`
+			Data struct {
+				Supported []string `json:"supported"`
+				Requested string   `json:"requested"`
+			} `json:"data"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response), "body=%s", w.Body.String())
+	require.JSONEq(t, `null`, string(response.ID))
+	require.Equal(t, oops.MCPCodeUnsupportedProtocolVersion, response.Error.Code)
+	require.Equal(t, supported, response.Error.Data.Supported)
+	require.Equal(t, requested, response.Error.Data.Requested)
 }
 
 // TestServePublic_InitializeBodyWinsOverNonconformingHeader pins which source
@@ -885,16 +1048,76 @@ func TestServePublic_InitializeBodyWinsOverNonconformingHeader(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-header-mcp")
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "negotiate-header-mcp")
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(mcpversions.Version20251125), "", map[string]string{
-		mcpversions.HTTPHeader: mcpversions.Version20250618,
+		mcpversions.HTTPHeader: mcpversions.Version20250326,
 	})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w))
+}
+
+// carriedProtocolVersion serves a tools/list request declaring declared and
+// returns the revision the hosted handler published to the error wrapper's
+// holder. tools/list is deliberate: initialize would additionally negotiate,
+// which is a different value settled at a different point.
+func carriedProtocolVersion(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, declared string) string {
+	t.Helper()
+
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  mcpversions.MethodToolsList,
+		"params":  map[string]any{},
+	})
+	require.NoError(t, err)
+
+	rpcCtx := &contextvalues.RPCContext{ID: mcpjsonrpc.NullID(), ProtocolVersion: ""}
+	ctx = contextvalues.SetRPCContext(ctx, rpcCtx)
+
+	_, err = servePublicHTTP(t, ctx, ti, mcpSlug, body, "", map[string]string{
+		mcpversions.HTTPHeader: declared,
+	})
+	require.NoError(t, err)
+
+	return rpcCtx.ProtocolVersion
+}
+
+// TestServePublic_CarriesSupportedDeclarationToTheErrorWrapper covers the
+// plumbing that lets an error escaping the handler be encoded on the revision
+// the client is speaking. A supported declaration governs the request, so it
+// is what the wrapper must see.
+func TestServePublic_CarriesSupportedDeclarationToTheErrorWrapper(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "carried-supported-version")
+
+	require.Equal(t, mcpversions.Version20250618, carriedProtocolVersion(t, ctx, ti, toolset.McpSlug.String, mcpversions.Version20250618))
+}
+
+// TestServePublic_UnsupportedDeclarationCarriesFallbackForErrorEncoding pins
+// the provisional half of unsupported-version handling. The request is
+// rejected before dispatch, but the shared error wrapper still needs a
+// supported revision for compatibility-safe encoding; publishing the raw
+// declaration would claim Speakeasy agreed to speak a revision it rejected.
+func TestServePublic_UnsupportedDeclarationCarriesFallbackForErrorEncoding(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "carried-resolved-version")
+
+	require.Equal(t, mcpversions.DefaultInEffect, carriedProtocolVersion(t, ctx, ti, toolset.McpSlug.String, unservedProtocolVersion))
 }

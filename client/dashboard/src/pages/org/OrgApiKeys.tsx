@@ -1,101 +1,104 @@
-import { AnyField } from "@/components/moon/any-field";
-import { InputField } from "@/components/moon/input-field";
 import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
-import { Label } from "@/components/ui/Label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
-import { assert } from "@/lib/utils";
-import { Key } from "@gram/client/models/components/key.js";
-import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import {
-  invalidateListAPIKeys,
-  useListAPIKeysSuspense,
-} from "@gram/client/react-query/listAPIKeys";
+import type { Key } from "@gram/client/models/components/key.js";
+import { invalidateAllListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Column, Table } from "@/components/ui/Table";
-import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Copy } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useOrganization } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { cn } from "@/lib/utils";
 import { RequireScope } from "@/components/require-scope";
+import { CreateApiKeySheet } from "./CreateApiKeySheet";
+import { projectBindingLabel } from "./api-key-project-binding";
+import { KeyPolicySheet } from "./KeyPolicySheet";
+import { keyPolicySummary } from "./key-policy";
+
+// Large organizations hold thousands of keys, most of them minted by plugins,
+// so the page reads one page at a time and searches on the server.
+const API_KEYS_PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
+
+// Starts with the SDK's keys.list prefix, so every invalidateAllListAPIKeys
+// call (create, revoke, policy edits, plugin rotations) also refreshes this
+// list. "infinite" keeps it apart from the SDK's single-page cache entries,
+// which hold a different data shape. The organization is part of the key so
+// switching organizations never shows the previous one's cached pages.
+function orgApiKeysQueryKey(organizationId: string, search: string) {
+  return [
+    "@gram/client",
+    "keys",
+    "list",
+    "infinite",
+    { organizationId, limit: API_KEYS_PAGE_SIZE, search },
+  ] as const;
+}
 
 export default function OrgApiKeys(): JSX.Element {
+  const organization = useOrganization();
   // The key fetching request returns a forbidden error without the org:admin
   // scope; the outer RequireScope gates rendering (and the data hook) on that
   // scope.
   return (
     <RequireScope scope="org:admin" level="page">
-      <OrgApiKeysInner />
+      <OrgApiKeysInner key={organization.id} />
     </RequireScope>
   );
 }
 
 function OrgApiKeysInner() {
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const organization = useOrganization();
+  const projectLabel = (id?: string) =>
+    projectBindingLabel(organization.projects, id);
+  const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
-  const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
-  const [isCopied, setIsCopied] = useState(false);
+  const [keyForPolicy, setKeyForPolicy] = useState<Key | null>(null);
   const queryClient = useQueryClient();
+  const sdk = useSdkClient();
   const [apiKeySearch, setApiKeySearch] = useState("");
+  const search = apiKeySearch.trim();
 
-  const { data: keysData } = useListAPIKeysSuspense();
-
-  const filteredKeys = useMemo(() => {
-    const keys = keysData?.keys ?? [];
-    const search = apiKeySearch.trim().toLowerCase();
-    if (!search) return keys;
-    return keys.filter((key) => key.name.toLowerCase().includes(search));
-  }, [keysData?.keys, apiKeySearch]);
-
-  const createKeyMutation = useCreateAPIKeyMutation({
-    onSuccess: async (data) => {
-      setNewlyCreatedKey(data);
-      await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
-      await queryClient.refetchQueries({
-        queryKey: ["@gram/client", "keys", "list"],
-      });
-    },
+  const keysQuery = useInfiniteQuery({
+    queryKey: orgApiKeysQueryKey(organization.id, search),
+    queryFn: ({ pageParam, signal }) =>
+      sdk.keys.list(
+        {
+          limit: API_KEYS_PAGE_SIZE,
+          cursor: pageParam,
+          search: search === "" ? undefined : search,
+        },
+        undefined,
+        { fetchOptions: { signal } },
+      ),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    // Keep the current rows on screen while a new search loads, so the
+    // toolbar (and the search box being typed in) never unmounts.
+    placeholderData: keepPreviousData,
   });
+
+  const keys = useMemo(
+    () => keysQuery.data?.pages.flatMap((page) => page.keys) ?? [],
+    [keysQuery.data],
+  );
 
   const revokeKeyMutation = useRevokeAPIKeyMutation({
     onSuccess: async () => {
       setKeyToRevoke(null);
-      await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
-      await queryClient.refetchQueries({
-        queryKey: ["@gram/client", "keys", "list"],
-      });
+      await invalidateAllListAPIKeys(queryClient);
     },
   });
-
-  const handleCreateKey: React.FormEventHandler<HTMLFormElement> = (e) => {
-    e.preventDefault();
-    const formEl = e.currentTarget;
-    const formData = new FormData(formEl);
-    const newKeyName = formData.get("name");
-    assert(typeof newKeyName === "string", "Key name must be a string");
-    const scope = formData.get("scope");
-    assert(typeof scope === "string", "Scope must be a string");
-
-    createKeyMutation.mutate(
-      {
-        security: { sessionHeaderGramSession: "" },
-        request: {
-          createKeyForm: {
-            name: newKeyName,
-            scopes: [scope],
-          },
-        },
-      },
-      {
-        onSuccess: () => {
-          formEl.reset();
-        },
-      },
-    );
-  };
 
   const handleRevokeKey = () => {
     if (!keyToRevoke) return;
@@ -106,20 +109,6 @@ function OrgApiKeysInner() {
         id: keyToRevoke.id,
       },
     });
-  };
-
-  const handleCopyToken = async () => {
-    if (newlyCreatedKey?.key) {
-      await navigator.clipboard.writeText(newlyCreatedKey.key);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
-    }
-  };
-
-  const handleCloseCreateDialog = () => {
-    setIsCreateDialogOpen(false);
-    setNewlyCreatedKey(null);
-    setIsCopied(false);
   };
 
   const apiKeyColumns: Column<Key>[] = [
@@ -140,6 +129,36 @@ function OrgApiKeysInner() {
       header: "Scopes",
       width: "1fr",
       render: (key: Key) => <Text variant="body">{key.scopes.join(", ")}</Text>,
+    },
+    {
+      key: "projectId",
+      header: "Project binding",
+      width: "1fr",
+      render: (key: Key) => (
+        <Text variant="body">{projectLabel(key.projectId)}</Text>
+      ),
+    },
+    {
+      key: "policyGrants",
+      header: "MCP access",
+      width: "1fr",
+      render: (key: Key) =>
+        key.subjectUrn ? (
+          <Text variant="body" className="text-muted-foreground">
+            Set by its agent
+          </Text>
+        ) : (
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={() => setKeyForPolicy(key)}
+            className="h-auto px-0 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:bg-transparent hover:decoration-solid"
+          >
+            <Button.Text className="font-sans normal-case tracking-normal">
+              {keyPolicySummary(key)}
+            </Button.Text>
+          </Button>
+        ),
     },
     {
       key: "createdAt",
@@ -180,7 +199,7 @@ function OrgApiKeysInner() {
 
   const newApiKeyButton = (
     <RequireScope scope="org:admin" level="component">
-      <Button onClick={() => setIsCreateDialogOpen(true)}>New API Key</Button>
+      <Button onClick={() => setIsCreateSheetOpen(true)}>New API Key</Button>
     </RequireScope>
   );
 
@@ -189,7 +208,7 @@ function OrgApiKeysInner() {
       <Button
         size="sm"
         variant="secondary"
-        onClick={() => setIsCreateDialogOpen(true)}
+        onClick={() => setIsCreateSheetOpen(true)}
       >
         <Button.LeftIcon>
           <Icon name="key-round" className="h-4 w-4" />
@@ -199,7 +218,15 @@ function OrgApiKeysInner() {
     </RequireScope>
   );
 
-  const hasNoKeys = (keysData?.keys ?? []).length === 0;
+  // Only an unfiltered empty list means the organization has no keys. An
+  // empty search result keeps the toolbar so the search can be changed. A
+  // failed read is not an empty organization: the client suppresses 401 and
+  // 403 errors, so they land here and get their own message below.
+  const hasNoKeys =
+    !keysQuery.isPending &&
+    !keysQuery.isError &&
+    search === "" &&
+    keys.length === 0;
 
   return (
     <>
@@ -211,7 +238,9 @@ function OrgApiKeysInner() {
           value: apiKeySearch,
           onChange: setApiKeySearch,
           placeholder: "Search by key name",
+          debounceMs: SEARCH_DEBOUNCE_MS,
         }}
+        isLoading={keysQuery.isPending}
         isEmpty={hasNoKeys}
         empty={{
           icon: "key-round",
@@ -219,13 +248,45 @@ function OrgApiKeysInner() {
           action: createKeyButton,
         }}
       >
-        {filteredKeys.length > 0 ? (
-          <Table
-            columns={apiKeyColumns}
-            data={filteredKeys}
-            rowKey={(row) => row.id}
-            className="max-h-[500px] overflow-y-auto"
-          />
+        {keys.length > 0 ? (
+          <div
+            className={cn(
+              "transition-opacity",
+              keysQuery.isPlaceholderData && "opacity-60",
+            )}
+            aria-busy={keysQuery.isPlaceholderData}
+          >
+            <Table
+              columns={apiKeyColumns}
+              data={keys}
+              rowKey={(row) => row.id}
+              className="max-h-[500px] overflow-y-auto"
+            />
+            <ApiKeysFooter
+              count={keys.length}
+              hasNextPage={keysQuery.hasNextPage}
+              isFetchingNextPage={keysQuery.isFetchingNextPage}
+              onLoadMore={() => {
+                void keysQuery.fetchNextPage();
+              }}
+            />
+          </div>
+        ) : keysQuery.isError ? (
+          <div
+            role="alert"
+            className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 border p-6"
+          >
+            <Text variant="body">Couldn&apos;t load API keys</Text>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                void keysQuery.refetch();
+              }}
+            >
+              Try again
+            </Button>
+          </div>
         ) : (
           <div
             role="status"
@@ -236,117 +297,20 @@ function OrgApiKeysInner() {
         )}
       </ResourceListPage>
 
-      <Dialog open={isCreateDialogOpen} onOpenChange={handleCloseCreateDialog}>
-        <Dialog.Content>
-          <Dialog.Header>
-            <Dialog.Title>
-              {newlyCreatedKey ? "API Key Created" : "Create New API Key"}
-            </Dialog.Title>
-          </Dialog.Header>
-          {newlyCreatedKey ? (
-            <div className="space-y-4 py-4">
-              <div className="text-foreground border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
-                You will not be able to see this token value again once you
-                close this dialog. Copy it now and store it securely.
-              </div>
-              <div className="bg-muted flex items-center space-x-2 p-3">
-                <code className="flex-1 break-all">{newlyCreatedKey.key}</code>
-                <Button
-                  aria-label={isCopied ? "API key copied" : "Copy API key"}
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => void handleCopyToken()}
-                  className="shrink-0"
-                >
-                  <Button.Icon>
-                    {isCopied ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button.Icon>
-                </Button>
-              </div>
-              <div className="flex justify-end">
-                <Button onClick={handleCloseCreateDialog}>Close</Button>
-              </div>
-            </div>
-          ) : (
-            <form className="space-y-4 py-4" onSubmit={handleCreateKey}>
-              <InputField
-                label="Key name"
-                name="name"
-                required
-                autoFocus
-                autoCapitalize="off"
-                autoComplete="off"
-                autoCorrect="off"
-              />
+      <CreateApiKeySheet
+        open={isCreateSheetOpen}
+        onOpenChange={setIsCreateSheetOpen}
+      />
 
-              <AnyField
-                label="Scope"
-                optionality="hidden"
-                render={() => {
-                  return (
-                    <RadioGroup name="scope" defaultValue="consumer">
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="consumer" id="r1" />
-                        <Label className="leading-normal" htmlFor="r1">
-                          Consumer: can query/modify toolsets, read data and
-                          access MCP servers.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="producer" id="r2" />
-                        <Label className="leading-normal" htmlFor="r2">
-                          Producer: can upload OpenAPI documents, trigger
-                          deployments, query/modify toolsets, read data
-                          (including exporting chat transcripts), and access MCP
-                          servers.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="chat" id="r3" />
-                        <Label className="leading-normal" htmlFor="r3">
-                          Chat: can use the chat API to interact with models.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="hooks" id="r4" />
-                        <Label className="leading-normal" htmlFor="r4">
-                          Hooks: can ingest authenticated AI traffic, including
-                          hook events and OpenTelemetry data.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="agent" id="r5" />
-                        <Label className="leading-normal" htmlFor="r5">
-                          Agent: presents to the Speakeasy device agent endpoint
-                          to fetch the user's assigned plugins. Store it in
-                          managed.json as org_token, or hand it to a dev for
-                          speakeasy enroll.
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                  );
-                }}
-              />
-              <div className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={handleCloseCreateDialog}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={createKeyMutation.isPending}>
-                  Create
-                </Button>
-              </div>
-            </form>
-          )}
-        </Dialog.Content>
-      </Dialog>
+      {keyForPolicy ? (
+        <KeyPolicySheet
+          key={keyForPolicy.id}
+          apiKey={keyForPolicy}
+          onOpenChange={(open) => {
+            if (!open) setKeyForPolicy(null);
+          }}
+        />
+      ) : null}
 
       <Dialog
         open={!!keyToRevoke}
@@ -380,5 +344,42 @@ function OrgApiKeysInner() {
         </Dialog.Content>
       </Dialog>
     </>
+  );
+}
+
+function ApiKeysFooter({
+  count,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+}: {
+  count: number;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onLoadMore: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between border-x border-b px-4 py-3">
+      <Text muted small>
+        {count.toLocaleString()} {count === 1 ? "key" : "keys"} shown
+      </Text>
+      {hasNextPage ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onLoadMore}
+          disabled={isFetchingNextPage}
+        >
+          {isFetchingNextPage ? (
+            <>
+              <Spinner className="mr-0 size-4" />
+              Loading...
+            </>
+          ) : (
+            "Load more"
+          )}
+        </Button>
+      ) : null}
+    </div>
   );
 }

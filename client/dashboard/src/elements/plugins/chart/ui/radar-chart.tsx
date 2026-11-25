@@ -1,7 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { FC } from "react";
+import type { FC } from "react";
+import type { TooltipContentProps } from "recharts";
 import {
   RadarChart as RechartsRadarChart,
   Radar,
@@ -11,7 +12,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  TooltipContentProps,
 } from "recharts";
 
 const CustomTooltip = ({ active, payload }: TooltipContentProps) => {

@@ -10,12 +10,18 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   "claude-chat-web": "Claude Chat Web",
   claudecode: "Claude Code",
   "claude-code": "Claude Code",
+  // Claude Code's web surface, reported by Anthropic's inference hooks rather
+  // than by a plugin on a machine.
+  "claude-code-web": "Claude Code Web",
+  "claude-tag": "Claude Tag",
   // Claude Code Desktop is its own surface, distinct from the claude-code CLI
   // and from cowork (which shares CCD's hook adapter slug but resolves to
   // "cowork" server-side via the OTEL service.name).
   "claude-code-desktop": "Claude Code Desktop",
   cowork: "Claude Cowork",
   "claude-cowork": "Claude Cowork",
+  kit: "Kit",
+  "ahp-harness:kit": "Kit",
   cursor: "Cursor",
   // The device agent's IDE deeplink target — the same Cursor surface as the
   // cursor CLI, reached via the desktop app.
@@ -26,17 +32,26 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   // compliance import — distinct surfaces from the Codex agent, split at
   // ingest by hook_source so they stay separable in the summaries.
   chatgpt: "ChatGPT",
+  "chatgpt-desktop": "ChatGPT Desktop",
   "chatgpt-work": "ChatGPT Work",
   opencode: "opencode",
+  pi: "Pi",
   openclaw: "OpenClaw",
   litellm: "LiteLLM",
-  copilot: "Copilot",
-  "github-copilot": "Copilot",
-  "copilot-cli": "GitHub Copilot CLI",
-  "vscode-copilot": "GitHub Copilot in VS Code",
+  // Copilot hooks emit CLI or VS Code sessions; Microsoft Copilot is a
+  // separate product.
+  copilot: "Copilot CLI",
+  "github-copilot": "Copilot CLI",
+  "copilot-cli": "Copilot CLI",
+  "github-copilot-cli": "Copilot CLI",
+  "vscode-copilot": "Copilot in VS Code",
+  "microsoft-copilot": "Microsoft Copilot",
   gemini: "Gemini",
   glean: "Glean",
   bedrock: "AWS Bedrock",
+  // Sessions from the built-in Speakeasy Slack app. The server stamps this
+  // surface from the trigger source; other assistant sessions stay "assistants".
+  "speakeasy-slack": "Speakeasy Slackbot",
   "aws-bedrock": "AWS Bedrock",
 };
 

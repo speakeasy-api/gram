@@ -131,6 +131,11 @@ class _UnusedPublisher:
         raise AssertionError("no findings expected on the clean path")
 
 
+class _UnusedMeterPublisher:
+    def publish(self, message: object) -> PublishResult:
+        raise AssertionError("no meter reading expected without an envelope")
+
+
 async def test_presidio_handler_stamps_content_size_on_delivery_span(
     exporter: InMemorySpanExporter,
 ):
@@ -138,7 +143,10 @@ async def test_presidio_handler_stamps_content_size_on_delivery_span(
     # so its content-size attribute must land on that delivery span — the exact
     # per-message value trace analytics correlates against duration.
     handler = PresidioHandler(
-        structlog.get_logger(), _UnusedPublisher(), _CleanScanner()
+        structlog.get_logger(),
+        _UnusedPublisher(),
+        _UnusedMeterPublisher(),
+        _CleanScanner(),
     )
     wrapped = tracing.traced(
         handler.handle,

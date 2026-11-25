@@ -1,8 +1,6 @@
 package events_test
 
 import (
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/outbox"
@@ -17,12 +15,8 @@ import (
 func TestCatalogIsUpToDate(t *testing.T) {
 	t.Parallel()
 
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	dir := filepath.Dir(thisFile)
-
-	require.NoError(t, cataloggen.Check(dir))
-	require.NoError(t, cataloggen.CheckYAML(dir, events.All))
+	require.NoError(t, cataloggen.Check("."))
+	require.NoError(t, cataloggen.CheckYAML(".", events.All))
 }
 
 func TestAccessEventsUseGenericNames(t *testing.T) {

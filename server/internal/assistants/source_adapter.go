@@ -32,13 +32,15 @@ func (deterministicChatIDAdapter) ChatID(assistantID uuid.UUID, correlationID st
 }
 
 var sourceAdapters = map[string]sourceAdapter{
-	sourceKindSlack:     slackAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
-	sourceKindMSTeams:   msteamsAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
-	sourceKindLinear:    linearAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
-	sourceKindGithub:    githubAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
-	sourceKindCron:      cronAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
-	sourceKindWake:      wakeAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
-	sourceKindDashboard: dashboardAdapter{},
+	sourceKindSlack: slackAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	// Speakeasy Slack app events decode exactly like a customer Slack app's.
+	sourceKindSpeakeasySlack: slackAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	sourceKindMSTeams:        msteamsAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	sourceKindLinear:         linearAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	sourceKindGithub:         githubAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	sourceKindCron:           cronAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	sourceKindWake:           wakeAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	sourceKindDashboard:      dashboardAdapter{},
 }
 
 func getSourceAdapter(kind string) (sourceAdapter, error) {

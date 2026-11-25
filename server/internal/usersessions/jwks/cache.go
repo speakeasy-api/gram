@@ -1,6 +1,7 @@
 package jwks
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"time"
@@ -21,6 +22,18 @@ type Cache interface {
 
 	// Put replaces the stored state for a source key.
 	Put(ctx context.Context, key string, state CacheState) error
+
+	// PutIfUnchanged atomically stores a result only if its starting state
+	// and storage revision are still current. A slower pre-rotation fetch must not
+	// replace keys written by a later fetch.
+	PutIfUnchanged(ctx context.Context, key string, prior, next CacheState) (bool, error)
+}
+
+// ConsultFailureMarker lets a durable cache record a failed forced consult
+// with an atomic comparison against the state that was consulted. Without
+// it, a late failure marker could overwrite a newer successful rotation.
+type ConsultFailureMarker interface {
+	MarkConsultFailure(ctx context.Context, key string, prior CacheState, consultedAt time.Time, reason string) error
 }
 
 const (
@@ -83,7 +96,23 @@ func (c *MemoryCache) Get(_ context.Context, key string) (CacheState, error) {
 func (c *MemoryCache) Put(_ context.Context, key string, state CacheState) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.putLocked(key, state)
+	return nil
+}
 
+// PutIfUnchanged compares and writes under one lock.
+func (c *MemoryCache) PutIfUnchanged(_ context.Context, key string, prior, next CacheState) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	current := c.entries[key]
+	if !bytes.Equal(current.Document, prior.Document) || !current.ExpiresAt.Equal(prior.ExpiresAt) || !current.RefreshedAt.Equal(prior.RefreshedAt) || !current.LastErrorAt.Equal(prior.LastErrorAt) || current.LastError != prior.LastError || current.Revision != prior.Revision {
+		return false, nil
+	}
+	c.putLocked(key, next)
+	return true, nil
+}
+
+func (c *MemoryCache) putLocked(key string, state CacheState) {
 	if existing, ok := c.entries[key]; ok {
 		c.totalBytes -= len(existing.Document)
 	}
@@ -108,5 +137,4 @@ func (c *MemoryCache) Put(_ context.Context, key string, state CacheState) error
 		c.totalBytes -= len(c.entries[evict].Document)
 		delete(c.entries, evict)
 	}
-	return nil
 }

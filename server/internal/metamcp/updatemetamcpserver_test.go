@@ -1,28 +1,58 @@
 package metamcp_test
 
 import (
+	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	srv "github.com/speakeasy-api/gram/server/gen/http/meta_mcp/server"
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/metamcp"
-	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-
-	"github.com/jackc/pgx/v5/pgtype"
-
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+func TestUpdateMetaMcpServer_NetworkModeOnlyTransaction(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "gateway network mode only"})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerUpdate)
+	require.NoError(t, err)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: Caller-owned transaction exercises the network-mode-only write.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	updated, err := metamcp.UpdateMetaMCPServerNetworkAccessModeInTransaction(ctx, tx, audit.NewLogger(), authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, authCtx.Email, uuid.MustParse(created.ID), networkaccess.ModeDual, networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }))
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	require.Equal(t, created.Name, updated.Name)
+	require.Equal(t, uuid.MustParse(*created.UserSessionIssuerID), updated.UserSessionIssuerID.UUID)
+	require.Equal(t, "dual", updated.NetworkAccessMode.String)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
 
 func TestUpdateMetaMcpServer_RenamesAndAttachesIssuer(t *testing.T) {
 	t.Parallel()
@@ -130,6 +160,83 @@ func TestUpdateMetaMcpServer_MintsIssuerWhenNoneStored(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated.UserSessionIssuerID, "update must mint an issuer for an issuerless gateway")
+}
+
+func TestUpdateMetaMcpServer_NonPublicOmissionFailsClosedAndPublicRecoverySucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "network recovery"})
+	require.NoError(t, err)
+	rows, err := testrepo.New(ti.conn).SetMetaMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMetaMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true},
+		ID:                uuid.MustParse(created.ID),
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	_, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		ID: created.ID, Name: created.Name, NetworkAccessMode: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	publicOnly := types.NetworkAccessMode("public_only")
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		ID: created.ID, Name: created.Name, NetworkAccessMode: &publicOnly,
+	})
+	require.NoError(t, err)
+	require.Equal(t, publicOnly, updated.NetworkAccessMode)
+
+	stored, err := metamcprepo.New(ti.conn).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
+		ID: uuid.MustParse(created.ID), OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.False(t, stored.NetworkAccessMode.Valid)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMetaMcpServerUpdate)
+	require.NoError(t, err)
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "private_only", beforeSnapshot["NetworkAccessMode"])
+	require.Equal(t, "public_only", afterSnapshot["NetworkAccessMode"])
+}
+
+func TestUpdateMetaMcpServer_UnknownStoredModeFailsClosedAndPublicRecoverySucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "unknown network recovery"})
+	require.NoError(t, err)
+
+	rows, err := testrepo.New(ti.conn).SetMetaMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMetaMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: "future_mode", Valid: true},
+		ID:                uuid.MustParse(created.ID),
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	_, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		ID: created.ID, Name: created.Name, NetworkAccessMode: nil,
+	})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	publicOnly := types.NetworkAccessMode("public_only")
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		ID: created.ID, Name: created.Name, NetworkAccessMode: &publicOnly,
+	})
+	require.NoError(t, err)
+	require.Equal(t, publicOnly, updated.NetworkAccessMode)
 }
 
 func TestUpdateMetaMcpServer_NotFound(t *testing.T) {
@@ -251,7 +358,7 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	client, err := rsRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := rsRepo.CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(projectID),
 		OrganizationID:          conv.ToPGText(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   remoteIssuer.ID,
@@ -277,10 +384,11 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 		RemoteSessionClientID: client.ID,
 		UserSessionIssuerID:   memberServer.UserSessionIssuerID.UUID,
 	}))
-	stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-		RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuer.ID),
-		ID:                    serverID,
+	stamped, err := testrepo.New(ti.conn).StampMCPServerUpstreamClientFixture(ctx, testrepo.StampMCPServerUpstreamClientFixtureParams{
 		ProjectID:             projectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		McpServerID:           serverID,
+		RemoteSessionClientID: client.ID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stamped)
@@ -319,6 +427,8 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, 1, boundCount(newIssuerID),
 		"issuer change must re-bind member provider clients to the new issuer")
+	require.Equal(t, 0, boundCount(uuid.MustParse(*meta.UserSessionIssuerID)),
+		"the previous issuer no longer holds the binding the gateway put there")
 
 	// A second swap wires the members again: rewiring is not a one-shot.
 	thirdIssuerID := seedUserSessionIssuer(t, ctx, ti.conn, projectID)
@@ -333,4 +443,149 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, 1, boundCount(thirdIssuerID),
 		"each issuer change must re-wire member provider clients")
+	require.Equal(t, 0, boundCount(newIssuerID),
+		"each issuer change removes the binding from the issuer it leaves")
+}
+
+// Instructions follow omit-preserves / blank-clears: an update that does not
+// mention them leaves the stored value alone, and a blank submission restores
+// the built-in gateway instructions (NULL) rather than serving an empty
+// handshake.
+func TestUpdateMetaMcpServer_Instructions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "instructed gateway",
+		UserSessionIssuerID: nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, created.Instructions)
+
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                created.Name,
+		UserSessionIssuerID: nil,
+		Instructions:        conv.PtrEmpty("  Call list_servers before anything else.  "),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Instructions)
+	require.Equal(t, "Call list_servers before anything else.", *updated.Instructions)
+
+	fetchedWithInstructions, err := ti.service.GetMetaMcpServer(ctx, &gen.GetMetaMcpServerPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, updated.Instructions, fetchedWithInstructions.Instructions)
+	listed, err := ti.service.ListMetaMcpServers(ctx, &gen.ListMetaMcpServersPayload{})
+	require.NoError(t, err)
+	require.Len(t, listed.MetaMcpServers, 1)
+	require.Equal(t, updated.Instructions, listed.MetaMcpServers[0].Instructions)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMetaMcpServerUpdate)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "Call list_servers before anything else.", afterSnapshot["Instructions"])
+
+	preserved, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                "renamed gateway",
+		UserSessionIssuerID: nil,
+		Instructions:        nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, preserved.Instructions)
+	require.Equal(t, "Call list_servers before anything else.", *preserved.Instructions)
+
+	cleared, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                "renamed gateway",
+		UserSessionIssuerID: nil,
+		Instructions:        conv.PtrEmpty("   "),
+	})
+	require.NoError(t, err)
+	require.Nil(t, cleared.Instructions)
+
+	fetched, err := ti.service.GetMetaMcpServer(ctx, &gen.GetMetaMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+	})
+	require.NoError(t, err)
+	require.Nil(t, fetched.Instructions)
+}
+
+// Goa accepts a JSON \u0000 but Postgres text rejects NUL, so the handler
+// strips it instead of surfacing a storage error.
+func TestUpdateMetaMcpServer_InstructionsStripNUL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "nul gateway",
+		UserSessionIssuerID: nil,
+	})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                created.Name,
+		UserSessionIssuerID: nil,
+		Instructions:        conv.PtrEmpty("Call list_servers\x00 first."),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Instructions)
+	require.Equal(t, "Call list_servers first.", *updated.Instructions)
+}
+
+func TestUpdateMetaMcpServer_InstructionsNormalizedLength(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "length gateway"})
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, input, want string
+		invalid           bool
+	}{
+		{name: "unicode at limit with padding", input: " \t" + strings.Repeat("界", 10000) + "\x00\n", want: strings.Repeat("界", 10000)},
+		{name: "over limit", input: strings.Repeat("界", 10001), invalid: true},
+		{name: "blank over raw limit", input: strings.Repeat(" \x00", 10001)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			body := &srv.UpdateMetaMcpServerRequestBody{ID: &created.ID, Name: &created.Name, Instructions: &tc.input}
+			require.NoError(t, srv.ValidateUpdateMetaMcpServerRequestBody(body))
+			updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{ID: created.ID, Name: created.Name, Instructions: &tc.input})
+			if tc.invalid {
+				require.ErrorContains(t, err, "instructions must not exceed 10000")
+				return
+			}
+			require.NoError(t, err)
+			if tc.want == "" {
+				require.Nil(t, updated.Instructions)
+			} else {
+				require.Equal(t, &tc.want, updated.Instructions)
+			}
+		})
+	}
 }

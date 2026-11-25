@@ -7,13 +7,25 @@ import { useGramMode } from "@/hooks/use-gram-mode";
 import { MODE_LABELS, MODE_SUBTITLES } from "@/lib/mode-labels";
 
 export function ActiveModeCard() {
-  const { data, isLoading } = useGramMode();
+  const { data, isLoading, error } = useGramMode();
 
   if (isLoading) {
     return (
       <Card size="sm" className="!rounded-md">
         <CardContent>
           <div className="h-12 animate-pulse" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card size="sm" className="!rounded-md">
+        <CardContent>
+          <div role="alert" className="text-sm text-destructive">
+            Could not read dev-idp configuration: {error.message}
+          </div>
         </CardContent>
       </Card>
     );
@@ -27,8 +39,8 @@ export function ActiveModeCard() {
             <div className="font-medium">No active dev-idp mode detected</div>
             <p className="text-xs text-muted-foreground mt-1">
               Neither <code>SPEAKEASY_API_URL</code> nor{" "}
-              <code>WORKOS_API_URL</code> points back at the dev-idp — Gram is
-              configured against an external upstream.
+              <code>WORKOS_API_URL</code> points back at the dev-idp — Speakeasy
+              is configured against an external upstream.
             </p>
           </div>
         </CardContent>
@@ -68,7 +80,7 @@ export function ActiveModeCard() {
             <div className="flex items-center gap-4">
               <div className="min-w-0 flex-1">
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Gram is logging in via
+                  Speakeasy is logging in via
                 </div>
                 <div className="font-semibold text-base font-mono">
                   {MODE_LABELS[mode]}

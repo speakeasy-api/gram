@@ -15,6 +15,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/httpstream"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -87,14 +89,24 @@ func (rw *responseWriter) Unwrap() http.ResponseWriter {
 var redactedQueryParams = map[string]bool{
 	// Live capability token on public share and signed-asset URLs.
 	"token":           true,
+	"code":            true,
+	"state":           true,
+	"code_verifier":   true,
+	"return_to":       true,
 	"support_handoff": true,
 
 	// Email address on auth.login, and on agent.getPlugins polls from legacy
 	// agents that still append `?email=` (current agents send a header).
 	"email": true,
 
-	// Chat search terms, which are user-typed free text.
+	// Search terms, which are user-typed free text and may contain resource names.
 	"search": true,
+	"q":      true,
+
+	// Product analytics session id forwarded by the sign-up page on
+	// auth.login. It joins a browser session (and its replay) to an identified
+	// user, so it stays out of logs that already carry IP and user agent.
+	"analytics_session_id": true,
 }
 
 // logSafeURL renders a request URL for logs and observability context with
@@ -242,6 +254,12 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
+			ctx = wide.Start(ctx, attr.SlogWideEvent())
+
+			defer func() {
+				logger.LogAttrs(ctx, slog.LevelInfo, "response", wide.Emit(ctx)...)
+			}()
+
 			requestID := conv.TruncateString(r.Header.Get("X-Request-ID"), 64)
 
 			spanCtx := trace.SpanContextFromContext(ctx)
@@ -281,10 +299,14 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 
 			rw := newResponseWriter(w)
 			r = r.WithContext(ctx)
-			attrs := []any{
+
+			attrs := []slog.Attr{
 				attr.SlogHTTPRequestMethod(r.Method),
 				attr.SlogURLOriginal(safeURL),
 				attr.SlogHostName(r.Host),
+			}
+			if route := httpstream.Route(r); route != "" {
+				attrs = append(attrs, attr.SlogHTTPRoute(route))
 			}
 			if requestContext.ReqID != "" {
 				attrs = append(attrs, attr.SlogHTTPRequestID(requestContext.ReqID))
@@ -298,8 +320,8 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			if requestContext.RefererHost != "" {
 				attrs = append(attrs, attr.SlogHTTPReferrerHost(requestContext.RefererHost))
 			}
-
-			logger.InfoContext(ctx, "request", attrs...)
+			attrs = append(attrs, agentDeviceIdentityAttrs(r)...)
+			wide.Push(ctx, attrs...)
 
 			next.ServeHTTP(rw, r)
 
@@ -308,23 +330,30 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				code = 499
 			}
 
-			attrs = append(attrs, attr.SlogHTTPResponseStatusCode(code), attr.SlogHTTPServerRequestDuration(time.Since(start).Seconds()))
+			responseAttrs := []slog.Attr{
+				attr.SlogHTTPResponseStatusCode(code),
+				attr.SlogHTTPServerRequestDuration(time.Since(start).Seconds()),
+			}
 
 			if code != rw.statusCode {
-				attrs = append(attrs, attr.SlogHTTPResponseOriginalStatusCode(rw.statusCode))
+				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseOriginalStatusCode(rw.statusCode))
 			}
 
 			proxied := conv.Default(rw.Header().Get(constants.HeaderProxiedResponse), "0")
 			if ok, err := strconv.ParseBool(proxied); err == nil && ok {
-				attrs = append(attrs, attr.SlogHTTPResponseExternal(true))
+				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseExternal(true))
 			}
 
 			filtered := conv.Default(rw.Header().Get(constants.HeaderFilteredResponse), "0")
 			if ok, err := strconv.ParseBool(filtered); err == nil && ok {
-				attrs = append(attrs, attr.SlogHTTPResponseFiltered(true))
+				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseFiltered(true))
 			}
 
-			logger.InfoContext(ctx, "response", attrs...)
+			if encoding := rw.Header().Get(constants.HeaderContentEncoding); encoding != "" {
+				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseHeaderContentEncoding(encoding))
+			}
+
+			wide.Push(ctx, responseAttrs...)
 		})
 	}
 }

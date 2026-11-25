@@ -13,7 +13,7 @@ type PKCESupportState string
 const (
 	// PKCESupportUncaptured: the column is NULL — neither discovery nor an
 	// operator has captured the field for this issuer. A coverage gap in
-	// Gram's own data, not a statement about the upstream; enforcement must
+	// Speakeasy's own data, not a statement about the upstream; enforcement must
 	// not treat it as a refusal case.
 	PKCESupportUncaptured PKCESupportState = "uncaptured"
 
@@ -21,13 +21,13 @@ const (
 	// The state MCP-mandated enforcement would refuse.
 	PKCESupportNone PKCESupportState = "none"
 
-	// PKCESupportSupported: captured, and S256 — the only method Gram sends —
+	// PKCESupportSupported: captured, and S256 — the only method Speakeasy sends —
 	// is advertised.
 	PKCESupportSupported PKCESupportState = "supported"
 
 	// PKCESupportUnsupported: captured and non-empty, but S256 is absent.
 	// Also a refusal state under enforcement, kept separate from none because
-	// it names an upstream that supports PKCE just not the method Gram uses.
+	// it names an upstream that supports PKCE just not the method Speakeasy uses.
 	PKCESupportUnsupported PKCESupportState = "unsupported"
 )
 

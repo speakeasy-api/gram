@@ -178,28 +178,31 @@ func TestScanner_ReportsFindingPerMatchingCall(t *testing.T) {
 	t.Parallel()
 
 	s := NewScanner()
-	findings := s.Scan([]ToolCall{
+	result := s.Scan(t.Context(), []ToolCall{
 		{Name: "Bash", Arguments: `{"command":"rm -rf /tmp/data"}`},
 		{Name: "echo", Arguments: `{"command":"echo hi"}`},
 		{Name: "psql", Arguments: `{"query":"DROP TABLE users"}`},
 	})
 
-	if assert.Len(t, findings, 2) {
-		assert.Equal(t, Source, findings[0].Source)
-		assert.Equal(t, "destructive.shell.rm_rf", findings[0].RuleID)
-		assert.Equal(t, "Bash", findings[0].Match)
+	if assert.Len(t, result.Findings, 2) {
+		assert.Equal(t, Source, result.Findings[0].Source)
+		assert.Equal(t, "destructive.shell.rm_rf", result.Findings[0].RuleID)
+		assert.Equal(t, "Bash", result.Findings[0].Match)
 
-		assert.Equal(t, "destructive.database.drop", findings[1].RuleID)
-		assert.Equal(t, "psql", findings[1].Match)
+		assert.Equal(t, "destructive.database.drop", result.Findings[1].RuleID)
+		assert.Equal(t, "psql", result.Findings[1].Match)
 	}
+	require.True(t, result.Completed)
+	require.Positive(t, result.STokens)
 }
 
 func TestScanner_SkipsCallsWithoutName(t *testing.T) {
 	t.Parallel()
 
 	s := NewScanner()
-	findings := s.Scan([]ToolCall{{Name: "", Arguments: `{"command":"rm -rf /"}`}})
-	assert.Empty(t, findings)
+	result := s.Scan(t.Context(), []ToolCall{{Name: "", Arguments: `{"command":"rm -rf /"}`}})
+	assert.Empty(t, result.Findings)
+	require.False(t, result.Completed)
 }
 
 // TestScanner_MalformedArgumentsFallBackToRawString proves that when a tool
@@ -209,13 +212,13 @@ func TestScanner_MalformedArgumentsFallBackToRawString(t *testing.T) {
 	t.Parallel()
 
 	s := NewScanner()
-	findings := s.Scan([]ToolCall{
+	result := s.Scan(t.Context(), []ToolCall{
 		{Name: "tool_calls", Arguments: `{"command":"rm -rf /tmp/x"`}, // missing closing brace
 	})
 
-	if assert.Len(t, findings, 1) {
-		assert.Equal(t, Source, findings[0].Source)
-		assert.Equal(t, "destructive.shell.rm_rf", findings[0].RuleID)
+	if assert.Len(t, result.Findings, 1) {
+		assert.Equal(t, Source, result.Findings[0].Source)
+		assert.Equal(t, "destructive.shell.rm_rf", result.Findings[0].RuleID)
 	}
 }
 
@@ -223,7 +226,10 @@ func TestScanner_EmptyAndBenignInputs(t *testing.T) {
 	t.Parallel()
 
 	s := NewScanner()
-	assert.Empty(t, s.Scan(nil))
-	assert.Empty(t, s.Scan([]ToolCall{{Name: "Bash", Arguments: ""}}))
-	assert.Empty(t, s.Scan([]ToolCall{{Name: "Bash", Arguments: `{"command":"ls -la"}`}}))
+	assert.Empty(t, s.Scan(t.Context(), nil).Findings)
+	assert.Empty(t, s.Scan(t.Context(), []ToolCall{{Name: "Bash", Arguments: ""}}).Findings)
+	assert.Empty(t, s.Scan(t.Context(), []ToolCall{{Name: "Bash", Arguments: `{"command":"ls -la"}`}}).Findings)
+	result := s.Scan(t.Context(), []ToolCall{{Name: "Bash", Arguments: `{"command":"ls -la"}`}})
+	require.True(t, result.Completed)
+	require.Positive(t, result.STokens)
 }

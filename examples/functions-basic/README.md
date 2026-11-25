@@ -1,7 +1,7 @@
-# Gram Functions: Basic API Integration
+# Speakeasy Functions: Basic API Integration
 
-This example demonstrates real-world patterns for building [Gram
-Functions](https://www.speakeasy.com/docs/gram/gram-functions/introduction) that
+This example demonstrates real-world patterns for building [Speakeasy
+Functions](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions) that
 integrate with external APIs. Study this project to learn how to structure your
 own LLM tools with proper error handling, validation, and data transformation.
 
@@ -38,13 +38,13 @@ To get started, install dependencies and run the development server:
 npm install
 ```
 
-To build a zip file that can be deployed to Gram, run:
+To build a zip file that can be deployed to Speakeasy, run:
 
 ```bash
 npm build
 ```
 
-After building, push your function to Gram with:
+After building, push your function to Speakeasy with:
 
 ```bash
 npm push
@@ -66,5 +66,5 @@ you interactively test your tools.
 
 ## Learn More
 
-- [Gram Functions Documentation](https://www.speakeasy.com/docs/gram/gram-functions/introduction)
+- [Speakeasy Functions Documentation](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions)
 - [Framework API Reference](./CONTRIBUTING.md)

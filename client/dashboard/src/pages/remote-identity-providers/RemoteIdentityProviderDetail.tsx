@@ -1,4 +1,3 @@
-import { AssetImage } from "@/components/asset-image";
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -11,10 +10,10 @@ import {
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { remoteSessionScopeTier } from "@/lib/sources";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
-import { ScopeBadge } from "./ScopeBadge";
+import { IssuerLogo, ScopeBadge } from "@/lib/remote-identity";
 import { issuerDisplayName } from "./issuerDisplay";
 import { ClientsTab } from "./tabs/issuer/ClientsTab";
 import { OverviewTab } from "./tabs/issuer/OverviewTab";
@@ -24,7 +23,7 @@ import { ISSUER_TABS, type IssuerTab } from "./tabs";
 
 export default function RemoteIdentityProviderDetail(): JSX.Element {
   const { issuerId = "" } = useParams<{ issuerId: string }>();
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const location = useLocation();
   const {
     data: issuer,
@@ -36,9 +35,9 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
 
   const activeTab = activeDetailTab(location.pathname, ISSUER_TABS);
   const tabHref = (tab: IssuerTab) =>
-    orgRoutes.remoteIdentityProviders.issuerDetail[tab].href(issuerId);
+    routes.remoteIdentityProviders.issuerDetail[tab].href(issuerId);
 
-  const label = issuer ? issuerDisplayName(issuer) : "Remote Identity Provider";
+  const label = issuer ? issuerDisplayName(issuer) : "Authorization Server";
 
   // Platform issuers are read-only to tenants. The Settings tab holds the only
   // issuer mutation controls (edit + delete), both refused by the backend, so it
@@ -47,7 +46,7 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
 
   // The issuer doesn't exist (or failed to load); return to the listing.
   if (isError || (!isLoading && !issuer)) {
-    return <Navigate to={orgRoutes.remoteIdentityProviders.href()} replace />;
+    return <Navigate to={routes.remoteIdentityProviders.href()} replace />;
   }
 
   // The bare /:issuerId URL has no tab; canonicalize to the Overview tab.
@@ -71,7 +70,7 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
           <Page.Eyebrow />
           <div className="flex items-center gap-3">
             <Text small muted>
-              Remote Identity Provider
+              Authorization Server
             </Text>
             {issuer && (
               <ScopeBadge
@@ -81,12 +80,8 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
             )}
           </div>
           <div className="flex items-center gap-3">
-            {issuer?.logoAssetId && (
-              <AssetImage
-                assetId={issuer.logoAssetId}
-                alt=""
-                className="size-10 shrink-0 object-contain"
-              />
+            {issuer && (
+              <IssuerLogo logoAssetId={issuer.logoAssetId} name={label} />
             )}
             <Heading variant="h1" className="break-all normal-case">
               {label}

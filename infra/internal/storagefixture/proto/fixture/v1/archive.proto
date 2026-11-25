@@ -1,0 +1,13 @@
+edition = "2024";
+
+package fixture.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/internal/storagefixture/pb/fixture/v1;fixturepb";
+
+message Archive {
+  option (gcp.pubsub.v1.storage_subscription) = {
+    topic: "fixture.v1.Event"
+  };
+}

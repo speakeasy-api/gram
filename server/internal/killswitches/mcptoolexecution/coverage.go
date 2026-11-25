@@ -56,6 +56,13 @@ func deriveCoverage(
 	return result
 }
 
+// hasAgentBackedPrincipal reports provenance that acts under an agent's
+// policy: an agent session, or a workload inheriting from its assigned agent.
+func (d coverageDerivation) hasAgentBackedPrincipal() bool {
+	identity, ok := d.principalSource.(mcpidentity.Identity)
+	return ok && (identity.Kind() == mcpidentity.KindAgent || identity.Kind() == mcpidentity.KindWorkload)
+}
+
 func (d coverageDerivation) record(ctx context.Context, recorder IdentityCoverageRecorder, surface mcpmetrics.KillswitchCoverageSurface) {
 	if recorder == nil {
 		return
@@ -74,7 +81,7 @@ func (d coverageDerivation) record(ctx context.Context, recorder IdentityCoverag
 // ownership cannot become stale. Metrics are observational and never reject a
 // call; enforcement is owned by the separately registered checkpoints.
 type IdentityCoverageCheckpoint struct {
-	principal *AuthenticatedUserPrincipalAdapter
+	principal killswitches.PrincipalAdapter
 	resource  *MCPServerResourceAdapter
 	recorder  IdentityCoverageRecorder
 }
@@ -86,7 +93,7 @@ func NewIdentityCoverageCheckpoint(db *pgxpool.Pool, recorder IdentityCoverageRe
 		return nil
 	}
 	return &IdentityCoverageCheckpoint{
-		principal: NewAuthenticatedUserPrincipalAdapter(db),
+		principal: &authenticatedPrincipalAdapter{PrincipalAdapter: NewAuthenticatedUserPrincipalAdapter(db), agent: NewAgentPrincipalAdapter(db)},
 		resource:  NewMCPServerResourceAdapter(db),
 		recorder:  recorder,
 	}

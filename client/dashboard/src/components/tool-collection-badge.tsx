@@ -1,4 +1,4 @@
-import { ReactElement } from "react";
+import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
@@ -100,13 +100,5 @@ export const ToolCollectionBadge = ({
         <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
       </TooltipPortal>
     </Tooltip>
-  );
-};
-
-export const PoweredBySpeakeasyBadge = (): ReactElement => {
-  return (
-    <Badge variant="neutral" className="bg-card">
-      <Badge.Text>Powered by Speakeasy</Badge.Text>
-    </Badge>
   );
 };

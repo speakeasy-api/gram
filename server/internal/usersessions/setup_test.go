@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -26,15 +28,32 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+const (
+	// testServerURL is the test service's server URL, which its shared
+	// authorization servers are served on.
+	testServerURL = "http://0.0.0.0"
+
+	// testAuthenticationHostURL is the test service's authentication host.
+	testAuthenticationHostURL = "https://auth.example.test"
+)
+
+// testHosts are the hosts the test service serves authorization servers on.
+var testHosts = authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: testAuthenticationHostURL, PlatformHosts: nil}
 
 var infra *testenv.Environment
 
@@ -58,6 +77,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	codeModeEnabled     *atomic.Bool
 	service             *usersessions.Service
 	conn                *pgxpool.Pool
 	sessionManager      *sessions.Manager
@@ -83,6 +103,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
 	t.Helper()
 
+	return newTestServiceWithHosts(t, testHosts, revoker, guardianOpts...)
+}
+
+// newTestServiceWithHosts builds the service on a deployment with the given
+// hosts, such as one without an authentication host.
+func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
@@ -95,7 +123,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
@@ -108,8 +136,10 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		tokenRevoker = revoker
 	}
 
+	codeModeEnabled := &atomic.Bool{}
+	codeModeSelection := func(context.Context, string) bool { return codeModeEnabled.Load() }
 	svc := usersessions.NewService(
-		logger,
+		aivendorstest.NewStore(), logger,
 		tracerProvider,
 		testenv.NewMeterProvider(t),
 		conn,
@@ -118,13 +148,17 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		authzEngine,
 		audit.NewLogger(),
 		guardianPolicy,
-		testenv.NewEncryptionClient(t),
+		nil,
+		testenv.NewEncryptionClient(t), clientsecretstest.New(t, conn, testenv.NewEncryptionClient(t)), nil,
 		usersessions.NewSigner("test-jwt-secret"),
-		"http://0.0.0.0",
+		testServerURL,
+		hosts,
 		ratelimit.NewRedisStore(redisClient),
+		codeModeSelection,
 	)
 
 	return ctx, &testInstance{
+		codeModeEnabled:     codeModeEnabled,
 		service:             svc,
 		conn:                conn,
 		sessionManager:      sessionManager,
@@ -348,9 +382,10 @@ func seedUserSessionFull(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		UserSessionClientID: clientID,
 		SubjectUrn:          principalURN,
 		Jti:                 "jti-" + uuid.NewString(),
-		RefreshTokenHash:    "hash-" + uuid.NewString(),
+		RefreshTokenHash:    conv.ToPGText("hash-" + uuid.NewString()),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: refreshExpiresAt, InfinityModifier: 0, Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return repo.UserSession{}, fmt.Errorf("seed user session: %w", err)
@@ -405,4 +440,165 @@ func seedIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string
 	})
 	require.NoError(t, err)
 	return uuid.MustParse(issuer.ID)
+}
+
+// createSiblingProject creates a second project inside the auth context's own
+// organization. Two projects sharing an organization is the boundary that
+// matters for the organization-tier predicate: its second arm admits rows
+// whose project_id is NULL and whose organization matches, so a predicate
+// that dropped the project_id IS NULL guard would start matching every
+// sibling project's rows rather than only genuine organization-tier ones.
+func createSiblingProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	return project.ID
+}
+
+// seedLegacyProjectIssuer writes the pre-dual-write shape: a project-tier
+// issuer whose organization_id is NULL. Session creation must recover its
+// organization from the owning project.
+func seedLegacyProjectIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuer, err := repo.New(conn).CreateUserSessionIssuer(ctx, repo.CreateUserSessionIssuerParams{
+		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     pgtype.Text{},
+		Slug:               slug,
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Valid: true},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+// seedIssuerInProject creates a project-tier issuer owned by an arbitrary
+// project rather than the one on the auth context. organization_id is written
+// the way the production create handler writes it, so the row is a faithful
+// project-tier row (both columns set) rather than one that predates the
+// dual-write.
+func seedIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuer, err := repo.New(conn).CreateUserSessionIssuer(ctx, repo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:               slug,
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+// seedOrganizationTierIssuer writes an issuer that belongs to the caller's
+// organization and to no project. Tests of lower-level project APIs seed it
+// directly so they can exercise the inherited-row boundary without depending
+// on the organization management handler.
+func seedOrganizationTierIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	id, err := testrepo.New(conn).InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:               slug,
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+
+	return id
+}
+
+// siblingProject is a second project in the caller's OWN organization, holding
+// a complete issuer subtree. It is the boundary the organization-tier
+// predicate has to keep: that predicate reads
+//
+//	project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id)
+//
+// and every row written today carries BOTH columns, so the project_id IS NULL
+// guard is the only thing confining the second arm to genuine
+// organization-tier rows. Drop it and the arm matches this project's rows too,
+// which is a cross-project read on the listings and a cross-project write on
+// the revoke and delete paths.
+type siblingProject struct {
+	projectID  uuid.UUID
+	issuerID   uuid.UUID
+	issuerSlug string
+	clientID   uuid.UUID
+	sessionID  uuid.UUID
+	consentID  uuid.UUID
+	cimdID     uuid.UUID
+	subject    urn.SessionSubject
+}
+
+// seedSiblingProject builds that project and fills it with one of every row
+// that hangs off an issuer. The children take their tenancy from the issuer
+// inside SQL, so seeding through the issuer is what makes them the sibling
+// project's rows rather than the caller's.
+func seedSiblingProject(t *testing.T, ctx context.Context, ti *testInstance, slug string) siblingProject {
+	t.Helper()
+
+	projectID := createSiblingProject(t, ctx, ti.conn, slug)
+	issuerSlug := slug + "-issuer"
+	issuerID := seedIssuerInProject(t, ctx, ti.conn, projectID, issuerSlug)
+	subject := urn.NewUserSubject(slug + "-subject")
+
+	client, err := seedUserSessionClient(t, ctx, ti.conn, issuerID, slug+"-client")
+	require.NoError(t, err)
+
+	session, err := seedUserSessionForClient(t, ctx, ti.conn, issuerID, client.ID, subject)
+	require.NoError(t, err)
+
+	consent, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, subject)
+	require.NoError(t, err)
+
+	cimd, err := repo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, repo.CreateUserSessionIssuerCimdClientParams{
+		ProjectID:           projectID,
+		ClientIDMetadataUri: "https://" + slug + ".example.com/client",
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+
+	return siblingProject{
+		projectID:  projectID,
+		issuerID:   issuerID,
+		issuerSlug: issuerSlug,
+		clientID:   client.ID,
+		sessionID:  session.ID,
+		consentID:  consent.ID,
+		cimdID:     cimd.ID,
+		subject:    subject,
+	}
+}
+
+// requireSiblingIssuerLive re-reads the sibling project's issuer under its own
+// project id. A mutation that leaked across the boundary soft-deletes the row,
+// so this is what turns a silent cross-project write into a failure.
+func requireSiblingIssuerLive(t *testing.T, ctx context.Context, ti *testInstance, sp siblingProject) {
+	t.Helper()
+
+	_, err := repo.New(ti.conn).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:             sp.issuerID,
+		ProjectID:      sp.projectID,
+		OrganizationID: "",
+	})
+	require.NoError(t, err, "sibling project's issuer must survive the caller's mutation")
 }

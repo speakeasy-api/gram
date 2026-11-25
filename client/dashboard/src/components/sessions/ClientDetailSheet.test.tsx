@@ -70,6 +70,31 @@ vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project-1",
 }));
 
+// Write access is decided per issuer from its owner; each test sets it.
+const { canManageIssuerClients } = vi.hoisted(() => ({
+  canManageIssuerClients: vi.fn(() => false),
+}));
+
+vi.mock("./useCanManageIssuerClients", () => ({
+  useCanManageIssuerClients: () => canManageIssuerClients(),
+}));
+
+const { updateRedirectsMutate } = vi.hoisted(() => ({
+  updateRedirectsMutate: vi.fn(),
+}));
+
+vi.mock(
+  "@gram/client/react-query/updateUserSessionClientRedirectURIs.js",
+  () => ({
+    useUpdateUserSessionClientRedirectURIsMutation: () => ({
+      mutate: (...args: unknown[]) => updateRedirectsMutate(...args),
+      isPending: false,
+      error: null,
+      reset: () => {},
+    }),
+  }),
+);
+
 const DOCUMENT_URL = "https://client.example.com/oauth/client.json";
 
 function cimdClient(overrides: Partial<UserSessionClient> = {}) {
@@ -136,6 +161,7 @@ function renderSheetForId(
 
 describe("ClientDetailSheet", () => {
   beforeEach(() => {
+    canManageIssuerClients.mockReturnValue(false);
     useUserSessionClient.mockReturnValue({ data: undefined });
     hasScope.mockReturnValue(true);
   });
@@ -341,5 +367,56 @@ describe("ClientDetailSheet", () => {
     expect(screen.getAllByText("Cannot authenticate").length).toBeGreaterThan(
       0,
     );
+  });
+  it("shows the loaded registration when its detail request fails", () => {
+    useUserSessionClient.mockReturnValue({ data: undefined, isError: true });
+    renderSheet(dcrClient({ clientName: "Loaded registration" }));
+    expect(screen.getByText("Loaded registration")).toBeTruthy();
+    expect(
+      screen.queryByText("This registration could not be loaded."),
+    ).toBeNull();
+  });
+
+  it("edits a DCR client's redirect URIs in place", async () => {
+    canManageIssuerClients.mockReturnValue(true);
+    renderSheet(dcrClient());
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit redirect URIs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add redirect URI" }));
+    fireEvent.change(screen.getByLabelText("Redirect URI 2"), {
+      target: { value: "https://client.example.com/v2/cb" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save redirect URIs" }));
+
+    expect(updateRedirectsMutate).toHaveBeenCalledWith({
+      request: {
+        gramProject: "project-1",
+        updateUserSessionClientRedirectURIsRequestBody: {
+          id: "client-1",
+          redirectUris: [
+            "https://client.example.com/cb",
+            "https://client.example.com/v2/cb",
+          ],
+        },
+      },
+    });
+  });
+
+  it("keeps a CIMD client's redirect URIs read-only", () => {
+    canManageIssuerClients.mockReturnValue(true);
+    renderSheet(cimdClient());
+
+    expect(screen.getByText("https://client.example.com/cb")).toBeDefined();
+    expect(
+      screen.queryByRole("button", { name: "Edit redirect URIs" }),
+    ).toBeNull();
+  });
+
+  it("hides editing from someone who cannot manage the issuer's agents", () => {
+    renderSheet(dcrClient());
+
+    expect(
+      screen.queryByRole("button", { name: "Edit redirect URIs" }),
+    ).toBeNull();
   });
 });

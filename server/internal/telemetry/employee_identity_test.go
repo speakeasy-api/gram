@@ -8,12 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,6 +20,18 @@ import (
 // that carry tokens and cost (Claude/Codex OTEL and the usage imports) carry
 // only the provider account's email. These tests pin the fold — DNO-827, where
 // the employee page showed sessions and tool calls with no tokens or cost.
+
+// seedEmployeeIdentityMap maps each email to the employee the way the identity
+// map sync does, with the first email as the canonical one.
+func seedEmployeeIdentityMap(t *testing.T, ctx context.Context, ti *testInstance, employeeID string, emails ...string) {
+	t.Helper()
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	canonical := strings.ToLower(emails[0])
+	for _, email := range emails {
+		seedIdentityMapEntry(t, ctx, ti, authCtx.ActiveOrganizationID, strings.ToLower(email), employeeID, canonical)
+	}
+}
 
 func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 	t.Parallel()
@@ -34,9 +44,9 @@ func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 
 	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
 	// A personal AI account signs in with its own email, so its usage rows only
-	// reach the employee through the user_accounts directory.
+	// reach the employee through the identity map.
 	personalEmail := "personal-" + uuid.New().String() + "@example.com"
-	linkUserAccount(t, ctx, ti, employeeID, personalEmail, "personal")
+	seedEmployeeIdentityMap(t, ctx, ti, employeeID, employeeEmail, personalEmail)
 
 	strangerEmail := "stranger-" + uuid.New().String() + "@example.com"
 
@@ -51,11 +61,6 @@ func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 
 	// Someone else's usage must stay out of this employee's totals.
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), strangerEmail, 9000, 9000, 99)
-
-	// Telemetry writes use ClickHouse async inserts; drain the queue synchronously
-	// so the rows are deterministically visible (no polling — see the telemetry
-	// README).
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	m := userMetrics(t, ctx, ti, employeeID)
 
@@ -85,12 +90,11 @@ func TestGetUserMetricsSummary_EmailIdentifierFoldsIDCarryingRows(t *testing.T) 
 	deploymentID := uuid.New().String()
 
 	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
+	seedEmployeeIdentityMap(t, ctx, ti, employeeID, employeeEmail)
 
 	now := time.Now().UTC()
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:http:petstore:listPets", 200, 0.5, employeeID, "")
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeEmail, 100, 50, 2.5)
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	m := userMetrics(t, ctx, ti, employeeEmail)
 
@@ -115,8 +119,6 @@ func TestGetUserMetricsSummary_EmailIdentifierWithNoDirectoryRow(t *testing.T) {
 
 	now := time.Now().UTC()
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), unknownEmail, 100, 50, 2.5)
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	m := userMetrics(t, ctx, ti, unknownEmail)
 
@@ -144,8 +146,6 @@ func TestGetUserMetricsSummary_IgnoresEmailRowsOwnedByAnotherUser(t *testing.T) 
 	// Same email, but the row already names a different owner.
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), otherID, employeeEmail, 700, 300, 42)
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	m := userMetrics(t, ctx, ti, employeeID)
 
 	require.Equal(t, int64(100), m.TotalInputTokens)
@@ -157,15 +157,12 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	projectID := authCtx.ProjectID.String()
 	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
 	personalEmail := "personal-" + uuid.New().String() + "@example.com"
-	linkUserAccount(t, ctx, ti, employeeID, personalEmail, "personal")
+	seedEmployeeIdentityMap(t, ctx, ti, employeeID, employeeEmail, personalEmail)
 
 	now := time.Now().UTC()
 	workChatID := uuid.NewString()
@@ -173,7 +170,6 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), workChatID, 1, 100, 50, 0, 0, "opus", employeeEmail, "Engineering", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), personalChatID, 2, 200, 100, 0, 0, "opus", strings.ToUpper(personalEmail), "", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-8*time.Minute), uuid.NewString(), 9, 900, 900, 0, 0, "opus", "stranger@example.com", "Engineering", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(time.Hour).Format(time.RFC3339)
@@ -203,7 +199,7 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 		require.Equal(t, workChatID, sessions.Sessions[1].GramChatID)
 
 		wideFrom, wideTo := summaryWindow(now)
-		wideSessions := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		wideSessions := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 			From:    wideFrom,
 			To:      wideTo,
 			Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{email}}},
@@ -215,41 +211,6 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 		require.Equal(t, personalChatID, wideSessions.Sessions[0].GramChatID)
 		require.Equal(t, workChatID, wideSessions.Sessions[1].GramChatID)
 	}
-}
-
-func TestCostAnalytics_DoesNotExpandAmbiguousAccountEmail(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
-
-	firstID, firstEmail := seedConnectedOrgUser(t, ctx, ti, "first")
-	secondID, secondEmail := seedConnectedOrgUser(t, ctx, ti, "second")
-	sharedEmail := "shared-" + uuid.NewString() + "@example.com"
-	linkUserAccount(t, ctx, ti, firstID, sharedEmail, "personal")
-	linkUserAccount(t, ctx, ti, secondID, sharedEmail, "personal")
-
-	now := time.Now().UTC()
-	projectID := authCtx.ProjectID.String()
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 0, 0, 0, "opus", sharedEmail, "", nil, "main", "", "", "", "")
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 0, 0, 0, "opus", firstEmail, "", nil, "main", "", "", "", "")
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-8*time.Minute), uuid.NewString(), 4, 400, 0, 0, 0, "opus", secondEmail, "", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
-	result, err := ti.service.Query(ctx, &gen.QueryPayload{
-		From:    now.Add(-time.Hour).Format(time.RFC3339),
-		To:      now.Add(time.Hour).Format(time.RFC3339),
-		Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{sharedEmail}}},
-		TopN:    10,
-		SortBy:  "total_cost",
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Table, 1)
-	require.InDelta(t, 1, result.Table[0].Measures.TotalCost, 0.001)
 }
 
 // userMetrics fetches one employee's metrics summary over a window wide enough

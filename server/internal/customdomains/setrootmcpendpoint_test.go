@@ -3,13 +3,11 @@ package customdomains_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
@@ -274,24 +272,7 @@ func TestSetRootMcpEndpoint_TranslatesUniqueConflict(t *testing.T) {
 		finished.Store(true)
 	}()
 
-	// Wait until the API transaction owns the target endpoint lock, then give
-	// it time to reach the unique-index wait on the uncommitted competing root.
-	require.Eventually(t, func() bool {
-		lockCtx, cancel := context.WithTimeout(ctx, 25*time.Millisecond)
-		defer cancel()
-		lockErr := pgx.BeginFunc(lockCtx, ti.conn, func(tx pgx.Tx) error {
-			_, queryErr := cdrepo.New(tx).LockRootMcpEndpointSelection(lockCtx, cdrepo.LockRootMcpEndpointSelectionParams{
-				CustomDomainID: domain.ID,
-				McpEndpointID:  uuid.NullUUID{UUID: targetID, Valid: true},
-			})
-			if queryErr != nil {
-				return fmt.Errorf("lock root mcp endpoint selection: %w", queryErr)
-			}
-			return nil
-		})
-		return errors.Is(lockErr, context.DeadlineExceeded)
-	}, 2*time.Second, 10*time.Millisecond)
-	require.Never(t, finished.Load, 100*time.Millisecond, 10*time.Millisecond)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(conflictingTx), 1)
 
 	require.NoError(t, conflictingTx.Commit(ctx))
 	require.Eventually(t, finished.Load, 2*time.Second, 10*time.Millisecond)

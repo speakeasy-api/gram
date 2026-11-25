@@ -5,6 +5,15 @@ import { useSearchParams, useNavigate } from "react-router";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { FullScreenPage } from "@/components/full-screen-page";
+import {
+  RequestAccessDialog,
+  type AccessRequestDraft,
+} from "@/components/request-access-dialog";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
+import { requestedDurationFields } from "./requestedDuration";
+import { scopeLabel } from "./scopeCatalogue";
 import React, { useState } from "react";
 
 /**
@@ -15,6 +24,17 @@ import React, { useState } from "react";
  */
 export default function RequestAccess(): React.JSX.Element {
   const [searchParams] = useSearchParams();
+  // A link to different access starts the page afresh: its dialog opens
+  // again and nothing about the previous request carries over.
+  return (
+    <RequestAccessPage
+      key={`${searchParams.get("scope") ?? ""}|${searchParams.get("resource_id") ?? ""}`}
+    />
+  );
+}
+
+function RequestAccessPage(): React.JSX.Element {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const scope = searchParams.get("scope");
@@ -22,31 +42,61 @@ export default function RequestAccess(): React.JSX.Element {
   const resourceName = searchParams.get("resource_name") || undefined;
 
   const [requestState, setRequestState] = useState<
-    "idle" | "sending" | "sent" | "error"
+    "idle" | "sending" | "sent" | "no-admin" | "error"
   >("idle");
 
   const requestAccessMutation = useRequestAccessMutation();
+  // How long the requester needs the access, kept only on stored requests,
+  // which the access requests rollout turns on.
+  const accessRequestsOn =
+    useFeatureFlag(FEATURE_FLAGS.accessRequests).status === "enabled";
+  // While requests are stored, the request is made in a dialog that asks how
+  // long the access is needed and why. A link from Slack, an email or the
+  // device agent opens it straight away.
+  const [dialogOpen, setDialogOpen] = useState(true);
+  // Only scopes that can be given temporarily can be stored as a request. A
+  // scope the catalogue does not describe (it may not load for this member)
+  // is offered, and the server refuses it if it cannot be given temporarily.
+  const { catalogue } = useScopeCatalogue();
+  const temporaryGrantable =
+    catalogue.get(scope ?? "")?.temporaryGrantable !== false;
+  const askInDialog = accessRequestsOn && temporaryGrantable;
+  // While requests are stored, a scope that cannot be given temporarily is
+  // refused by the server, so the page says so instead of offering to send.
+  const notRequestable = accessRequestsOn && !temporaryGrantable;
 
   // Validate that scope is a valid requestable scope
   const validScopes = Object.values(RequestAccessFormScope);
   const isValidScope =
     scope && validScopes.includes(scope as RequestAccessFormScope);
 
-  const handleRequestAccess = async () => {
+  const handleRequestAccess = async (draft?: AccessRequestDraft) => {
     if (!isValidScope) return;
 
     setRequestState("sending");
     try {
-      await requestAccessMutation.mutateAsync({
+      const result = await requestAccessMutation.mutateAsync({
         request: {
           requestAccessForm: {
             scope: scope as RequestAccessFormScope,
             resourceId,
             resourceName,
+            ...(draft
+              ? {
+                  ...requestedDurationFields(draft.duration, new Date()),
+                  message: draft.message || undefined,
+                }
+              : {}),
           },
         },
       });
-      setRequestState("sent");
+      // A stored request reached the admins, including one asked for again
+      // while pending, which notifies nobody a second time.
+      setRequestState(
+        result.request !== undefined || result.sentToCount > 0
+          ? "sent"
+          : "no-admin",
+      );
     } catch {
       setRequestState("error");
     }
@@ -75,8 +125,9 @@ export default function RequestAccess(): React.JSX.Element {
           <>
             <p className="text-muted-foreground text-sm">
               You don&apos;t have the required permission to access this
-              resource. Click the button below to send a request to your
-              organization administrators.
+              resource.
+              {!notRequestable &&
+                " Click the button below to send a request to your organization administrators."}
             </p>
 
             {/* Scope info */}
@@ -97,16 +148,44 @@ export default function RequestAccess(): React.JSX.Element {
               </Stack>
             </div>
 
+            {notRequestable && (
+              <p className="text-muted-foreground text-sm">
+                This access can&apos;t be requested here. Ask an organization
+                administrator to give it to you.
+              </p>
+            )}
+
+            {askInDialog && (
+              <RequestAccessDialog
+                key={`${scope ?? ""}|${resourceId ?? ""}`}
+                open={dialogOpen && requestState !== "sent"}
+                onOpenChange={setDialogOpen}
+                permissions={[scopeLabel(catalogue, scope ?? "")]}
+                resourceName={resourceName}
+                askDuration
+                sending={requestAccessMutation.isPending}
+                onSubmit={(draft) => {
+                  void handleRequestAccess(draft).finally(() =>
+                    setDialogOpen(false),
+                  );
+                }}
+              />
+            )}
+
             {/* Request button */}
-            {requestState === "idle" && (
+            {requestState === "idle" && !notRequestable && (
               <Button
                 variant="primary"
-                onClick={() => void handleRequestAccess()}
+                onClick={() =>
+                  askInDialog ? setDialogOpen(true) : void handleRequestAccess()
+                }
                 disabled={requestAccessMutation.isPending}
               >
                 {requestAccessMutation.isPending
                   ? "Sending..."
-                  : "Send request"}
+                  : askInDialog
+                    ? "Request access"
+                    : "Send request"}
               </Button>
             )}
 
@@ -129,6 +208,18 @@ export default function RequestAccess(): React.JSX.Element {
                   </p>
                 </div>
                 <Button variant="secondary" size="sm" onClick={handleGoBack}>
+                  Go Back
+                </Button>
+              </div>
+            )}
+
+            {requestState === "no-admin" && (
+              <div className="flex flex-col items-center gap-3">
+                <p className="text-destructive text-sm">
+                  No organization administrator could be notified. Contact an
+                  administrator directly to request access.
+                </p>
+                <Button variant="tertiary" size="sm" onClick={handleGoBack}>
                   Go Back
                 </Button>
               </div>

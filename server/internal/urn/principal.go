@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/mail"
+	"regexp"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // PrincipalType represents the type prefix of a principal URN.
@@ -15,6 +18,14 @@ const (
 	PrincipalTypeUser  PrincipalType = "user"
 	PrincipalTypeRole  PrincipalType = "role"
 	PrincipalTypeEmail PrincipalType = "email"
+	PrincipalTypeAgent PrincipalType = "agent"
+	// PrincipalTypeSystem is a Speakeasy component acting with no request behind it; new background work audits as it, older writers still audit as "user:system".
+	PrincipalTypeSystem PrincipalType = "system"
+	// PrincipalTypeWorkload is a machine vouched for by an external issuer; it holds no grants and inherits policy from its assigned agent.
+	PrincipalTypeWorkload PrincipalType = "workload"
+	// PrincipalTypeAPIKey is a legacy API key, named by its api_keys row id; it holds only the grants written to it.
+	// Not to be confused with urn.APIKey ("apikey:"), which names a key in audit entries and session subjects.
+	PrincipalTypeAPIKey PrincipalType = "api_key"
 )
 
 // PrincipalWildcard is the URN that matches any principal in the org. It is
@@ -23,19 +34,28 @@ const (
 const PrincipalWildcard = "*"
 
 // AllUsersPrincipalID is reserved for the user:all subject-set principal.
-// It must not be resolved as a concrete Gram user ID.
+// It must not be resolved as a concrete Speakeasy user ID.
 const AllUsersPrincipalID = "all"
 
 var principalTypes = map[PrincipalType]struct{}{
-	PrincipalTypeUser:  {},
-	PrincipalTypeRole:  {},
-	PrincipalTypeEmail: {},
+	PrincipalTypeUser:     {},
+	PrincipalTypeRole:     {},
+	PrincipalTypeEmail:    {},
+	PrincipalTypeAgent:    {},
+	PrincipalTypeSystem:   {},
+	PrincipalTypeWorkload: {},
+	PrincipalTypeAPIKey:   {},
 }
 
+// systemPrincipalIDPattern is the lowercase kebab-case component name a system principal carries.
+var systemPrincipalIDPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+
 // Principal is a 2-segment URN that identifies a principal in the RBAC system.
-// Format: "type:id" where type is "user", "role", or "email" and id is the
-// principal identifier (e.g. "user:user_01abc", "user:all", "role:admin",
-// "email:dev@acme.corp").
+// Format: "type:id" where type is "user", "role", "email", "agent", "system",
+// "workload", or "api_key" and id is the principal identifier (e.g. "user:user_01abc",
+// "user:all", "role:admin", "email:dev@example.com", "agent:<uuid>",
+// "system:issuer-metadata-refresh", or
+// "workload:<workload_issuers id>:<external subject>").
 type Principal struct {
 	Type PrincipalType
 	ID   string
@@ -57,6 +77,37 @@ func NewPrincipal(typ PrincipalType, id string) Principal {
 	_ = p.validate()
 
 	return p
+}
+
+// NewSystemPrincipal names a Speakeasy component acting on its own, for audit entries background work writes.
+func NewSystemPrincipal(component string) Principal {
+	return NewPrincipal(PrincipalTypeSystem, component)
+}
+
+// NewAPIKeyPrincipal names a legacy API key by its api_keys row id.
+func NewAPIKeyPrincipal(apiKeyID uuid.UUID) Principal {
+	return NewPrincipal(PrincipalTypeAPIKey, apiKeyID.String())
+}
+
+// NewWorkloadPrincipal names a workload by the workload_issuers row that
+// vouched for it and the subject that issuer asserted, the same identity a
+// workload session subject carries.
+func NewWorkloadPrincipal(workloadIssuerID uuid.UUID, externalSubject string) Principal {
+	return NewPrincipal(PrincipalTypeWorkload, workloadIssuerID.String()+delimiter+externalSubject)
+}
+
+// Workload splits a workload principal back into the issuer that vouched for
+// it and the external subject that issuer asserted. It reports an error for any
+// other principal type.
+func (u Principal) Workload() (uuid.UUID, string, error) {
+	if err := u.validate(); err != nil {
+		return uuid.Nil, "", err
+	}
+	if u.Type != PrincipalTypeWorkload {
+		return uuid.Nil, "", fmt.Errorf("%w: not a workload principal: %q", ErrInvalid, u.Type)
+	}
+
+	return splitWorkloadID(u.ID)
 }
 
 // ParsePrincipal parses a string of the form "type:id" into a Principal.
@@ -185,9 +236,9 @@ func (u *Principal) UnmarshalText(text []byte) error {
 // validate checks that the principal has a known type and a well-formed ID.
 // For user and role principals the ID is intentionally permissive (any
 // non-empty string up to maxSegmentLength) because IDs come from external
-// systems (WorkOS) and do not follow the slug pattern. For email principals
-// the ID must be a bare, lowercase RFC 5321 address so two assignments to the
-// same person collapse to one row.
+// systems (WorkOS) and do not follow the slug pattern. Agent and api_key IDs
+// must be canonical UUIDs. Email IDs must be bare, lowercase RFC 5321 addresses so two
+// assignments to the same person collapse to one row.
 func (u *Principal) validate() error {
 	if u.checked {
 		return u.err
@@ -210,8 +261,33 @@ func (u *Principal) validate() error {
 		return u.err
 	}
 
-	if len(u.ID) > maxSegmentLength {
-		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxSegmentLength, len(u.ID))
+	// Workload principals share the workload session subject's id cap.
+	maxIDLength := maxSegmentLength
+	if u.Type == PrincipalTypeWorkload {
+		maxIDLength = MaxWorkloadSubjectIDLength
+	}
+	if len(u.ID) > maxIDLength {
+		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxIDLength, len(u.ID))
+		return u.err
+	}
+
+	if u.Type == PrincipalTypeAgent || u.Type == PrincipalTypeAPIKey {
+		id, err := uuid.Parse(u.ID)
+		if err != nil || id.String() != u.ID {
+			u.err = fmt.Errorf("%w: %s principal id must be a canonical UUID", ErrInvalid, u.Type)
+			return u.err
+		}
+	}
+
+	if u.Type == PrincipalTypeWorkload {
+		if _, _, err := splitWorkloadID(u.ID); err != nil {
+			u.err = err
+			return u.err
+		}
+	}
+
+	if u.Type == PrincipalTypeSystem && !systemPrincipalIDPattern.MatchString(u.ID) {
+		u.err = fmt.Errorf("%w: system principal id must be a lowercase kebab-case component name", ErrInvalid)
 		return u.err
 	}
 

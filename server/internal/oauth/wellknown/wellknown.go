@@ -7,7 +7,7 @@
 // Caveats:
 //
 // This implementation is tightly coupled to the MCP client authentication flow.
-// The package's concerns are more broadly useful within Gram, but this revision
+// The package's concerns are more broadly useful within Speakeasy, but this revision
 // only addresses the immediate client requirements rather than fully describing
 // toolset authentication state.
 //
@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -45,7 +46,7 @@ const OAuthProtectedResourcePath = "/.well-known/oauth-protected-resource"
 
 // OAuthProtectedResourceMetadata represents OAuth 2.0 Protected Resource Metadata (RFC 9728).
 //
-// Used for both serving Gram's own metadata documents and decoding metadata
+// Used for both serving Speakeasy's own metadata documents and decoding metadata
 // probed from upstream resource servers via [DiscoverProtectedResourceMetadata].
 // Fields outside the minimum set required by the existing server-side callers
 // are tagged omitempty so adding them does not change emitted documents.
@@ -55,6 +56,59 @@ type OAuthProtectedResourceMetadata struct {
 	ScopesSupported        []string `json:"scopes_supported,omitempty"`
 	BearerMethodsSupported []string `json:"bearer_methods_supported,omitempty"`
 	ResourceDocumentation  string   `json:"resource_documentation,omitempty"`
+
+	// ResourceName is the resource server's display name (RFC 9728 §2); empty when omitted or unsafe to render.
+	ResourceName string `json:"resource_name,omitempty"`
+
+	// ResourcePolicyURI links the resource server's data-usage policy; discovery drops non-http(s) values.
+	ResourcePolicyURI string `json:"resource_policy_uri,omitempty"`
+
+	// ResourceTosURI links the resource server's terms of service; discovery drops non-http(s) values.
+	ResourceTosURI string `json:"resource_tos_uri,omitempty"`
+
+	// Token-binding members (RFC 9728 §2); nil when the document omits them.
+	DPoPBoundAccessTokensRequired         *bool    `json:"dpop_bound_access_tokens_required,omitempty"`
+	DPoPSigningAlgValuesSupported         []string `json:"dpop_signing_alg_values_supported,omitempty"`
+	TLSClientCertificateBoundAccessTokens *bool    `json:"tls_client_certificate_bound_access_tokens,omitempty"`
+
+	// Raw is the probed document verbatim, before any sanitizing; never emitted when serving.
+	Raw json.RawMessage `json:"-"`
+
+	// MetadataURL is the well-known URL the document was read from; empty when not probed.
+	MetadataURL string `json:"-"`
+}
+
+// IdentifiesResource reports whether the document names resourceURL as its
+// resource (RFC 9728 §3.3), trailing slash aside. A document read from the
+// origin-style well-known path may describe a sibling resource; callers that
+// persist display members must not do so unless this holds.
+func (m OAuthProtectedResourceMetadata) IdentifiesResource(resourceURL string) bool {
+	return SameResource(m.Resource, resourceURL)
+}
+
+// ValidForResource reports whether a discovered document can be used for the
+// exact requested identifier (RFC 9728 §3.3). In addition to the resource
+// member, check provenance: a speculative origin fallback is not the metadata
+// location derived from a path-bearing identifier. Diagnostic discovery may
+// still return such documents, but callers must not trust their contents.
+func (m OAuthProtectedResourceMetadata) ValidForResource(resourceURL string) bool {
+	if m.Resource == "" || m.Resource != resourceURL {
+		return false
+	}
+	u, err := url.Parse(resourceURL)
+	if err != nil || u.Fragment != "" || u.User != nil {
+		return false
+	}
+	candidates, err := protectedResourceProbeCandidates(resourceURL)
+	return err == nil && m.MetadataURL == candidates[0]
+}
+
+// SameResource reports whether two resource identifiers name one resource,
+// trailing slash aside (RFC 9728 §3.3); an empty identifier names none.
+// Display members recorded for one resource may only be shown for another
+// when this holds.
+func SameResource(recorded, resourceURL string) bool {
+	return recorded != "" && resourceURL != "" && resourceURLsEquivalent(recorded, resourceURL)
 }
 
 // OAuthServerMetadata represents OAuth 2.0 Authorization Server Metadata (RFC 8414).
@@ -74,14 +128,12 @@ type OAuthServerMetadataResultKind string
 const (
 	OAuthServerMetadataResultKindStatic OAuthServerMetadataResultKind = "static"
 	OAuthServerMetadataResultKindRaw    OAuthServerMetadataResultKind = "raw"
-	OAuthServerMetadataResultKindProxy  OAuthServerMetadataResultKind = "proxy"
 )
 
 type OAuthServerMetadataResult struct {
-	Kind     OAuthServerMetadataResultKind
-	Static   *OAuthServerMetadata
-	Raw      json.RawMessage
-	ProxyURL string
+	Kind   OAuthServerMetadataResultKind
+	Static *OAuthServerMetadata
+	Raw    json.RawMessage
 }
 
 type OAuthRepo interface {
@@ -91,20 +143,17 @@ type OAuthRepo interface {
 // ResolveOAuthServerMetadataFromToolset returns OAuth Authorization Server
 // metadata for a toolset, or nil if the toolset is not OAuth-configured.
 //
-// oauthSlug is the slug used to address the Gram-hosted OAuth endpoints
-// (`/oauth/{oauthSlug}/...`). Today the OAuth machinery is keyed by
-// `toolsets.mcp_slug`, so callers should pass that value. The /x/mcp
-// experimental endpoint uses the same OAuth flow under the hood, so it
-// also passes `toolset.mcp_slug` here even though its protected-resource
-// URL uses an `mcp_endpoints.slug` instead — see the companion
-// resourceURL argument on [ResolveOAuthProtectedResourceFromToolset].
+// oauthSlug is the slug used to address the Speakeasy-hosted OAuth endpoints
+// (`/oauth/{oauthSlug}/...`): the `mcp_endpoints.slug` the request arrived
+// at — see the companion resourceURL argument on
+// [ResolveOAuthProtectedResourceFromToolset].
 //
-// resourceURL is the absolute URL of the protected resource — the same value
-// [ResolveOAuthProtectedResourceFromToolset] emits as `resource` and
-// `authorization_servers`. For the external-OAuth-server case it becomes the
+// resourceURL is the absolute URL of the protected resource. For metadata-based
+// External OAuth configurations, protected-resource metadata
+// also advertises this value as its authorization server, so it becomes the
 // served document's `issuer` so the metadata satisfies RFC 8414 §3.3 (the
 // served `issuer` must equal the issuer identifier the client fetched it
-// under); the proxy case ignores it and keys its issuer off oauthSlug.
+// under).
 func ResolveOAuthServerMetadataFromToolset(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -125,12 +174,18 @@ func ResolveOAuthServerMetadataFromToolset(
 			return nil, fmt.Errorf("get external oauth server metadata: %w", err)
 		}
 
+		// Issuer-only configurations use upstream discovery and deliberately do
+		// not expose this retained Speakeasy-hosted RFC 8414 compatibility route.
+		if externalOAuthServer.AuthorizationServerIssuer.Valid {
+			return nil, nil
+		}
+
 		// The captured upstream document's `issuer` identifies the upstream
-		// authorization server, but Gram re-serves that document from its own
+		// authorization server, but Speakeasy re-serves that document from its own
 		// `/.well-known/oauth-authorization-server/...` URL. RFC 8414 §3.3
 		// requires the served `issuer` to equal the issuer identifier the
-		// client used to fetch the document — here the Gram resource URL that
-		// the protected-resource metadata advertises in
+		// client used to fetch the document — here the Speakeasy resource URL that
+		// metadata-based protected-resource metadata advertises in
 		// `authorization_servers` — so a spec-compliant MCP client does not
 		// reject the metadata on a mismatch. The upstream's own
 		// authorization/token/registration endpoints are preserved verbatim;
@@ -141,10 +196,9 @@ func ResolveOAuthServerMetadataFromToolset(
 		}
 
 		return &OAuthServerMetadataResult{
-			Kind:     OAuthServerMetadataResultKindRaw,
-			Static:   nil,
-			Raw:      rewritten,
-			ProxyURL: "",
+			Kind:   OAuthServerMetadataResultKindRaw,
+			Static: nil,
+			Raw:    rewritten,
 		}, nil
 	}
 
@@ -153,10 +207,10 @@ func ResolveOAuthServerMetadataFromToolset(
 
 // rewriteMetadataIssuer returns raw with its top-level "issuer" field set to
 // issuer, leaving every other field untouched. Used to reconcile a captured
-// upstream OAuth authorization-server metadata document with the Gram URL it
+// upstream OAuth authorization-server metadata document with the Speakeasy URL it
 // is re-served from (RFC 8414 §3.3). Preserving the raw form of every other
 // field keeps upstream-specific extensions (e.g. userinfo/introspection
-// endpoints, claims_supported) that Gram's typed structs do not model.
+// endpoints, claims_supported) that Speakeasy's typed structs do not model.
 func rewriteMetadataIssuer(raw json.RawMessage, issuer string) (json.RawMessage, error) {
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(raw, &fields); err != nil {
@@ -186,11 +240,9 @@ func rewriteMetadataIssuer(raw json.RawMessage, issuer string) (json.RawMessage,
 // Metadata for a toolset, or nil if the toolset is not OAuth-protected.
 //
 // resourceURL is the absolute URL of the protected resource (the runtime MCP
-// endpoint). For /mcp callers this is `<baseURL>/mcp/<toolset.mcp_slug>`; for
-// /x/mcp callers this is `<baseURL>/x/mcp/<mcp_endpoint.slug>`. It is used
-// verbatim for both `resource` and `authorization_servers` so that the
-// `/.well-known/...` discovery path on the protected resource resolves back
-// to the Gram-hosted authorization server metadata.
+// endpoint). It is always emitted verbatim as `resource`. Metadata-based
+// configurations also advertise it as their Speakeasy-hosted authorization server;
+// issuer-based configurations advertise their exact stored issuer instead.
 func ResolveOAuthProtectedResourceFromToolset(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -199,14 +251,35 @@ func ResolveOAuthProtectedResourceFromToolset(
 	toolset *toolsets_repo.Toolset,
 	resourceURL string,
 ) (*OAuthProtectedResourceMetadata, error) {
-	// Check for external OAuth server configuration
+	// Check for external OAuth server configuration.
 	if toolset.ExternalOauthServerID.Valid {
+		external, err := repo.New(db).GetExternalOAuthServerMetadata(ctx, repo.GetExternalOAuthServerMetadataParams{
+			ProjectID: toolset.ProjectID,
+			ID:        toolset.ExternalOauthServerID.UUID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get external oauth server metadata: %w", err)
+		}
+
+		authorizationServer := resourceURL
+		if external.AuthorizationServerIssuer.Valid {
+			authorizationServer = external.AuthorizationServerIssuer.String
+		}
+
 		return &OAuthProtectedResourceMetadata{
-			Resource:               resourceURL,
-			AuthorizationServers:   []string{resourceURL},
-			ScopesSupported:        nil,
-			BearerMethodsSupported: nil,
-			ResourceDocumentation:  "",
+			Resource:                              resourceURL,
+			AuthorizationServers:                  []string{authorizationServer},
+			ScopesSupported:                       nil,
+			BearerMethodsSupported:                nil,
+			ResourceDocumentation:                 "",
+			ResourceName:                          "",
+			ResourcePolicyURI:                     "",
+			ResourceTosURI:                        "",
+			DPoPBoundAccessTokensRequired:         nil,
+			DPoPSigningAlgValuesSupported:         nil,
+			TLSClientCertificateBoundAccessTokens: nil,
+			Raw:                                   nil,
+			MetadataURL:                           "",
 		}, nil
 	}
 

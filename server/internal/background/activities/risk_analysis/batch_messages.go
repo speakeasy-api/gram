@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -16,24 +16,107 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
+// batchScanMaxContentBytes bounds every batch scan input when it is loaded, so
+// no scanner or Pub/Sub publish sees an unbounded message. Same value as the
+// enforcement dispatch default, which caps each field separately instead.
+const batchScanMaxContentBytes = 50 * 1024
+
 type batchMessage struct {
-	ID           uuid.UUID
-	ContentPart  bool
-	Type         message.Type
-	Content      string
-	RawToolCalls []byte
-	ToolCalls    []recordedToolCall
+	ID                     uuid.UUID
+	ChatID                 uuid.UUID
+	ParentChatMessageID    uuid.UUID
+	ContentPart            bool
+	Type                   message.Type
+	Content                string
+	RawToolCalls           []byte
+	ToolCalls              []recordedToolCall
+	PriorUserRequest       string
+	RecentUntrustedContent string
 	// UserID is the scanned chat's owner (empty for unattributed sessions),
-	// carried onto judge completions for scanning-volume attribution and into
-	// Shadow MCP bypass checks. GetMessageContentBatch must return the same
-	// WorkOS user-id space that authz.ResolveUserPrincipals expects.
+	// carried on every scan request for scanning-volume attribution and the
+	// handlers' Shadow MCP bypass checks. GetMessageContentBatch must return
+	// the same WorkOS user-id space that authz.ResolveUserPrincipals expects.
 	UserID string
-	// CreatedAt is when the message was recorded. The shadow-MCP scanner uses
-	// the batch's oldest value to bound its ClickHouse provenance lookup.
+	// CreatedAt is when the message was recorded, stamped on each tool call of
+	// a tool-call scan request.
 	CreatedAt time.Time
-	// Source is the agent that recorded the message (Codex, Cursor, ...). The
-	// shadow-MCP scanner attributes unresolved provenance to it.
+	// Source is the agent that recorded the message (Codex, Cursor, ...),
+	// carried on every scan request as the hook source.
 	Source string
+	// Truncated reports that bound cut content, arguments, raw tool-call JSON,
+	// a tool-call name or id, or the number of calls.
+	Truncated bool
+}
+
+const (
+	// Tool names and ids identify calls for name-based scanners, so they are
+	// capped on their own rather than cut by the text budget.
+	batchToolIdentityMaxBytes = 512
+	batchMaxToolCalls         = 512
+)
+
+// bound cuts Content and tool-call arguments to one shared
+// batchScanMaxContentBytes budget, caps each call's name and id and the number
+// of calls separately, and cuts RawToolCalls to the text budget on its own.
+func (m *batchMessage) bound() {
+	remaining := batchScanMaxContentBytes
+	m.Content = m.boundText(m.Content, &remaining)
+	if len(m.ToolCalls) > batchMaxToolCalls {
+		m.ToolCalls = m.ToolCalls[:batchMaxToolCalls]
+		m.Truncated = true
+	}
+	for i := range m.ToolCalls {
+		call := &m.ToolCalls[i]
+		call.Function.Name = m.boundIdentity(call.Function.Name)
+		call.ID = m.boundIdentity(call.ID)
+		call.Function.Arguments = m.boundText(call.Function.Arguments, &remaining)
+	}
+	if len(m.RawToolCalls) > batchScanMaxContentBytes {
+		m.RawToolCalls = []byte(truncateAtRuneBoundary(string(m.RawToolCalls), batchScanMaxContentBytes))
+		// Raw JSON is only scanned when no call carries a name or arguments.
+		if !m.hasUsableToolCall() {
+			m.Truncated = true
+		}
+	}
+}
+
+func (m batchMessage) hasUsableToolCall() bool {
+	for _, c := range m.ToolCalls {
+		if c.Function.Name != "" || strings.TrimSpace(c.Function.Arguments) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *batchMessage) boundIdentity(s string) string {
+	if len(s) > batchToolIdentityMaxBytes {
+		m.Truncated = true
+		return truncateAtRuneBoundary(s, batchToolIdentityMaxBytes)
+	}
+	return s
+}
+
+func (m *batchMessage) boundText(s string, remaining *int) string {
+	if len(s) > *remaining {
+		s = truncateAtRuneBoundary(s, *remaining)
+		m.Truncated = true
+	}
+	*remaining -= len(s)
+	return s
+}
+
+// truncateAtRuneBoundary returns the longest prefix of s whose byte length is
+// <= n and that does not split a UTF-8 rune. Returns s unchanged when it
+// already fits.
+func truncateAtRuneBoundary(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // scanSurface is the text content scanners (gitleaks, presidio) evaluate:
@@ -76,7 +159,10 @@ func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetM
 		if !ok {
 			continue
 		}
+		msg.ChatID = row.ChatID
 		msg.UserID = row.ChatUserID
+		msg.PriorUserRequest = row.PriorUserRequest
+		msg.RecentUntrustedContent = row.RecentUntrustedContent
 		if row.CreatedAt.Valid {
 			msg.CreatedAt = row.CreatedAt.Time
 		}
@@ -93,20 +179,28 @@ func newContentPartBatchMessages(rows []repo.GetContentPartBatchRow, contents []
 		if !message.IsTypeValid(messageType) {
 			continue
 		}
+		// Content parts carry no chat position, so they scan without trajectory
+		// context.
 		msg := batchMessage{
-			ID:           row.ID,
-			ContentPart:  true,
-			Type:         messageType,
-			Content:      contents[i],
-			RawToolCalls: nil,
-			ToolCalls:    []recordedToolCall{},
-			UserID:       row.ChatUserID,
-			CreatedAt:    time.Time{},
-			Source:       row.Source.String,
+			ID:                     row.ID,
+			ChatID:                 row.ChatID,
+			ParentChatMessageID:    row.ParentChatMessageID.UUID,
+			ContentPart:            true,
+			Type:                   messageType,
+			Content:                contents[i],
+			RawToolCalls:           nil,
+			ToolCalls:              []recordedToolCall{},
+			PriorUserRequest:       "",
+			RecentUntrustedContent: "",
+			UserID:                 row.ChatUserID,
+			CreatedAt:              time.Time{},
+			Source:                 row.Source.String,
+			Truncated:              false,
 		}
 		if row.CreatedAt.Valid {
 			msg.CreatedAt = row.CreatedAt.Time
 		}
+		msg.bound()
 		messages = append(messages, msg)
 	}
 	return messages
@@ -124,19 +218,25 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 	}
 
 	msg := batchMessage{
-		ID:           id,
-		ContentPart:  false,
-		Type:         messageType,
-		Content:      content,
-		RawToolCalls: toolCalls,
-		ToolCalls:    []recordedToolCall{},
-		UserID:       "",
-		CreatedAt:    time.Time{},
-		Source:       "",
+		ID:                     id,
+		ChatID:                 uuid.Nil,
+		ParentChatMessageID:    uuid.Nil,
+		ContentPart:            false,
+		Type:                   messageType,
+		Content:                content,
+		RawToolCalls:           toolCalls,
+		ToolCalls:              []recordedToolCall{},
+		PriorUserRequest:       "",
+		RecentUntrustedContent: "",
+		UserID:                 "",
+		CreatedAt:              time.Time{},
+		Source:                 "",
+		Truncated:              false,
 	}
 	if messageType == message.ToolRequest && len(toolCalls) > 0 {
 		msg.ToolCalls = parseRecordedToolCalls(ctx, logger, toolCalls)
 	}
+	msg.bound()
 	return msg, true
 }
 
@@ -166,19 +266,6 @@ func parseRecordedToolCalls(ctx context.Context, logger *slog.Logger, raw []byte
 	return calls
 }
 
-func filterBatchMessagesByMessageTypes(messages []batchMessage, messageTypes []string) []batchMessage {
-	if len(messageTypes) == 0 {
-		return messages
-	}
-	filtered := make([]batchMessage, 0, len(messages))
-	for _, msg := range messages {
-		if slices.Contains(messageTypes, msg.Type) {
-			filtered = append(filtered, msg)
-		}
-	}
-	return filtered
-}
-
 func messageTypeForRole(role string, toolCalls []byte) (message.Type, bool) {
 	switch role {
 	case "user":
@@ -196,6 +283,20 @@ func messageTypeForRole(role string, toolCalls []byte) (message.Type, bool) {
 }
 
 func batchJudgeMessage(msg batchMessage) judgemessage.Message {
+	result := batchJudgeMessageContent(msg)
+	result.ChatID = msg.ChatID
+	if msg.ContentPart {
+		result.AnchorID = msg.ParentChatMessageID
+		if result.AnchorID == uuid.Nil {
+			result.ChatID = uuid.Nil
+		}
+	} else {
+		result.AnchorID = msg.ID
+	}
+	return result
+}
+
+func batchJudgeMessageContent(msg batchMessage) judgemessage.Message {
 	if msg.Type != message.ToolRequest {
 		return judgemessage.New(msg.Type, "", msg.Content)
 	}

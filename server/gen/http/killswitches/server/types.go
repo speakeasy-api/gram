@@ -1848,6 +1848,8 @@ type KillswitchMCPServerResponseBody struct {
 	ID        string `form:"id" json:"id" xml:"id"`
 	Name      string `form:"name" json:"name" xml:"name"`
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The project's display name
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
 }
 
 // KillswitchSummaryResponseBody is used to define fields on response body

@@ -26,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -68,6 +70,11 @@ type testInstance struct {
 
 func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestMCPMetadataServiceWithAdmission(t, nil)
+}
+
+func newTestMCPMetadataServiceWithAdmission(t *testing.T, admission func(context.Context, string) error) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := t.Context()
 
@@ -96,7 +103,7 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpmetadata.NewService(logger, tracerProvider, conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger)
+	svc := mcpmetadata.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, admission)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -120,6 +127,7 @@ type mcpServerFixtureOptions struct {
 	tunneledMcpServerID uuid.NullUUID
 	customDomainID      uuid.NullUUID
 	userSessionIssuerID uuid.NullUUID
+	networkAccessMode   networkaccess.Mode
 }
 
 func createMcpServerWithEndpoint(
@@ -152,8 +160,6 @@ func createMcpServerWithEndpoint(
 			Slug:                   "fixture-toolset-" + uuid.NewString()[:8],
 			Description:            conv.ToPGText("Fixture toolset for mcp_server backend"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                pgtype.Text{String: "", Valid: false},
-			McpEnabled:             false,
 		})
 		require.NoError(t, err)
 		opts.toolsetID = uuid.NullUUID{UUID: toolset.ID, Valid: true}
@@ -173,6 +179,7 @@ func createMcpServerWithEndpoint(
 		TunneledMcpServerID: opts.tunneledMcpServerID,
 		ToolsetID:           opts.toolsetID,
 		Visibility:          opts.visibility,
+		NetworkAccessMode:   networkaccess.Storage(opts.networkAccessMode),
 	})
 	require.NoError(t, err)
 
@@ -193,9 +200,12 @@ func createMcpServerWithEndpoint(
 // needed here.
 func createUserSessionIssuer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) usersessions_repo.UserSessionIssuer {
 	t.Helper()
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, projectID)
+	require.NoError(t, err)
 
 	usi, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
 		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(project.OrganizationID),
 		Slug:               "usi-" + uuid.NewString()[:8],
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{
@@ -208,4 +218,60 @@ func createUserSessionIssuer(t *testing.T, ctx context.Context, ti *testInstance
 	require.NoError(t, err)
 
 	return usi
+}
+
+// servedToolsetOptions describes a toolset served at mcpSlug by its canonical MCP server.
+type servedToolsetOptions struct {
+	name           string
+	slug           string
+	mcpSlug        string
+	description    string
+	visibility     string
+	issuerID       uuid.NullUUID
+	customDomainID uuid.NullUUID
+	organizationID string
+	projectID      uuid.UUID
+}
+
+// createServedToolset creates a toolset and its canonical MCP server, reachable at opts.mcpSlug.
+func createServedToolset(t *testing.T, ctx context.Context, ti *testInstance, opts servedToolsetOptions) toolsets_repo.Toolset {
+	t.Helper()
+
+	if opts.organizationID == "" {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+		opts.organizationID = authCtx.ActiveOrganizationID
+		opts.projectID = *authCtx.ProjectID
+	}
+	if opts.slug == "" {
+		opts.slug = opts.mcpSlug
+	}
+	if opts.name == "" {
+		opts.name = opts.slug
+	}
+	if opts.visibility == "" {
+		opts.visibility = mcpservers.VisibilityPrivate
+	}
+
+	toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         opts.organizationID,
+		ProjectID:              opts.projectID,
+		Name:                   opts.name,
+		Slug:                   opts.slug,
+		Description:            pgtype.Text{String: opts.description, Valid: opts.description != ""},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	createCanonicalWrapper(t, ctx, ti, toolset, opts.visibility)
+
+	hosted := testenv.HostedMCP{Visibility: "", UserSessionIssuerID: nil, Slug: opts.mcpSlug, CustomDomainID: opts.customDomainID}
+	if opts.issuerID.Valid {
+		hosted.UserSessionIssuerID = &opts.issuerID
+	}
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, hosted)
+
+	toolset, err = toolsets_repo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
+	require.NoError(t, err)
+	return toolset
 }

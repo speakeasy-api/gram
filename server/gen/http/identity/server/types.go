@@ -25,9 +25,9 @@ type ResolveResponseBody struct {
 	// subject returns this one, so links built from different identifiers converge
 	// on a single page.
 	CanonicalUrn string `form:"canonical_urn" json:"canonical_urn" xml:"canonical_urn"`
-	// The Gram user ids this identity resolves to, the first being the directory
-	// owner. Empty when the subject matches no directory row. Audit logs, chats,
-	// user sessions and plugin assignments key on these.
+	// The Speakeasy user ids this identity resolves to, the first being the
+	// directory owner. Empty when the subject matches no directory row. Audit
+	// logs, chats, user sessions and plugin assignments key on these.
 	UserIds []string `form:"user_ids" json:"user_ids" xml:"user_ids"`
 	// Every address the subject is known by — directory email first, then linked
 	// AI account emails. Telemetry and cost aggregate over this set.

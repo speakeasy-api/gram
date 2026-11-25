@@ -17,30 +17,32 @@ type ExternalMCPServerEntry struct {
 	Version string
 	// Description of what the server does
 	Description string
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string
 	// ID of the external MCP registry this server came from
 	RegistryID *string
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string
 	// Display name for the server
 	Title *string
 	// URL to the server's icon
 	IconURL *string
 	// Opaque metadata from the registry
 	Meta any
-	// Number of tools the server exposes
-	ToolCount int
-	// Whether every tool on the server is read-only
-	IsReadOnly bool
+	// Number of declared tools, when catalog evidence is available
+	ToolCount *int
+	// Whether every declared tool is read-only, when catalog evidence is available
+	IsReadOnly *bool
 	// Whether the server's OAuth authorization server advertises a dynamic client
-	// registration endpoint (RFC 7591). When false, connecting requires manual
-	// setup (static OAuth client credentials or API keys).
+	// registration endpoint (RFC 7591). False alone does not establish that manual
+	// setup is required.
 	SupportsDcr bool
+	// Whether issuer metadata advertises compatible Client ID Metadata Document
+	// support.
+	SupportsCimd *bool
+	// Advertised authentication setup; unknown means evidence is insufficient, not
+	// that manual setup is required.
+	AuthSetup *string
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemote
 	// The source repository the registry links for this server, when it declares

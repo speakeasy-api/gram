@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 
 	relay "github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
 )
@@ -154,4 +155,50 @@ func TestPublishOutboxGCWorkflow_FullBatchContinues(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, 2, calls)
+}
+
+func TestPublishOutboxWorkflow_ExitsAfterBusyBatchBudget(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	calls := registerDrain(env, func(call int) (relay.DrainResult, error) {
+		if call > publishOutboxMaxBatches {
+			return relay.DrainResult{}, haltLoop()
+		}
+		return relay.DrainResult{Published: 50, HasMore: true}, nil
+	})
+	env.ExecuteWorkflow(PublishOutboxWorkflow)
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, publishOutboxMaxBatches, *calls)
+}
+
+func TestPublishOutboxWorkflow_ExitsAfterIdleLifetime(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	calls := registerDrain(env, func(call int) (relay.DrainResult, error) {
+		if call > int(publishOutboxMaxLifetime/publishOutboxIdleInterval) {
+			return relay.DrainResult{}, haltLoop()
+		}
+		return relay.DrainResult{HasMore: false}, nil
+	})
+	env.ExecuteWorkflow(PublishOutboxWorkflow)
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, int(publishOutboxMaxLifetime/publishOutboxIdleInterval), *calls)
+}
+
+func TestPublishOutboxWorkflow_LegacyVersionKeepsCommandSequence(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.OnGetVersion(publishOutboxBoundedLoopChangeID, workflow.DefaultVersion, 1).Return(workflow.DefaultVersion)
+	calls := registerDrain(env, func(call int) (relay.DrainResult, error) {
+		if call > publishOutboxMaxBatches {
+			return relay.DrainResult{}, haltLoop()
+		}
+		return relay.DrainResult{HasMore: true}, nil
+	})
+	env.ExecuteWorkflow(PublishOutboxWorkflow)
+	require.ErrorContains(t, env.GetWorkflowError(), "halt")
+	require.Equal(t, publishOutboxMaxBatches+1, *calls)
 }

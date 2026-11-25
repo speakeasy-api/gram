@@ -39,16 +39,12 @@ type GetServerDetailsResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -1022,30 +1018,32 @@ type ExternalMCPServerEntryResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Opaque metadata from the registry
 	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
-	// Number of tools the server exposes
-	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
-	// Whether every tool on the server is read-only
-	IsReadOnly bool `form:"is_read_only" json:"is_read_only" xml:"is_read_only"`
+	// Number of declared tools, when catalog evidence is available
+	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// Whether every declared tool is read-only, when catalog evidence is available
+	IsReadOnly *bool `form:"is_read_only,omitempty" json:"is_read_only,omitempty" xml:"is_read_only,omitempty"`
 	// Whether the server's OAuth authorization server advertises a dynamic client
-	// registration endpoint (RFC 7591). When false, connecting requires manual
-	// setup (static OAuth client credentials or API keys).
+	// registration endpoint (RFC 7591). False alone does not establish that manual
+	// setup is required.
 	SupportsDcr bool `form:"supports_dcr" json:"supports_dcr" xml:"supports_dcr"`
+	// Whether issuer metadata advertises compatible Client ID Metadata Document
+	// support.
+	SupportsCimd *bool `form:"supports_cimd,omitempty" json:"supports_cimd,omitempty" xml:"supports_cimd,omitempty"`
+	// Advertised authentication setup; unknown means evidence is insufficient, not
+	// that manual setup is required.
+	AuthSetup *string `form:"auth_setup,omitempty" json:"auth_setup,omitempty" xml:"auth_setup,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// The source repository the registry links for this server, when it declares
@@ -1166,7 +1164,7 @@ type MCPSetupGuideResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// One-line summary of what the guide covers
 	Summary string `form:"summary" json:"summary" xml:"summary"`
-	// How the server is meant to be added in Gram, when the guide states one
+	// How the server is meant to be added in Speakeasy, when the guide states one
 	// (e.g., 'catalog', 'custom-remote')
 	AddServerFlow *string `form:"add_server_flow,omitempty" json:"add_server_flow,omitempty" xml:"add_server_flow,omitempty"`
 	// Registry identifiers the guide is also published under
@@ -1183,7 +1181,7 @@ type MCPSetupGuideResponseBody struct {
 	// Markdown instructions for the setup work that happens in the upstream
 	// provider
 	ExternalMarkdown string `form:"external_markdown" json:"external_markdown" xml:"external_markdown"`
-	// Markdown instructions for the setup work that happens in Gram
+	// Markdown instructions for the setup work that happens in Speakeasy
 	SpeakeasyMarkdown string `form:"speakeasy_markdown" json:"speakeasy_markdown" xml:"speakeasy_markdown"`
 }
 
@@ -1245,16 +1243,15 @@ func NewListCatalogResponseBody(res *mcpregistries.ListCatalogResult) *ListCatal
 // result of the "getServerDetails" endpoint of the "mcpRegistries" service.
 func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDetailsResponseBody {
 	body := &GetServerDetailsResponseBody{
-		RegistrySpecifier:                   res.RegistrySpecifier,
-		Version:                             res.Version,
-		Description:                         res.Description,
-		ToolsetID:                           res.ToolsetID,
-		McpServerID:                         res.McpServerID,
-		RegistryID:                          res.RegistryID,
-		OrganizationMcpCollectionRegistryID: res.OrganizationMcpCollectionRegistryID,
-		Title:                               res.Title,
-		IconURL:                             res.IconURL,
-		Meta:                                res.Meta,
+		RegistrySpecifier: res.RegistrySpecifier,
+		Version:           res.Version,
+		Description:       res.Description,
+		ToolsetID:         res.ToolsetID,
+		McpServerID:       res.McpServerID,
+		RegistryID:        res.RegistryID,
+		Title:             res.Title,
+		IconURL:           res.IconURL,
+		Meta:              res.Meta,
 	}
 	if res.Tools != nil {
 		body.Tools = make([]*ExternalMCPToolResponseBody, len(res.Tools))

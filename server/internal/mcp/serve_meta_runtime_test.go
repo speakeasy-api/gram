@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,16 +22,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	metadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -63,8 +66,11 @@ func seedHostedMetaMember(
 	require.True(t, ok)
 
 	toolsetSlug := "member-ts-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, toolsetSlug)
-	toolURNs := addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, toolNames...)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, toolsetSlug)
+	toolURNs := map[string]urn.Tool{}
+	if len(toolNames) != 0 {
+		toolURNs = addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, toolNames...)
+	}
 
 	serverID, err := uuid.NewV7()
 	require.NoError(t, err)
@@ -128,8 +134,27 @@ func TestServePublic_MetaEndpoint_DescribeServer_HostedMember(t *testing.T) {
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool", "beta_tool")
+	args := map[string]any{"server": member.slug}
+	before := decodeMetaToolResult(t, callMetaTool(t, ctx, ti, slug, "describe_server", args))
+	require.False(t, before.IsError)
+	var withoutInstructions map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(before.StructuredContent, &withoutInstructions))
+	require.NotContains(t, withoutInstructions, "instructions")
 
-	envelope := callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	const instructions = "Use alpha before beta.\nRead the result before continuing."
+	_, err := metadatarepo.New(ti.conn).UpsertMetadataByMcpServerID(ctx, metadatarepo.UpsertMetadataByMcpServerIDParams{
+		McpServerID:               member.toolsetID,
+		ProjectID:                 *authCtx.ProjectID,
+		Instructions:              conv.ToPGText(instructions),
+		ExternalDocumentationUrl:  pgtype.Text{},
+		ExternalDocumentationText: pgtype.Text{},
+		LogoID:                    uuid.NullUUID{},
+		DefaultEnvironmentID:      uuid.NullUUID{},
+		InstallationOverrideUrl:   pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	envelope := callMetaTool(t, ctx, ti, slug, "describe_server", args)
 	result := decodeMetaToolResult(t, envelope)
 	require.False(t, result.IsError)
 
@@ -138,11 +163,13 @@ func TestServePublic_MetaEndpoint_DescribeServer_HostedMember(t *testing.T) {
 			Slug   string `json:"slug"`
 			Status string `json:"status"`
 		} `json:"server"`
-		Tools []map[string]json.RawMessage `json:"tools"`
+		Instructions string                       `json:"instructions"`
+		Tools        []map[string]json.RawMessage `json:"tools"`
 	}
 	require.NoError(t, json.Unmarshal(result.StructuredContent, &described))
 	require.Equal(t, member.slug, described.Server.Slug)
 	require.Equal(t, "available", described.Server.Status)
+	require.Equal(t, instructions, described.Instructions)
 
 	names := make([]string, 0, len(described.Tools))
 	for _, tool := range described.Tools {
@@ -338,7 +365,7 @@ func TestServePublic_MetaEndpoint_ListServers_StatusByBackend(t *testing.T) {
 	proxiedSlug := "member-remote-" + uuid.NewString()[:8]
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", proxiedSlug, 2, mcpservers.VisibilityPrivate)
 	tunneledSlug := "member-tunnel-" + uuid.NewString()[:8]
-	tunnelID := seedTunneledMetaMember(t, ctx, ti, *authCtx.ProjectID, meta.ID, "tunneled member", tunneledSlug, 3)
+	tunnelID, _ := seedTunneledMetaMember(t, ctx, ti, *authCtx.ProjectID, meta.ID, "tunneled member", tunneledSlug, 3, "")
 
 	listStatuses := func() map[string]string {
 		envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})
@@ -420,7 +447,7 @@ func TestServePublic_MetaEndpoint_ListServers_ExcludesSluglessMember(t *testing.
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "ts-slugless-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "ts-slugless-"+uuid.NewString()[:8])
 	serverID, err := uuid.NewV7()
 	require.NoError(t, err)
 	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
@@ -449,10 +476,10 @@ func TestServePublic_MetaEndpoint_ListServers_ExcludesSluglessMember(t *testing.
 	require.Empty(t, listed.Servers)
 }
 
-// A notification carrying a bad protocol-version declaration is dropped, not
-// answered: JSON-RPC 2.0 forbids responding to notifications, even with an
-// error.
-func TestServePublic_MetaEndpoint_NotificationWithBadVersionIsDropped(t *testing.T) {
+// A notification declaring an unsupported revision is refused with an HTTP
+// error status, as every revision requires for a notification the server
+// cannot accept, under a null id because it answers no request.
+func TestServePublic_MetaEndpoint_NotificationWithUnsupportedVersionIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -469,11 +496,10 @@ func TestServePublic_MetaEndpoint_NotificationWithBadVersionIsDropped(t *testing
 	require.NoError(t, err)
 
 	w, err := servePublicHTTP(t, ctx, ti, slug, body, "", map[string]string{
-		mcpversions.HTTPHeader: "2031-01-01",
+		mcpversions.HTTPHeader: unservedProtocolVersion,
 	})
 	require.NoError(t, err)
-	require.Equal(t, http.StatusAccepted, w.Code, "body=%s", w.Body.String())
-	require.Empty(t, w.Body.String())
+	requireRefusedNotification(t, w, unservedProtocolVersion, mcpversions.SupportedMetaServer())
 }
 
 // Challenge-resumption arms of the meta endpoint resolver, driven through
@@ -517,11 +543,9 @@ func TestHandleIDPCallback_MetaEndpointResumption(t *testing.T) {
 	t.Run("resumes onto the meta endpoint", func(t *testing.T) {
 		t.Parallel()
 		mock := &mockIdentityResolver{
-			exchangeResult:  &identity.IDPUserInfo{Sub: "idp-user-123", Email: "test@example.com", Name: "Test User"},
-			upsertResult:    "user-" + uuid.NewString()[:8],
-			hasAccessResult: &sessions.Organization{ID: "org-id-placeholder", Name: "Test Org"},
-			hasAccessEmail:  "test@example.com",
-			hasAccessOK:     true,
+			exchangeResult: &identity.IDPUserInfo{Sub: "idp-user-123", Email: "test@example.com", Name: "Test User"},
+			upsertResult:   "user-" + uuid.NewString()[:8],
+			hasAccessOK:    true,
 		}
 		ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -577,17 +601,47 @@ func setToolsetMcpPrivate(t *testing.T, ctx context.Context, ti *testInstance, t
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	_, err = repo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            false,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "private"})
+}
+
+func setToolsetMcpDisabled(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, projectID uuid.UUID) {
+	t.Helper()
+	repo := toolsets_repo.New(ti.conn)
+	toolset, err := repo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+		ID:        toolsetID,
+		ProjectID: projectID,
 	})
 	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "disabled"})
+}
+
+// An independent hosted server uses its own visibility, not the backing
+// toolset's legacy MCP enablement, just like direct wrapper dispatch.
+func TestServePublic_MetaEndpoint_HostedMember_LegacyMcpDisabledStillServable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+	setToolsetMcpDisabled(t, ctx, ti, member.toolsetID, *authCtx.ProjectID)
+	envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})
+	text, isError := metaToolResultText(t, envelope)
+	require.False(t, isError)
+	require.Contains(t, text, member.slug)
+	envelope = callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	text, isError = metaToolResultText(t, envelope)
+	require.False(t, isError)
+	require.Contains(t, text, "alpha_tool")
+	envelope = callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
+		"name":      member.slug + "--alpha_tool",
+		"arguments": map[string]any{},
+	})
+	text, isError = metaToolResultText(t, envelope)
+	require.True(t, isError)
+	// The fixture tool has no upstream, so this error proves dispatch ran.
+	require.Contains(t, text, "no server URL")
 }
 
 // Snapshot RBAC: a private-visibility member is invisible without
@@ -838,7 +892,7 @@ func TestServePublic_MetaEndpoint_ToolSelectionSessionRejected(t *testing.T) {
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, slug, issuerID)
 	seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
 
-	subject := urn.NewUserSubject("selection-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "selection-user-"+uuid.NewString())
 	bearer, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  subject,
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),
@@ -854,10 +908,11 @@ func TestServePublic_MetaEndpoint_ToolSelectionSessionRejected(t *testing.T) {
 		UserSessionClientID: uuid.NullUUID{},
 		SubjectUrn:          subject,
 		Jti:                 jti,
-		RefreshTokenHash:    "test-selection-" + uuid.NewString(),
+		RefreshTokenHash:    conv.ToPGText("test-selection-" + uuid.NewString()),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 		ToolSelection:       selection,
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 
@@ -890,7 +945,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedMember_MultiCredentialSessio
 
 	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "multicred-a", "", []uuid.UUID{sharedIssuerID})
 	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "multicred-b", "", []uuid.UUID{sharedIssuerID})
-	subject := urn.NewUserSubject("multicred-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "multicred-user-"+uuid.NewString())
 	insertRemoteSessionAccessToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-a", time.Now().Add(time.Hour))
 	insertRemoteSessionAccessToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-b", time.Now().Add(time.Hour))
 
@@ -942,4 +997,42 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedConfigFailureIsMemberScoped(
 	require.True(t, isError, "the member's failure must surface as a tool error result")
 	require.Contains(t, text, fixture.slug, "the failure must name the member")
 	require.Contains(t, text, "no server URL", "the failure must carry the actionable cause")
+}
+
+// TestServePublic_MetaEndpoint_DescribeTools_SharesOneShadowAdmission: a
+// describe_tools request spanning several hosted members admits its caller for
+// the mandatory authz shadow once, failure included, rather than once per
+// member and toolset check, each with its own timeout.
+func TestServePublic_MetaEndpoint_DescribeTools_SharesOneShadowAdmission(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ti.features.SetFlag(feature.FlagMandatoryAuthzShadow, authCtx.ActiveOrganizationID, true)
+
+	var admissions atomic.Int32
+	ti.service.SetPrepareMandatory(func(ctx context.Context) (authz.MandatoryAuthorization, error) {
+		admissions.Add(1)
+		// A slow admission spends its whole budget and fails.
+		<-ctx.Done()
+		return authz.MandatoryAuthorization{}, ctx.Err()
+	})
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	names := []string{}
+	for i := range 3 {
+		tool := fmt.Sprintf("tool_%d", i)
+		member := seedHostedMetaMember(t, ctx, ti, meta.ID, fmt.Sprintf("hosted member %d", i), int32(i+1), mcpservers.VisibilityPublic, tool)
+		names = append(names, member.slug+"--"+tool)
+	}
+
+	// Each seeded member gets its own deployment and only the latest resolves
+	// tools, but every member is still admitted and connect-checked.
+	envelope := callMetaTool(t, ctx, ti, slug, "describe_tools", map[string]any{"tools": names})
+	result := decodeMetaToolResult(t, envelope)
+	require.False(t, result.IsError, "a failed shadow admission never changes the response")
+	require.Contains(t, string(result.StructuredContent), names[2])
+	require.Equal(t, int32(1), admissions.Load(), "one shadow admission per request")
 }

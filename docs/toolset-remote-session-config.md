@@ -10,7 +10,7 @@ Bring the remote-MCP-server identity-provider configuration (user session issuer
 ## Agreed design decisions (from spec interview, 2026-07-08)
 
 1. Frontend-only, single PR. Backend already type-agnostic: the serve path gates on `toolsets.user_session_issuer_id`, and when it is set the issuer gate wins and the legacy OAuth chain is skipped entirely (`server/internal/mcp/impl.go`, ~line 642, `runInToolsetGate`).
-2. Shared components parameterized by an `AuthTarget` interface (state-context composition pattern). Remote target links via `mcpServers.update` (keeps its visibility-private side effect); toolset target links via `toolsets.setUserSessionIssuer` and touches nothing else (no `mcpEnabled`/`mcpIsPublic` changes).
+2. Shared components parameterized by an `AuthTarget` interface (state-context composition pattern). Remote target links via `mcpServers.update` (keeps its visibility-private side effect); toolset target links via `toolsets.setUserSessionIssuer` and touches nothing else (no `mcpEnabled`/`mcpIsPublic` changes). `toolsets.setUserSessionIssuer` was later removed in AIM-738.
 3. State matrix on the toolset Authentication tab, USI-first tiebreak:
    - USI wired: shared manage surface only, even if inert legacy config remains (`manage`).
    - Legacy OAuth configured, unwired: legacy UI plus a convert path (`legacy`). Proxy/gram paradigms convert via the existing wire modal; external OAuth converts via the attach sheet with the issuer URL prefilled from the stored RFC 8414 metadata.
@@ -51,7 +51,7 @@ Untouched on purpose: `WireUserSessionIssuerModal` and its machine, `ModifyRemot
 ## Remaining work
 
 1. Not manually verified: the `legacy` surface (legacy OAuth configured, unwired) with its convert buttons. No local toolset has an OAuth proxy or external OAuth configured. Options: seed one locally for a visual check, or rely on unit tests plus the untouched wire modal. Walker had not chosen when this doc was written.
-2. Commit + PR (use the `pr` skill; remember the `env -u GH_TOKEN -u GITHUB_TOKEN` prefix for gh writes). Suggested demo: pr-demo-gif of the toolset attach flow.
+2. Commit + PR (use the `pr` skill; remember the `env -u GH_TOKEN -u GITHUB_TOKEN` prefix for gh writes). Suggested demo: pull-request-demo of the toolset attach flow.
 3. Possible reviewer question: `ConvertToUserSessionsButton` mounts its own `useRemoteSessionIssuers()`; fine per React Query dedup.
 
 ## Related context
