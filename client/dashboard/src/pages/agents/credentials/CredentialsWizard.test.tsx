@@ -497,6 +497,24 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
+function useProxiedGitHub() {
+  mocks.mcpServers.mockResolvedValue({
+    mcpServers: [
+      {
+        id: "server_one",
+        name: "GitHub",
+        slug: "github",
+        projectId: "project_one",
+        remoteMcpServerId: "remote_github",
+        visibility: "private",
+        networkAccessMode: "dual",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ],
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requiredClientIds = {};
@@ -545,7 +563,13 @@ beforeEach(() => {
   mocks.serverAuth.mockResolvedValue({
     status: "configured",
     clients: [
-      { id: "auth_personal", clientType: "remote_session", enabled: true },
+      {
+        id: "auth_personal",
+        clientType: "remote_session",
+        enabled: true,
+        personal: true,
+        remoteSessionClientId: "client_linear",
+      },
     ],
   });
   mocks.bindings.mockResolvedValue([]);
@@ -800,8 +824,8 @@ describe("Provisioning a new agent", () => {
     expect(mocks.checkAuthGrant).not.toHaveBeenCalled();
   });
 
-  it("stops on the server step when the organization requires the sign-in grant its creator cannot give", async () => {
-    mocks.authEnforced = true;
+  it("stops on the server step when a proxied server needs a sign-in grant its creator cannot give", async () => {
+    useProxiedGitHub();
     mocks.checkAuthGrant.mockResolvedValue({
       results: [{ allowed: false, limitedBy: "caller" }],
     });
@@ -823,8 +847,7 @@ describe("Provisioning a new agent", () => {
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
 
-  it("waits for the organization's settings before letting a refused creator on", async () => {
-    mocks.authEnforced = undefined;
+  it("can create a hosted-only agent when the optional sign-in grant is refused", async () => {
     mocks.checkAuthGrant.mockResolvedValue({
       results: [{ allowed: false, limitedBy: "caller" }],
     });
@@ -835,51 +858,18 @@ describe("Provisioning a new agent", () => {
     await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
-
-    expect(
-      await screen.findByText(
-        "Checking whether this organization requires sign-in permission…",
-      ),
-    ).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-  });
-
-  it("creates nothing while the organization's upstream auth enforcement loads", async () => {
-    mocks.authEnforced = undefined;
-    fireEvent.click(await reachCredentialStep());
-
-    expect(
-      await screen.findByText(
-        "Checking how this organization's servers sign in. Try again in a moment.",
-      ),
-    ).toBeTruthy();
-    expect(mocks.createAgent).not.toHaveBeenCalled();
-    expect(mocks.attach).not.toHaveBeenCalled();
-  });
-
-  it("leaves the sign-in grant out where the organization does not require it", async () => {
-    mocks.checkAuthGrant.mockResolvedValue({
-      results: [{ allowed: false, limitedBy: "caller" }],
-    });
-    fireEvent.click(await reachCredentialStep());
-
+    await waitFor(() => expect(mocks.checkAuthGrant).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
     await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
-    expect(
-      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
-    ).toEqual([
-      {
-        effect: "allow",
-        scope: "mcp:connect",
-        selector: {
-          resourceKind: "mcp",
-          resourceId: "toolset_one",
-          projectId: "project_one",
-        },
-      },
-    ]);
+    const { policyGrants } =
+      mocks.createAgent.mock.calls[0]![0].createAgentForm;
+    expect(policyGrants).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ scope: "mcp:auth" })]),
+    );
   });
 
   it("gives a new agent hook ingestion in its project, and asks its first key for it", async () => {
@@ -2421,12 +2411,18 @@ describe("Editing an agent that already exists", () => {
     expect(mocks.checkAuthGrant).not.toHaveBeenCalled();
   });
 
-  it("will not save an agent without the sign-in grant its editor cannot give where it is required", async () => {
-    mocks.authEnforced = true;
+  it("will not save a proxied agent without the sign-in grant its editor cannot give", async () => {
+    useProxiedGitHub();
     mocks.checkAuthGrant.mockResolvedValue({
       results: [{ allowed: false, limitedBy: "owner" }],
     });
-    editing({ withoutAuth: true });
+    const grant = (grants as unknown as { selector: object }[])[0]!;
+    editing({
+      withoutAuth: true,
+      grants: [
+        { ...grant, selector: { ...grant.selector, resourceId: "server_one" } },
+      ],
+    });
 
     expect(
       await screen.findByText(/This agent's owner cannot give it mcp:auth/),
@@ -2439,23 +2435,6 @@ describe("Editing an agent that already exists", () => {
       mocks.checkAuthGrant.mock.calls[0]?.[0]?.checkAgentPolicyGrantsForm
         ?.agentId,
     ).toBe("agent_one");
-  });
-
-  it("saves without adding the sign-in grant where it is not required and refused", async () => {
-    mocks.checkAuthGrant.mockResolvedValue({
-      results: [{ allowed: false, limitedBy: "caller" }],
-    });
-    const { onDone } = editing({ withoutAuth: true });
-    fireEvent.change(screen.getByLabelText("Name"), {
-      target: { value: "Renamed Bot" },
-    });
-    await nameChecked();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("checkbox", { name: "GitHub" });
-    fireEvent.click(await authenticationSave());
-
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
-    expect(mocks.createGrant).not.toHaveBeenCalled();
   });
 
   it("holds an edit's save until the sign-in check answers", async () => {
@@ -2480,23 +2459,6 @@ describe("Editing an agent that already exists", () => {
     await waitFor(() =>
       expect((save as HTMLButtonElement).disabled).toBe(false),
     );
-  });
-
-  it("holds an edit's save until the organization's upstream auth enforcement loads", async () => {
-    mocks.authEnforced = undefined;
-    editing();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("checkbox", { name: "GitHub" });
-    const save = await authenticationSave();
-    expect(
-      await screen.findByText(
-        "Checking how this organization's servers sign in…",
-      ),
-    ).toBeTruthy();
-    expect((save as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(save);
-    expect(mocks.attach).not.toHaveBeenCalled();
-    expect(mocks.createGrant).not.toHaveBeenCalled();
   });
 
   it("gives no sign-in grant to an edited agent that reaches no server", async () => {
@@ -4151,22 +4113,10 @@ describe("Servers that sign in as a person", () => {
         selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
       },
     ]);
-    // The issuer's sign-ins are read in the server's own project, before the
-    // agent exists and again while attaching.
-    expect(mocks.sessionClients).toHaveBeenCalledWith({
-      gramProject: "project-one",
-      userSessionIssuerId: "issuer_linear",
-    });
-    expect(
-      mocks.sessionClients.mock.calls.every(
-        ([request]) =>
-          request.gramProject === "project-one" &&
-          request.userSessionIssuerId === "issuer_linear",
-      ),
-    ).toBe(true);
-    // Checked again as the new agent's candidates, then attached.
+    expect(mocks.sessionClients).not.toHaveBeenCalled();
     expect(mocks.sessions).toHaveBeenCalledWith(
       expect.objectContaining({
+        gramProject: "project-one",
         principalId: "agent_new",
         userSessionIssuerId: "issuer_linear",
       }),
@@ -4363,7 +4313,7 @@ describe("Servers that sign in as a person", () => {
     expect(mocks.attach).not.toHaveBeenCalled();
   });
 
-  it("attaches only the server's own sign-in when the enforcement state cannot be read", async () => {
+  it("attaches only the caller session matching the server's typed offer", async () => {
     mocks.authEnforced = "error";
     // The organization-wide issuer also lists another server's sign-in,
     // which the creator happens to have connected.
