@@ -43,7 +43,8 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 		{name: "disabled excluded", clientType: authClientTypeRemoteSession, state: "disabled", enforced: true, issuerLinked: true},
 		{name: "deleted excluded", clientType: authClientTypeRemoteSession, state: "deleted", enforced: true, issuerLinked: true},
 		{name: "unlinked excluded", clientType: authClientTypeRemoteSession, state: "unlinked", enforced: true, issuerLinked: true},
-		{name: "off preserves legacy", issuerLinked: true, wantCard: true},
+		{name: "off ignores legacy attachment", issuerLinked: true},
+		{name: "shadow ignores legacy attachment", shadow: true, issuerLinked: true},
 		{name: "hosted preserves legacy", hosted: true, enforced: true, issuerLinked: true, wantCard: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -109,7 +110,7 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 	}
 }
 
-func TestDirectConsentConnectionCardsModeErrorFailsClosed(t *testing.T) {
+func TestDirectConsentConnectionCardsOfferReadErrorFailsClosed(t *testing.T) {
 	t.Parallel()
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_direct_consent_mode_error")
 	require.NoError(t, err)
@@ -119,7 +120,7 @@ func TestDirectConsentConnectionCardsModeErrorFailsClosed(t *testing.T) {
 	cancel()
 	// No challenge manager: mode lookup must fail before reading legacy clients.
 	clients, typed, err := f.service.listEndpointClientsAndRegistrations(ctx, &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, McpServerID: validUUID(f.serverID)}, AuthnChallengeState{})
-	require.ErrorContains(t, err, "read upstream auth enforcement")
+	require.ErrorContains(t, err, "list configured auth offers")
 	require.Empty(t, clients)
 	require.Empty(t, typed)
 }

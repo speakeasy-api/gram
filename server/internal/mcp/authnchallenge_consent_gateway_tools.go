@@ -87,6 +87,7 @@ func listingFailureStatus(lost error, configured gatewayServerStatus) gatewaySer
 func (s *Service) captureGatewayConsentInventory(r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, view *gatewayConsentView) (string, error) {
 	ctx := r.Context()
 	reservation := consentToolInventory{
+		TypedGateway:     true,
 		DirectAuthClient: nil,
 		CompletedAt:      time.Time{}, BackendHash: "", StateID: state.ID, Attempt: uuid.NewString(), Resource: endpointToolSelectionResource(endpoint), Tools: []consentInventoryTool{}, ExpectedCursor: "", Complete: false, McpSessionID: "", MemberOutcomes: nil, MemberBindings: nil,
 	}
@@ -239,40 +240,19 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "read gateway credential choices").LogError(ctx, logger)
 	}
 	view.auth = memberAuth
-	var preferred map[uuid.UUID]uuid.UUID
-	if memberAuth == nil {
-		serviceAuth, err := s.gatewayConsentServiceChoices(ctx, r, endpoint, subject, members, view.cards)
-		if err != nil {
-			return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "read gateway service choices").LogError(ctx, logger)
-		}
-		view.auth = serviceAuth
-		preferred = selectedServices(serviceAuth)
-	}
-	picks := chooseConsentUpstreamClientPicks(endpoint, members, view.cards, preferred)
 	for i := range members {
 		member := &members[i]
 		if member.backend != metaMemberBackendProxied {
 			continue
 		}
-		if memberAuth != nil {
-			res, resolveErr := s.resolveMemberAuthChoice(ctx, endpoint, *member, memberAuth[member.serverID], subject)
-			s.applyMemberAuthClient(ctx, endpoint.OrganizationID, member, res, resolveErr)
-			continue
-		}
-		clientID, chosen := picks[member.serverID]
-		res, resolveErr := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.serverID, member.projectID, uuid.NullUUID{UUID: clientID, Valid: chosen}, subject)
+		res, resolveErr := s.resolveMemberAuthChoice(ctx, endpoint, *member, memberAuth[member.serverID], subject)
 		s.applyMemberAuthClient(ctx, endpoint.OrganizationID, member, res, resolveErr)
 	}
 	gate.memberChoices = &memberChoices{selector: nil, consentPreview: true, subject: subject, profile: false, unchosen: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, readOnly: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-		// Enforcement uses registration-scoped tokens even for legacy resolver
-		// outcomes (for example EMA), matching the runtime selection path.
-		if memberAuth != nil {
-			return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
-				ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
-				Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(s.aiCatalog.SnapshotFor(ctx), r, endpoint, challengeState),
-			})
-		}
-		return s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, consentRefreshAttribution(s.aiCatalog.SnapshotFor(ctx), r, endpoint, challengeState), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
+		return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+			ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(s.aiCatalog.SnapshotFor(ctx), r, endpoint, challengeState),
+		})
 	}, mu: sync.Mutex{}, byServer: map[uuid.UUID]*memberTokens{}}
 	var signInID uuid.UUID
 	if challengeState.SignInID != nil {
@@ -350,7 +330,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 			}
 			authBinding = &connectionCatalogAuth{ClientID: clientID, RegistrationID: member.chosenClientID}
 		}
-		toolMembers[member.slug] = connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: backendHashes[member.serverID].hash, TypedBackendHash: backendHashes[member.serverID].typedHash, Auth: authBinding}
+		toolMembers[member.slug] = connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: backendHashes[member.serverID].hash, TypedBackendHash: backendHashes[member.serverID].typedHash, TypedApproval: false, Auth: authBinding}
 	}
 	for _, tool := range inventory {
 		// Local tools are not approved one by one: access to them follows

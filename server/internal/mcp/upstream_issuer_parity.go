@@ -75,9 +75,6 @@ const (
 	// upstreamIssuerSiteRoute routes a direct request's credential.
 	upstreamIssuerSiteRoute = "route"
 
-	// upstreamIssuerSiteConsentPreview routes the consent page's tool preview.
-	upstreamIssuerSiteConsentPreview = "consent_preview"
-
 	// upstreamIssuerSiteMemberIssuer is a gateway member's starting upstream
 	// issuer, which its sign-in status, connect links, identity chaining and
 	// client matching read.

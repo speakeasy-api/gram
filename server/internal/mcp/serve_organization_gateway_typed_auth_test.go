@@ -131,11 +131,11 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 						require.NoError(t, err)
 					}
 					mcp.ResetAuthEnforcementForTest(ti.service.Service)
-					visible := tc.visibleEnforced
+					runtimeVisible := tc.visibleEnforced
 					w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, token, listServersBody(t))
 					require.NoError(t, err)
 					require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-					if visible {
+					if runtimeVisible {
 						require.Contains(t, w.Body.String(), `"slug":"`+fx.granted+`"`)
 					} else {
 						require.NotContains(t, w.Body.String(), `"slug":"`+fx.granted+`"`)
@@ -147,7 +147,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 					projectPage, err := serveProjectGatewayHTTP(t, ti, fx, fx.projectSlug, projectToken, listServersBody(t))
 					require.NoError(t, err)
 					require.Equal(t, http.StatusOK, projectPage.Code, projectPage.Body.String())
-					if visible {
+					if runtimeVisible {
 						require.Contains(t, projectPage.Body.String(), `"slug":"`+fx.granted+`"`)
 					} else {
 						require.NotContains(t, projectPage.Body.String(), `"slug":"`+fx.granted+`"`)
@@ -157,14 +157,17 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 					page := httptest.NewRecorder()
 					require.NoError(t, ti.service.ServeConsent(page, request, endpoint))
 					require.Equal(t, http.StatusOK, page.Code)
-					consentVisible := tc.visibleLegacy
-					if mode == "enforced" && !tc.pending && !tc.detached {
-						consentVisible = visible
-					}
+					// Without a live typed offer, consent does not infer OAuth
+					// from issuer links. A source without required caller headers
+					// can be shown, but no legacy registration is offered.
+					consentVisible := tc.visibleEnforced || ((tc.pending || tc.detached) && !tc.required)
 					if consentVisible {
 						require.NotContains(t, page.Body.String(), "data-gateway-focus-unavailable")
 					} else {
 						require.Contains(t, page.Body.String(), "data-gateway-focus-unavailable")
+					}
+					if tc.pending || tc.detached {
+						require.NotContains(t, page.Body.String(), `data-remote-client="`+registration.String()+`"`)
 					}
 				})
 			}

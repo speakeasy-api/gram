@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -206,6 +207,9 @@ func TestServeConsentMCP_RemoteDoesNotForwardSpeakeasyHeaders(t *testing.T) {
 	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, issuer.ProjectID.UUID, upstream.server.URL, endpointSlug, "public", issuer.ID)
 	seedRemoteHeader(t, ctx, ti.conn, issuer.ProjectID.UUID, remoteServer.ID, "x-api-key", "operator-credential", "", true)
 	seedRemoteHeader(t, ctx, ti.conn, issuer.ProjectID.UUID, remoteServer.ID, "X-Upstream-Token", "", "Gram-Key", false)
+	orgID := requireProjectAuthContext(t, ctx).ActiveOrganizationID
+	id := seedConsentAuthOffer(t, ctx, ti, orgID, issuer.ProjectID.UUID, mcpServer.ID, uuid.Nil, "static_credential")
+	require.NoError(t, authclientbackfill.New(ti.conn).SeedAuthClientHeaderFixture(ctx, authclientbackfill.SeedAuthClientHeaderFixtureParams{AuthClientID: id, OrganizationID: orgID, Name: "X-Api-Key", Value: pgtype.Text{String: "operator-credential", Valid: true}}))
 	stateID, csrfToken := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, endpointSlug, "mcp")
 	require.NoError(t, err)

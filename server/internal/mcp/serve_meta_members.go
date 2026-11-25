@@ -227,17 +227,25 @@ func (s *Service) resolveMetaMemberSnapshot(
 // gateway endpoint authorizes against: a stored gateway's membership rows, or
 // an organization gateway's derived members.
 func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slog.Logger, surface string, endpoint *ResolvedMcpEndpoint) (context.Context, []metaMember, error) {
+	var members []metaMember
+	var err error
 	if endpoint.IsOrganizationGateway() {
-		ctx, members, _, err := s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID, false)
-		return ctx, members, err
+		if surface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx) {
+			ctx = withTypedConsentAuth(ctx)
+		}
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID, false)
+	} else {
+		ctx, members, _, err = s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID, false)
 	}
-	ctx, members, _, err := s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 	if err != nil {
 		return ctx, nil, err
 	}
-	// Only consent and its validation read a stored gateway's associated
-	// clients, and only a gateway that signs people in has any to match.
-	if endpoint.UserSessionIssuerID != uuid.Nil {
+	switch {
+	case surface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx) && !endpoint.IsOrganizationGateway():
+		if err := s.withTypedMemberRegistrations(ctx, endpoint.OrganizationID, members); err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member offers").LogError(ctx, logger)
+		}
+	case !endpoint.IsOrganizationGateway() && endpoint.UserSessionIssuerID != uuid.Nil:
 		if err := s.attachAssociatedClients(ctx, endpoint.OrganizationID, members); err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
 		}
@@ -393,7 +401,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	if userSessionIssuerID != uuid.Nil {
 		enforced := serving
 		if !serving {
-			enforced, err = s.consentAuthChoicesEnforced(ctx, organizationID)
+			enforced, err = s.typedConsentAuth(ctx, organizationID)
 			if err != nil {
 				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check gateway consent auth choices").LogError(ctx, logger)
 			}
@@ -419,14 +427,23 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	}
 
 	var clients []remotesessions.Client
+	typedConsent := authzSurface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx)
 	if !serving && userSessionIssuerID != uuid.Nil {
-		// Consent cards still use legacy links during their separate rollout.
-		if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
-			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
+		if typedConsent {
+			applyTypedMemberRegistrations(members, offers)
 		}
-		clients, err = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
-		if err != nil {
-			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "list gateway sign-in clients").LogError(ctx, logger)
+		// The agent gateway signs nobody in, so its callers never read
+		// associations and its members keep the derived match.
+		if !typedConsent {
+			if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
+				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
+			}
+		}
+		if !typedConsent || hasHostedConsentMember(members) {
+			clients, err = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
+			if err != nil {
+				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "list gateway sign-in clients").LogError(ctx, logger)
+			}
 		}
 	}
 	shadow := s.newMandatoryShadow(ctx, organizationID)
@@ -488,7 +505,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 				}
 			}
 			if servingClientsErr != nil || !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
-				return clientServesAnyMember(client, []metaMember{member})
+				return (!typedConsent || member.backend != metaMemberBackendProxied) && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
 			}) {
 				continue
 			}

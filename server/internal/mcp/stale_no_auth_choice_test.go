@@ -230,16 +230,32 @@ func TestStaleNoAuthChoiceReconnectsThroughConsent(t *testing.T) {
 					requireExecuted(t, g.call(t, rotated.AccessToken, "other--tool_000"))
 					requireStaleError(t, g.call(t, rotated.AccessToken, "source--tool_000"), staleReconnectCopy)
 
+					if !typed {
+						// A legacy association stales the old choice but must not
+						// authorize previewing or issuing a new one.
+						beforePreview := g.source.requests.Load()
+						stateID, _ := seedGatewayConsentChallenge(t, ctx, g.ti, g.issuer, g.client, g.gateway, g.slug)
+						inventory := gatewayInventoryFromPage(t, consentGetPageWithContext(t, ctx, g.ti, g.slug, stateID))
+						found := false
+						for _, outcome := range inventory.MemberOutcomes {
+							if outcome.Slug == "source" {
+								require.Equal(t, "not_set_up", outcome.Status)
+								found = true
+							}
+						}
+						require.True(t, found, "consent explicitly shows the member needing setup")
+						pending := g.approve(t, ctx)
+						claims, err := usersessions.NewSigner("test-jwt-secret").Validate(pending.token, urn.NewUserSessionIssuer(g.issuer).String())
+						require.NoError(t, err)
+						policy, err := usersessionsrepo.New(g.ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: g.issuer, Jti: claims.ID})
+						require.NoError(t, err)
+						_, err = authclientfixtures.New(g.ti.conn).GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: policy.CredentialID, McpServerID: g.serverID})
+						require.ErrorIs(t, err, pgx.ErrNoRows, "the grant must not stamp a choice from legacy setup")
+						require.Equal(t, beforePreview, g.source.requests.Load(), "no upstream requests during preview or issuance")
+						seedTypedSessionClient(t, ctx, g.ti, g.org, g.project, g.serverID, registration, authz.AuthClientTypeRemoteSession, urn.NewUserSubject(mockidp.MockUserID))
+					}
 					insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", g.source.url)
 					renewed := g.approve(t, ctx)
-					if !typed {
-						// The legacy picker still renders, but issuing against
-						// legacy-only setup must not persist a guessed choice.
-						beforeCall := g.source.requests.Load()
-						requireStaleError(t, g.call(t, renewed.token, "source--tool_000"), "has no sign-in set up yet")
-						require.Equal(t, beforeCall, g.source.requests.Load())
-						return
-					}
 					requireExecuted(t, g.call(t, renewed.token, "source--tool_000"))
 					require.Equal(t, "Bearer fixture-token", g.source.callAuthorization.Load())
 				})
@@ -343,6 +359,7 @@ func TestValidGatewayChoiceIsUntouched(t *testing.T) {
 	t.Parallel()
 	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect)
 	registration := g.attachSignIn(t, ctx, true)
+	g.ti.service.SetAuthClientPermitted(true)
 	insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", g.source.url)
 	authClientID := serverAuthClientID(t, ctx, g.ti, g.org, g.serverID, authz.AuthClientTypeRemoteSession)
 	seedPrincipalGrant(t, ctx, g.ti, g.org, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), authz.ScopeMCPAuth, authClientID.String())
@@ -439,19 +456,16 @@ func TestStaleNoAuthReconnectCopyFollowsTypedOffers(t *testing.T) {
 	})
 }
 
-// Resynchronizing a no-auth gateway member's derived authorization server is
-// not a change an approval covers under enforcement, so the frozen approval
-// keeps serving. Without enforcement the same resync asks for the approval
-// again.
+// Consent captures a typed fingerprint even if runtime enforcement is off.
+// A derived issuer resync does not change that approval.
 func TestGatewayApprovalAcrossDerivedIssuerResync(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name     string
 		enforced bool
-		served   bool
 	}{
-		{name: "no-auth member under enforcement", enforced: true, served: true},
-		{name: "no-auth member without enforcement", enforced: false, served: false},
+		{name: "no-auth member under enforcement", enforced: true},
+		{name: "no-auth member without enforcement", enforced: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -470,12 +484,7 @@ func TestGatewayApprovalAcrossDerivedIssuerResync(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, authclientfixtures.New(g.ti.conn).SetServerRemoteSessionIssuerFixture(ctx, authclientfixtures.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: conv.ToNullUUID(issuer.ID), ID: g.serverID}))
 
-			w := g.call(t, connection.token, "source--tool_000")
-			if tc.served {
-				requireExecuted(t, w)
-				return
-			}
-			require.Contains(t, w.Body.String(), "changed since you approved it")
+			requireExecuted(t, g.call(t, connection.token, "source--tool_000"))
 		})
 	}
 }

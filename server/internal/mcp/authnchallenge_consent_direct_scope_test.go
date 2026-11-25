@@ -216,7 +216,7 @@ func TestConsentDirectScope_InventoryCannotApproveAnotherChoice(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
 }
 
-func TestConsentDirectScope_OffAndShadowKeepLegacyPreview(t *testing.T) {
+func TestConsentDirectScope_OffAndShadowUseTypedPreview(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{"not_enrolled"} {
 		t.Run(mode, func(t *testing.T) {
@@ -232,7 +232,7 @@ func TestConsentDirectScope_OffAndShadowKeepLegacyPreview(t *testing.T) {
 			requests := member.drain()
 			require.NotEmpty(t, requests)
 			for _, request := range requests {
-				require.Equal(t, "Bearer legacy-token", request.auth)
+				require.Equal(t, "Bearer typed-token", request.auth)
 			}
 		})
 	}
