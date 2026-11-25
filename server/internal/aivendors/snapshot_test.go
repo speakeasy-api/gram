@@ -153,6 +153,9 @@ func TestSnapshotDisabledDocumentsKeepTheirMatch(t *testing.T) {
 			t.Parallel()
 			_, ok := snapshot.CatalogPreset(tc.clientID)
 			require.False(t, ok, "the client is unknown, not the broader pattern's product")
+			doc, ok := snapshot.CatalogDocument(tc.clientID)
+			require.True(t, ok, "the disabled document still wins the match")
+			require.False(t, doc.Enabled)
 		})
 	}
 	known := []struct {
@@ -171,8 +174,13 @@ func TestSnapshotDisabledDocumentsKeepTheirMatch(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, tc.product, got.ProductID)
 			require.True(t, got.Enabled)
+			doc, ok := snapshot.CatalogDocument(tc.clientID)
+			require.True(t, ok)
+			require.Equal(t, got, doc)
 		})
 	}
+	_, ok := snapshot.CatalogDocument("https://unrelated.example.com/client.json")
+	require.False(t, ok)
 }
 
 func TestSnapshotFingerprintTreatsNilAndEmptyAlike(t *testing.T) {

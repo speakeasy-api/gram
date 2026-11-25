@@ -962,7 +962,7 @@ func newWorkerCommand() *cli.Command {
 				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
 				OrganizationEncryptionSweeper:  orgEncryptionSweeper(orgEncryption.Provisioner),
 				OrganizationEncryptionMigrator: orgEncryptionMigrator,
-				StartupSeeds:                   startupSeeds(logger, db, siteURL),
+				StartupSeeds:                   startupSeeds(logger, db, siteURL, outboundOrigin),
 				AssistantsCore:                 assistantsCore,
 				TemporalEnv:                    temporalEnv,
 				PIScanner:                      piScanner,

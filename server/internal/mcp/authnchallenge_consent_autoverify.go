@@ -64,8 +64,8 @@ func (a *autoVerifications) shutdown(ctx context.Context) error {
 }
 
 // Shutdown stops admitting automatic verifications and the keepalive
-// re-check, releases code runtimes and drains the probes in flight, then
-// closes the tool call logger. Run it after the HTTP servers have drained and
+// re-check, releases code runtimes and drains the probes and CIMD candidate
+// writes in flight, then closes the tool call logger. Run it after the HTTP servers have drained and
 // before the database and cache close: the probes detach from their requests
 // and still write verdicts and close upstream sessions.
 func (s *Service) Shutdown(ctx context.Context) error {
@@ -104,6 +104,9 @@ func (s *Service) Shutdown(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("drain upstream token refreshes: %w", err))
 		}
 	}
+	// Handlers have drained, so no new candidate writes start; those in flight
+	// end within their own write timeout.
+	s.cimdCandidates.Wait()
 	s.toolCallLogger.Close()
 	return errors.Join(errs...)
 }

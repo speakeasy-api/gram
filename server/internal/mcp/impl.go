@@ -28,6 +28,7 @@ import (
 	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/cimdcandidates"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -207,6 +208,8 @@ type Service struct {
 	// instrument (a denial performs no fetch, so it has no place under
 	// cimd.fetch.attempts).
 	cimdAdmissionMetrics *admission.Metrics
+	// cimdCandidates records open-mode clients no catalog document covers.
+	cimdCandidates *cimdcandidates.Recorder
 	// clientAssertionVerifier verifies private_key_jwt client assertions at
 	// the token and revocation endpoints. Nil without Redis, in which case
 	// assertion clients are refused rather than admitted unverified.
@@ -681,6 +684,7 @@ func NewService(aiCatalog *aivendors.Store,
 		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
+		cimdCandidates:            cimdcandidates.NewRecorder(db, meterProvider, logger),
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
 		workloadGrant:             newWorkloadGrant(db, redisClient, guardianPolicy, meterProvider, logger),
 		idJAGValidator:            idJAGValidator,

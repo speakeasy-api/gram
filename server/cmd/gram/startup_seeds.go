@@ -12,7 +12,10 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/cimdcandidates"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
@@ -23,7 +26,10 @@ import (
 // startupSeeds lists the reference data every worker keeps applied. To ship
 // new data, change the seed's source in code: its Version moves and the next
 // deploy applies it. To add a kind of seed, append one here.
-func startupSeeds(logger *slog.Logger, db *pgxpool.Pool, assetBaseURL *url.URL) []activities.StartupSeed {
+//
+// outboundOrigin is the origin admission treats as first party for assistant
+// documents; nil when the caller does not configure one.
+func startupSeeds(logger *slog.Logger, db *pgxpool.Pool, assetBaseURL *url.URL, outboundOrigin *url.URL) []activities.StartupSeed {
 	return []activities.StartupSeed{
 		{
 			Name:    "ai-client-catalog",
@@ -42,6 +48,20 @@ func startupSeeds(logger *slog.Logger, db *pgxpool.Pool, assetBaseURL *url.URL) 
 				}
 				if _, err := oktaseed.Apply(ctx, logger, mcpregistry.New(db, validator).WithAssetBaseURL(assetBaseURL)); err != nil {
 					return fmt.Errorf("apply okta catalog seed: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Name:    cimdcandidates.BackfillSeedName,
+			Version: cimdcandidates.BackfillSeedVersion,
+			Apply: func(ctx context.Context) error {
+				catalog, err := aivendors.Load(ctx, db, logger, aitargets.ValidateCatalog)
+				if err != nil {
+					return fmt.Errorf("load AI catalog for cimd candidate backfill: %w", err)
+				}
+				if _, err := cimdcandidates.Backfill(ctx, logger, db, catalog, outboundOrigin); err != nil {
+					return fmt.Errorf("backfill cimd client candidates: %w", err)
 				}
 				return nil
 			},
@@ -94,7 +114,9 @@ func newAppSeedCommand() *cli.Command {
 			}
 			defer db.Close()
 
-			seeds, err := selectStartupSeeds(startupSeeds(logger, db, assetBaseURL), c.StringSlice("name"))
+			// This command takes no server or outbound callback URL, so the
+			// candidate backfill matches assistant documents on any origin.
+			seeds, err := selectStartupSeeds(startupSeeds(logger, db, assetBaseURL, nil), c.StringSlice("name"))
 			if err != nil {
 				return err
 			}

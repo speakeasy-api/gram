@@ -146,23 +146,27 @@ const (
 	// SigintEventKindKey namespaces the event identity within its tenant.
 	SigintEventKindKey = attribute.Key("gram.sigint.event.kind")
 
-	RegistryEntryIDKey               = attribute.Key("gram.registry.entry.id")
-	RegistryUpdatedAtKey             = attribute.Key("gram.registry.entry.updated_at")
-	RegistryInvalidPathsKey          = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
-	RegistryEntryNameKey             = attribute.Key("gram.registry.entry.name")
-	RegistrySeedOutcomeKey           = attribute.Key("gram.registry.seed.outcome")
-	AICatalogSeedVersionKey          = attribute.Key("gram.ai_catalog.seed.version")
-	AICatalogProductsInsertedKey     = attribute.Key("gram.ai_catalog.products_inserted")
-	AICatalogDocumentsInsertedKey    = attribute.Key("gram.ai_catalog.documents_inserted")
-	AICatalogDecisionsLinkedKey      = attribute.Key("gram.ai_catalog.decisions_linked")
-	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
-	AuthSourceKey                    = attribute.Key("gram.auth.source")
-	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
-	AuthorizationActorTypeKey        = attribute.Key("gram.authorization.actor.type")
-	AuthorizationActorIDKey          = attribute.Key("gram.authorization.actor.id")
-	AuthorizationAPIKeyIDKey         = attribute.Key("gram.authorization.api_key_id")
-	AuthorizationAuthorizerUserIDKey = attribute.Key("gram.authorization.authorizer_user_id")
-	AuthorizationOwnerUserIDKey      = attribute.Key("gram.authorization.owner_user_id")
+	RegistryEntryIDKey                = attribute.Key("gram.registry.entry.id")
+	RegistryUpdatedAtKey              = attribute.Key("gram.registry.entry.updated_at")
+	RegistryInvalidPathsKey           = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
+	RegistryEntryNameKey              = attribute.Key("gram.registry.entry.name")
+	RegistrySeedOutcomeKey            = attribute.Key("gram.registry.seed.outcome")
+	AICatalogSeedVersionKey           = attribute.Key("gram.ai_catalog.seed.version")
+	AICatalogProductsInsertedKey      = attribute.Key("gram.ai_catalog.products_inserted")
+	AICatalogDocumentsInsertedKey     = attribute.Key("gram.ai_catalog.documents_inserted")
+	AICatalogDecisionsLinkedKey       = attribute.Key("gram.ai_catalog.decisions_linked")
+	CIMDCandidateRowsScannedKey       = attribute.Key("gram.cimd.candidate_rows_scanned")
+	CIMDCandidateSightingsRecordedKey = attribute.Key("gram.cimd.candidate_sightings_recorded")
+	CIMDCandidateRowsSkippedKey       = attribute.Key("gram.cimd.candidate_rows_skipped")
+	CIMDCandidateRowsHeldKey          = attribute.Key("gram.cimd.candidate_rows_held")
+	AdminOIDCSubjectKey               = attribute.Key("gram.admin.oidc_subject")
+	AuthSourceKey                     = attribute.Key("gram.auth.source")
+	AuthorizationOrganizationIDKey    = attribute.Key("gram.authorization.organization_id")
+	AuthorizationActorTypeKey         = attribute.Key("gram.authorization.actor.type")
+	AuthorizationActorIDKey           = attribute.Key("gram.authorization.actor.id")
+	AuthorizationAPIKeyIDKey          = attribute.Key("gram.authorization.api_key_id")
+	AuthorizationAuthorizerUserIDKey  = attribute.Key("gram.authorization.authorizer_user_id")
+	AuthorizationOwnerUserIDKey       = attribute.Key("gram.authorization.owner_user_id")
 
 	WideEventKey = attribute.Key("gram.wide_event")
 
@@ -415,6 +419,12 @@ const (
 	// refuses nobody: the client got in, and no rule anywhere covered it.
 	// Alert on it alongside "denied_not_listed".
 	CIMDAdmissionOutcomeKey = attribute.Key("gram.cimd.admission_outcome")
+
+	// CIMDCandidateOutcomeKey is what happened to one candidate write on
+	// cimd.candidates.writes: "recorded", "capped" (the issuer is at its
+	// pending cap or no longer exists), "dropped" (too many writes in
+	// flight), or "failed".
+	CIMDCandidateOutcomeKey = attribute.Key("gram.cimd.candidate_outcome")
 
 	// JWKSOriginKey is the host of a remote JWK Set URL — the per-key-host
 	// dimension on jwks.fetch.* metrics. Omitted for inline key sets, which
@@ -2345,6 +2355,14 @@ func CIMDAdmissionOutcome[V ~string](v V) attribute.KeyValue {
 
 func SlogCIMDAdmissionOutcome[V ~string](v V) slog.Attr {
 	return slog.String(string(CIMDAdmissionOutcomeKey), string(v))
+}
+
+func CIMDCandidateOutcome[V ~string](v V) attribute.KeyValue {
+	return CIMDCandidateOutcomeKey.String(string(v))
+}
+
+func SlogCIMDCandidateOutcome[V ~string](v V) slog.Attr {
+	return slog.String(string(CIMDCandidateOutcomeKey), string(v))
 }
 
 func JWKSOrigin(v string) attribute.KeyValue { return JWKSOriginKey.String(v) }
@@ -4721,4 +4739,16 @@ func SlogAICatalogDocumentsInserted(v int64) slog.Attr {
 }
 func SlogAICatalogDecisionsLinked(v int64) slog.Attr {
 	return slog.Int64(string(AICatalogDecisionsLinkedKey), v)
+}
+func SlogCIMDCandidateRowsScanned(v int64) slog.Attr {
+	return slog.Int64(string(CIMDCandidateRowsScannedKey), v)
+}
+func SlogCIMDCandidateSightingsRecorded(v int64) slog.Attr {
+	return slog.Int64(string(CIMDCandidateSightingsRecordedKey), v)
+}
+func SlogCIMDCandidateRowsSkipped(v int64) slog.Attr {
+	return slog.Int64(string(CIMDCandidateRowsSkippedKey), v)
+}
+func SlogCIMDCandidateRowsHeld(v int64) slog.Attr {
+	return slog.Int64(string(CIMDCandidateRowsHeldKey), v)
 }

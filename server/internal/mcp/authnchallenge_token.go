@@ -464,7 +464,7 @@ func (s *Service) authenticateTokenClient(
 			return nil, writeInvalidClientError(ctx, w, r, logger, clientIDNamesEndpointDescription)
 		}
 	}
-	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientCatalog, clientID, resolveMode)
+	clientRow, err := s.resolveUserSessionClient(ctx, logger.With(attr.SlogOAuthClientID(truncateClientIDForLog(clientID))), endpoint, clientCatalog, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "cimd_admission_denied", mcpmetrics.IDJAGRejectionClientNotAdmitted)

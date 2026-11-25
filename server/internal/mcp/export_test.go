@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/cimdcandidates"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -443,4 +444,16 @@ func (s *Service) ConsentSwitched(ctx context.Context, stateID string) bool {
 // AgentConnectionsOutageError is the consent page's answer when an agent's connection is in an outage.
 func AgentConnectionsOutageError(w http.ResponseWriter, err error) error {
 	return agentConnectionsOutage(remoteSessionUnavailableError(w, err), err)
+}
+
+// WaitForCIMDCandidates blocks until every candidate write started so far has
+// finished.
+func (s *Service) WaitForCIMDCandidates() { s.cimdCandidates.Wait() }
+
+// ForgetCIMDCandidateSightings replaces the candidate recorder, as a new
+// process or an elapsed dedup window would.
+func (s *Service) ForgetCIMDCandidateSightings(t *testing.T) {
+	t.Helper()
+	s.cimdCandidates.Wait()
+	s.cimdCandidates = cimdcandidates.NewRecorder(s.db, testenv.NewMeterProvider(t), s.logger)
 }

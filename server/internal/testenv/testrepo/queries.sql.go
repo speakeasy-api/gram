@@ -3497,6 +3497,15 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 	return id, err
 }
 
+const insertCimdClientCandidateFixture = `-- name: InsertCimdClientCandidateFixture :exec
+INSERT INTO cimd_client_candidates (url) VALUES ($1)
+`
+
+func (q *Queries) InsertCimdClientCandidateFixture(ctx context.Context, url string) error {
+	_, err := q.db.Exec(ctx, insertCimdClientCandidateFixture, url)
+	return err
+}
+
 const insertCompletedDeploymentFixture = `-- name: InsertCompletedDeploymentFixture :exec
 WITH created AS (
   INSERT INTO deployments (id, user_id, project_id, organization_id, idempotency_key)
@@ -4332,6 +4341,90 @@ func (q *Queries) ListAgentColumnNamesFixture(ctx context.Context) ([]string, er
 			return nil, err
 		}
 		items = append(items, column_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCimdClientCandidateSightingsFixture = `-- name: ListCimdClientCandidateSightingsFixture :many
+SELECT s.id, s.candidate_id, s.user_session_issuer_id, s.organization_id, s.last_seen_at, s.created_at, s.updated_at, c.url
+FROM cimd_client_candidate_sightings AS s
+JOIN cimd_client_candidates AS c ON c.id = s.candidate_id
+ORDER BY c.url, s.user_session_issuer_id
+`
+
+type ListCimdClientCandidateSightingsFixtureRow struct {
+	ID                  uuid.UUID
+	CandidateID         uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      pgtype.Text
+	LastSeenAt          pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	Url                 string
+}
+
+func (q *Queries) ListCimdClientCandidateSightingsFixture(ctx context.Context) ([]ListCimdClientCandidateSightingsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listCimdClientCandidateSightingsFixture)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCimdClientCandidateSightingsFixtureRow
+	for rows.Next() {
+		var i ListCimdClientCandidateSightingsFixtureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CandidateID,
+			&i.UserSessionIssuerID,
+			&i.OrganizationID,
+			&i.LastSeenAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Url,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCimdClientCandidatesFixture = `-- name: ListCimdClientCandidatesFixture :many
+SELECT id, url, client_name, status, reason, reviewed_by, reviewed_at, document_id, first_seen_at, last_seen_at, created_at, updated_at FROM cimd_client_candidates ORDER BY url
+`
+
+func (q *Queries) ListCimdClientCandidatesFixture(ctx context.Context) ([]CimdClientCandidate, error) {
+	rows, err := q.db.Query(ctx, listCimdClientCandidatesFixture)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CimdClientCandidate
+	for rows.Next() {
+		var i CimdClientCandidate
+		if err := rows.Scan(
+			&i.ID,
+			&i.Url,
+			&i.ClientName,
+			&i.Status,
+			&i.Reason,
+			&i.ReviewedBy,
+			&i.ReviewedAt,
+			&i.DocumentID,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -7264,6 +7357,20 @@ func (q *Queries) SetChatMessagesCreatedAtFixture(ctx context.Context, arg SetCh
 	return err
 }
 
+const setCimdClientCandidateStatusFixture = `-- name: SetCimdClientCandidateStatusFixture :exec
+UPDATE cimd_client_candidates SET status = $1 WHERE url = $2
+`
+
+type SetCimdClientCandidateStatusFixtureParams struct {
+	Status string
+	Url    string
+}
+
+func (q *Queries) SetCimdClientCandidateStatusFixture(ctx context.Context, arg SetCimdClientCandidateStatusFixtureParams) error {
+	_, err := q.db.Exec(ctx, setCimdClientCandidateStatusFixture, arg.Status, arg.Url)
+	return err
+}
+
 const setCustomDomainHealthWithoutDNSObservation = `-- name: SetCustomDomainHealthWithoutDNSObservation :exec
 UPDATE custom_domains
 SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = $1
@@ -8329,6 +8436,20 @@ type SetUserPlatformAdminFixtureParams struct {
 // Test-only fixture: controls platform-admin eligibility for invitation flows.
 func (q *Queries) SetUserPlatformAdminFixture(ctx context.Context, arg SetUserPlatformAdminFixtureParams) error {
 	_, err := q.db.Exec(ctx, setUserPlatformAdminFixture, arg.Admin, arg.ID)
+	return err
+}
+
+const setUserSessionClientCIMDFetchedAtFixture = `-- name: SetUserSessionClientCIMDFetchedAtFixture :exec
+UPDATE user_session_clients SET client_id_metadata_fetched_at = $1 WHERE id = $2
+`
+
+type SetUserSessionClientCIMDFetchedAtFixtureParams struct {
+	FetchedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+func (q *Queries) SetUserSessionClientCIMDFetchedAtFixture(ctx context.Context, arg SetUserSessionClientCIMDFetchedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserSessionClientCIMDFetchedAtFixture, arg.FetchedAt, arg.ID)
 	return err
 }
 
