@@ -54,6 +54,7 @@ func checkAttachmentReachLifecycle(t *testing.T, state string, checkRecheck bool
 	source := createUserSessionIssuer(t, ctx, ti.conn, "attachment-source")
 	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "attachment-client")
 	session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), source.String(), client)
+	ensureAttachmentParent(t, ctx, ti.conn, session.RemoteSessionClientID, config)
 	binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, RemoteSessionID: session.ID, SubjectUrn: session.SubjectUrn.String()})
 	require.NoError(t, err)
 	fixtures := testrepo.New(ti.conn)

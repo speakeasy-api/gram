@@ -144,10 +144,9 @@ func (f attachFixture) clientOfProvider(t *testing.T, ctx context.Context, slug 
 		Audience:                pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuerID,
-	}))
+	if userIssuerID != uuid.Nil {
+		placeClientForSignInInProject(t, ctx, f.ti.conn, f.projectID, f.orgID, client.ID, userIssuerID)
+	}
 	return client.ID
 }
 
@@ -177,12 +176,12 @@ func TestAttachServerClientAssociation_SharedIssuer(t *testing.T) {
 	issuer := f.issuer(t, ctx, "attach-shared")
 	target := f.serverAt(t, ctx, "attach-shared-a", "https://a.example.com/mcp", issuer)
 	sibling := f.serverAt(t, ctx, "attach-shared-b", "https://b.example.com/mcp", issuer)
-	client, _ := f.client(t, ctx, "attach-shared", issuer)
+	client, _ := f.client(t, ctx, "attach-shared", uuid.Nil)
 	resync(t, ctx, f.ti.conn, f.orgID, f.projectID, issuer)
-	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, target), "a shared issuer captures nothing, which is what attach repairs")
+	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, target), "a shared issuer alone does not configure the target")
 	siblingBefore, err := f.ti.service.ListServerClientAssociations(ctx, &gen.ListServerClientAssociationsPayload{McpServerID: sibling.String()})
 	require.NoError(t, err)
-	require.Equal(t, []string{client.String()}, siblingBefore.RequiredClientIds, "a sibling falls back to a client nothing claims")
+	require.Empty(t, siblingBefore.RequiredClientIds, "sharing a sign-in does not configure the sibling")
 
 	before, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionRemoteSessionClientAttachMcpServer)
 	require.NoError(t, err)
@@ -191,7 +190,7 @@ func TestAttachServerClientAssociation_SharedIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, client.String(), result.Association.RemoteSessionClientID)
 	require.Equal(t, "project", result.Association.Scope)
-	require.Empty(t, result.BoundUserSessionIssuerIds, "the client was already bound, so no binding changed")
+	require.Empty(t, result.BoundUserSessionIssuerIds, "an exact placement does not add an issuer binding")
 
 	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, target))
 	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, sibling), "attach names one server")
@@ -212,7 +211,7 @@ func TestAttachServerClientAssociation_SharedIssuer(t *testing.T) {
 	require.Equal(t, []string{client.String()}, listed.RequiredClientIds, "the server's callers now need its client")
 	siblingAfter, err := f.ti.service.ListServerClientAssociations(ctx, &gen.ListServerClientAssociationsPayload{McpServerID: sibling.String()})
 	require.NoError(t, err)
-	require.Empty(t, siblingAfter.RequiredClientIds, "the attach claims the client, so the sibling stops falling back to it")
+	require.Empty(t, siblingAfter.RequiredClientIds, "attaching on the target does not configure the sibling")
 
 	_, err = f.attach(ctx, target, client)
 	require.NoError(t, err, "attaching again is a no-op")
@@ -434,7 +433,7 @@ func TestAttachServerClientAssociation_OffersRegistrationWithoutServersIssuerPai
 
 	_, err := f.attach(ctx, server, client)
 	require.NoError(t, err)
-	requireClientBound(t, ctx, f.ti, client, own, false)
+	requireNoAttachmentParent(t, ctx, f.ti, client, own)
 	require.NotEmpty(t, offeredAuthClients(t, ctx, f.ti.conn, server))
 	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
 }
@@ -552,12 +551,8 @@ func TestHostedServerAssociationDoesNotRequireOrCreateIssuerLink(t *testing.T) {
 	issuer := f.issuer(t, ctx, "hosted-exact-unlinked")
 	first := f.hostedServer(t, ctx, "hosted-exact-a", conv.ToNullUUID(issuer))
 	second := f.hostedServer(t, ctx, "hosted-exact-b", conv.ToNullUUID(issuer))
-	client, _ := f.client(t, ctx, "hosted-exact", issuer)
+	client, _ := f.client(t, ctx, "hosted-exact", uuid.Nil)
 	q := repo.New(f.ti.conn)
-	_, err := q.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
-		OrganizationID: f.orgID, ProjectID: f.projectID, RemoteSessionClientID: client, UserSessionIssuerID: issuer,
-	})
-	require.NoError(t, err)
 	for _, server := range []uuid.UUID{first, second} {
 		result, err := f.attach(ctx, server, client)
 		require.NoError(t, err)
@@ -716,15 +711,13 @@ func TestDetachServerClientAssociation_KeepsAnOrganizationIssuersBinding(t *test
 	f.serverAt(t, ctx, "release-org-sibling", "https://c.example.com/mcp", own)
 	f.member(t, ctx, createImpactGateway(t, ctx, f.ti, "release-org", organizationIssuer), server)
 	client, _ := f.client(t, ctx, "release-org", own)
-	require.NoError(t, repo.New(f.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client,
-		UserSessionIssuerID:   organizationIssuer,
-	}))
+	other := placeClientForSignIn(t, ctx, f.ti.conn, client, organizationIssuer)
 
 	_, err := f.attach(ctx, server, client)
 	require.NoError(t, err)
 	require.NoError(t, detachServerClient(ctx, f.ti, server, client))
-	requireClientBound(t, ctx, f.ti, client, organizationIssuer, true)
+	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
+	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, other))
 }
 
 // A captured association can predate the rules a new attach follows.

@@ -45,11 +45,7 @@ func bindSiblingIssuer(t *testing.T, ctx context.Context, ti *testInstance, clie
 	t.Helper()
 
 	sibling := createUserSessionIssuer(t, ctx, ti.conn, slug)
-	err := repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   sibling,
-	})
-	require.NoError(t, err)
+	placeClientForSignIn(t, ctx, ti.conn, clientID, sibling)
 	return sibling
 }
 
@@ -216,10 +212,7 @@ func TestRefreshRemoteSession_SiblingIssuerRefreshesSharedCredential(t *testing.
 		"shared-refresh-sibling-issuer", upstream.URL)
 	provenance := createUserSessionIssuer(t, ctx, ti.conn, "usi-shared-refresh-sibling-a")
 	clientID := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, *authCtx.ProjectID, issuerID, "shared-refresh-sibling-cid")
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   provenance,
-	}))
+	placeClientForSignIn(t, ctx, ti.conn, clientID, provenance)
 	subject := seedRefreshableSharedSession(t, ctx, ti, provenance, clientID, "shared-refresh-sibling")
 	sibling := bindSiblingIssuer(t, ctx, ti, clientID, "usi-shared-refresh-sibling-b")
 

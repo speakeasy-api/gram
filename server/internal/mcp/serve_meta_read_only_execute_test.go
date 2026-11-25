@@ -173,7 +173,8 @@ func seedReadOnlyProxiedGateway(t *testing.T, ctx context.Context, ti *testInsta
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, client, subject, "token-member-a", upstream.url)
 
 	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, serverID, client, "remote_session", subject)
-	return metaSlug, serverID, upstream, mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: serverID, clientID: typed})
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: serverID, clientID: typed})
+	return metaSlug, serverID, upstream, bearer
 }
 
 // executeReadOnlyMetaTool drives execute_read_only_tool through the public

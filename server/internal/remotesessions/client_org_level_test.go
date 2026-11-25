@@ -5,12 +5,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -43,9 +47,8 @@ func TestListClients_OrgLevelClientResolvedForProject(t *testing.T) {
 }
 
 // TestListClients_OrgLevelClientFromOtherOrgNotResolved is the cross-tenant
-// guard: an org-level client owned by a different organization, even when
-// (defensively) linked to this project's user_session_issuer, must not resolve
-// for this org because the org-OR predicate matches only the caller's org.
+// guard: a client placed in a foreign organization must not resolve for the
+// caller's sign-in. The schema also refuses placing it in the caller's project.
 func TestListClients_OrgLevelClientFromOtherOrgNotResolved(t *testing.T) {
 	t.Parallel()
 
@@ -57,7 +60,17 @@ func TestListClients_OrgLevelClientFromOtherOrgNotResolved(t *testing.T) {
 	otherOrg := createOrganization(t, ctx, ti.conn, "other-org")
 	otherOrgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, otherOrg, "other-org-issuer")
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cross-org-usi")
-	seedOrgLevelRemoteClient(t, ctx, ti.conn, otherOrg, otherOrgIssuer, "other-org-cid", userIssuer)
+	otherClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, otherOrg, otherOrgIssuer, "other-org-cid")
+	foreignServer := seedMCPServerInOrg(t, ctx, ti.conn, otherOrg, "foreign-placement")
+	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: foreignServer, OrganizationID: otherOrg})
+	require.NoError(t, err)
+	associateClient(t, ctx, ti.conn, otherOrg, server.ProjectID, foreignServer, otherClient)
+	callerServer := seedServerOnIssuer(t, ctx, ti.conn, *authCtx.ProjectID, userIssuer, "caller-placement")
+	association := testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: callerServer, RemoteSessionClientID: otherClient}
+	err = testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, association)
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "mcp_server_remote_session_clients_client_scope_check", pgErr.ConstraintName)
 
 	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
 	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
@@ -80,7 +93,8 @@ func TestAttachUserSessionIssuer_OrgLevelClientConflictsWithProjectClient(t *tes
 
 	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "guard-issuer")
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "guard-usi")
-	createRemoteClient(t, ctx, ti, orgIssuer.String(), userIssuer.String(), "guard-project-cid")
+	server := seedServerOnIssuer(t, ctx, ti.conn, *authCtx.ProjectID, userIssuer, "guard-project-server")
+	projectClient := createRemoteClient(t, ctx, ti, orgIssuer.String(), userIssuer.String(), "guard-project-cid")
 
 	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "guard-org-cid")
 
@@ -90,6 +104,7 @@ func TestAttachUserSessionIssuer_OrgLevelClientConflictsWithProjectClient(t *tes
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeConflict)
+	require.Equal(t, []uuid.UUID{uuid.MustParse(projectClient)}, serverAssociatedClients(t, ctx, ti, server))
 }
 
 // TestGetRemoteSessionClient_OrgLevelClientHidesOtherProjectsUserSessionIssuerIds
@@ -108,11 +123,30 @@ func TestGetRemoteSessionClient_OrgLevelClientHidesOtherProjectsUserSessionIssue
 	callerUserIssuer := createUserSessionIssuer(t, ctx, ti.conn, "p2-caller-usi")
 	otherProject := createProject(t, ctx, ti.conn, "p2-other-project")
 	otherUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "p2-other-usi")
-	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "p2-cid", callerUserIssuer, otherUserIssuer)
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "p2-cid", callerUserIssuer)
+	otherServer := placeClientForSignInInProject(t, ctx, ti.conn, otherProject, authCtx.ActiveOrganizationID, orgClient, otherUserIssuer)
+	require.Equal(t, []uuid.UUID{orgClient}, associatedClients(t, ctx, ti.conn, otherProject, otherServer), "the foreign placement must exist to exercise project scoping")
 
 	view, err := ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{ID: orgClient.String()})
 	require.NoError(t, err)
 	require.Equal(t, []string{callerUserIssuer.String()}, view.UserSessionIssuerIds)
+
+	q := repo.New(ti.conn)
+	rows, err := q.ListRemoteSessionClientsByProjectID(ctx, repo.ListRemoteSessionClientsByProjectIDParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		RemoteSessionIssuerID: conv.ToNullUUID(orgIssuer), Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, []uuid.UUID{callerUserIssuer}, rows[0].UserSessionIssuerIds)
+
+	filtered, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, UserSessionIssuerID: callerUserIssuer,
+		RemoteSessionIssuerID: conv.ToNullUUID(orgIssuer), Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered, 1)
+	require.Equal(t, []uuid.UUID{callerUserIssuer}, filtered[0].UserSessionIssuerIds)
 }
 
 // TestDetachUserSessionIssuer_RejectsOtherProjectsBindingOnOrgLevelClient
@@ -134,7 +168,8 @@ func TestDetachUserSessionIssuer_RejectsOtherProjectsBindingOnOrgLevelClient(t *
 	// org-level client is bound to.
 	otherProject := createProject(t, ctx, ti.conn, "detach-boundary-other-project")
 	otherUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "detach-boundary-other-usi")
-	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "detach-boundary-cid", otherUserIssuer)
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "detach-boundary-cid")
+	placeClientForSignInInProject(t, ctx, ti.conn, otherProject, authCtx.ActiveOrganizationID, orgClient, otherUserIssuer)
 
 	// The caller (the auth context's own project) must not be able to detach the
 	// other project's binding.
@@ -203,7 +238,7 @@ func TestAttachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
-	requireClientBound(t, ctx, ti, orgClient, userIssuer, false)
+	require.Zero(t, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, orgClient, userIssuer))
 }
 
 func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
@@ -215,7 +250,8 @@ func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 
 	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "orgwide-detach-issuer")
 	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "orgwide-detach-usi")
-	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "orgwide-detach-cid", userIssuer)
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "orgwide-detach-cid")
+	ensureAttachmentParent(t, ctx, ti.conn, orgClient, userIssuer)
 
 	_, err := ti.service.DetachLegacyIssuerForTest(withoutOrganizationAdmin(t, ctx), &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  orgClient.String(),
@@ -223,7 +259,7 @@ func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
-	requireClientBound(t, ctx, ti, orgClient, userIssuer, true)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, orgClient, userIssuer))
 }
 
 // The pre-lock binding snapshot must not turn a concurrent org-wide change
@@ -278,7 +314,34 @@ func TestClientAttachment_OrgWideGuardUsesLockedBinding(t *testing.T) {
 			case <-time.After(30 * time.Second):
 				t.Fatal("binding change did not complete after releasing issuer lock")
 			}
-			requireClientBound(t, ctx, ti, orgClient, userIssuer, !attach)
+			want := 1
+			if attach {
+				want = 0
+			}
+			require.Equal(t, want, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, orgClient, userIssuer))
 		})
 	}
+}
+
+func TestListClientsBySignIn_IncludesOrganizationGatewayPlacement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	project, org := projectIDFromContext(t, ctx), activeOrganizationID(t, ctx)
+	gatewaySignIn := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "list-org-gateway")
+	memberSignIn := createUserSessionIssuer(t, ctx, ti.conn, "list-org-member")
+	provider := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, org, "list-org-provider")
+	registration := seedOrgLevelRemoteClient(t, ctx, ti.conn, org, provider, "list-org-registration", memberSignIn)
+	q := repo.New(ti.conn)
+	params := repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
+		ProjectID: project, OrganizationID: org, UserSessionIssuerID: gatewaySignIn,
+		RemoteSessionIssuerID: conv.ToNullUUID(provider), Cursor: uuid.NullUUID{}, LimitValue: 10,
+	}
+	rows, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, registration, rows[0].RemoteSessionClient.ID)
+	seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "list-org-other-gateway")
+	rows, err = q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, rows, "an ambiguous organization issuer must not acquire placements")
 }

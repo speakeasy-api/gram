@@ -50,11 +50,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			}
 			var posted atomic.Value
 			as := newConsentExchangeAS(t, &posted, "typed-upstream-token")
-			var bindings []uuid.UUID
-			if scenario == "legacy" || scenario == "gateway_legacy" {
-				bindings = []uuid.UUID{issuerID}
-			}
-			registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "typed-login", as.URL, bindings)
+			registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "typed-login", as.URL, nil)
 			endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, issuerID, "typed-login")
 			q := authclientbackfill.New(ti.conn)
 			serverID, remoteID := uuid.New(), uuid.New()
@@ -82,6 +78,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			require.NoError(t, loadErr)
 			require.Len(t, loaded, 1)
 			if scenario == "legacy" || scenario == "gateway_legacy" {
+				require.NoError(t, q.SetServerUserSessionIssuerFixture(ctx, authclientbackfill.SetServerUserSessionIssuerFixtureParams{ID: serverID, UserSessionIssuerID: conv.ToNullUUID(issuerID)}))
 				_, err = q.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, RemoteSessionClientID: registration})
 				require.NoError(t, err)
 			}

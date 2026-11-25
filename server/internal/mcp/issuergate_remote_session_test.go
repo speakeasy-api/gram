@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
 
@@ -511,16 +512,22 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 // Give the fixture's user access to this client, not to other credentials.
 func seedTypedSessionClient(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID, serverID, registrationID uuid.UUID, clientType string, subject urn.SessionSubject) uuid.UUID {
 	t.Helper()
-	q := authclientbackfill.New(ti.conn)
-	registration := uuid.NullUUID{UUID: registrationID, Valid: registrationID != uuid.Nil}
-	clientID, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: registration})
-	require.NoError(t, err)
-	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: clientID, Source: "admin"}))
+	clientID := seedServerAuthOffer(t, ctx, ti.conn, organizationID, projectID, serverID, registrationID, clientType)
 	if subject.Kind == urn.SessionSubjectKindUser {
 		_, err := organizationsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: organizationID, UserID: conv.ToPGText(subject.ID)})
 		require.NoError(t, err)
 		seedPrincipalGrant(t, ctx, ti, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, subject.ID), authz.ScopeMCPAuth, clientID.String())
 	}
+	return clientID
+}
+
+func seedServerAuthOffer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, serverID, registrationID uuid.UUID, clientType string) uuid.UUID {
+	t.Helper()
+	q := authclientbackfill.New(conn)
+	registration := uuid.NullUUID{UUID: registrationID, Valid: registrationID != uuid.Nil}
+	clientID, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: registration})
+	require.NoError(t, err)
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: clientID, Source: "admin"}))
 	return clientID
 }
 
@@ -562,8 +569,9 @@ func attachHostedRemoteSessionClient(t *testing.T, ctx context.Context, ti *test
 	return client
 }
 
-// attachTestRemoteSessionClient binds a new remote_session_client to the user
-// session issuer, giving its sessions an upstream remote session requirement.
+// attachTestRemoteSessionClient creates a registration and retains the
+// compatibility row required by the principal attachment foreign key.
+// The caller sets up any runtime association or typed offer separately.
 func attachTestRemoteSessionClient(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, userSessionIssuerID uuid.UUID) remotesessions_repo.RemoteSessionClient {
 	t.Helper()
 
@@ -590,11 +598,17 @@ func attachTestRemoteSessionClient(t *testing.T, ctx context.Context, ti *testIn
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: remoteClient.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-	}))
+	retainClientIssuerFK(t, ctx, ti.conn, remoteClient.ID, userSessionIssuerID)
 	return remoteClient
+}
+
+// retainClientIssuerFK is not a runtime sign-in binding.
+func retainClientIssuerFK(t *testing.T, ctx context.Context, conn *pgxpool.Pool, registrationID, issuerID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, remotesessions_repo.New(conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: registrationID,
+		UserSessionIssuerID:   issuerID,
+	}))
 }
 
 // upsertExpiredRefreshableRemoteSession links subject with an access token

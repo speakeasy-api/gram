@@ -485,9 +485,10 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 	t.Parallel()
 	issuer, candidate := uuid.New(), uuid.New()
 	for name, tc := range map[string]struct {
-		row       ListSelectionMappingsRow
-		typedOnly bool
-		want      SelectionOutcome
+		row              ListSelectionMappingsRow
+		typedOnly        bool
+		typedOfferRepair bool
+		want             SelectionOutcome
 	}{
 		"no-auth beside an association, not enforcing": {
 			row:  ListSelectionMappingsRow{NoAuth: true, ServerHasAssociations: true},
@@ -522,10 +523,16 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 			typedOnly: true,
 			want:      SelectionUnusable,
 		},
+		"typed offer maps a live registration without an FK parent": {
+			row:              ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
+			typedOnly:        true,
+			typedOfferRepair: true,
+			want:             SelectionMap,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly, false)
+			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly, tc.typedOfferRepair)
 			require.Equal(t, tc.want, got)
 			if got == SelectionMap {
 				require.Equal(t, candidate, mapped, "the candidate is the client recorded")

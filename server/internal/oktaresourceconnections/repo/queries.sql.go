@@ -902,18 +902,16 @@ SELECT
   , i.scopes_supported AS issuer_scopes_supported
   , i.omit_scope_fallback AS issuer_omit_scope_fallback
   , (
-      SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
-      FROM remote_session_client_user_session_issuers AS link
-      JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-      WHERE link.remote_session_client_id = c.id
-        AND usi.deleted IS FALSE
-        AND (
-          (usi.project_id IS NULL AND usi.organization_id = $1::text)
-          OR usi.project_id IN (
-            SELECT id FROM projects
-            WHERE organization_id = $1::text AND deleted IS FALSE
-          )
-        )
+      SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+      FROM mcp_server_remote_session_clients AS link
+      JOIN mcp_servers AS server ON server.id = link.mcp_server_id
+        AND server.project_id = link.project_id AND NOT server.deleted
+      JOIN projects AS project ON project.id = server.project_id
+        AND project.organization_id = link.organization_id AND NOT project.deleted
+      JOIN user_session_issuers AS usi ON usi.id = server.user_session_issuer_id AND NOT usi.deleted
+      WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+        AND link.organization_id = $1::text
+        AND (usi.project_id = project.id OR (usi.project_id IS NULL AND usi.organization_id = project.organization_id))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE

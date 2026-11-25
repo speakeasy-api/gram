@@ -24,6 +24,7 @@ func TestUpdateClient_CorrectsClientID(t *testing.T) {
 	issuerID := createRemoteIssuer(t, ctx, ti, "correct-cid-issuer", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "correct-cid-usi")
 	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "mistyped-cid")
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(clientID), userIssuerID)
 	subject := urn.NewUserSubject("correct-cid-user")
 	insertRemoteSession(t, ctx, ti.conn, subject, userIssuerID.String(), clientID)
 

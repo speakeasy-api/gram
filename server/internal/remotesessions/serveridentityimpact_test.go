@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -115,7 +114,7 @@ func TestGetServerIdentityImpactProjectIssuer(t *testing.T) {
 
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "impact-current", "", false, []string{"none"})
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-next", "", false, []string{"none"})
-	bindServerIdentityClient(t, ctx, ti, "impact-current-client", currentProviderID, userIssuerID, false)
+	bindServerIdentityClient(t, ctx, ti, "impact-current-client", currentProviderID, targetID, false)
 
 	// A change made from one server leaves a directly Remote MCP-backed sibling
 	// alone; only a plain attach still changes what the issuer derives for it.
@@ -152,7 +151,7 @@ func TestGetServerIdentityImpactUnchangedUpstreamIsEmpty(t *testing.T) {
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "impact-noop-target")
 	createImpactServer(t, ctx, ti, projectID, "impact-noop-sibling", userIssuerID)
 	providerID := createServerIdentityProvider(t, ctx, ti, "impact-noop-provider", "", false, []string{"none"})
-	clientID := bindServerIdentityClient(t, ctx, ti, "impact-noop-client", providerID, userIssuerID, false)
+	clientID := bindServerIdentityClient(t, ctx, ti, "impact-noop-client", providerID, targetID, false)
 
 	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "replace", &providerID, &clientID))
 	require.NoError(t, err)
@@ -173,7 +172,7 @@ func TestGetServerIdentityImpactOrganizationIssuerAcrossProjects(t *testing.T) {
 
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-current", "", false, []string{"none"})
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-next", "", false, []string{"none"})
-	bindServerIdentityClient(t, ctx, ti, "impact-org-project-client", currentProviderID, userIssuerID, false)
+	bindServerIdentityClient(t, ctx, ti, "impact-org-project-client", currentProviderID, targetID, false)
 
 	// A change made from one server leaves its siblings alone, here and in other
 	// projects.
@@ -201,15 +200,17 @@ func TestGetServerIdentityImpactOrganizationIssuerAcrossProjects(t *testing.T) {
 	result, err = ti.service.GetServerIdentityImpact(editorCtx, impactPayload(userIssuerID, &targetID, "replace", nil, &orgClientID))
 	require.NoError(t, err)
 	require.Empty(t, impactsByServer(result))
-	_, err = ti.service.CommitServerIdentityConfiguration(editorCtx, existingServerIdentityPayload(targetID, nextProviderID, orgClientID))
-	require.NoError(t, err)
-	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
-
-	// An organization admin may, and the preview lists the other project's
-	// server among those it reaches.
+	// An organization admin can preview an issuer-wide attach before the client
+	// is offered. A server-scoped commit only writes the target's offer.
 	result, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "attach", nil, &orgClientID))
 	require.NoError(t, err)
 	require.Contains(t, impactsByServer(result), otherServerID.String())
+
+	_, err = ti.service.CommitServerIdentityConfiguration(editorCtx, existingServerIdentityPayload(targetID, nextProviderID, orgClientID))
+	require.NoError(t, err)
+	requireNoAttachmentParent(t, ctx, ti, orgClientID, userIssuerID)
+	require.Equal(t, []uuid.UUID{orgClientID}, serverAssociatedClients(t, ctx, ti, targetID))
+	require.Empty(t, serverAssociatedClients(t, ctx, ti, otherServerID), "the commit does not offer the client in another project")
 }
 
 func TestGetServerIdentityImpactRefusesUnbindingOrgClientOnOrgIssuerWithoutOrganizationAdmin(t *testing.T) {
@@ -219,7 +220,7 @@ func TestGetServerIdentityImpactRefusesUnbindingOrgClientOnOrgIssuerWithoutOrgan
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "impact-org-unbind-issuer")
 	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "impact-org-unbind-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-unbind-current", "", false, []string{"none"})
-	orgClientID := bindServerIdentityClient(t, ctx, ti, "impact-org-unbind-client", currentProviderID, userIssuerID, true)
+	orgClientID := bindServerIdentityClient(t, ctx, ti, "impact-org-unbind-client", currentProviderID, targetID, true)
 	associate(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), targetID, orgClientID)
 	recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), targetID)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-unbind-next", "", false, []string{"none"})
@@ -251,26 +252,21 @@ func TestGetServerIdentityImpactMatchesCommitOnDeletedProvider(t *testing.T) {
 	siblingID := createImpactServer(t, ctx, ti, projectID, "impact-deleted-sibling", userIssuerID)
 	liveProviderID := createServerIdentityProvider(t, ctx, ti, "impact-deleted-live", "", false, []string{"none"})
 	deletedProviderID := createServerIdentityProvider(t, ctx, ti, "impact-deleted-gone", "", false, []string{"none"})
-	liveClientID := bindServerIdentityClient(t, ctx, ti, "impact-deleted-live-client", liveProviderID, userIssuerID, false)
-	goneClientID := bindServerIdentityClient(t, ctx, ti, "impact-deleted-gone-client", deletedProviderID, userIssuerID, false)
-	for _, clientID := range []uuid.UUID{liveClientID, goneClientID} {
-		associated, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
-			OrganizationID:        activeOrganizationID(t, ctx),
-			RemoteSessionClientID: clientID,
-			McpServerID:           targetID,
-			ProjectID:             projectID,
-		})
-		require.NoError(t, err)
-		require.Equal(t, int64(1), associated)
-	}
-	recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), targetID)
+	bindServerIdentityClient(t, ctx, ti, "impact-deleted-live-client", liveProviderID, targetID, false)
+	bindServerIdentityClient(t, ctx, ti, "impact-deleted-gone-client", deletedProviderID, targetID, false)
 	_, err := repo.New(ti.conn).DeleteRemoteSessionIssuer(ctx, repo.DeleteRemoteSessionIssuerParams{ID: deletedProviderID, ProjectID: conv.ToNullUUID(projectID)})
 	require.NoError(t, err)
 
 	// A deleted provider is not an eligible offer and does not make a
-	// replacement ambiguous, even while the historical issuer pair exists.
+	// replacement ambiguous, even while its historical association exists.
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-deleted-next", "", false, []string{"none"})
 	nextClientID := createServerIdentityClient(t, ctx, ti, "impact-deleted-new-client", nextProviderID, false)
+	// Adding a second live provider would clear the sibling's derivation. The
+	// deleted provider does not count, so the derivation starts unambiguous.
+	addition, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "attach", &nextProviderID, &nextClientID))
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{siblingID.String(): "clear"}, impactsByServer(addition))
+
 	preview, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "replace", &nextProviderID, &nextClientID))
 	require.NoError(t, err)
 	require.Empty(t, preview.Servers)
@@ -283,11 +279,10 @@ func TestGetServerIdentityImpactMatchesCommitOnDeletedProvider(t *testing.T) {
 	require.Len(t, offers, 1)
 	require.Equal(t, nextClientID, offers[0].ID)
 
-	// The deleted provider's client does not count toward the derivation, as
-	// in the resync: the sibling derives the live provider until another joins.
-	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "attach", &nextProviderID, nil))
+	// Once the replacement is offered, adding that client again has no impact.
+	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "attach", &nextProviderID, &nextClientID))
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{siblingID.String(): "clear"}, impactsByServer(result))
+	require.Empty(t, impactsByServer(result))
 }
 
 func TestGetServerIdentityImpactListsGateways(t *testing.T) {
@@ -298,7 +293,7 @@ func TestGetServerIdentityImpactListsGateways(t *testing.T) {
 	gatewayID := createImpactGateway(t, ctx, ti, "impact-gateway", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "impact-gateway-current", "", false, []string{"none"})
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-gateway-next", "", false, []string{"none"})
-	bindServerIdentityClient(t, ctx, ti, "impact-gateway-client", currentProviderID, userIssuerID, false)
+	bindServerIdentityClient(t, ctx, ti, "impact-gateway-client", currentProviderID, targetID, false)
 
 	for _, tc := range []struct {
 		change     string
@@ -377,7 +372,7 @@ func TestGetServerIdentityImpactCountsUnreadableServers(t *testing.T) {
 	siblingID := createImpactServer(t, ctx, ti, projectID, "impact-hidden-sibling", userIssuerID)
 	createImpactGateway(t, ctx, ti, "impact-hidden-gateway", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "impact-hidden-current", "", false, []string{"none"})
-	bindServerIdentityClient(t, ctx, ti, "impact-hidden-current-client", currentProviderID, userIssuerID, false)
+	bindServerIdentityClient(t, ctx, ti, "impact-hidden-current-client", currentProviderID, targetID, false)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-hidden-next", "", false, []string{"none"})
 	orgClientID := createServerIdentityClient(t, ctx, ti, "impact-hidden-org-client", nextProviderID, true)
 

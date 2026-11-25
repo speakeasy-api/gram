@@ -226,7 +226,7 @@ func runSelections(ctx context.Context, q *Queries, opts Options, size int32, wr
 		return err
 	}
 	return visitSelectionMappings(ctx, q, ListSelectionMappingsParams{
-		TypedOfferRepair: false,
+		TypedOfferRepair: opts.TypedOnly,
 		OrganizationID:   opts.OrganizationID, PageSize: size, OnlyUnmapped: false, ScopeMcpServerIds: nil,
 		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}, func(rows []ListSelectionMappingsRow) error {
@@ -265,13 +265,13 @@ func visitSelectionMappings(ctx context.Context, q *Queries, params ListSelectio
 }
 
 func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write bool, credential liveCredential, row ListSelectionMappingsRow, report *Report) error {
-	outcome, clientID := decideSelection(row, credential.issuer, opts.TypedOnly, false)
+	outcome, clientID := decideSelection(row, credential.issuer, opts.TypedOnly, opts.TypedOnly)
 	counts := report.selectionClass(credential.class)
 	counts.Selections++
 	if outcome == SelectionMap {
 		report.PendingSelectionMappings++
 		if write {
-			written, final, err := mapSelection(ctx, q, opts.OrganizationID, credential.issuer, opts.TypedOnly, false, row, clientID)
+			written, final, err := mapSelection(ctx, q, opts.OrganizationID, credential.issuer, opts.TypedOnly, opts.TypedOnly, row, clientID)
 			if err != nil {
 				return err
 			}

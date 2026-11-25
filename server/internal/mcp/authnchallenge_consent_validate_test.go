@@ -1226,7 +1226,8 @@ func TestServeConsentAction_ToolsetEndpointOffersNoRecheck(t *testing.T) {
 	endpoint.ToolsetID = conv.ToNullUUID(uuid.New())
 
 	member := newValidationMember(t)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim204-toolset", "", []uuid.UUID{shared})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim204-toolset", "", nil)
+	seedConsentSignInPlacement(t, ctx, ti, shared, clientID)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-aim204-toolset", member.url)
 
 	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: stateID, subject: subject, member: member, clientID: clientID, name: ""}

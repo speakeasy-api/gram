@@ -34,6 +34,40 @@ func (q *Queries) ServersAttachAssistantServer(ctx context.Context, arg ServersA
 	return err
 }
 
+const serversCopyStaticCredentialHeader = `-- name: ServersCopyStaticCredentialHeader :execrows
+INSERT INTO mcp_auth_client_headers
+ (id, auth_client_id, organization_id, name, description, is_required, is_secret, value, value_from_request_header)
+SELECT $1::uuid, client.id, client.organization_id,
+ source.name, source.description, source.is_required, source.is_secret, source.value, source.value_from_request_header
+FROM remote_mcp_server_headers AS source
+JOIN remote_mcp_servers AS server ON server.id = source.remote_mcp_server_id AND server.project_id = $2::uuid
+JOIN mcp_auth_clients AS client ON client.id = $3::uuid AND client.project_id = server.project_id
+ AND client.organization_id = $4::text
+WHERE source.id = $5::uuid AND NOT source.deleted AND NOT server.deleted
+`
+
+type ServersCopyStaticCredentialHeaderParams struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	AuthClientID uuid.UUID
+	OrgID        string
+	HeaderID     uuid.UUID
+}
+
+func (q *Queries) ServersCopyStaticCredentialHeader(ctx context.Context, arg ServersCopyStaticCredentialHeaderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversCopyStaticCredentialHeader,
+		arg.ID,
+		arg.ProjectID,
+		arg.AuthClientID,
+		arg.OrgID,
+		arg.HeaderID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const serversInsertAgentConnectGrant = `-- name: ServersInsertAgentConnectGrant :exec
 INSERT INTO principal_grants
   (id, organization_id, principal_urn, scope, selectors)
@@ -145,6 +179,25 @@ func (q *Queries) ServersInsertAttachmentClient(ctx context.Context, arg Servers
 	return err
 }
 
+const serversInsertAttachmentParent = `-- name: ServersInsertAttachmentParent :exec
+INSERT INTO remote_session_client_user_session_issuers
+  (remote_session_client_id, user_session_issuer_id)
+VALUES
+  ($1::uuid,
+   $2::uuid)
+`
+
+type ServersInsertAttachmentParentParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+// The principal attachment FK requires this compatibility row.
+func (q *Queries) ServersInsertAttachmentParent(ctx context.Context, arg ServersInsertAttachmentParentParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAttachmentParent, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
+}
+
 const serversInsertAttachmentSession = `-- name: ServersInsertAttachmentSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id,
@@ -221,6 +274,43 @@ func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsert
 		arg.RemoteSessionClientID,
 	)
 	return err
+}
+
+const serversInsertAuthClientEMA = `-- name: ServersInsertAuthClientEMA :execrows
+INSERT INTO mcp_auth_client_emas
+  (auth_client_id, organization_id, remote_session_client_id, remote_session_issuer_id, resource, requested_scopes)
+SELECT client.id, binding.organization_id, binding.remote_session_client_id,
+       binding.remote_session_issuer_id, binding.resource, binding.requested_scopes
+FROM remote_session_ema_bindings AS binding
+JOIN mcp_auth_clients AS client
+  ON client.id = $1::uuid
+ AND client.organization_id = binding.organization_id
+ AND client.remote_session_client_id = binding.remote_session_client_id
+WHERE binding.id = $2::uuid
+  AND binding.organization_id = $3::text
+  AND binding.project_id = $4::uuid
+  AND client.project_id = binding.project_id
+  AND binding.state = 'ready'
+`
+
+type ServersInsertAuthClientEMAParams struct {
+	AuthClientID uuid.UUID
+	BindingID    uuid.UUID
+	OrgID        string
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) ServersInsertAuthClientEMA(ctx context.Context, arg ServersInsertAuthClientEMAParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversInsertAuthClientEMA,
+		arg.AuthClientID,
+		arg.BindingID,
+		arg.OrgID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const serversInsertAuthClientHeader = `-- name: ServersInsertAuthClientHeader :exec
@@ -1754,24 +1844,6 @@ func (q *Queries) ServersInsertRemoteMCPServers(ctx context.Context, arg Servers
 	return err
 }
 
-const serversInsertRemoteSessionClientIssuerBinding = `-- name: ServersInsertRemoteSessionClientIssuerBinding :exec
-INSERT INTO remote_session_client_user_session_issuers
-  (remote_session_client_id, user_session_issuer_id)
-VALUES
-  ($1::uuid,
-   $2::uuid)
-`
-
-type ServersInsertRemoteSessionClientIssuerBindingParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) ServersInsertRemoteSessionClientIssuerBinding(ctx context.Context, arg ServersInsertRemoteSessionClientIssuerBindingParams) error {
-	_, err := q.db.Exec(ctx, serversInsertRemoteSessionClientIssuerBinding, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	return err
-}
-
 const serversInsertRemovedGatewayMember = `-- name: ServersInsertRemovedGatewayMember :exec
 INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order, deleted_at) VALUES
@@ -2090,14 +2162,18 @@ func (q *Queries) ServersInsertToolBlock(ctx context.Context, arg ServersInsertT
 const serversInsertUpstreamClientChoice = `-- name: ServersInsertUpstreamClientChoice :exec
 INSERT INTO upstream_client_selections
   (id, project_id, organization_id, credential_kind, credential_id,
-   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
-   source)
+   mcp_server_id, remote_session_client_id, client_attachment_scope,
+   auth_client_id, auth_client_attachment_scope, no_auth, source)
 SELECT $1::uuid, $2::uuid, $3::text, $4::text,
        $5::uuid, $6::uuid, c.id, c.attachment_scope,
-       $7::uuid IS NULL, $8::text
+       auth_client.id, auth_client.attachment_scope,
+       ($7::uuid IS NULL AND $8::uuid IS NULL), $9::text
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
-  ON c.id = $7::uuid
+  ON c.id = $8::uuid
+LEFT JOIN mcp_auth_clients AS auth_client
+  ON auth_client.id = $7::uuid
+ AND auth_client.organization_id = $3::text
 `
 
 type ServersInsertUpstreamClientChoiceParams struct {
@@ -2107,6 +2183,7 @@ type ServersInsertUpstreamClientChoiceParams struct {
 	CredentialKind        string
 	CredentialID          uuid.UUID
 	McpServerID           uuid.UUID
+	AuthClientID          uuid.NullUUID
 	RemoteSessionClientID uuid.NullUUID
 	Source                string
 }
@@ -2124,6 +2201,7 @@ func (q *Queries) ServersInsertUpstreamClientChoice(ctx context.Context, arg Ser
 		arg.CredentialKind,
 		arg.CredentialID,
 		arg.McpServerID,
+		arg.AuthClientID,
 		arg.RemoteSessionClientID,
 		arg.Source,
 	)
