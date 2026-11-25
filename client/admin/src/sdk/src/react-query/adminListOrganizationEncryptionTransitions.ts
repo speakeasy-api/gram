@@ -23,7 +23,9 @@ import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   AdminListOrganizationEncryptionTransitionsRequest,
+  Sort,
   State,
+  Values,
 } from "../models/operations/adminlistorganizationencryptiontransitions.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -59,7 +61,7 @@ export type AdminListOrganizationEncryptionTransitionsQueryError =
  * listOrganizationEncryptionTransitions admin
  *
  * @remarks
- * Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.
+ * Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.
  */
 export function useAdminListOrganizationEncryptionTransitions(
   request?: AdminListOrganizationEncryptionTransitionsRequest | undefined,
@@ -86,7 +88,7 @@ export function useAdminListOrganizationEncryptionTransitions(
  * listOrganizationEncryptionTransitions admin
  *
  * @remarks
- * Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.
+ * Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.
  */
 export function useAdminListOrganizationEncryptionTransitionsSuspense(
   request?: AdminListOrganizationEncryptionTransitionsRequest | undefined,
@@ -115,6 +117,8 @@ export function setAdminListOrganizationEncryptionTransitionsData(
     parameters: {
       useCase?: string | undefined;
       state?: State | undefined;
+      values?: Values | undefined;
+      sort?: Sort | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
     },
@@ -136,6 +140,8 @@ export function invalidateAdminListOrganizationEncryptionTransitions(
     [parameters: {
       useCase?: string | undefined;
       state?: State | undefined;
+      values?: Values | undefined;
+      sort?: Sort | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
     }]

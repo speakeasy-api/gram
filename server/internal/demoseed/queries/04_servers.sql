@@ -273,14 +273,6 @@ VALUES
    -- No scope of its own: the resource pin decides once discovery is on.
    NULL);
 
--- name: ServersInsertAttachmentParent :exec
--- The principal attachment FK requires this compatibility row.
-INSERT INTO remote_session_client_user_session_issuers
-  (remote_session_client_id, user_session_issuer_id)
-VALUES
-  (@remote_session_client_id::uuid,
-   @user_session_issuer_id::uuid);
-
 -- mcp_servers.remote_session_issuer_id is denormalized from a server's client
 -- associations, and the app recomputes it after the commit that writes them
 -- (ResyncMCPServerRemoteSessionIssuers). Seeding them in SQL never goes through

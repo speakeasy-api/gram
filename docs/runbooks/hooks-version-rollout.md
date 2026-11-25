@@ -112,5 +112,6 @@ the rollout off PostHog without changing what any customer receives:
   decided to roll them out.
 
 The staff Admin MCP exposes the same state read-only through the
-`get_hooks_rollout` and `get_organization_hooks_rollout` tools. Pin changes are
+`get_hooks_rollout`, `get_hooks_release_progress` and
+`get_organization_hooks_rollout` tools. Pin changes are
 made from the dashboard only.

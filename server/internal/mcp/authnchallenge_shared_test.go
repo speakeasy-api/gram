@@ -842,7 +842,7 @@ func TestSharedAuthorizationServer_RemoteConnectReturnsToSharedConsent(t *testin
 	ctx, ti := newTestMCPService(t)
 	authCtx := requireProjectAuthContext(t, ctx)
 	f := seedSharedIssuer(t, ctx, ti)
-	remoteClientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "shared-rc-"+uuid.NewString()[:8], "", nil)
+	remoteClientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "shared-rc-"+uuid.NewString()[:8], "")
 	placeHostedConsentRegistration(t, ctx, ti, f.slugA, remoteClientID)
 
 	authorized := sharedAuthorize(t, ctx, ti, f, pkceChallenge(pkceVerifier(t)), f.resource(ti, f.slugA))

@@ -73,7 +73,7 @@ func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase, asBase
 	}
 	slug := "recovery-" + uuid.NewString()[:6]
 	f.asBase = conv.Default(asBase, "https://"+slug+"-as.example.com")
-	registration := createConsentRemoteClientWithCallback(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, f.asBase, nil, callbackBase)
+	registration := createConsentRemoteClientWithCallback(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, f.asBase, callbackBase)
 	f.fixtures = authclientfixtures.New(ti.conn)
 	remoteID, serverID := uuid.New(), uuid.New()
 	f.upstream = "https://mcp.example.com/" + remoteID.String()[:8]

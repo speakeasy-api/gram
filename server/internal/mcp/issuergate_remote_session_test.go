@@ -213,11 +213,17 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 			// Only the remote server signs in through the issuer.
 			testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{UserSessionIssuerID: &uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 			remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
-			if tc.sibling {
-				attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
-			}
 			slug := "chained-refresh-" + uuid.NewString()[:8]
 			serverID := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug, upstream)
+			associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, remoteClient.ID)
+			offer := seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, remoteClient.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
+			if tc.sibling {
+				sibling := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+				associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, sibling.ID)
+				seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, sibling.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
+			} else {
+				seedTypedSessionChoice(t, ctx, ti, authCtx.ActiveOrganizationID, issuer.ID, oldJTI, serverID, offer)
+			}
 			_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 				ProjectID:       *authCtx.ProjectID,
 				CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -270,12 +276,17 @@ func TestHandleToken_RefreshIgnoresSiblingClientsOfTheIssuer(t *testing.T) {
 	const upstreamB = "https://sibling-refresh-b.example.com/mcp"
 	ctx, ti := newTestMCPService(t)
 	authCtx := requireProjectAuthContext(t, ctx)
-	_, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+	_, issuer, client, refreshToken, jti := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
 	clientA := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
-	attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+	clientB := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
 	slug := "sibling-refresh-" + uuid.NewString()[:8]
 	serverA := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug, upstreamA)
-	attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug+"-b", upstreamB)
+	serverB := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug+"-b", upstreamB)
+	associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverA, clientA.ID)
+	associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverB, clientB.ID)
+	offer := seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverA, clientA.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
+	seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverB, clientB.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
+	seedTypedSessionChoice(t, ctx, ti, authCtx.ActiveOrganizationID, issuer.ID, jti, serverA, offer)
 	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:       *authCtx.ProjectID,
 		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -569,8 +580,7 @@ func attachHostedRemoteSessionClient(t *testing.T, ctx context.Context, ti *test
 	return client
 }
 
-// attachTestRemoteSessionClient creates a registration and retains the
-// compatibility row required by the principal attachment foreign key.
+// attachTestRemoteSessionClient creates an unplaced upstream registration.
 // The caller sets up any runtime association or typed offer separately.
 func attachTestRemoteSessionClient(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, userSessionIssuerID uuid.UUID) remotesessions_repo.RemoteSessionClient {
 	t.Helper()
@@ -598,17 +608,7 @@ func attachTestRemoteSessionClient(t *testing.T, ctx context.Context, ti *testIn
 	})
 	require.NoError(t, err)
 
-	retainClientIssuerFK(t, ctx, ti.conn, remoteClient.ID, userSessionIssuerID)
 	return remoteClient
-}
-
-// retainClientIssuerFK is not a runtime sign-in binding.
-func retainClientIssuerFK(t *testing.T, ctx context.Context, conn *pgxpool.Pool, registrationID, issuerID uuid.UUID) {
-	t.Helper()
-	require.NoError(t, remotesessions_repo.New(conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: registrationID,
-		UserSessionIssuerID:   issuerID,
-	}))
 }
 
 // upsertExpiredRefreshableRemoteSession links subject with an access token

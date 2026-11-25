@@ -41,7 +41,6 @@ func TestAuthClientAttachedConnection(t *testing.T) {
 		agentID := uuid.New()
 		_, err := testrepo.New(ti.conn).CreateAttachmentAgentFixture(ctx, testrepo.CreateAttachmentAgentFixtureParams{ID: agentID, OrganizationID: organizationID, OwnerUserID: auth.UserID, Name: "attached-owner-" + name})
 		require.NoError(t, err)
-		ensureAttachmentParent(t, ctx, ti.conn, client, issuer)
 		_, err = testrepo.New(ti.conn).InsertAttachmentFixture(ctx, testrepo.InsertAttachmentFixtureParams{ProjectID: projectID, OrganizationID: organizationID, PrincipalID: agentID, UserSessionIssuerID: issuer, RemoteSessionClientID: client, RemoteSessionID: source.ID, GrantGeneration: source.GrantGeneration, AttachedBySubjectID: owner.String()})
 		require.NoError(t, err)
 		return attachment{

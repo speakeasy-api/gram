@@ -99,9 +99,6 @@ func (f *fixture) client(userIssuerIDs ...uuid.UUID) uuid.UUID {
 		RemoteSessionIssuerID: issuerID,
 		ClientID:              "cid-" + clientID.String()[:8],
 	}))
-	for _, userIssuerID := range userIssuerIDs {
-		require.NoError(f.t, f.q.SeedClientBindingFixture(ctx, SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID}))
-	}
 	return clientID
 }
 
@@ -330,7 +327,6 @@ func TestRecordUpstreamClientSelections(t *testing.T) {
 
 		// The compatibility row does not govern a choice backed by a live
 		// server association.
-		require.NoError(t, f.q.UnbindClientFixture(t.Context(), UnbindClientFixtureParams{RemoteSessionClientID: second, UserSessionIssuerID: issuer}))
 		require.True(t, f.selection(issuer, later, server).Usable)
 	})
 
@@ -1289,7 +1285,7 @@ func TestReconcileIssuerScopeEmptyDoesNotRecordOrMap(t *testing.T) {
 	require.NoError(t, authclientbackfill.LockEMAWriterScope(t.Context(), tx, f.orgID, []uuid.UUID{f.projectID}))
 	require.NoError(t, authclientbackfill.PreflightServerAssociations(t.Context(), tx, f.orgID, server))
 	require.NoError(t, authclientbackfill.SyncServerAssociations(t.Context(), tx, f.orgID, server))
-	skipped, err := ReconcileIssuerScopeInLockedTransaction(t.Context(), tx, f.orgID, issuer, []uuid.UUID{}, nil)
+	skipped, err := ReconcileTypedIssuerScopeInLockedTransaction(t.Context(), tx, f.orgID, issuer, []uuid.UUID{}, nil)
 	require.NoError(t, err)
 	require.Zero(t, skipped)
 	require.NoError(t, tx.Commit(t.Context()))

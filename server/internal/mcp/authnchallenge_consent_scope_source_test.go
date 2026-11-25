@@ -84,7 +84,7 @@ func seedGatewayScopeOffers(t *testing.T, tag string, aScopes []string) (context
 	seedScopeConsentOffer(t, ctx, fx, a.mcpServerID, owner)
 	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", aScopes)
 
-	other := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag+"-b", "", []uuid.UUID{fx.shared})
+	other := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag+"-b", "")
 	otherIssuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, other)
 	fx = focusTypedConsentTunnel(t, ctx, fx, metaID, other, otherIssuer, tag+"-b")
 	advertise(t, ctx, fx, otherIssuer, []string{"b:read"})
@@ -113,9 +113,9 @@ func TestServeConsentAction_MultiBindingConnectRequestsOwnResourceScopes(t *test
 func TestServeConsentAction_SoleSharedClientRequestsEndpointResourceScopes(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, other := seedSharedUpstreamEndpoint(t, "scope-sole")
+	ctx, fx, _ := seedSharedUpstreamEndpoint(t, "scope-sole")
 	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", []string{"a:read"})
-	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-sole", "", []uuid.UUID{fx.shared, other})
+	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-sole", "")
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, shared, "remote_session")
 	advertise(t, ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, shared), []string{"b:read"})
 
@@ -179,7 +179,7 @@ func TestServeConsent_RemoteEndpointIdentityReconnectFollowsLogin(t *testing.T) 
 	ctx, fx := standaloneConsent(t, "scope-remote", upstream.URL, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, upstream.URL)
 	})
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-remote", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-remote", "")
 	seedScopeConsentOffer(t, ctx, fx, fx.endpoint.McpServerID.UUID, clientID)
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 	const claimed = "https://claimed.example.com/mcp"
