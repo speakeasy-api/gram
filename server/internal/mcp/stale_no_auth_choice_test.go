@@ -759,7 +759,9 @@ func TestEnforcedNoAuthServerIgnoresALeftoverAssociation(t *testing.T) {
 	pendingBearer, pendingID := issueTyped()
 	_, err = fixtures.GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: pendingID, McpServerID: server.ID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	require.Equal(t, http.StatusUnauthorized, call(pendingBearer).Code)
+	pending := call(pendingBearer)
+	require.Equal(t, http.StatusPreconditionFailed, pending.Code, pending.Body.String())
+	require.Empty(t, pending.Header().Get("WWW-Authenticate"), "a new sign-in cannot fix incomplete setup")
 	require.Empty(t, upstream.journal(), "an incomplete connection must make zero upstream requests")
 
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server.ID, AuthClientID: authClient, Source: "admin"}))
