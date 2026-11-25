@@ -246,6 +246,7 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
           {items.map((item) => (
             <li key={item.key}>
               <ActionRow
+                overlayHint={tall}
                 {...("prompt" in item
                   ? { prompt: item.prompt }
                   : { href: item.href })}
@@ -262,7 +263,12 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
                 <span className="min-w-0 flex-1">
                   <span
                     title={item.label}
-                    className="text-sm max-lg:line-clamp-2 max-lg:break-words lg:block lg:truncate"
+                    className={cn(
+                      "text-sm",
+                      tall
+                        ? "line-clamp-2 break-words"
+                        : "max-lg:line-clamp-2 max-lg:break-words lg:block lg:truncate",
+                    )}
                   >
                     {item.label}
                   </span>
@@ -397,6 +403,7 @@ function MoversWidget({ className }: { className?: string }): JSX.Element {
           {movers.map((m) => (
             <li key={m.name}>
               <ActionRow
+                overlayHint
                 prompt={`Why did tool calls to the ${m.name} server change from ${m.prev} to ${m.curr} this week? Who and what is driving it?`}
               >
                 <span
@@ -511,7 +518,7 @@ function MostActiveWidget({ className }: { className?: string }): JSX.Element {
             return (
               <li
                 key={`${row.userKind}:${row.userKey}`}
-                className="group hover:bg-muted/50 flex items-center gap-3 px-6 py-3"
+                className="group hover:bg-muted/50 relative flex items-center gap-3 px-6 py-3"
               >
                 {/* An agent's name already carries its own bot badge. */}
                 {!isAgent && (
@@ -534,10 +541,11 @@ function MostActiveWidget({ className }: { className?: string }): JSX.Element {
                 <span className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
                   {row.eventCount.toLocaleString()} calls
                 </span>
-                <AskButton
-                  className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
-                  prompt={`What has ${name} been doing in this project this week? Which tools and MCP servers did they use, and did anything fail?`}
-                />
+                <HoverOverlay className="top-1/2 -translate-y-1/2">
+                  <AskButton
+                    prompt={`What has ${name} been doing in this project this week? Which tools and MCP servers did they use, and did anything fail?`}
+                  />
+                </HoverOverlay>
               </li>
             );
           })}
@@ -643,17 +651,27 @@ function ActionRow({
   children,
   prompt,
   href,
+  overlayHint = false,
 }: {
   children: ReactNode;
   prompt?: string;
   href?: string;
+  /** Show the hint over the row's end instead of reserving width for it. */
+  overlayHint?: boolean;
 }): JSX.Element {
   const { sendPrompt } = useInsightsState();
-  const className =
-    "group hover:bg-muted/50 flex w-full items-start gap-3 px-6 py-3 text-left";
-  const hint = (
+  const className = cn(
+    "group hover:bg-muted/50 flex w-full items-start gap-3 px-6 py-3 text-left",
+    overlayHint && "relative",
+  );
+  const label = prompt ? "Ask ›" : "Open ›";
+  const hint = overlayHint ? (
+    <HoverOverlay className="top-3 flex h-5 items-center">
+      <span className="text-muted-foreground text-xs">{label}</span>
+    </HoverOverlay>
+  ) : (
     <span className="text-muted-foreground mt-0.5 shrink-0 text-xs opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">
-      {prompt ? "Ask ›" : "Open ›"}
+      {label}
     </span>
   );
   if (href) {
@@ -675,6 +693,28 @@ function ActionRow({
       {children}
       {hint}
     </button>
+  );
+}
+
+/** Shown over the right end of a hovered or focused row, on the row's own background. */
+function HoverOverlay({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}): JSX.Element {
+  return (
+    <span
+      className={cn(
+        "bg-card pointer-events-none absolute right-6 opacity-0 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-visible:opacity-100",
+        className,
+      )}
+    >
+      <span className="group-hover:bg-muted/50 flex h-full items-center pl-2">
+        {children}
+      </span>
+    </span>
   );
 }
 

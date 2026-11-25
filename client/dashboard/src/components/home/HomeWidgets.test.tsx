@@ -30,6 +30,7 @@ const state = vi.hoisted(() => ({
     viewerScope: "all",
     problems: [] as Record<string, unknown>[],
     total: undefined as number | undefined,
+    status: 503,
   },
   connectionCalls: [] as unknown[],
   failingTools: [] as Record<string, unknown>[],
@@ -38,9 +39,9 @@ const state = vi.hoisted(() => ({
   signalsFail: false,
 }));
 
-const unavailable = () =>
+const unavailable = (status = 503) =>
   new GramError("unavailable", {
-    response: new Response("", { status: 503 }),
+    response: new Response("", { status }),
     request: new Request("http://localhost/rpc"),
     body: "",
   });
@@ -65,7 +66,7 @@ vi.mock(
                 problemsTotal: c.total ?? c.problems.length,
               },
             }
-          : { ok: false, error: unavailable() };
+          : { ok: false, error: unavailable(c.status) };
       if (!state.hold) return Promise.resolve(answer());
       return new Promise((resolve) => {
         state.hold = { release: () => resolve(answer()) };
@@ -269,6 +270,7 @@ afterEach(() => {
     viewerScope: "all",
     problems: [],
     total: undefined,
+    status: 503,
   };
   state.connectionCalls = [];
   state.failingTools = [];
@@ -446,6 +448,62 @@ describe("Needs attention connection rows", () => {
     );
   });
 
+  it("treats a not-found read as connection health off, not as a failure", async () => {
+    state.scopes = ["log:read", "org:admin"];
+    state.signals = ["1", "2", "3"].map((id) => ({
+      ...criticalSignal,
+      ruleId: `rule-${id}`,
+      description: `Signal ${id}`,
+    }));
+    state.failingTools = ["a", "b", "c"].map((t) => ({
+      ...failingTool,
+      gramUrn: `tools:http:x:${t}`,
+    }));
+    state.connections.ok = false;
+    state.connections.status = 404;
+    renderWidgets();
+    await settled();
+    expect(within(card()).getAllByRole("listitem")).toHaveLength(5);
+    expect(within(card()).queryByText(PARTIAL)).toBeNull();
+    expect(card().getAttribute("data-tooltip")).toBe(
+      "High-risk signals, failing tools, and pending access requests from the last 7 days.",
+    );
+    await act(async () => {});
+    expect(state.connectionCalls).toHaveLength(1);
+  });
+
+  it("wraps labels to two lines and overlays the hint only in the tall card", async () => {
+    state.connections.problems = [problem("a")];
+    renderWidgets();
+    await settled();
+    const label = within(card()).getByTitle(/^Problem a since/);
+    expect(label.className.split(" ")).toEqual(
+      expect.arrayContaining(["line-clamp-2", "break-words"]),
+    );
+    expect(label.className).not.toContain("lg:truncate");
+    expect(
+      within(rows()[0]!).getByText("Open ›").parentElement!.parentElement!
+        .className,
+    ).toContain("absolute");
+    cleanup();
+    state.flag = "disabled";
+    state.failingTools = [failingTool];
+    renderWidgets();
+    await settled();
+    const own = within(card()).getByTitle("search is failing");
+    expect(own.className.split(" ")).toEqual(
+      expect.arrayContaining([
+        "lg:block",
+        "lg:truncate",
+        "max-lg:line-clamp-2",
+      ]),
+    );
+    expect(within(card()).getByText("Ask ›").className).not.toContain(
+      "absolute",
+    );
+    expect(within(card()).getByText("Ask ›").className).toContain("shrink-0");
+  });
+
   it("keeps the five-row card when the API says the viewer reads only their own logs", async () => {
     state.scopes = ["log:read", "org:admin"];
     state.signals = ["1", "2", "3"].map((id) => ({
@@ -619,6 +677,7 @@ describe("useConnectionProblems display", () => {
     ["base", "an own-logs answer", {}, { viewerScope: "own" }],
     ["base", "a logging-off answer", {}, { loggingEnabled: false }],
     ["tall", "a failed read", {}, { ok: false }],
+    ["base", "a not-found read", {}, { ok: false, status: 404 }],
     ["base", "logs off", { logsEnabled: false }, {}],
     ["base", "the flag off", { flag: "disabled" as const }, {}],
     ["base", "no log:read", { scopes: [] }, {}],
