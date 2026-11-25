@@ -340,7 +340,7 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 		return choice, true, err
 	}
 	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: no execution profile choice", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeCredentialMisconfigured)
-	return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
+	return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication, remoteSessionReconnectDescription)
 }
 
 // directAgentKeyActor returns the agent a principal agent key in ctx

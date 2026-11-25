@@ -45,6 +45,8 @@ type consentGovernor struct {
 	// checkedSignIns are the sign-ins CheckConsent judged.
 	checkedSignIns []uuid.UUID
 	refreshed      []identitychaining.Request
+	// refused is the cached refusal behind a RefreshRefused.
+	refused identitychaining.Outcome
 }
 
 func (g *consentGovernor) Governs(context.Context, identitychaining.Request) bool {
@@ -70,7 +72,7 @@ func (g *consentGovernor) RefreshDecision(_ context.Context, req identitychainin
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.refreshed = append(g.refreshed, req)
-	return identitychaining.RefreshVerdict{Decision: g.refresh, RemoteSessionIssuerID: g.issuer, Provider: "", Reason: ""}
+	return identitychaining.RefreshVerdict{Decision: g.refresh, RemoteSessionIssuerID: g.issuer, Provider: "", Reason: g.refused.Reason, Stage: g.refused.Stage}
 }
 
 func (g *consentGovernor) Acquire(ctx context.Context, req identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {

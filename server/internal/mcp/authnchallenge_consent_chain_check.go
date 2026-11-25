@@ -102,32 +102,33 @@ func (s *Service) consentChainCheckAtRender(ctx context.Context, requests []iden
 
 // chainedConsentClient resolves a posted client_id to a card this consent
 // renders chained for its own subject, with the requests that card relies on.
-func (s *Service) chainedConsentClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, rawClientID string) (*remotesessions.Client, []identitychaining.Request, error) {
+func (s *Service) chainedConsentClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, rawClientID string) (*remotesessions.Client, []identitychaining.Request, map[identitychaining.Request][]uuid.UUID, error) {
 	clientID, err := uuid.Parse(rawClientID)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, logger)
+		return nil, nil, nil, oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, logger)
 	}
 	bound, typed, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
+		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
 	clients := s.remoteChallengeMgr.WithCatalogBranding(ctx, subjectConnectedClients(bound))
 	client := findConsentClient(clients, clientID)
 	if client == nil {
-		return nil, nil, oops.E(oops.CodeBadRequest, nil, "unknown remote session client for this MCP server").LogError(ctx, logger)
+		return nil, nil, nil, oops.E(oops.CodeBadRequest, nil, "unknown remote session client for this MCP server").LogError(ctx, logger)
 	}
 	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients, typed)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve consent routing").LogError(ctx, logger)
+		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "resolve consent routing").LogError(ctx, logger)
 	}
 	if state, ok := statuses[client.ID]; ok && state.Status == remotesessions.RemoteSessionActive {
-		return nil, nil, oops.E(oops.CodeBadRequest, nil, "service is not managed by identity chaining for this consent").LogError(ctx, logger)
+		return nil, nil, nil, oops.E(oops.CodeBadRequest, nil, "service is not managed by identity chaining for this consent").LogError(ctx, logger)
 	}
-	requests := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)[client.ID]
+	chained, members := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
+	requests := chained[client.ID]
 	if len(requests) == 0 {
-		return nil, nil, oops.E(oops.CodeBadRequest, nil, "service is not managed by identity chaining for this consent").LogError(ctx, logger)
+		return nil, nil, nil, oops.E(oops.CodeBadRequest, nil, "service is not managed by identity chaining for this consent").LogError(ctx, logger)
 	}
-	return client, requests, nil
+	return client, requests, members, nil
 }
 
 // serveIdentityChainingCheck runs the exchange a chained card relies on, so
@@ -137,19 +138,18 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger).With(attr.SlogOAuthFlowID(challengeState.FlowID))
 
-	client, requests, err := s.chainedConsentClient(ctx, logger, endpoint, challengeState, r.PostForm.Get("client_id"))
+	client, requests, requestMembers, err := s.chainedConsentClient(ctx, logger, endpoint, challengeState, r.PostForm.Get("client_id"))
 	if err != nil {
 		return err
 	}
 	clientID := client.ID
 
-	owner := s.newResourceDisplayOwner(endpoint, challengeState)
-	display, _ := issuerCardBranding(*client, owner.ownsOrFallsBack(ctx, logger, *client), s.serverURL)
+	display := s.serviceDisplayName(ctx, logger, s.newResourceDisplayOwner(endpoint, challengeState), *client)
 	signInID := uuid.Nil
 	if challengeState.SignInID != nil {
 		signInID = *challengeState.SignInID
 	}
-	result, outcome := s.checkIdentityChaining(ctx, requests, display, signInID)
+	result, outcome, decidedBy := s.checkIdentityChaining(ctx, requests, display, signInID)
 	switchEnabled := result.Status == chainCheckRejected && s.accountSwitchEnabled(ctx, endpoint.OrganizationID)
 	// Off, refusals keep the key they had before the flag.
 	refusedSignIn := uuid.Nil
@@ -174,10 +174,14 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 		attr.SlogIdentityChainingProvider(string(outcome.Provider)),
 	)
 
-	if code, refused := chainingRefusalCode(outcome.Reason); refused && result.Status == chainCheckRejected {
-		s.recordRefusedConsent(ctx, logger, challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint), client.ID, refusedSignIn, code,
+	if step, code, refused := chainingRefusalCode(outcome); refused && result.Status == chainCheckRejected {
+		attempt := challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint)
+		opts := []mcpconnectionattempts.Option{
 			mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject),
-			mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID))
+			mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID),
+		}
+		// A gateway's refusal belongs to each member the refused request serves.
+		s.recordRefusedConsents(ctx, logger, attempt, client.ID, refusedSignIn, requestMembers[decidedBy], step, code, opts...)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -207,7 +211,7 @@ func (s *Service) consentChainedUpstreamToken(ctx context.Context, logger *slog.
 		logger.WarnContext(ctx, "resolve routing for consent identity chaining", attr.SlogError(err))
 		return nil
 	}
-	chained := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
+	chained, _ := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
 	var requests []identitychaining.Request
 	switch {
 	case clientID != uuid.Nil:
@@ -265,63 +269,43 @@ func (s *Service) retireDeniedConsentCredentials(ctx context.Context, logger *sl
 // vendor accepted one: a stored downstream token or, when the credential slot
 // is held, a vendor acceptance cached for a few minutes. It also returns the
 // outcome that decided the result.
-func (s *Service) checkIdentityChaining(ctx context.Context, requests []identitychaining.Request, service string, signInID uuid.UUID) (consentChainCheckResult, identitychaining.Outcome) {
+func (s *Service) checkIdentityChaining(ctx context.Context, requests []identitychaining.Request, service string, signInID uuid.UUID) (consentChainCheckResult, identitychaining.Outcome, identitychaining.Request) {
 	ctx, cancel := context.WithTimeout(ctx, consentChainCheckTimeout)
 	defer cancel()
 	result := chainCheckConnectedResult
 	var decided identitychaining.Outcome
+	var decidedBy identitychaining.Request
 	for _, req := range requests {
 		outcome := s.identityChainer.CheckConsent(ctx, req, signInID)
 		checked := classifyChainCheck(outcome, service)
 		switch checked.Status {
 		case chainCheckRejected:
-			return checked, outcome
+			return checked, outcome, req
 		case chainCheckUnknown:
-			result, decided = checked, outcome
+			result, decided, decidedBy = checked, outcome, req
 		case chainCheckConnected:
 			if result.Status == chainCheckConnected {
-				decided = outcome
+				decided, decidedBy = outcome, req
 			}
 		}
 	}
-	return result, decided
+	return result, decided, decidedBy
 }
 
-// classifyChainCheck maps an outcome to page copy. Only definitive refusals
-// read as rejected; transient, ambiguous and stale outcomes stay unknown.
+// serviceDisplayName is the service a chained card names in its refusals.
+func (s *Service) serviceDisplayName(ctx context.Context, logger *slog.Logger, owner *resourceDisplayOwner, client remotesessions.Client) string {
+	display, _ := issuerCardBranding(client, owner.ownsOrFallsBack(ctx, logger, client), s.serverURL)
+	return display
+}
+
+// classifyChainCheck maps an outcome to page copy from chainingVerdicts; only definitive failures read as rejected.
 func classifyChainCheck(outcome identitychaining.Outcome, service string) consentChainCheckResult {
-	if outcome.Retryable {
+	if outcome.Succeeded() && !outcome.Retryable {
+		return chainCheckConnectedResult
+	}
+	verdict, ok := chainingVerdictOf(outcome)
+	if !ok || verdict.message == nil {
 		return chainCheckUnknownResult
 	}
-	rejected := func(format string) consentChainCheckResult {
-		return consentChainCheckResult{Status: chainCheckRejected, Message: fmt.Sprintf(format, service), Action: ""}
-	}
-	switch outcome.Reason {
-	case identitychaining.ReasonSuccess:
-		return chainCheckConnectedResult
-	case identitychaining.ReasonInvalidGrant, identitychaining.ReasonAccessDenied, identitychaining.ReasonScopePolicyDenied,
-		identitychaining.ReasonInvalidClient, identitychaining.ReasonInvalidTarget, identitychaining.ReasonInsufficientScope:
-		switch outcome.Stage {
-		case identitychaining.StageExchange, identitychaining.StageValidation:
-			return rejected("Your identity provider didn't allow access to %[1]s. Ask your administrator, or use your own %[1]s account.")
-		case identitychaining.StageSelection, identitychaining.StageAuthorization, identitychaining.StageDelegation,
-			identitychaining.StageRedemption, identitychaining.StagePersistence, identitychaining.StageComplete:
-			return rejected("%[1]s didn't accept your identity provider sign-in. Ask your administrator, or use your own %[1]s account.")
-		}
-	case identitychaining.ReasonReauthenticationRequired:
-		return rejected("A current identity provider sign-in for %[1]s is required. Close this page and start connecting again, or use your own %[1]s account.")
-	case identitychaining.ReasonConfigurationRequired:
-		if outcome.Retained {
-			return rejected("Your saved company sign-in for %[1]s isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use your own %[1]s account.")
-		}
-		return rejected("%[1]s isn't set up for identity provider sign-in yet. Ask your administrator, or use your own %[1]s account.")
-	case identitychaining.ReasonIneligibleIdentity:
-		return rejected("Your organization can't vouch for your account to %[1]s, for example because your email isn't on one of its verified domains. Ask your administrator, or use your own %[1]s account.")
-	case identitychaining.ReasonUnmanagedAccount:
-		return rejected("You're signed in to Speakeasy with a personal account, so Speakeasy can't sign you in to %s. Accounts you created yourself with your work email count as personal.")
-	case identitychaining.ReasonNotApplicable, identitychaining.ReasonBindingNotReady, identitychaining.ReasonMalformedAssertion,
-		identitychaining.ReasonMalformedResponse, identitychaining.ReasonTransientFailure, identitychaining.ReasonUnknownRejection,
-		identitychaining.ReasonStaleConfiguration, identitychaining.ReasonProviderUnavailable:
-	}
-	return chainCheckUnknownResult
+	return consentChainCheckResult{Status: chainCheckRejected, Message: verdict.message.text(service), Action: ""}
 }

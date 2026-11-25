@@ -1697,7 +1697,7 @@ func (s *Service) rotateRefreshToken(
 		tracker.Refuse(ctx, mcpconnectionattempts.CodeRefreshedUnverified, mcpconnectionattempts.Subject(&minted.Subject), mcpconnectionattempts.FromRequest(r))
 	case upstreamRefreshCheckFailed:
 		tracker.Succeed(ctx, mcpconnectionattempts.ResultRefreshed, mcpconnectionattempts.Subject(&minted.Subject), mcpconnectionattempts.Detail(string(upstreamRefreshCheckFailed)), mcpconnectionattempts.FromRequest(r))
-	case upstreamRefreshServed, upstreamRefreshReconnect, upstreamRefreshEMARefused:
+	case upstreamRefreshServed, upstreamRefreshReconnect, upstreamRefreshEMARefused, upstreamRefreshEMAIdentityProviderRefused, upstreamRefreshEMAServiceRefused, upstreamRefreshEMANotRenewed:
 		tracker.Succeed(ctx, mcpconnectionattempts.ResultRefreshed, mcpconnectionattempts.Subject(&minted.Subject), mcpconnectionattempts.FromRequest(r))
 	}
 	return published, nil
@@ -1841,7 +1841,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	case identitychaining.RefreshUnconfirmed:
 		return unconfirmedRefreshCheck(verdict.Reason)
 	case identitychaining.RefreshRefused:
-		return upstreamRefreshEMARefused
+		return emaRefusedRefreshCheck(verdict)
 	case identitychaining.RefreshNotChained, identitychaining.RefreshReauthenticate:
 		return upstreamRefreshReconnect
 	}

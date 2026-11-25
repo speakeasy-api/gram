@@ -1317,7 +1317,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 			return recoveryErr
 		}
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeInvalidRemoteSession, err)
-		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
+		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication, remoteSessionReconnectDescription)
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
 		// The upstream token endpoint failed in a way that clears on its own.
 		// A 401 would send the user through reauthorization over an outage, so
@@ -1347,7 +1347,11 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
 			return errWorkloadReconnectRequired
 		}
-		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
+		description := remoteSessionReconnectDescription
+		if refused, ok := errors.AsType[*chainingRefusedError](err); ok {
+			description = refused.description
+		}
+		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication, description)
 	default:
 		return s.remoteSessionResolveFailed(ctx, s.logger, authentication, err)
 	}
@@ -1411,23 +1415,28 @@ func (s *Service) remoteSessionResolveFailed(ctx context.Context, logger *slog.L
 // recordRemoteSessionOutcome writes the request row for an upstream remote
 // session the gate could not use, unless a refresh already wrote it.
 func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication *issuerGateAuthentication, reason string, code mcpconnectionattempts.Code, causes ...error) {
+	endpoint := authentication.endpoint
+	scope := connectionScope(endpoint, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx)))
+	client := s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope)
+	cause := errors.Join(causes...)
+	// A managed sign-in refusal is its own event, whichever answer the request got.
+	refused, isRefused := errors.AsType[*chainingRefusedError](cause)
+	if isRefused && refused.code != code {
+		s.recordRequestOutcome(ctx, scope, refused.code, authentication.request, mcpconnectionattempts.Detail(issuerGateReasonIdentityChainingRefused), mcpconnectionattempts.Subject(&authentication.subject), client)
+	}
 	// Only a fresh, admitted standalone refresh row replaces this gate row.
-	if remotesessions.RefreshFailureRecorded(errors.Join(causes...)) {
+	if (!isRefused || refused.code != code) && remotesessions.RefreshFailureRecorded(cause) {
 		contextvalues.ClaimRefreshConnectionReference(ctx)
 		return
 	}
-	endpoint := authentication.endpoint
-	opts := []mcpconnectionattempts.Option{
-		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject),
-		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope),
-	}
-	if id, ok := remotesessions.UnreadableRemoteSessionID(errors.Join(causes...)); ok {
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject), client}
+	if id, ok := remotesessions.UnreadableRemoteSessionID(cause); ok {
 		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
 	}
 	if mcpconnectionattempts.AddressOf(code) != guardian.AddressFine {
-		opts = append(opts, remotesessions.OutageAddressOption(errors.Join(causes...)))
+		opts = append(opts, remotesessions.OutageAddressOption(cause))
 	}
-	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx))), code, authentication.request, opts...)
+	s.recordRequestOutcome(ctx, scope, code, authentication.request, opts...)
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required
@@ -1444,7 +1453,7 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 // enforcement, an explicit refresh is still refused when its chosen upstream
 // grant is unusable, including an agent session on a compatibility registration.
 // Its connection owner must repair the grant; a new session cannot bypass it.
-func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) error {
+func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, description string) error {
 	errorCode := ""
 	// Typed serving cannot offer an anonymous caller a personal connection to
 	// repair. Hosted endpoints retain their existing reconnect policy.
@@ -1455,8 +1464,8 @@ func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w ht
 	if authentication.refreshableUserSession && reauthorizes {
 		errorCode = oautherr.CodeInvalidToken
 	}
-	header := bearerErrorChallengeHeader(authentication.protectedResourceURL, errorCode, remoteSessionReconnectDescription)
-	return writeChallenge(w, header, remoteSessionReconnectDescription)
+	header := bearerErrorChallengeHeader(authentication.protectedResourceURL, errorCode, description)
+	return writeChallenge(w, header, description)
 }
 
 // subjectReauthorizesToReconnect reports a person at the client who can repair

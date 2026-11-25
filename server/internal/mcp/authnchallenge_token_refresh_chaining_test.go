@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"testing"
 	"time"
 
@@ -322,8 +323,9 @@ func TestServePublic_ChainedDelegationFailureMessages(t *testing.T) {
 	t.Parallel()
 	const (
 		retryMessage = "Company sign-in for this server is temporarily unavailable. Try again in a moment."
-		adminMessage = "Company sign-in for this server isn't working. Contact your administrator."
 	)
+	// The paused sign-in reads as on the consent page, naming the service.
+	pausedMessage := regexp.MustCompile(`^Your saved company sign-in for \S+ isn't working right now\. Speakeasy keeps trying it every few minutes, so it may start working again by itself\. If it doesn't, ask your administrator, or use your own \S+ account\.$`)
 	setState := func(t *testing.T, ctx context.Context, f chainedRefreshFixture, state remotesessions_repo.SetTrustedDelegationStateFixtureParams) {
 		t.Helper()
 		state.OrganizationID, state.ClientID = f.org, f.idpClient
@@ -335,7 +337,7 @@ func TestServePublic_ChainedDelegationFailureMessages(t *testing.T) {
 		name    string
 		arrange func(*testing.T, context.Context, chainedRefreshFixture)
 		code    oops.Code
-		message string
+		message any
 	}{
 		{
 			name: "paused after the provider refused",
@@ -346,7 +348,7 @@ func TestServePublic_ChainedDelegationFailureMessages(t *testing.T) {
 					RetryAfter:        conv.ToPGTimestamptz(time.Now().Add(5 * time.Minute)),
 				})
 			},
-			code: oops.CodeForbidden, message: adminMessage,
+			code: oops.CodeForbidden, message: pausedMessage,
 		},
 		{
 			name: "erased after an invalid identity",
@@ -394,7 +396,11 @@ func TestServePublic_ChainedDelegationFailureMessages(t *testing.T) {
 			f.retainDelegation(t, ctx, "durable_credential_present")
 			tc.arrange(t, ctx, f)
 			w, err := f.callEndpoint(t, ctx)
-			require.Equal(t, tc.message, requireOopsCode(t, err, tc.code))
+			if pattern, ok := tc.message.(*regexp.Regexp); ok {
+				require.Regexp(t, pattern, requireOopsCode(t, err, tc.code))
+			} else {
+				require.Equal(t, tc.message, requireOopsCode(t, err, tc.code))
+			}
 			if tc.code == oops.CodeUnauthorized {
 				require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`, "the client is sent to sign in")
 			} else {

@@ -50,6 +50,6 @@ func TestRefusedConsentKeyWithoutSignInKeepsTheEarlierKey(t *testing.T) {
 	attempt := mcpconnectionattempts.AttemptAt(uuid.New(), time.Now(), scope)
 	clientID, signInID := uuid.New(), uuid.New()
 	code := mcpconnectionattempts.CodeUnmanagedAccount
-	require.Equal(t, "connectionAttemptIneligible:"+attempt.ID().String()+":"+clientID.String()+":"+code.String(), refusedConsentKey(attempt, clientID, uuid.Nil, code))
-	require.Equal(t, "connectionAttemptIneligible:"+attempt.ID().String()+":"+clientID.String()+":"+signInID.String()+":"+code.String(), refusedConsentKey(attempt, clientID, signInID, code))
+	require.Equal(t, "connectionAttemptIneligible:"+attempt.ID().String()+":"+clientID.String()+":"+code.String(), refusedConsentKey(attempt, clientID, uuid.Nil, uuid.Nil, code))
+	require.Equal(t, "connectionAttemptIneligible:"+attempt.ID().String()+":"+clientID.String()+":"+signInID.String()+":"+code.String(), refusedConsentKey(attempt, clientID, signInID, uuid.Nil, code))
 }

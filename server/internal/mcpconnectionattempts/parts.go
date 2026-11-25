@@ -39,7 +39,7 @@ var serverDidNotAnswer = []string{
 
 // serviceSignInNeedsRenewing are reasons a refresh is refused for because the person's
 // sign-in to the service needs renewing, whatever step records them.
-var serviceSignInNeedsRenewing = []string{CodeUpstreamReconnectRequired.name, CodeUpstreamEMARefused.name}
+var serviceSignInNeedsRenewing = []string{CodeUpstreamReconnectRequired.name, CodeUpstreamEMARefused.name, CodeUpstreamEMAIdentityProviderRefused.name, CodeUpstreamEMAServiceRefused.name, CodeUpstreamEMANotRenewed.name}
 
 // PartOf returns the part a failure broke, from the step it was recorded on. A request
 // or listing can be refused for any part, so there the reason decides. An unknown

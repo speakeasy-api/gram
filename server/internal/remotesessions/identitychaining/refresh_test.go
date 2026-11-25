@@ -208,8 +208,15 @@ func TestChainer_RefreshDecisionAfterARecentRefusal(t *testing.T) {
 
 	refused := newOutcome(StageExchange, ReasonAccessDenied, ConfidenceVerified, false)
 	require.NoError(t, c.locks.Set(t.Context(), cacheKey("identityChainingFailure", f.req, f.sel), refused, time.Minute))
-	require.Equal(t, RefreshVerdict{Decision: RefreshRefused, RemoteSessionIssuerID: f.sel.remoteIssuerID, Provider: remotesessions.EMAProviderExternal, Reason: ReasonAccessDenied}, c.RefreshDecision(t.Context(), f.req),
-		"a provider that just refused for good does not serve the refreshed grant")
+	require.Equal(t, RefreshVerdict{Decision: RefreshRefused, RemoteSessionIssuerID: f.sel.remoteIssuerID, Provider: remotesessions.EMAProviderExternal, Reason: ReasonAccessDenied, Stage: StageExchange}, c.RefreshDecision(t.Context(), f.req),
+		"a provider that just refused for good does not serve the refreshed grant, and the verdict names the refusal's stage")
+
+	redeemed := newOutcome(StageRedemption, ReasonInvalidGrant, ConfidenceVerified, false)
+	require.NoError(t, c.locks.Set(t.Context(), cacheKey("identityChainingFailure", f.req, f.sel), redeemed, time.Minute))
+	verdict := c.RefreshDecision(t.Context(), f.req)
+	require.Equal(t, RefreshRefused, verdict.Decision)
+	require.Equal(t, StageRedemption, verdict.Stage, "a service refusal is told apart from the identity provider's")
+	require.Equal(t, ReasonInvalidGrant, verdict.Reason)
 
 	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
 	require.Equal(t, RefreshServed, c.RefreshDecision(t.Context(), f.req).Decision, "a usable stored credential still serves, as at runtime")

@@ -202,8 +202,11 @@ func TestDirectUpstreamChainingRefusalWritesARequestRow(t *testing.T) {
 	}{
 		{identitychaining.StageAuthorization, identitychaining.ReasonReauthenticationRequired, mcpconnectionattempts.CodeReauthenticationRequired, mcpconnectionattempts.WhoPerson, ""},
 		// At runtime only the signer refuses an account as ineligible.
-		{identitychaining.StageExchange, identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.WhoAdmin, "Company sign-in for this server isn't working. Contact your administrator."},
-		{identitychaining.StageAuthorization, identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.CodeUnmanagedAccount, mcpconnectionattempts.WhoPerson, "Company sign-in for this server can't use your account, because your company doesn't manage it."},
+		{identitychaining.StageExchange, identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.WhoAdmin, "Your organization can't vouch for your account to the service, for example because your email isn't on one of its verified domains. Ask your administrator, or use your own account for the service."},
+		{identitychaining.StageAuthorization, identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.CodeUnmanagedAccount, mcpconnectionattempts.WhoPerson, "You're signed in to Speakeasy with a personal account, so Speakeasy can't sign you in to the service. Accounts you created yourself with your work email count as personal."},
+		// A provider refusal with no linked session is recorded too, naming who refused.
+		{identitychaining.StageExchange, identitychaining.ReasonAccessDenied, mcpconnectionattempts.CodeAccessDenied, mcpconnectionattempts.WhoAdmin, "Your identity provider didn't allow access to the service. Ask your administrator, or use your own account for the service."},
+		{identitychaining.StageRedemption, identitychaining.ReasonInvalidGrant, mcpconnectionattempts.CodeEMAProviderRejected, mcpconnectionattempts.WhoAdmin, "The service didn't accept your identity provider sign-in. Ask your administrator, or use your own account for the service."},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()

@@ -66,6 +66,9 @@ type RefreshVerdict struct {
 
 	// Reason is the outcome behind the decision.
 	Reason Reason
+
+	// Stage is the stage of a RefreshRefused's cached refusal; empty otherwise.
+	Stage Stage
 }
 
 // RefreshDecision judges, from stored state alone, whether identity chaining
@@ -78,7 +81,7 @@ type RefreshVerdict struct {
 // resource the cache cannot name is RefreshUnconfirmed, so an outage never
 // demands a reconnect.
 func (g *Governor) RefreshDecision(ctx context.Context, req Request) RefreshVerdict {
-	verdict := RefreshVerdict{Decision: RefreshNotChained, RemoteSessionIssuerID: uuid.Nil, Provider: "", Reason: ReasonNotApplicable}
+	verdict := RefreshVerdict{Decision: RefreshNotChained, RemoteSessionIssuerID: uuid.Nil, Provider: "", Reason: ReasonNotApplicable, Stage: ""}
 	if !req.complete() || req.UserID == "" {
 		return verdict
 	}
@@ -141,6 +144,11 @@ func (g *Governor) RefreshDecision(ctx context.Context, req Request) RefreshVerd
 	verdict.Provider = outcome.Provider
 	verdict.Reason = outcome.Reason
 	verdict.Decision = refreshDecisionFor(outcome, failures)
+	if verdict.Decision == RefreshRefused {
+		// The cached refusal names who refused, as the request it followed did.
+		refused := failures[slices.IndexFunc(failures, func(f Outcome) bool { return f.Cached })]
+		verdict.Provider, verdict.Reason, verdict.Stage = refused.Provider, refused.Reason, refused.Stage
+	}
 	return verdict
 }
 

@@ -145,24 +145,24 @@ func TestUpstreamTokenPresent(t *testing.T) {
 
 func TestIdentityChainingError(t *testing.T) {
 	t.Parallel()
-	retryable := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceInferred, Retryable: true, Cached: false, Provider: ""})
+	retryable := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceInferred, Retryable: true, Cached: false, Provider: ""}, "Example")
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, retryable, &shareable)
 	require.Equal(t, oops.CodeUnavailable, shareable.Code)
 	require.Equal(t, "Company sign-in for this server is temporarily unavailable. Try again in a moment.", shareable.Error())
 
-	denied := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidTarget, Confidence: identitychaining.ConfidenceInferred, Retryable: false, Cached: false, Provider: ""})
+	denied := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidTarget, Confidence: identitychaining.ConfidenceInferred, Retryable: false, Cached: false, Provider: ""}, "Example")
 	require.ErrorAs(t, denied, &shareable)
 	require.Equal(t, oops.CodeForbidden, shareable.Code, "an explicit binding never falls back to interactive authorization")
-	require.Equal(t, "Company sign-in for this server isn't working. Contact your administrator.", shareable.Error())
+	require.Equal(t, "Your identity provider didn't allow access to Example. Ask your administrator, or use your own Example account.", shareable.Error())
 
-	rejected := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""})
+	rejected := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, "")
 	require.ErrorAs(t, rejected, &shareable)
 	require.Equal(t, oops.CodeForbidden, shareable.Code)
-	require.Equal(t, "Company sign-in for this server isn't working. Reconnect this server in your AI client. If that doesn't help, contact your administrator.", shareable.Error())
+	require.Equal(t, "Your identity provider turned down your saved sign-in for the service. Reconnect to sign in again. If it keeps happening, ask your administrator, or use your own account for the service.", shareable.Error(), "no service name reads neutrally")
 
-	redemption := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""})
-	require.ErrorAs(t, redemption, &shareable)
+	unknown := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonUnknownRejection, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, "Example")
+	require.ErrorAs(t, unknown, &shareable)
 	require.Equal(t, "Company sign-in for this server isn't working. Contact your administrator.", shareable.Error())
 }
 
@@ -197,10 +197,12 @@ func TestMetaMemberChainer(t *testing.T) {
 	}{
 		{"not applicable stays anonymous", identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, false, "", mcpconnectionattempts.Code{}},
 		{"reauthentication is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonReauthenticationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Server "docs" needs a new company sign-in. Reconnect this gateway in your AI client.`, mcpconnectionattempts.CodeReauthenticationRequired},
-		{"an ineligible account names the administrator", identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonIneligibleIdentity, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Contact your administrator.`, mcpconnectionattempts.CodeIneligibleIdentity},
-		{"a personal account names the cause", identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonUnmanagedAccount, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" can't use your account, because your company doesn't manage it.`, mcpconnectionattempts.CodeUnmanagedAccount},
-		{"provider rejection is member scoped", identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Contact your administrator.`, mcpconnectionattempts.Code{}},
-		{"provider rejecting the saved sign-in offers a reconnect", identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.`, mcpconnectionattempts.Code{}},
+		{"an ineligible account names the administrator", identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonIneligibleIdentity, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Server "docs": Your organization can't vouch for your account to the service, for example because your email isn't on one of its verified domains. Ask your administrator, or use your own account for the service.`, mcpconnectionattempts.CodeIneligibleIdentity},
+		{"a personal account names the cause", identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonUnmanagedAccount, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Server "docs": You're signed in to Speakeasy with a personal account, so Speakeasy can't sign you in to the service. Accounts you created yourself with your work email count as personal.`, mcpconnectionattempts.CodeUnmanagedAccount},
+		{"a service refusal names who refused", identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Server "docs": The service didn't accept your identity provider sign-in. Ask your administrator, or use your own account for the service.`, mcpconnectionattempts.CodeEMAProviderRejected},
+		{"an identity provider refusal names who refused", identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonAccessDenied, Confidence: identitychaining.ConfidenceInferred, Retryable: false, Cached: false, Provider: ""}, true, `Server "docs": Your identity provider didn't allow access to the service. Ask your administrator, or use your own account for the service.`, mcpconnectionattempts.CodeAccessDenied},
+		{"provider rejecting the saved sign-in offers a reconnect", identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Server "docs": Your identity provider turned down your saved sign-in for the service. Reconnect to sign in again. If it keeps happening, ask your administrator, or use your own account for the service.`, mcpconnectionattempts.CodeReauthenticationRequired},
+		{"an unclassified rejection stays generic", identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonUnknownRejection, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Contact your administrator.`, mcpconnectionattempts.CodeInvalidRemoteSession},
 		{"temporary failure is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" is temporarily unavailable. Try again in a moment.`, mcpconnectionattempts.Code{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
