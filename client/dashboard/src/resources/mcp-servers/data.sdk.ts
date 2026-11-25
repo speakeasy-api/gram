@@ -284,7 +284,8 @@ function useRecord(id: string): Query<McpServerRecord> {
 
 function useListActions(): ActionHandlers {
   const { hasScope } = useRBAC();
-  if (!hasScope("mcp:write")) return {};
+  const project = useProject();
+  if (!hasScope("mcp:write", project.id)) return {};
   // Creating a server is a conversation; the kit routes it to chat.
   return { create: { run: () => {}, pending: false } };
 }

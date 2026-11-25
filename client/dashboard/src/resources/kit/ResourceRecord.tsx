@@ -84,7 +84,7 @@ export function ResourceRecord<Row, Rec>({
         }
         action={
           <div className="flex gap-2">
-            {query.status === "error" && (
+            {query.status === "error" && query.retry && (
               <Button variant="secondary" size="sm" onClick={query.retry}>
                 Try again
               </Button>

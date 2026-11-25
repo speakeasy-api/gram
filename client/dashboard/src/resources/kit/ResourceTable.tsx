@@ -124,9 +124,11 @@ export function ResourceTable<Row extends object, Rec>({
           heading={`Couldn't load ${definition.noun.many}`}
           description={query.message}
           action={
-            <Button variant="secondary" size="sm" onClick={query.retry}>
-              Try again
-            </Button>
+            query.retry && (
+              <Button variant="secondary" size="sm" onClick={query.retry}>
+                Try again
+              </Button>
+            )
           }
         />
       )}

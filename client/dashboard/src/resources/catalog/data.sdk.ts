@@ -1,3 +1,4 @@
+import { filterToHttpRemotes } from "@/pages/catalog/remotes";
 import {
   useCatalogInstallations,
   useListMCPCatalog,
@@ -40,7 +41,7 @@ function toRecord(
     added: install === "unknown" ? undefined : install === "added",
     mark: { label: name, iconUrl: server.iconUrl },
     version: server.version,
-    url: server.remotes?.[0]?.url,
+    url: filterToHttpRemotes(server).remotes?.[0]?.url,
     repository: server.repository?.url,
     readOnly: server.isReadOnly,
   };
@@ -79,7 +80,6 @@ function useRecord(id: string): Query<CatalogRecord> {
     : {
         status: "error",
         message: "It isn't in the reviewed catalog.",
-        retry: () => {},
       };
 }
 

@@ -346,7 +346,7 @@ export interface ResourceDefinition<Row, Rec> {
 
 export type Query<T> =
   | { status: "loading" }
-  | { status: "error"; message: string; retry: () => void }
+  | { status: "error"; message: string; retry?: () => void }
   | { status: "ready"; data: T };
 
 interface ActionState {
