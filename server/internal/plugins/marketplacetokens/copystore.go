@@ -114,7 +114,24 @@ func (c *CopyStore) Count(ctx context.Context, organizationID string) (orgencryp
 		Unreadable:     row.Unreadable,
 		Unattributed:   row.Unattributed,
 		PlatformCopies: row.PlatformCopies,
+		Values:         row.ValueCount,
+		LastWrittenAt:  orgencryption.LastWrittenAt(row.LastWrittenAt),
 	}, nil
+}
+
+// ListOrganizationsWithValues returns every organization storing a marketplace token.
+func (c *CopyStore) ListOrganizationsWithValues(ctx context.Context) ([]orgencryption.OrganizationValues, error) {
+	rows, err := repo.New(c.db).ListOrganizationsWithMarketplaceTokens(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list organizations with marketplace tokens: %w", err)
+	}
+
+	organizations := make([]orgencryption.OrganizationValues, 0, len(rows))
+	for _, row := range rows {
+		organizations = append(organizations, orgencryption.NewOrganizationValues(row.OrganizationID, row.ValueCount, row.LastWrittenAt))
+	}
+
+	return organizations, nil
 }
 
 // ClearPlatformCopies destroys up to limit of the organization's platform-key

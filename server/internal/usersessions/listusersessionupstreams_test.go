@@ -509,13 +509,13 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 			}
 			return rows, nil
 		}, humanRemains: true},
-		{name: "client detached from requesting issuer", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+		{name: "removing a legacy link preserves the attachment", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentClientDetachedFromRequestingIssuerFixture(ctx, testrepo.MutateAttachmentClientDetachedFromRequestingIssuerFixtureParams{Client: args.Client, Requesting: args.Requesting})
 			if err != nil {
 				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
 			}
 			return rows, nil
-		}},
+		}, wantAttached: true},
 		{name: "deleted client", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentDeletedClientFixture(ctx, testrepo.MutateAttachmentDeletedClientFixtureParams{Client: args.Client, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
 			if err != nil {

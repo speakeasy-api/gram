@@ -83,7 +83,6 @@ func (r reconsentFixture) store(t *testing.T, ctx context.Context, organizationI
 
 func (r reconsentFixture) attachAgent(t *testing.T, ctx context.Context, session repo.RemoteSession) {
 	t.Helper()
-	ensureAttachmentParent(t, ctx, r.ti.conn, r.clientID, r.signInA)
 	_, err := repo.New(r.ti.conn).AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: r.projectID, OrganizationID: r.organizationID, PrincipalID: r.agentID, UserSessionIssuerID: r.signInA, SubjectUrn: r.member.String(), RemoteSessionID: session.ID})
 	require.NoError(t, err)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -25,6 +26,7 @@ func CopyStores(db *pgxpool.Pool) []orgencryption.CopyStore {
 			sealWaiting: sealRemoteSessionAccessTokenWaiting,
 			listSealed:  listRemoteSessionAccessTokensSealed,
 			count:       countRemoteSessionAccessTokenCopies,
+			listValues:  listOrganizationsWithRemoteSessionAccessTokens,
 			clear:       clearRemoteSessionAccessTokenPlatformCopies,
 		},
 		&copyStore{
@@ -34,6 +36,7 @@ func CopyStores(db *pgxpool.Pool) []orgencryption.CopyStore {
 			sealWaiting: sealRemoteSessionRefreshTokenWaiting,
 			listSealed:  listRemoteSessionRefreshTokensSealed,
 			count:       countRemoteSessionRefreshTokenCopies,
+			listValues:  listOrganizationsWithRemoteSessionRefreshTokens,
 			clear:       clearRemoteSessionRefreshTokenPlatformCopies,
 		},
 		&copyStore{
@@ -43,6 +46,7 @@ func CopyStores(db *pgxpool.Pool) []orgencryption.CopyStore {
 			sealWaiting: sealEMACredentialAccessTokenWaiting,
 			listSealed:  listEMACredentialAccessTokensSealed,
 			count:       countEMACredentialAccessTokenCopies,
+			listValues:  listOrganizationsWithEMACredentialAccessTokens,
 			clear:       clearEMACredentialAccessTokenPlatformCopies,
 		},
 		&copyStore{
@@ -52,6 +56,7 @@ func CopyStores(db *pgxpool.Pool) []orgencryption.CopyStore {
 			sealWaiting: sealTrustedIssuerSessionIdentityAssertionWaiting,
 			listSealed:  listTrustedIssuerSessionIdentityAssertionsSealed,
 			count:       countTrustedIssuerSessionIdentityAssertionCopies,
+			listValues:  listOrganizationsWithTrustedIssuerSessionIdentityAssertions,
 			clear:       clearTrustedIssuerSessionIdentityAssertionPlatformCopies,
 		},
 		&copyStore{
@@ -61,6 +66,7 @@ func CopyStores(db *pgxpool.Pool) []orgencryption.CopyStore {
 			sealWaiting: sealTrustedIssuerSessionRefreshTokenWaiting,
 			listSealed:  listTrustedIssuerSessionRefreshTokensSealed,
 			count:       countTrustedIssuerSessionRefreshTokenCopies,
+			listValues:  listOrganizationsWithTrustedIssuerSessionRefreshTokens,
 			clear:       clearTrustedIssuerSessionRefreshTokenPlatformCopies,
 		},
 		&copyStore{
@@ -70,6 +76,7 @@ func CopyStores(db *pgxpool.Pool) []orgencryption.CopyStore {
 			sealWaiting: sealTrustedIssuerSessionUpstreamSubjectWaiting,
 			listSealed:  listTrustedIssuerSessionUpstreamSubjectsSealed,
 			count:       countTrustedIssuerSessionUpstreamSubjectCopies,
+			listValues:  listOrganizationsWithTrustedIssuerSessionUpstreamSubjects,
 			clear:       clearTrustedIssuerSessionUpstreamSubjectPlatformCopies,
 		},
 		&copyStore{
@@ -79,6 +86,7 @@ func CopyStores(db *pgxpool.Pool) []orgencryption.CopyStore {
 			sealWaiting: sealTrustedIssuerSessionNonceWaiting,
 			listSealed:  listTrustedIssuerSessionNoncesSealed,
 			count:       countTrustedIssuerSessionNonceCopies,
+			listValues:  listOrganizationsWithTrustedIssuerSessionNonces,
 			clear:       clearTrustedIssuerSessionNoncePlatformCopies,
 		},
 	}
@@ -104,6 +112,9 @@ type copyStore struct {
 
 	// count returns the value's counts for the organization.
 	count func(ctx context.Context, q *repo.Queries, organizationID string) (orgencryption.CopyCounts, error)
+
+	// listValues returns every organization storing the value.
+	listValues func(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error)
 
 	// clear destroys up to limit platform-key copies and reports how many.
 	clear func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error)
@@ -171,6 +182,13 @@ func (c *copyStore) Count(ctx context.Context, organizationID string) (orgencryp
 	}
 
 	return counts, nil
+}
+
+// ListOrganizationsWithValues returns every organization storing the value.
+// Callers name the column in errors, as orgencryption.ListOrganizationsWithValues
+// does.
+func (c *copyStore) ListOrganizationsWithValues(ctx context.Context) ([]orgencryption.OrganizationValues, error) {
+	return c.listValues(ctx, repo.New(c.db))
 }
 
 // ClearPlatformCopies destroys up to limit of the organization's platform-key
@@ -248,7 +266,7 @@ func countRemoteSessionAccessTokenCopies(ctx context.Context, q *repo.Queries, o
 		return orgencryption.CopyCounts{}, fmt.Errorf("count access token copies: %w", err)
 	}
 
-	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies, Values: row.ValueCount, LastWrittenAt: orgencryption.LastWrittenAt(row.LastWrittenAt)}, nil
 }
 
 func clearRemoteSessionAccessTokenPlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
@@ -309,7 +327,7 @@ func countRemoteSessionRefreshTokenCopies(ctx context.Context, q *repo.Queries, 
 		return orgencryption.CopyCounts{}, fmt.Errorf("count refresh token copies: %w", err)
 	}
 
-	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies, Values: row.ValueCount, LastWrittenAt: orgencryption.LastWrittenAt(row.LastWrittenAt)}, nil
 }
 
 func clearRemoteSessionRefreshTokenPlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
@@ -370,7 +388,7 @@ func countEMACredentialAccessTokenCopies(ctx context.Context, q *repo.Queries, o
 		return orgencryption.CopyCounts{}, fmt.Errorf("count EMA access token copies: %w", err)
 	}
 
-	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies, Values: row.ValueCount, LastWrittenAt: orgencryption.LastWrittenAt(row.LastWrittenAt)}, nil
 }
 
 func clearEMACredentialAccessTokenPlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
@@ -431,7 +449,7 @@ func countTrustedIssuerSessionIdentityAssertionCopies(ctx context.Context, q *re
 		return orgencryption.CopyCounts{}, fmt.Errorf("count trusted issuer session identity assertion copies: %w", err)
 	}
 
-	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies, Values: row.ValueCount, LastWrittenAt: orgencryption.LastWrittenAt(row.LastWrittenAt)}, nil
 }
 
 func clearTrustedIssuerSessionIdentityAssertionPlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
@@ -492,7 +510,7 @@ func countTrustedIssuerSessionRefreshTokenCopies(ctx context.Context, q *repo.Qu
 		return orgencryption.CopyCounts{}, fmt.Errorf("count trusted issuer session refresh token copies: %w", err)
 	}
 
-	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies, Values: row.ValueCount, LastWrittenAt: orgencryption.LastWrittenAt(row.LastWrittenAt)}, nil
 }
 
 func clearTrustedIssuerSessionRefreshTokenPlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
@@ -553,7 +571,7 @@ func countTrustedIssuerSessionUpstreamSubjectCopies(ctx context.Context, q *repo
 		return orgencryption.CopyCounts{}, fmt.Errorf("count trusted issuer session upstream subject copies: %w", err)
 	}
 
-	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies, Values: row.ValueCount, LastWrittenAt: orgencryption.LastWrittenAt(row.LastWrittenAt)}, nil
 }
 
 func clearTrustedIssuerSessionUpstreamSubjectPlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
@@ -614,7 +632,7 @@ func countTrustedIssuerSessionNonceCopies(ctx context.Context, q *repo.Queries, 
 		return orgencryption.CopyCounts{}, fmt.Errorf("count trusted issuer session nonce copies: %w", err)
 	}
 
-	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies}, nil
+	return orgencryption.CopyCounts{Waiting: row.Waiting, Unreadable: row.Unreadable, Unattributed: row.Unattributed, PlatformCopies: row.PlatformCopies, Values: row.ValueCount, LastWrittenAt: orgencryption.LastWrittenAt(row.LastWrittenAt)}, nil
 }
 
 func clearTrustedIssuerSessionNoncePlatformCopies(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
@@ -624,4 +642,92 @@ func clearTrustedIssuerSessionNoncePlatformCopies(ctx context.Context, q *repo.Q
 	}
 
 	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy, Empty: row.Empty}, nil
+}
+
+// organizationValues converts a ListOrganizationsWith* query's rows.
+func organizationValues[R any](rows []R, get func(R) (string, int64, pgtype.Timestamptz)) []orgencryption.OrganizationValues {
+	organizations := make([]orgencryption.OrganizationValues, 0, len(rows))
+	for _, row := range rows {
+		organizationID, values, lastWrittenAt := get(row)
+		organizations = append(organizations, orgencryption.NewOrganizationValues(organizationID, values, lastWrittenAt))
+	}
+
+	return organizations
+}
+
+func listOrganizationsWithRemoteSessionAccessTokens(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error) {
+	rows, err := q.ListOrganizationsWithRemoteSessionAccessTokens(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list organizations with values: %w", err)
+	}
+
+	return organizationValues(rows, func(row repo.ListOrganizationsWithRemoteSessionAccessTokensRow) (string, int64, pgtype.Timestamptz) {
+		return row.OrganizationID, row.ValueCount, row.LastWrittenAt
+	}), nil
+}
+
+func listOrganizationsWithRemoteSessionRefreshTokens(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error) {
+	rows, err := q.ListOrganizationsWithRemoteSessionRefreshTokens(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list organizations with values: %w", err)
+	}
+
+	return organizationValues(rows, func(row repo.ListOrganizationsWithRemoteSessionRefreshTokensRow) (string, int64, pgtype.Timestamptz) {
+		return row.OrganizationID, row.ValueCount, row.LastWrittenAt
+	}), nil
+}
+
+func listOrganizationsWithEMACredentialAccessTokens(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error) {
+	rows, err := q.ListOrganizationsWithEMACredentialAccessTokens(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list organizations with values: %w", err)
+	}
+
+	return organizationValues(rows, func(row repo.ListOrganizationsWithEMACredentialAccessTokensRow) (string, int64, pgtype.Timestamptz) {
+		return row.OrganizationID, row.ValueCount, row.LastWrittenAt
+	}), nil
+}
+
+func listOrganizationsWithTrustedIssuerSessionIdentityAssertions(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error) {
+	rows, err := q.ListOrganizationsWithTrustedIssuerSessionIdentityAssertions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list organizations with values: %w", err)
+	}
+
+	return organizationValues(rows, func(row repo.ListOrganizationsWithTrustedIssuerSessionIdentityAssertionsRow) (string, int64, pgtype.Timestamptz) {
+		return row.OrganizationID, row.ValueCount, row.LastWrittenAt
+	}), nil
+}
+
+func listOrganizationsWithTrustedIssuerSessionRefreshTokens(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error) {
+	rows, err := q.ListOrganizationsWithTrustedIssuerSessionRefreshTokens(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list organizations with values: %w", err)
+	}
+
+	return organizationValues(rows, func(row repo.ListOrganizationsWithTrustedIssuerSessionRefreshTokensRow) (string, int64, pgtype.Timestamptz) {
+		return row.OrganizationID, row.ValueCount, row.LastWrittenAt
+	}), nil
+}
+
+func listOrganizationsWithTrustedIssuerSessionUpstreamSubjects(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error) {
+	rows, err := q.ListOrganizationsWithTrustedIssuerSessionUpstreamSubjects(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list organizations with values: %w", err)
+	}
+
+	return organizationValues(rows, func(row repo.ListOrganizationsWithTrustedIssuerSessionUpstreamSubjectsRow) (string, int64, pgtype.Timestamptz) {
+		return row.OrganizationID, row.ValueCount, row.LastWrittenAt
+	}), nil
+}
+
+func listOrganizationsWithTrustedIssuerSessionNonces(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error) {
+	rows, err := q.ListOrganizationsWithTrustedIssuerSessionNonces(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list organizations with values: %w", err)
+	}
+
+	return organizationValues(rows, func(row repo.ListOrganizationsWithTrustedIssuerSessionNoncesRow) (string, int64, pgtype.Timestamptz) {
+		return row.OrganizationID, row.ValueCount, row.LastWrittenAt
+	}), nil
 }

@@ -132,7 +132,6 @@ func TestDeleteClient(t *testing.T) {
 	issuerID := createRemoteIssuer(t, ctx, ti, "admin-delclient-issuer", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-delclient-usi")
 	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-delclient-client")
-	ensureAttachmentParent(t, ctx, ti.conn, uuid.MustParse(clientID), userIssuerID)
 	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("admin-delclient-subject"), userIssuerID.String(), clientID)
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDelete)
@@ -159,7 +158,7 @@ func TestDeleteClient(t *testing.T) {
 
 	bindings, err := testrepo.New(ti.conn).CountRemoteSessionClientBindingsFixture(ctx, uuid.MustParse(clientID))
 	require.NoError(t, err)
-	require.Positive(t, bindings, "retirement does not physically unlink compatibility parents")
+	require.Zero(t, bindings, "retirement does not create a legacy link")
 }
 
 // A server that took its upstream issuer from the deleted client no longer
