@@ -131,7 +131,7 @@ WHERE organization_id = $6
   AND id = $7
   AND status = 'pending'
   AND deleted IS FALSE
-RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type DecideAccessRequestParams struct {
@@ -170,6 +170,8 @@ func (q *Queries) DecideAccessRequest(ctx context.Context, arg DecideAccessReque
 		&i.DecidedAt,
 		&i.TemporaryGrantID,
 		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -565,7 +567,7 @@ func (q *Queries) FindMCPResourceVisibility(ctx context.Context, arg FindMCPReso
 }
 
 const getAccessRequest = `-- name: GetAccessRequest :one
-SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
+SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.requested_duration_seconds, access_requests.requested_until, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
 FROM access_requests
 LEFT JOIN principal_grants
   ON principal_grants.id = access_requests.temporary_grant_id
@@ -602,6 +604,8 @@ func (q *Queries) GetAccessRequest(ctx context.Context, arg GetAccessRequestPara
 		&i.AccessRequest.DecidedAt,
 		&i.AccessRequest.TemporaryGrantID,
 		&i.AccessRequest.ChallengeIds,
+		&i.AccessRequest.RequestedDurationSeconds,
+		&i.AccessRequest.RequestedUntil,
 		&i.AccessRequest.ExpiresAt,
 		&i.AccessRequest.CreatedAt,
 		&i.AccessRequest.UpdatedAt,
@@ -613,7 +617,7 @@ func (q *Queries) GetAccessRequest(ctx context.Context, arg GetAccessRequestPara
 }
 
 const getAccessRequestForUpdate = `-- name: GetAccessRequestForUpdate :one
-SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
 FROM access_requests
 WHERE organization_id = $1
   AND id = $2
@@ -644,6 +648,8 @@ func (q *Queries) GetAccessRequestForUpdate(ctx context.Context, arg GetAccessRe
 		&i.DecidedAt,
 		&i.TemporaryGrantID,
 		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1113,7 +1119,7 @@ func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganiza
 }
 
 const getPendingAccessRequest = `-- name: GetPendingAccessRequest :one
-SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
 FROM access_requests
 WHERE organization_id = $1
   AND requester_user_id = $2
@@ -1152,6 +1158,8 @@ func (q *Queries) GetPendingAccessRequest(ctx context.Context, arg GetPendingAcc
 		&i.DecidedAt,
 		&i.TemporaryGrantID,
 		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1339,22 +1347,24 @@ func (q *Queries) HasPermanentPrincipalGrants(ctx context.Context, arg HasPerman
 }
 
 const insertAccessRequest = `-- name: InsertAccessRequest :one
-INSERT INTO access_requests (organization_id, requester_user_id, scope, selector, resource_name, message, challenge_ids, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO access_requests (organization_id, requester_user_id, scope, selector, resource_name, message, challenge_ids, requested_duration_seconds, requested_until, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (organization_id, requester_user_id, scope, selector) WHERE deleted IS FALSE AND status = 'pending'
 DO NOTHING
-RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertAccessRequestParams struct {
-	OrganizationID  string
-	RequesterUserID string
-	Scope           string
-	Selector        []byte
-	ResourceName    pgtype.Text
-	Message         pgtype.Text
-	ChallengeIds    []string
-	ExpiresAt       pgtype.Timestamptz
+	OrganizationID           string
+	RequesterUserID          string
+	Scope                    string
+	Selector                 []byte
+	ResourceName             pgtype.Text
+	Message                  pgtype.Text
+	ChallengeIds             []string
+	RequestedDurationSeconds pgtype.Int4
+	RequestedUntil           pgtype.Timestamptz
+	ExpiresAt                pgtype.Timestamptz
 }
 
 // Stores a pending request. Returns no row when the requester already has a
@@ -1368,6 +1378,8 @@ func (q *Queries) InsertAccessRequest(ctx context.Context, arg InsertAccessReque
 		arg.ResourceName,
 		arg.Message,
 		arg.ChallengeIds,
+		arg.RequestedDurationSeconds,
+		arg.RequestedUntil,
 		arg.ExpiresAt,
 	)
 	var i AccessRequest
@@ -1385,6 +1397,8 @@ func (q *Queries) InsertAccessRequest(ctx context.Context, arg InsertAccessReque
 		&i.DecidedAt,
 		&i.TemporaryGrantID,
 		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2164,7 +2178,7 @@ func (q *Queries) ListAccessRequestPeople(ctx context.Context, ids []string) ([]
 }
 
 const listAccessRequests = `-- name: ListAccessRequests :many
-SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
+SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.requested_duration_seconds, access_requests.requested_until, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
 FROM access_requests
 LEFT JOIN principal_grants
   ON principal_grants.id = access_requests.temporary_grant_id
@@ -2225,6 +2239,8 @@ func (q *Queries) ListAccessRequests(ctx context.Context, arg ListAccessRequests
 			&i.AccessRequest.DecidedAt,
 			&i.AccessRequest.TemporaryGrantID,
 			&i.AccessRequest.ChallengeIds,
+			&i.AccessRequest.RequestedDurationSeconds,
+			&i.AccessRequest.RequestedUntil,
 			&i.AccessRequest.ExpiresAt,
 			&i.AccessRequest.CreatedAt,
 			&i.AccessRequest.UpdatedAt,
@@ -5448,7 +5464,7 @@ WHERE organization_id = $1
   AND requester_user_id = $3
   AND status = 'pending'
   AND deleted IS FALSE
-RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type WithdrawAccessRequestParams struct {
@@ -5474,6 +5490,8 @@ func (q *Queries) WithdrawAccessRequest(ctx context.Context, arg WithdrawAccessR
 		&i.DecidedAt,
 		&i.TemporaryGrantID,
 		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,

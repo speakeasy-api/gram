@@ -256,6 +256,16 @@ func PGIntervalToDuration(iv pgtype.Interval) (time.Duration, bool) {
 	return time.Duration(dayPart + microPart), true
 }
 
+// FromPGInt8 converts a pgtype.Int8 to an int64 pointer, nil when it is not
+// valid.
+func FromPGInt8(v pgtype.Int8) *int64 {
+	if !v.Valid {
+		return nil
+	}
+
+	return new(v.Int64)
+}
+
 // PtrToPGInt8 converts an int pointer to a pgtype.Int8. If the pointer is nil,
 // the result has Valid set to false.
 func PtrToPGInt8(v *int) pgtype.Int8 {

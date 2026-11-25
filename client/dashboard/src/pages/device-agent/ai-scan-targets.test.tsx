@@ -260,7 +260,7 @@ describe("AiScanTargetsSection", () => {
     expect(screen.getAllByText("Harnesses")).toHaveLength(2);
     expect(screen.getAllByText("Assistants")).toHaveLength(1);
     expect(screen.getAllByText("Open models")).toHaveLength(1);
-    expect(screen.getByText(/Library version 11/)).toBeDefined();
+    expect(screen.queryByText(/Library version/)).toBeNull();
   });
 
   // A match hidden under a collapsed heading is a search that found nothing
@@ -375,13 +375,11 @@ describe("AiScanTargetsSection", () => {
     // The editor's save mutation is the first one the section creates.
     await act(async () => {
       await mocks.upsertOptions[0]?.onSuccess({
-        listVersion: 12,
+        listVersion: 11,
         target: { id: "chatgpt-desktop" },
       });
     });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith(
-      expect.stringContaining("List version 12"),
-    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Saved chatgpt-desktop.");
     expect(mocks.invalidateList).toHaveBeenCalled();
   });
 

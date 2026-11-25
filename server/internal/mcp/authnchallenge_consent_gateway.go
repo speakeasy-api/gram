@@ -390,8 +390,7 @@ func (s *Service) gatewayConsent(
 
 // gatewayServersView lists members with the status their cards give them.
 // A card serves a member when it signs in to the member's authorization
-// server, from the member's own project unless no project owns it, the same
-// match clientServesAnyMember makes.
+// server, from the member's own project unless no project owns it.
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
@@ -585,7 +584,7 @@ func gatewayServerConnectURL(endpointRoot string, serverSlug string) string {
 // derived for the member decides nothing there.
 func (g metaGateContext) memberConnectURL(member metaMember) string {
 	signsIn := member.remoteSessionIssuerID.Valid
-	if res := member.authClient; g.memberChoices != nil && g.memberChoices.enforced && res != nil {
+	if res := member.authClient; g.memberChoices != nil && !g.memberChoices.consentPreview && res != nil {
 		signsIn = member.chosenClientID.Valid || (res.outcome == authClientGap && !res.noAuthAllowed && !res.staleNoAuth())
 	}
 	if g.connectRoot == "" || !signsIn {

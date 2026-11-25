@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 )
@@ -75,7 +76,16 @@ func TestDescribeMcpServerHealth_ReportsResourceScopesForRemoteServer(t *testing
 	remoteIssuerID := f.seedGlobalRemoteSessionIssuer(t, "upstream-"+uuid.NewString()[:8])
 	clientID := f.seedRemoteSessionClient(t, remoteIssuerID, issuerID, "scoped-client", true)
 	serverID, _ := f.seedRemoteServer(t, "https://scopes.example.com/mcp", issuerID)
-	_, err := f.setScopePin(t, serverID, "read")
+	typed := authclientbackfill.New(f.conn)
+	offer, err := typed.SeedAuthClientFixture(t.Context(), authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: f.orgID, ProjectID: conv.ToNullUUID(f.projectID), ClientType: authclientbackfill.TypeRemoteSession,
+		Source: "admin", RemoteSessionClientID: conv.ToNullUUID(clientID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, typed.SeedServerAuthClientLinkFixture(t.Context(), authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: f.orgID, ProjectID: f.projectID, McpServerID: serverID, AuthClientID: offer, Source: "admin",
+	}))
+	_, err = f.setScopePin(t, serverID, "read")
 	require.NoError(t, err)
 
 	got, err := f.describe(t, serverID, 14)

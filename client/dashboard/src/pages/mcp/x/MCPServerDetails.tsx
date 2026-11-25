@@ -59,6 +59,7 @@ import { OverviewTab } from "./tabs/OverviewTab";
 import { MCP_AGENT_SETUP_SECTION_ID } from "./tabs/settings/sections/AgentSetupSection";
 import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./tabs/settings/sections/PublicAccessSection";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
+import { FeedbackTab } from "./tabs/feedback/FeedbackTab";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -150,12 +151,15 @@ export default function MCPServerDetails(): JSX.Element | null {
     );
   }
   // Inspect and Clients and Sessions are hidden from the nav for unproxied
-  // servers (see McpServerXSidebarNav) but the routes still resolve, so bounce
-  // anyone who lands on them directly (old links, the legacy /tools redirect
-  // above) back to Overview instead of rendering a tab with nothing to show.
+  // servers, and Agent Feedback for every server not built from an API or
+  // functions (see McpServerXSidebarNav), but the routes still resolve, so
+  // bounce anyone who lands on them directly (old links, the legacy /tools
+  // redirect above) back to Overview instead of rendering a tab with nothing
+  // to show.
   if (
-    (activeTab === "inspect" || activeTab === "sessions") &&
-    mcpServer?.unproxiedMcpServerId
+    ((activeTab === "inspect" || activeTab === "sessions") &&
+      mcpServer?.unproxiedMcpServerId) ||
+    (activeTab === "feedback" && mcpServer && !mcpServer.toolsetId)
   ) {
     return (
       <Navigate to={mcpServerTabHref(routes, idOrSlug, "overview")} replace />
@@ -214,12 +218,14 @@ export default function MCPServerDetails(): JSX.Element | null {
     // Hosted tabs and settings need the toolset; never fall back to another layout.
     // Overview needs the loaded toolset only when the read's summary is missing.
     // Skills reads links by server id and owns its flag and access checks.
+    // Agent Feedback reads by server id too.
     const needsToolset =
       activeTab === "overview"
         ? !mcpServer.toolset
         : activeTab !== "sessions" &&
           activeTab !== "guardrails" &&
-          activeTab !== "skills";
+          activeTab !== "skills" &&
+          activeTab !== "feedback";
     if (hosted && needsToolset && !hostedToolset) {
       if (isLoadingToolset) return <SplashScreen />;
       return (
@@ -357,6 +363,19 @@ export default function MCPServerDetails(): JSX.Element | null {
                   ) : undefined
                 }
               />
+            </RequireScope>
+          )
+        );
+      case "feedback":
+        return (
+          mcpServer && (
+            // Gated on the toolset id for a hosted server, like the API.
+            <RequireScope
+              scope="mcp:read"
+              resourceId={mcpServer.toolsetId ?? mcpServer.id}
+              level="page"
+            >
+              <FeedbackTab key={mcpServer.id} mcpServer={mcpServer} />
             </RequireScope>
           )
         );

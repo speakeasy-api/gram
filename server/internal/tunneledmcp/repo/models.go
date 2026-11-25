@@ -17,8 +17,8 @@ type TunneledMcpServer struct {
 	// Project that owns this tunneled MCP source. All management queries are scoped by project_id.
 	// @access: confidential
 	ProjectID uuid.UUID
-	// User-facing display name for the tunneled MCP source.
-	// @access: confidential
+	// User-facing display name for the tunneled MCP source, chosen by the customer.
+	// @access: opaque-confidential
 	Name string
 	// Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.
 	// @access: secret-restricted

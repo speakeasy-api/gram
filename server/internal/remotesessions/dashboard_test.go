@@ -1072,7 +1072,7 @@ func TestCommitServerIdentityConfigurationDoesNotRepublishOrgClientToOtherProjec
 
 	otherServer, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: otherServerID, ProjectID: otherProjectID})
 	require.NoError(t, err)
-	require.False(t, otherServer.RemoteSessionIssuerID.Valid)
+	require.False(t, otherServer.RemoteSessionIssuerID.Valid, "the unrelated server did not offer this client")
 }
 
 func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientWithAgentBindingInAnotherProject(t *testing.T) {

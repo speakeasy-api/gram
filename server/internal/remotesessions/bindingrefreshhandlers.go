@@ -82,6 +82,12 @@ func (s *Service) CompleteBindingRefresh(ctx context.Context, payload *gen.Compl
 	if !attempt.Started || attempt.GrantGeneration == 0 {
 		return &gen.BindingRefreshResult{Completed: false, Binding: nil}, nil
 	}
+	if err := op.lockAttachmentIssuer(ctx); err != nil {
+		return nil, err
+	}
+	if err := op.lockAttachmentRegistration(ctx, attempt.ClientID); err != nil {
+		return nil, err
+	}
 	binding, err := op.queries.LockPrincipalBindingForRefresh(ctx, repo.LockPrincipalBindingForRefreshParams{ID: attempt.BindingID, PrincipalID: op.principalID, ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String()})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeConflict, err, "attachment changed during sign-in; review the current connection")

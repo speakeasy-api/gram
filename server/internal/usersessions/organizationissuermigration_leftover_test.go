@@ -60,12 +60,8 @@ func TestOrganizationUserSessionIssuerMigrateCreatesNoAuthClientForTypedServers(
 	}
 }
 
-// A registration still bound to a source issuer that no live server uses was
-// left behind by earlier configuration. Consolidation leaves that binding
-// behind, enforced or not, and the preview lists it as dropped: carried to the
-// target, it would become a client the target's only server serves from
-// without anyone having configured it there. Without a leftover binding the
-// same consolidation changes nothing about that server.
+// A leftover issuer link is neither a typed offer nor a preview impact.
+// Consolidation leaves the target server's configured offer unchanged.
 func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {
@@ -93,14 +89,8 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 				require.NoError(t, err)
 				require.True(t, preflight.ImpactPreviewed)
 				assert.Empty(t, preflight.ServerImpacts, "the target's server keeps the client it uses")
-				if leftover {
-					require.Len(t, preflight.DroppedClientLinks, 1)
-					assert.Equal(t, stale.String(), preflight.DroppedClientLinks[0].RemoteSessionClientID)
-					assert.NotEmpty(t, preflight.WarningsFingerprint, "a dropped link needs confirming")
-				} else {
-					assert.Empty(t, preflight.DroppedClientLinks)
-					assert.Empty(t, preflight.WarningsFingerprint)
-				}
+				assert.Empty(t, preflight.DroppedClientLinks)
+				assert.Empty(t, preflight.WarningsFingerprint)
 
 				result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String(), ConfirmedWarningsFingerprint: new(preflight.WarningsFingerprint)})
 				require.NoError(t, err)
@@ -116,9 +106,13 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 				require.NoError(t, err)
 				assert.Len(t, clientsAfter, 1)
 				if leftover {
-					bound, err := remotesessionsrepo.New(ti.conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: stale, UserSessionIssuerID: targetID})
+					remoteRepo := remotesessionsrepo.New(ti.conn)
+					bound, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: stale, UserSessionIssuerID: targetID})
 					require.NoError(t, err)
 					assert.Zero(t, bound, "the leftover binding stays behind with the source")
+					sourceBound, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: stale, UserSessionIssuerID: sourceID})
+					require.NoError(t, err)
+					assert.EqualValues(t, 1, sourceBound, "consolidation does not delete source issuer-client links")
 				}
 
 				// A credential issued after consolidation takes the path issuance

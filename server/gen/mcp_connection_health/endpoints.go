@@ -16,12 +16,14 @@ import (
 
 // Endpoints wraps the "mcpConnectionHealth" service endpoints.
 type Endpoints struct {
-	ListAttempts       goa.Endpoint
-	GetAttemptCounts   goa.Endpoint
-	GetAttempt         goa.Endpoint
-	GetSignInSummary   goa.Endpoint
-	GetSessionActivity goa.Endpoint
-	ListDeniedClients  goa.Endpoint
+	ListAttempts          goa.Endpoint
+	GetAttemptCounts      goa.Endpoint
+	GetAttempt            goa.Endpoint
+	GetSignInSummary      goa.Endpoint
+	GetSessionActivity    goa.Endpoint
+	ListDeniedClients     goa.Endpoint
+	ListSuspectedProblems goa.Endpoint
+	GetSuspectedProblem   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "mcpConnectionHealth" service with
@@ -30,12 +32,14 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListAttempts:       NewListAttemptsEndpoint(s, a.APIKeyAuth),
-		GetAttemptCounts:   NewGetAttemptCountsEndpoint(s, a.APIKeyAuth),
-		GetAttempt:         NewGetAttemptEndpoint(s, a.APIKeyAuth),
-		GetSignInSummary:   NewGetSignInSummaryEndpoint(s, a.APIKeyAuth),
-		GetSessionActivity: NewGetSessionActivityEndpoint(s, a.APIKeyAuth),
-		ListDeniedClients:  NewListDeniedClientsEndpoint(s, a.APIKeyAuth),
+		ListAttempts:          NewListAttemptsEndpoint(s, a.APIKeyAuth),
+		GetAttemptCounts:      NewGetAttemptCountsEndpoint(s, a.APIKeyAuth),
+		GetAttempt:            NewGetAttemptEndpoint(s, a.APIKeyAuth),
+		GetSignInSummary:      NewGetSignInSummaryEndpoint(s, a.APIKeyAuth),
+		GetSessionActivity:    NewGetSessionActivityEndpoint(s, a.APIKeyAuth),
+		ListDeniedClients:     NewListDeniedClientsEndpoint(s, a.APIKeyAuth),
+		ListSuspectedProblems: NewListSuspectedProblemsEndpoint(s, a.APIKeyAuth),
+		GetSuspectedProblem:   NewGetSuspectedProblemEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -48,6 +52,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSignInSummary = m(e.GetSignInSummary)
 	e.GetSessionActivity = m(e.GetSessionActivity)
 	e.ListDeniedClients = m(e.ListDeniedClients)
+	e.ListSuspectedProblems = m(e.ListSuspectedProblems)
+	e.GetSuspectedProblem = m(e.GetSuspectedProblem)
 }
 
 // NewListAttemptsEndpoint returns an endpoint function that calls the method
@@ -401,5 +407,123 @@ func NewListDeniedClientsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.ListDeniedClients(ctx, p)
+	}
+}
+
+// NewListSuspectedProblemsEndpoint returns an endpoint function that calls the
+// method "listSuspectedProblems" of service "mcpConnectionHealth".
+func NewListSuspectedProblemsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSuspectedProblemsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSuspectedProblems(ctx, p)
+	}
+}
+
+// NewGetSuspectedProblemEndpoint returns an endpoint function that calls the
+// method "getSuspectedProblem" of service "mcpConnectionHealth".
+func NewGetSuspectedProblemEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSuspectedProblemPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSuspectedProblem(ctx, p)
 	}
 }

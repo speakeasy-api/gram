@@ -1,10 +1,10 @@
 /** End of day is offered only while the day has this much left in it. */
-const MIN_END_OF_DAY_LEAD_MS = 10 * 60 * 1000;
+export const MIN_END_OF_DAY_LEAD_MS = 10 * 60 * 1000;
 
 const HOUR_MS = 60 * 60 * 1000;
 
 /** The longest a temporary grant can last, as the server enforces. */
-const MAX_GRANT_MS = 24 * HOUR_MS;
+export const MAX_GRANT_MS = 24 * HOUR_MS;
 
 type Choice = { key: string; label: string; expiresAt: Date };
 

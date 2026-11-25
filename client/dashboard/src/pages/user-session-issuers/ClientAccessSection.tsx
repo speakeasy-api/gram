@@ -97,7 +97,7 @@ export function ClientAccessSection({
       <SettingsSection.Header>
         <SettingsSection.Title>Client access</SettingsSection.Title>
         <SettingsSection.Description>
-          Which MCP clients may connect through this provider.
+          Which MCP clients may connect through this MCP sign-in.
           <ExplainerDialog title="Client ID Metadata Documents (CIMD)">
             <Text muted small className="block">
               A client can host a small public file — its name, logo and where
@@ -243,7 +243,7 @@ function WhenToPick({
 
 /**
  * The clients Known clients admits: Speakeasy's catalog, then the ones this
- * organization added for this provider.
+ * organization added for this MCP sign-in.
  */
 function KnownClients({
   issuer,
@@ -301,8 +301,7 @@ function KnownClients({
           <div className="flex flex-col gap-0.5">
             <Text className="text-sm">Allowed by your organization</Text>
             <Text small muted>
-              Clients you add yourself, for this MCP Authentication Provider
-              only.
+              Clients you add yourself, for this MCP sign-in only.
             </Text>
           </div>
           {path.kind !== "elsewhere" && (
@@ -373,7 +372,7 @@ function OrganizationClientList({
   if (path.kind === "elsewhere") {
     return (
       <Text small muted>
-        See them in {path.projectName}&apos;s MCP Sessions configuration.
+        See them on the MCP Sign-in page of the {path.projectName} project.
       </Text>
     );
   }

@@ -46,12 +46,12 @@ func (r *testAgentSessionRevoker) RevokeToken(ctx context.Context, jti string) e
 	}
 	return r.pushErr
 }
-func (r *testAgentSessionRevoker) SoftDeleteAgentSubjectSessions(ctx context.Context, tx remoterepo.DBTX, subject urn.SessionSubject, issuerID, projectID uuid.UUID, orgID string, revokedAt pgtype.Timestamptz, alreadyRevoked bool) ([]remotesessions.RevokedCredentials, error) {
+func (r *testAgentSessionRevoker) SoftDeleteAgentSubjectSessions(ctx context.Context, tx remoterepo.DBTX, subject urn.SessionSubject, issuerID, projectID uuid.UUID, orgID string, sessionID uuid.UUID, revokedAt pgtype.Timestamptz, alreadyRevoked bool) ([]remotesessions.RevokedCredentials, error) {
 	r.events = append(r.events, "cascade")
 	if r.cascadeErr != nil {
 		return nil, r.cascadeErr
 	}
-	credentials, err := (&remotesessions.UpstreamRevoker{}).SoftDeleteAgentSubjectSessions(ctx, tx, subject, issuerID, projectID, orgID, revokedAt, alreadyRevoked)
+	credentials, err := (&remotesessions.UpstreamRevoker{}).SoftDeleteAgentSubjectSessions(ctx, tx, subject, issuerID, projectID, orgID, sessionID, revokedAt, alreadyRevoked)
 	if err != nil {
 		return nil, fmt.Errorf("delete test subject sessions: %w", err)
 	}

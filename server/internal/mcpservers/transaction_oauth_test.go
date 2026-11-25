@@ -43,7 +43,7 @@ func testCreateDoesNotInheritOAuthBeforeCommit(t *testing.T, enforced bool) {
 		require.NoError(t, err)
 	}
 	issuer := createOrganizationIssuer(t, ctx, ti, auth.ActiveOrganizationID)
-	remoteIssuer, _ := linkRemoteClientWithID(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, issuer)
+	_, _ = linkRemoteClientWithID(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, issuer)
 	source := uuid.New()
 	fixtures := backfill.New(ti.conn)
 	require.NoError(t, fixtures.SeedRemoteMCPServerFixture(ctx, backfill.SeedRemoteMCPServerFixtureParams{ID: source, ProjectID: *auth.ProjectID, Url: "https://mcp.example.com/atomic-create"}))
@@ -55,7 +55,7 @@ func testCreateDoesNotInheritOAuthBeforeCommit(t *testing.T, enforced bool) {
 		RemoteMCPServerID:   uuid.NullUUID{UUID: source, Valid: true},
 	})
 	require.NoError(t, err)
-	require.Equal(t, uuid.NullUUID{UUID: remoteIssuer, Valid: true}, server.RemoteSessionIssuerID)
+	require.False(t, server.RemoteSessionIssuerID.Valid, "an issuer link alone does not stamp the server")
 	associations, err := upstreamclientsrepo.New(tx).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{
 		McpServerID: server.ID,
 		ProjectID:   *auth.ProjectID,

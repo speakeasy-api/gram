@@ -3,7 +3,7 @@ package mcpconnectionattempts
 import (
 	"slices"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // LabelOther stands in for any provider, app or client that is not on a fixed list.
@@ -58,20 +58,6 @@ func IsAppKind(appKey string) bool {
 	return slices.Contains(appKinds, appKey)
 }
 
-// catalogAppHosts are the hosts of every client metadata document in the client catalog,
-// disabled ones included, since a disabled entry still names a vendor.
-var catalogAppHosts = buildCatalogAppHosts()
-
-func buildCatalogAppHosts() map[string]struct{} {
-	hosts := map[string]struct{}{}
-	for _, preset := range admission.Catalog() {
-		if host := NormalizeProviderHost(preset.URL); host != "" {
-			hosts[host] = struct{}{}
-		}
-	}
-	return hosts
-}
-
 // ProviderLabel keeps a provider host only when it is a known vendor's shared host.
 // Empty stays empty: the attempt reached no provider.
 func ProviderLabel(host string) string {
@@ -84,12 +70,27 @@ func ProviderLabel(host string) string {
 	return LabelOther
 }
 
-// AppLabel keeps an app_key only when it is a catalog app's host or a kind of app.
-func AppLabel(appKey string) string {
+// AppHosts are the client metadata document hosts an app_key label keeps.
+type AppHosts map[string]struct{}
+
+// CatalogAppHosts collects the host of every client metadata document in catalog,
+// disabled ones included, since a disabled entry still names a vendor.
+func CatalogAppHosts(catalog *aivendors.Snapshot) AppHosts {
+	hosts := AppHosts{}
+	for _, preset := range catalog.Catalog() {
+		if host := NormalizeProviderHost(preset.URL); host != "" {
+			hosts[host] = struct{}{}
+		}
+	}
+	return hosts
+}
+
+// AppLabel keeps an app_key only when it is a kind of app or one of hosts.
+func AppLabel(hosts AppHosts, appKey string) string {
 	if appKey == "" {
 		return ""
 	}
-	if _, ok := catalogAppHosts[appKey]; ok || IsAppKind(appKey) {
+	if _, ok := hosts[appKey]; ok || IsAppKind(appKey) {
 		return appKey
 	}
 	return LabelOther

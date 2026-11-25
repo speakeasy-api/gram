@@ -5,30 +5,26 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"go.opentelemetry.io/otel/metric"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	networkIngressMeterScope                  = "github.com/speakeasy-api/gram/server/internal/k8s"
-	networkIngressOperationsMetric            = "gram.network_ingress.provisioner.operations"
-	networkIngressDurationMetric              = "gram.network_ingress.provisioner.operation.duration"
-	networkIngressOperationApply              = "apply"
-	networkIngressOperationObserve            = "observe"
-	networkIngressOperationDelete             = "delete"
-	networkIngressOperationUnknown            = "unknown"
-	networkIngressResultSuccess               = "success"
-	networkIngressResultPending               = "pending"
-	networkIngressResultError                 = "error"
-	networkIngressErrorCodeNone               = "none"
-	networkIngressErrorCodeInternal           = "internal"
-	networkIngressErrorCodeDeletionPending    = "deletion_pending"
-	networkIngressErrorCodeReplacementPending = "replacement_pending"
+	networkIngressMeterScope               = "github.com/speakeasy-api/gram/server/internal/k8s"
+	networkIngressOperationsMetric         = "gram.network_ingress.provisioner.operations"
+	networkIngressDurationMetric           = "gram.network_ingress.provisioner.operation.duration"
+	networkIngressOperationApply           = "apply"
+	networkIngressOperationObserve         = "observe"
+	networkIngressOperationDelete          = "delete"
+	networkIngressOperationUnknown         = "unknown"
+	networkIngressResultSuccess            = "success"
+	networkIngressResultPending            = "pending"
+	networkIngressResultError              = "error"
+	networkIngressErrorCodeNone            = "none"
+	networkIngressErrorCodeInternal        = "internal"
+	networkIngressErrorCodeDeletionPending = "deletion_pending"
 )
 
 type NetworkIngressMetrics struct {
@@ -181,10 +177,9 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 		return
 	}
 	if err != nil {
-		// Provider errors can contain Kubernetes request data. Only bounded
+		// Provider errors can contain provider API response data. Only bounded
 		// classifications may leave the provider boundary through telemetry.
 		attrs = append(attrs, attr.SlogError(fmt.Errorf("network ingress provider: %s", errorCode)))
-		attrs = append(attrs, kubernetesStatusAttrs(err)...)
 		p.logger.ErrorContext(ctx, "network ingress provisioner operation failed", attrs...)
 		return
 	}
@@ -194,76 +189,6 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 	}
 	p.logger.InfoContext(ctx, "network ingress provisioner operation completed", attrs...)
 }
-
-// kubernetesStatusAttrs describes a failed Kubernetes API call by its reason,
-// HTTP status and resource type: enough to tell which teardown or apply step
-// failed and why. The status message and object name are omitted because they
-// can carry request data, and the reason and resource are only logged when they
-// have the shape the API server gives them, since an admission webhook or a
-// non-standard server can put anything in a Status.
-func kubernetesStatusAttrs(err error) []any {
-	apiErr, ok := errors.AsType[interface {
-		error
-		k8serrors.APIStatus
-	}](err)
-	if !ok {
-		return nil
-	}
-	status := apiErr.Status()
-	reason := metav1.StatusReasonUnknown
-	if _, known := kubernetesStatusReasons[status.Reason]; known {
-		reason = status.Reason
-	}
-	attrs := []any{
-		attr.SlogNetworkIngressKubernetesReason(reason),
-		attr.SlogNetworkIngressKubernetesStatusCode(status.Code),
-	}
-	if status.Details == nil || status.Details.Kind == "" {
-		return attrs
-	}
-	resource := status.Details.Kind
-	if status.Details.Group != "" {
-		resource += "." + status.Details.Group
-	}
-	if len(resource) <= maxKubernetesResourceLength && kubernetesResourcePattern.MatchString(resource) {
-		attrs = append(attrs, attr.SlogNetworkIngressKubernetesResource(resource))
-	}
-	return attrs
-}
-
-// kubernetesStatusReasons are the reasons the API server reports. Anything
-// else is logged as StatusReasonUnknown.
-var kubernetesStatusReasons = map[metav1.StatusReason]struct{}{
-	metav1.StatusReasonUnknown:               {},
-	metav1.StatusReasonUnauthorized:          {},
-	metav1.StatusReasonForbidden:             {},
-	metav1.StatusReasonNotFound:              {},
-	metav1.StatusReasonAlreadyExists:         {},
-	metav1.StatusReasonConflict:              {},
-	metav1.StatusReasonGone:                  {},
-	metav1.StatusReasonInvalid:               {},
-	metav1.StatusReasonServerTimeout:         {},
-	metav1.StatusReasonStoreReadError:        {},
-	metav1.StatusReasonTimeout:               {},
-	metav1.StatusReasonTooManyRequests:       {},
-	metav1.StatusReasonBadRequest:            {},
-	metav1.StatusReasonMethodNotAllowed:      {},
-	metav1.StatusReasonNotAcceptable:         {},
-	metav1.StatusReasonRequestEntityTooLarge: {},
-	metav1.StatusReasonUnsupportedMediaType:  {},
-	metav1.StatusReasonInternalError:         {},
-	metav1.StatusReasonExpired:               {},
-	metav1.StatusReasonServiceUnavailable:    {},
-}
-
-// kubernetesResourcePattern matches a plural resource or a CamelCase Kind,
-// optionally qualified by its API group of DNS-1123 labels
-// ("tailnets.tailscale.com", "ProxyGroup.tailscale.com", "secrets").
-var kubernetesResourcePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]*(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
-
-// maxKubernetesResourceLength is the DNS-1123 subdomain limit that resource,
-// kind and group names stay within.
-const maxKubernetesResourceLength = 253
 
 func classifyNetworkIngressError(err error, observationCode string) string {
 	switch {
@@ -280,21 +205,12 @@ func classifyNetworkIngressError(err error, observationCode string) string {
 	case errors.Is(err, ErrNetworkIngressUnsupportedProvider):
 		return NetworkIngressErrorUnsupportedProvider
 	}
-	if _, ok := errors.AsType[interface {
-		error
-		k8serrors.APIStatus
-	}](err); ok {
-		return NetworkIngressErrorKubernetes
-	}
-	switch {
-	case errors.Is(err, ErrNetworkIngressDeletionPending):
+	if errors.Is(err, ErrNetworkIngressDeletionPending) {
 		return networkIngressErrorCodeDeletionPending
-	case errors.Is(err, ErrNetworkIngressReplacementPending):
-		return networkIngressErrorCodeReplacementPending
 	}
 	switch observationCode {
 	case NetworkIngressErrorInvalidDesiredState, NetworkIngressErrorUnsupportedProvider,
-		NetworkIngressErrorInvalidCredentials, NetworkIngressErrorKubernetes,
+		NetworkIngressErrorInvalidCredentials,
 		NetworkIngressErrorProviderCredentialsRejected, NetworkIngressErrorProviderForbidden,
 		NetworkIngressErrorProviderRateLimited, NetworkIngressErrorProviderAPIUnavailable,
 		NetworkIngressErrorProviderServiceNotApproved, NetworkIngressErrorProviderCertificateUnavailable,
@@ -335,12 +251,10 @@ func clampNetworkIngressErrorCode(value string) string {
 	case networkIngressErrorCodeNone,
 		networkIngressErrorCodeInternal,
 		networkIngressErrorCodeDeletionPending,
-		networkIngressErrorCodeReplacementPending,
 		NetworkIngressErrorProviderCredentialsRejected,
 		NetworkIngressErrorInvalidDesiredState,
 		NetworkIngressErrorUnsupportedProvider,
 		NetworkIngressErrorInvalidCredentials,
-		NetworkIngressErrorKubernetes,
 		NetworkIngressErrorProviderForbidden,
 		NetworkIngressErrorProviderRateLimited,
 		NetworkIngressErrorProviderAPIUnavailable,
