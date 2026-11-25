@@ -25,6 +25,7 @@ import type {
   GetAttemptResponse,
   GetSuspectedProblemResponse,
   ListAttemptsResponse,
+  ListProjectSuspectedProblemsResponse,
   ListSuspectedProblemsResponse,
   SessionActivityResponse,
   ProblemPart,
@@ -321,6 +322,22 @@ export function useSuspectedProblems(
         part,
       }),
     ...PROBLEM_QUERY,
+  });
+}
+
+export function useProjectSuspectedProblems(options: {
+  limit: number;
+  enabled: boolean;
+}): UseQueryResult<ListProjectSuspectedProblemsResponse> {
+  const { client, gramProject, projectId } = useClient();
+  return useQuery({
+    queryKey: [ROOT, projectId, "listProjectSuspectedProblems", options.limit],
+    queryFn: () =>
+      sdk.listProjectSuspectedProblems(client, gramProject, options.limit),
+    enabled: options.enabled,
+    ...PROBLEM_QUERY,
+    // The overview stays open; a stale list must not look current on return.
+    refetchOnWindowFocus: true,
   });
 }
 

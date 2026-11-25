@@ -6,6 +6,7 @@ import { mcpConnectionHealthGetSignInSummary } from "@gram/client/funcs/mcpConne
 import { mcpConnectionHealthGetSuspectedProblem } from "@gram/client/funcs/mcpConnectionHealthGetSuspectedProblem.js";
 import { mcpConnectionHealthListAttempts } from "@gram/client/funcs/mcpConnectionHealthListAttempts.js";
 import { mcpConnectionHealthListDeniedClients } from "@gram/client/funcs/mcpConnectionHealthListDeniedClients.js";
+import { mcpConnectionHealthListProjectSuspectedProblems } from "@gram/client/funcs/mcpConnectionHealthListProjectSuspectedProblems.js";
 import { mcpConnectionHealthListSuspectedProblems } from "@gram/client/funcs/mcpConnectionHealthListSuspectedProblems.js";
 import type { ConnectionAttemptDetail } from "@gram/client/models/components/connectionattemptdetail.js";
 import type { ConnectionAttemptFilters } from "@gram/client/models/components/connectionattemptfilters.js";
@@ -13,6 +14,7 @@ import type { ConnectionAttemptRow } from "@gram/client/models/components/connec
 import type { ConnectionAttemptStep } from "@gram/client/models/components/connectionattemptstep.js";
 import type { ConnectionPerson } from "@gram/client/models/components/connectionperson.js";
 import type { ConnectionServer } from "@gram/client/models/components/connectionserver.js";
+import type { ProjectSuspectedProblem as SdkProjectSuspectedProblem } from "@gram/client/models/components/projectsuspectedproblem.js";
 import type { SuspectedProblem as SdkSuspectedProblem } from "@gram/client/models/components/suspectedproblem.js";
 import type { SuspectedProblemDetail as SdkSuspectedProblemDetail } from "@gram/client/models/components/suspectedproblemdetail.js";
 import { unwrapAsync } from "@gram/client/types/fp";
@@ -27,12 +29,14 @@ import type {
   GetAttemptResponse,
   GetSuspectedProblemResponse,
   ListAttemptsRequest,
+  ListProjectSuspectedProblemsResponse,
   ListSuspectedProblemsResponse,
   ListAttemptsResponse,
   Outcome,
   Person,
   ProblemPart,
   ProblemRule,
+  ProjectSuspectedProblem,
   ServerKind,
   ServerRef,
   SessionActivityResponse,
@@ -307,7 +311,10 @@ export async function listDeniedClients(
 }
 
 function problem(
-  p: SdkSuspectedProblem | SdkSuspectedProblemDetail,
+  p:
+    | SdkSuspectedProblem
+    | SdkSuspectedProblemDetail
+    | SdkProjectSuspectedProblem,
 ): SuspectedProblem {
   return {
     id: p.id,
@@ -334,6 +341,9 @@ function problem(
       apps: p.filters.apps,
       appVersions: p.filters.appVersions,
       reasons: p.filters.reasons,
+      services: p.filters.services,
+      steps: p.filters.steps as StepGroup[] | undefined,
+      networks: p.filters.networks,
     },
   };
 }
@@ -392,6 +402,33 @@ export async function listSuspectedProblems(
     loggingEnabled: result.loggingEnabled,
     viewerScope: result.connectionViewerScope as ViewerScope,
     problems: result.problems.map(problem),
+    problemsTotal: result.problemsTotal,
+  };
+}
+
+export async function listProjectSuspectedProblems(
+  client: GramCore,
+  gramProject: string,
+  limit: number,
+): Promise<ListProjectSuspectedProblemsResponse> {
+  const result = await unwrapAsync(
+    mcpConnectionHealthListProjectSuspectedProblems(client, {
+      gramProject,
+      listProjectSuspectedProblemsRequestBody: { limit },
+    }),
+  );
+  return {
+    loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
+    problems: result.problems.map((p): ProjectSuspectedProblem => ({
+      ...problem(p),
+      server: p.server && {
+        id: p.server.id,
+        name: p.server.name,
+        slug: p.server.slug,
+      },
+      userSessionIssuerId: p.userSessionIssuerId,
+    })),
     problemsTotal: result.problemsTotal,
   };
 }

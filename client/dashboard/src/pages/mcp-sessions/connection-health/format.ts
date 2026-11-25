@@ -310,13 +310,16 @@ export function problemRule(problem: SuspectedProblem): string {
   ];
 }
 
+/** When the problem started: a date for one person, a time today or a date and time for a group. */
+export function problemSince(problem: SuspectedProblem, now: Date): string {
+  return problem.rule === "one_person"
+    ? formatDayMonth(problem.since)
+    : formatSince(problem.since, now);
+}
+
 /** The headline with when it started, as the panel lists it. */
 export function problemHeadline(problem: SuspectedProblem, now: Date): string {
-  const since =
-    problem.rule === "one_person"
-      ? formatDayMonth(problem.since)
-      : formatSince(problem.since, now);
-  return `${problem.headline} since ${since}`;
+  return `${problem.headline} since ${problemSince(problem, now)}`;
 }
 
 /** A session length in its largest whole unit: "9 days", "5 hours". */
