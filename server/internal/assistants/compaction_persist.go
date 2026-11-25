@@ -170,7 +170,7 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 	for i := range writes {
 		writes[i].Params.Generation = currentGen + 1
 	}
-	if err := chat.MarkCompactedLineage(ctx, tx, projectID, threadRow.ChatID, currentGen, writes); err != nil {
+	if err := chat.MarkCompactedLineage(ctx, s.transcripts, tx, projectID, threadRow.ChatID, currentGen, writes); err != nil {
 		return fmt.Errorf("capture compacted lineage: %w", err)
 	}
 	n, err := s.chatWriter.WriteInTx(ctx, tx, writes)

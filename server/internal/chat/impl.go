@@ -2838,8 +2838,8 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		}
 	}()
 
-	row, err := queries.GetToolCallSummaryContext(ctx, repo.GetToolCallSummaryContextParams{
-		ToolCallID: pgtype.Text{String: payload.ToolCallID, Valid: true},
+	row, err := s.transcripts.GetToolCallSummaryContext(ctx, conn, transcriptstore.ToolCallSummaryContext{
+		ToolCallID: payload.ToolCallID,
 		MessageID:  messageID,
 		ChatID:     chatID,
 		ProjectID:  *authCtx.ProjectID,
@@ -2941,7 +2941,7 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil, oops.E(oops.CodeUnexpected, err, "encode tool summary response").LogError(ctx, s.logger)
 	}
 
-	stored, err := queries.StoreToolCallSummary(ctx, repo.StoreToolCallSummaryParams{
+	stored, err := s.transcripts.StoreToolCallSummary(ctx, conn, transcriptstore.StoreToolCallSummaryParams{
 		ToolCallID: payload.ToolCallID, Summary: encodedRecord, MessageID: messageID,
 		ChatID: chatID, ProjectID: *authCtx.ProjectID,
 	})

@@ -53,7 +53,7 @@ func (f *transcriptWriterFixture) message(content string) chat.MessageWrite {
 
 func (f *transcriptWriterFixture) assertShadow(t *testing.T, id uuid.UUID) {
 	t.Helper()
-	row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: id})
+	row, err := (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), f.conn, f.projectID, id)
 	require.NoError(t, err)
 	opened, err := f.store.Load(t.Context(), f.orgID, f.projectID, id)
 	require.NoError(t, err)
@@ -102,7 +102,7 @@ func TestTranscriptWriterNative(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 	f.assertShadow(t, m.Params.ID)
-	row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: m.Params.ID})
+	row, err := (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), f.conn, f.projectID, m.Params.ID)
 	require.NoError(t, err)
 	require.Equal(t, m.Params.Content, row.Content, "shadow storage must retain plaintext")
 }

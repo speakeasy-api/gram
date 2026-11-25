@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
-	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -116,12 +116,19 @@ type Publisher struct {
 // NewPublisher constructs a Publisher over the given judge roster. events may
 // be nil, which disables work-units score event emission (scores still
 // publish).
+// WithTranscripts makes the publisher read judged transcripts through
+// transcripts, opening encrypted shadows for the projects that keep them.
+func (p *Publisher) WithTranscripts(transcripts *transcriptstore.Transcripts) *Publisher {
+	p.chats = efficacy.NewTranscriptSource(p.db, transcripts)
+	return p
+}
+
 func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, scores ScoreSink, events ScoreEventSink, judges *Judges) *Publisher {
 	return &Publisher{
 		logger:            logger.With(attr.SlogComponent("chat-analysis-publisher")),
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat/analysis"),
 		db:                db,
-		chats:             chatrepo.New(db),
+		chats:             efficacy.NewTranscriptSource(db, nil),
 		scores:            scores,
 		events:            events,
 		judges:            judges,

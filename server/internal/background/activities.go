@@ -42,7 +42,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
-	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/summaryjudge"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	"github.com/speakeasy-api/gram/server/internal/email"
@@ -406,7 +405,7 @@ func NewActivities(
 
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
 	if db != nil && chatClient != nil && skillSuggestionSignaler != nil && judgeRateLimiter != nil {
-		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
+		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, efficacy.NewTranscriptSource(db, transcripts), chatClient, judgeRateLimiter)
 		if err != nil {
 			panic(fmt.Errorf("new skill suggestion engine: %w", err))
 		}
@@ -525,7 +524,7 @@ func NewActivities(
 			meterProvider,
 			db,
 			productFeatures,
-			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler, riskRecorder),
+			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler, riskRecorder).WithTranscripts(transcripts),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
@@ -542,7 +541,7 @@ func NewActivities(
 		chatAnalysisScorer: activities.NewChatAnalysisScorer(
 			db,
 			chatAnalysisJudges,
-			analysis.NewPublisher(logger, tracerProvider, db, telemetryRepo, telemetryLogger, chatAnalysisJudges),
+			analysis.NewPublisher(logger, tracerProvider, db, telemetryRepo, telemetryLogger, chatAnalysisJudges).WithTranscripts(transcripts),
 			&TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 	}

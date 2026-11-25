@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"os"
 	"strings"
@@ -213,7 +214,7 @@ func (c *countingChats) CountChatMessages(ctx context.Context, arg chatrepo.Coun
 	return count, nil
 }
 
-func (c *countingChats) ListChatTranscriptMessagesPage(ctx context.Context, arg chatrepo.ListChatTranscriptMessagesPageParams) ([]chatrepo.ListChatTranscriptMessagesPageRow, error) {
+func (c *countingChats) ListChatTranscriptMessagesPage(ctx context.Context, arg transcriptstore.TranscriptPage) ([]transcriptstore.ListChatTranscriptMessagesPageRow, error) {
 	c.loads[arg.ChatID]++
 	rows, err := c.TranscriptSource.ListChatTranscriptMessagesPage(ctx, arg)
 	if err != nil {
@@ -231,7 +232,7 @@ type flakyChats struct {
 	loads int
 }
 
-func (f *flakyChats) ListChatTranscriptMessagesPage(ctx context.Context, arg chatrepo.ListChatTranscriptMessagesPageParams) ([]chatrepo.ListChatTranscriptMessagesPageRow, error) {
+func (f *flakyChats) ListChatTranscriptMessagesPage(ctx context.Context, arg transcriptstore.TranscriptPage) ([]transcriptstore.ListChatTranscriptMessagesPageRow, error) {
 	f.loads++
 	if f.loads == 1 {
 		return nil, errors.New("chat read unavailable")

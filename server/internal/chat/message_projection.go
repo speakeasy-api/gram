@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,7 +33,7 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 		return false, fmt.Errorf("admit message projection: %w", err)
 	}
 	q := repo.New(tx)
-	row, err := q.GetKitProjectionMessage(ctx, repo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ID: messageID})
+	row, err := w.transcripts.GetKitProjectionMessage(ctx, tx, projectID, messageID)
 	exists := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("load projected message: %w", err)
@@ -69,7 +70,7 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	var changed int64
 	var organizationID string
 	if exists {
-		changed, err = q.PatchKitProjectionMessage(ctx, repo.PatchKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: write.Params.ChatID, ID: messageID, Content: write.Params.Content, ContentRaw: write.Params.ContentRaw, ToolCalls: write.Params.ToolCalls, ContentHash: write.Params.ContentHash, FinishReason: write.Params.FinishReason})
+		changed, err = w.transcripts.PatchKitProjectionMessage(ctx, tx, transcriptstore.PatchKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: write.Params.ChatID, ID: messageID, Content: write.Params.Content, ContentRaw: write.Params.ContentRaw, ToolCalls: write.Params.ToolCalls, ContentHash: write.Params.ContentHash, FinishReason: write.Params.FinishReason})
 	} else {
 		changed, err = q.CreateChatMessage(ctx, []repo.CreateChatMessageParams{write.Params})
 		if err == nil && changed > 0 {

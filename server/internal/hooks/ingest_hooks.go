@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"maps"
 	"strings"
 	"time"
@@ -2030,6 +2031,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	chatID := sessionIDToUUID(sessionID)
 	projectID := *authCtx.ProjectID
 	queries := chatRepo.New(s.db)
+	var queriesDB transcriptstore.DBTX = s.db
 	commit := func() error { return nil }
 	logicalAttachments := authenticatedIngestOptions(ctx).promptCorrelationID != ""
 	if logicalAttachments {
@@ -2046,6 +2048,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		}
 		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 		queries = chatRepo.New(tx)
+		queriesDB = tx
 		if err := queries.AcquireChatPromptCorrelationLock(ctx, chatRepo.AcquireChatPromptCorrelationLockParams{ProjectID: projectID, ChatID: chatID}); err != nil {
 			return fmt.Errorf("lock logical prompt attachments: %w", err)
 		}
@@ -2057,7 +2060,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		}
 	}
 
-	parentResolver, err := newPromptAttachmentParentResolver(ctx, queries, chatID, projectID)
+	parentResolver, err := newPromptAttachmentParentResolver(ctx, s.writer.Transcripts(), queriesDB, chatID, projectID)
 	if err != nil {
 		return err
 	}
@@ -2177,11 +2180,8 @@ type promptAttachmentParentResolver struct {
 	byHash  map[string]uuid.NullUUID
 }
 
-func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Queries, chatID uuid.UUID, projectID uuid.UUID) (*promptAttachmentParentResolver, error) {
-	candidates, err := queries.ListClaudeUserMessagesForPromptAttachmentParent(ctx, chatRepo.ListClaudeUserMessagesForPromptAttachmentParentParams{
-		ChatID:    chatID,
-		ProjectID: projectID,
-	})
+func newPromptAttachmentParentResolver(ctx context.Context, transcripts *transcriptstore.Transcripts, db transcriptstore.DBTX, chatID uuid.UUID, projectID uuid.UUID) (*promptAttachmentParentResolver, error) {
+	candidates, err := transcripts.ListClaudeUserMessagesForPromptAttachmentParent(ctx, db, projectID, chatID)
 	if err != nil {
 		return nil, fmt.Errorf("list prompt attachment parent candidates: %w", err)
 	}

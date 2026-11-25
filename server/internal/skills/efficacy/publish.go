@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"slices"
 	"strings"
@@ -72,10 +73,22 @@ const recommendationRedaction = "<redacted>"
 const validationFailureClass = "skill efficacy row validation failure"
 
 // TranscriptSource reads one chat's messages a page at a time, newest first.
-// Satisfied by *chatrepo.Queries.
+// NewTranscriptSource builds the production one.
 type TranscriptSource interface {
 	CountChatMessages(ctx context.Context, arg chatrepo.CountChatMessagesParams) (int64, error)
-	ListChatTranscriptMessagesPage(ctx context.Context, arg chatrepo.ListChatTranscriptMessagesPageParams) ([]chatrepo.ListChatTranscriptMessagesPageRow, error)
+	ListChatTranscriptMessagesPage(ctx context.Context, page transcriptstore.TranscriptPage) ([]transcriptstore.ListChatTranscriptMessagesPageRow, error)
+}
+
+type transcriptSource struct {
+	*chatrepo.Queries
+	transcriptstore.TranscriptPages
+}
+
+// NewTranscriptSource reads message counts from db and message bodies through
+// transcripts, which opens encrypted shadows for the projects that keep them.
+// A nil transcripts reads plaintext.
+func NewTranscriptSource(db *pgxpool.Pool, transcripts *transcriptstore.Transcripts) TranscriptSource {
+	return transcriptSource{Queries: chatrepo.New(db), TranscriptPages: transcripts.Pages(db)}
 }
 
 // ScoreSink is the ClickHouse side of publication: the existence guard and the
@@ -145,7 +158,7 @@ func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *
 		logger:                logger.With(attr.SlogComponent("skill-efficacy-publisher")),
 		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills/efficacy"),
 		db:                    db,
-		chats:                 chatrepo.New(db),
+		chats:                 NewTranscriptSource(db, nil),
 		scores:                scores,
 		judge:                 judge,
 		signaler:              signaler,
@@ -153,6 +166,13 @@ func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *
 		riskRecorder:          riskRecorder,
 		evaluationTimeout:     publishEvaluationTimeout,
 	}
+}
+
+// WithTranscripts makes the publisher read judged transcripts through
+// transcripts, opening encrypted shadows for the projects that keep them.
+func (p *Publisher) WithTranscripts(transcripts *transcriptstore.Transcripts) *Publisher {
+	p.chats = NewTranscriptSource(p.db, transcripts)
+	return p
 }
 
 // Publish judges the given reserved evaluations and writes their scores.
@@ -678,13 +698,13 @@ func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, cha
 // the omission count has to account for what was never read. Errors wrap
 // ErrRetryable: a failed read is infrastructure, never the transcript's fault.
 func LoadTranscript(ctx context.Context, chats TranscriptSource, projectID uuid.UUID, chatID uuid.UUID) (Transcript, error) {
-	page := chatrepo.ListChatTranscriptMessagesPageParams{
+	page := transcriptstore.TranscriptPage{
 		ChatID:          chatID,
 		ProjectID:       projectID,
 		CursorCreatedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		CursorSeq:       pgtype.Int8{Int64: 0, Valid: false},
 		CursorID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Lim:             transcriptPageSize,
+		Limit:           transcriptPageSize,
 	}
 
 	unread, err := chats.CountChatMessages(ctx, chatrepo.CountChatMessagesParams{ChatID: chatID, ProjectID: projectID})
@@ -740,7 +760,7 @@ func LoadTranscript(ctx context.Context, chats TranscriptSource, projectID uuid.
 // transcriptPageMessage projects one page row onto the shape RenderTranscript
 // reads. The page selects every column the rendering touches and nothing else,
 // so the projection is field-for-field.
-func transcriptPageMessage(row chatrepo.ListChatTranscriptMessagesPageRow) TranscriptInput {
+func transcriptPageMessage(row transcriptstore.ListChatTranscriptMessagesPageRow) TranscriptInput {
 	return TranscriptInput{
 		ID:               row.ID,
 		Seq:              row.Seq,

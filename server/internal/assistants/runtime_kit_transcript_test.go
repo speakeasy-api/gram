@@ -3,6 +3,7 @@ package assistants
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"testing"
 	"time"
 
@@ -131,7 +132,7 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	omitted, err := projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"agent_message","messageId":"omitted","stopReason":"end_turn"}`))
 	require.NoError(t, err)
 	require.False(t, omitted.Changed)
-	_, err = chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: KitTranscriptMessageID(b, "agent_message", "omitted")})
+	_, err = (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), db, project, KitTranscriptMessageID(b, "agent_message", "omitted"))
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	afterOmitted, err := testrepo.New(db).CountPublishOutboxRows(t.Context())
 	require.NoError(t, err)
@@ -182,7 +183,7 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	require.False(t, messages[0].RiskAnalyzedAt.Valid, "replacement must be scanned again")
 	require.NoError(t, riskrepo.New(db).MarkMessagesRiskAnalyzed(t.Context(), riskrepo.MarkMessagesRiskAnalyzedParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, MessageIds: []uuid.UUID{KitTranscriptMessageID(b, "agent_message", "reply")}}))
 
-	beforeTerminal, err := chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: KitTranscriptMessageID(b, "agent_message", "reply")})
+	beforeTerminal, err := (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), db, project, KitTranscriptMessageID(b, "agent_message", "reply"))
 	require.NoError(t, err)
 	require.True(t, beforeTerminal.RiskAnalyzedAt.Valid, "analysis marker must be set before terminal projection")
 
@@ -199,7 +200,7 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	result, err = projector.Handle(t.Context(), b, terminal)
 	require.NoError(t, err)
 	require.False(t, result.Changed)
-	row, err := chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: KitTranscriptMessageID(b, "agent_message", "reply")})
+	row, err := (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), db, project, KitTranscriptMessageID(b, "agent_message", "reply"))
 	require.NoError(t, err)
 	require.Equal(t, "two", row.Content)
 	require.Equal(t, "cancelled", row.FinishReason.String)
@@ -213,15 +214,15 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	require.Equal(t, beforeTerminal.ToolCalls, row.ToolCalls, "reason-only projection must preserve tool calls")
 	require.True(t, row.RiskAnalyzedAt.Valid, "reason-only updates preserve completed risk analysis")
 	for _, field := range []string{"raw content", "tool calls"} {
-		patch := chatrepo.PatchKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ChatID: chatID, ID: row.ID, Content: row.Content, ContentRaw: row.ContentRaw, ToolCalls: row.ToolCalls, ContentHash: row.ContentHash, FinishReason: row.FinishReason}
+		patch := transcriptstore.PatchKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ChatID: chatID, ID: row.ID, Content: row.Content, ContentRaw: row.ContentRaw, ToolCalls: row.ToolCalls, ContentHash: row.ContentHash, FinishReason: row.FinishReason}
 		if field == "raw content" {
 			patch.ContentRaw = []byte(`[{"type":"text","text":"updated raw"}]`)
 		} else {
 			patch.ToolCalls = []byte(`[{"id":"new-call"}]`)
 		}
-		_, err := chatrepo.New(db).PatchKitProjectionMessage(t.Context(), patch)
+		_, err := (*transcriptstore.Transcripts)(nil).PatchKitProjectionMessage(t.Context(), db, patch)
 		require.NoError(t, err)
-		row, err = chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: row.ID})
+		row, err = (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), db, project, row.ID)
 		require.NoError(t, err)
 		require.False(t, row.RiskAnalyzedAt.Valid, field)
 		require.NoError(t, riskrepo.New(db).MarkMessagesRiskAnalyzed(t.Context(), riskrepo.MarkMessagesRiskAnalyzedParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, MessageIds: []uuid.UUID{row.ID}}))
@@ -261,7 +262,7 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	// Replaying a content event without terminal metadata cannot erase it.
 	_, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"agent_message","messageId":"reply","content":[{"type":"text","text":"two"}]}`))
 	require.NoError(t, err)
-	row, err = chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: row.ID})
+	row, err = (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), db, project, row.ID)
 	require.NoError(t, err)
 	require.Equal(t, "cancelled", row.FinishReason.String)
 	// This replay replaces the raw-content/tool-call mutations above, so it

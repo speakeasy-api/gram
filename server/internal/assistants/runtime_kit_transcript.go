@@ -130,7 +130,7 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 		}
 		if echo, ok := b.UserEchoes[key]; ok && u.SessionUpdate == "user_message" {
 			err := p.guarded(ctx, b, func(tx pgx.Tx) error {
-				row, err := chatrepo.New(tx).GetKitProjectionMessage(ctx, chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: b.ProjectID, Valid: true}, ID: echo})
+				row, err := p.writer.Transcripts().GetKitProjectionMessage(ctx, tx, b.ProjectID, echo)
 				if err != nil {
 					return fmt.Errorf("get correlated user message: %w", err)
 				}

@@ -120,7 +120,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		absoluteIndex := args.StartIndex + tc.MessageIndex
 		if absoluteIndex >= 0 && absoluteIndex < len(allMessages) {
 			msgID := allMessages[absoluteIndex].ID
-			if err := txRepo.UpdateToolCallOutcome(ctx, repo.UpdateToolCallOutcomeParams{
+			if err := a.transcripts.UpdateToolCallOutcome(ctx, tx, transcriptstore.UpdateToolCallOutcomeParams{
 				ID:               msgID,
 				ProjectID:        args.ProjectID,
 				ToolOutcome:      conv.ToPGText(tc.Outcome),

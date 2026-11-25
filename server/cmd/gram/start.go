@@ -2358,6 +2358,7 @@ func newStartCommand() *cli.Command {
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						Connections:                    connectionRecorder,
+						Transcripts:                    transcripts,
 						FleetHealthCache:               admin.NewHookClientsCache(logger, cache.NewRedisCacheAdapter(redisClient), tm.NewHookClients(chDB), deviceagentversions.NewStore(redisClient)),
 						HookFleetMetrics:               newHookFleetMetrics(ctx, logger, meterProvider, db, chReadDB),
 						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),

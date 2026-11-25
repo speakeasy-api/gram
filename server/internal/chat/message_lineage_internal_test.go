@@ -1,12 +1,11 @@
 package chat
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-
-	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 )
 
 func TestTranscriptLineage(t *testing.T) {
@@ -28,9 +27,9 @@ func TestTranscriptLineage(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			previous := make([]repo.ListChatMessagesForMatchRow, len(tc.previous))
+			previous := make([]transcriptstore.ListChatMessagesForMatchRow, len(tc.previous))
 			for i, text := range tc.previous {
-				previous[i] = repo.ListChatMessagesForMatchRow{ID: uuid.New(), Role: "user", Content: text, CaptureKind: CaptureOriginal}
+				previous[i] = transcriptstore.ListChatMessagesForMatchRow{ID: uuid.New(), Role: "user", Content: text, CaptureKind: CaptureOriginal}
 				if i == 1 {
 					previous[i].OriginalMessageID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 				}

@@ -913,6 +913,7 @@ func newWorkerCommand() *cli.Command {
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				FleetHealthCache:               admin.NewHookClientsCache(logger, cache.NewRedisCacheAdapter(redisClient), telemetry.NewHookClients(chDB), deviceagentversions.NewStore(redisClient)),
+				Transcripts:                    transcripts,
 				HookFleetMetrics:               newHookFleetMetrics(ctx, logger, meterProvider, db, meterReadConn),
 				CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL), productFeatures, telemetry.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
 				MemoryEvals:                    evalrun.NewRunner(logger, db, chatClient),

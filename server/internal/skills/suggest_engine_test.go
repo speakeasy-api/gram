@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"sync"
 	"testing"
 	"time"
@@ -20,7 +21,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
 	backgroundactivities "github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/skills"
@@ -115,7 +115,7 @@ func newSuggestionEngine(t *testing.T, ti *testInstance, config suggest.Config, 
 		testenv.NewLogger(t),
 		ti.conn,
 		insights,
-		chatrepo.New(ti.conn),
+		efficacy.NewTranscriptSource(ti.conn, nil),
 		completion,
 		openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient)),
 	)
@@ -467,7 +467,7 @@ func TestSuggestionEngineRateLimitFailureConsumesNothing(t *testing.T) {
 	allowed, err := limiter.Allow(ctx, key)
 	require.NoError(t, err)
 	require.True(t, allowed.Allowed)
-	engine, err := suggest.NewEngine(suggest.DefaultConfig(), testenv.NewLogger(t), ti.conn, &suggestionInsightsStub{}, chatrepo.New(ti.conn), completion, limiter)
+	engine, err := suggest.NewEngine(suggest.DefaultConfig(), testenv.NewLogger(t), ti.conn, &suggestionInsightsStub{}, efficacy.NewTranscriptSource(ti.conn, nil), completion, limiter)
 	require.NoError(t, err)
 
 	_, err = engine.Run(ctx, suggest.RunInput{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID), Now: now})

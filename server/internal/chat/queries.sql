@@ -245,70 +245,6 @@ WHERE chat_id = @chat_id
     WHERE chats.id = ai_integration_config_chats.chat_id AND chats.project_id = @project_id
   );
 
--- name: CreateChatMessage :copyfrom
--- id is caller-supplied because ChatMessageWriter must know the durable message
--- identity before COPY FROM so transactional side effects use the same id.
--- created_at is caller-supplied so hook-captured messages carry the event's
--- original occurred_at: spool replays arrive after newer live rows, and
--- insert-time stamps would sort them out of conversation order. Transcript
--- readers order by (created_at, seq).
-INSERT INTO chat_messages (
-    id
-  , chat_id
-  , role
-  , project_id
-  , content
-  , content_raw
-  , content_asset_url
-  , storage_error
-  , model
-  , message_id
-  , tool_call_id
-  , user_id
-  , external_user_id
-  , finish_reason
-  , tool_calls
-  , prompt_tokens
-  , completion_tokens
-  , total_tokens
-  , origin
-  , user_agent
-  , ip_address
-  , source
-  , content_hash
-  , generation
-  , replayed
-  , created_at
-)
-VALUES (
-    @id
-  , @chat_id
-  , @role
-  , @project_id::uuid
-  , @content
-  , @content_raw
-  , @content_asset_url
-  , @storage_error
-  , @model
-  , @message_id
-  , @tool_call_id
-  , @user_id
-  , @external_user_id
-  , @finish_reason
-  , @tool_calls
-  , @prompt_tokens
-  , @completion_tokens
-  , @total_tokens
-  , @origin
-  , @user_agent
-  , @ip_address
-  , @source
-  , @content_hash
-  , @generation
-  , @replayed
-  , @created_at
-);
-
 -- name: GetMessagesForPublication :many
 -- Read authoritative identity and attribution in the write transaction.
 -- Content is fetched by consumers, never serialized into these events.
@@ -364,81 +300,6 @@ SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model,
 FROM messages m
 JOIN departments d ON d.actor_id = m.actor_id AND d.email = m.email
 ORDER BY m.seq;
-
--- name: UpsertCorrelatedChatMessage :one
--- Returns persisted metering fields and distinguishes initial inserts from
--- native-hook promotions, which must not emit another storage reading.
-INSERT INTO chat_messages (
-    id
-  , chat_id
-  , role
-  , project_id
-  , content
-  , content_raw
-  , content_asset_url
-  , storage_error
-  , model
-  , message_id
-  , tool_call_id
-  , user_id
-  , external_user_id
-  , external_message_id
-  , finish_reason
-  , tool_calls
-  , prompt_tokens
-  , completion_tokens
-  , total_tokens
-  , origin
-  , user_agent
-  , ip_address
-  , source
-  , content_hash
-  , generation
-  , replayed
-  , created_at
-)
-VALUES (
-    @id
-  , @chat_id
-  , @role
-  , @project_id::uuid
-  , @content
-  , @content_raw
-  , @content_asset_url
-  , @storage_error
-  , @model
-  , @message_id
-  , @tool_call_id
-  , @user_id
-  , @external_user_id
-  , @external_message_id
-  , @finish_reason
-  , @tool_calls
-  , @prompt_tokens
-  , @completion_tokens
-  , @total_tokens
-  , @origin
-  , @user_agent
-  , @ip_address
-  , @source
-  , @content_hash
-  , @generation
-  , @replayed
-  , @created_at
-)
-ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
-DO UPDATE SET
-    source = EXCLUDED.source
-  , user_id = COALESCE(EXCLUDED.user_id, chat_messages.user_id)
-  , external_user_id = COALESCE(EXCLUDED.external_user_id, chat_messages.external_user_id)
-  , model = COALESCE(EXCLUDED.model, chat_messages.model)
-  , replayed = chat_messages.replayed OR EXCLUDED.replayed
-  , created_at = EXCLUDED.created_at
-  , risk_analyzed_at = NULL
-WHERE chat_messages.project_id = EXCLUDED.project_id
-  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
-  AND chat_messages.source = 'litellm'
-RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted;
 
 -- name: AcquireChatPromptCorrelationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
@@ -541,69 +402,6 @@ WHERE ccp.chat_id = @chat_id
     OR ccp.parent_chat_message_id = ANY(@parent_chat_message_ids::uuid[])
   )
 ORDER BY created_at ASC, id ASC;
-
--- name: CreateExternalChatMessage :one
--- The writer supplies the candidate id before insertion so a newly inserted
--- message and its atomic meter reading share one durable identity.
-INSERT INTO chat_messages (
-    id
-  , chat_id
-  , role
-  , project_id
-  , content
-  , content_raw
-  , content_asset_url
-  , storage_error
-  , model
-  , message_id
-  , tool_call_id
-  , user_id
-  , external_user_id
-  , external_message_id
-  , finish_reason
-  , tool_calls
-  , prompt_tokens
-  , completion_tokens
-  , total_tokens
-  , origin
-  , user_agent
-  , ip_address
-  , source
-  , content_hash
-  , generation
-  , created_at
-)
-VALUES (
-    @id
-  , @chat_id
-  , @role
-  , @project_id::uuid
-  , @content
-  , @content_raw
-  , @content_asset_url
-  , @storage_error
-  , @model
-  , @message_id
-  , @tool_call_id
-  , @user_id
-  , @external_user_id
-  , @external_message_id
-  , @finish_reason
-  , @tool_calls
-  , @prompt_tokens
-  , @completion_tokens
-  , @total_tokens
-  , @origin
-  , @user_agent
-  , @ip_address
-  , @source
-  , @content_hash
-  , @generation
-  , @created_at
-)
-ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
-DO NOTHING
-RETURNING id;
 
 -- name: GetProjectOrganizationID :one
 SELECT organization_id
@@ -1377,56 +1175,6 @@ SELECT * FROM chat_messages
 WHERE chat_id = @chat_id AND project_id = @project_id::uuid
 ORDER BY created_at ASC, seq ASC;
 
--- name: ListClaudeUserMessagesForPromptAttachmentParent :many
-SELECT cm.id, cm.content
-FROM chat_messages cm
-WHERE cm.chat_id = @chat_id
-  AND cm.project_id = @project_id::uuid
-  AND cm.role = 'user'
-  AND cm.content != ''
-ORDER BY cm.seq DESC, cm.created_at DESC;
-
--- name: ListChatTranscriptMessagesPage :many
--- Keyset page of one chat's messages, newest first, carrying only the columns
--- transcript rendering reads. A transcript reader that pulled the whole chat
--- held every message of an unbounded session in memory to then throw most of
--- them away, so it walks backwards a page at a time instead and stops as soon
--- as the rendering starts dropping messages: the trim is oldest-first, so every
--- unread row is older than the ones already being dropped and would be dropped
--- too.
---
--- The same project filter as ListChatMessages, so a page can never cross a
--- project boundary. CountChatMessages supplies the total once per transcript;
--- repeating a windowed count on every page makes long transcripts quadratic.
---
--- The cursor is the full transcript key (created_at, seq, id): created_at and
--- seq alone are not unique, and a tie split across a page boundary would either
--- repeat or skip a message.
-SELECT
-  cm.id,
-  cm.seq,
-  cm.created_at,
-  cm.role,
-  cm.content,
-  cm.tool_calls,
-  cm.tool_call_id,
-  cm.tool_urn,
-  cm.tool_outcome,
-  cm.tool_outcome_notes
-FROM chat_messages cm
-WHERE cm.chat_id = @chat_id
-  AND cm.project_id = @project_id::uuid
-  AND (
-    sqlc.narg('cursor_created_at')::timestamptz IS NULL
-    OR (cm.created_at, cm.seq, cm.id) < (
-      sqlc.narg('cursor_created_at')::timestamptz,
-      sqlc.narg('cursor_seq')::bigint,
-      sqlc.narg('cursor_id')::uuid
-    )
-  )
-ORDER BY cm.created_at DESC, cm.seq DESC, cm.id DESC
-LIMIT @lim::integer;
-
 -- name: CountChatMessages :one
 -- Must match ListChatMessages' project_id filter, otherwise count and the
 -- list drift and the client hits "chat history mismatch" at
@@ -1449,15 +1197,6 @@ WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
 -- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages
 WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
-
--- name: ListChatMessagesForMatch :many
-SELECT id, role, content, tool_call_id, tool_calls, original_message_id,
-  COALESCE(capture_kind, CASE WHEN generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind
-FROM chat_messages
-WHERE chat_id = @chat_id
-  AND project_id = @project_id::uuid
-  AND generation = @generation
-ORDER BY created_at ASC, seq ASC;
 
 -- name: SetMessageCaptureLineage :exec
 UPDATE chat_messages m
@@ -1516,52 +1255,12 @@ SET summary = @summary,
 WHERE chats.id = @id AND chats.project_id = @project_id AND chats.deleted IS FALSE
 RETURNING summary, summary_generated_at;
 
--- name: GetToolCallSummaryContext :one
--- Fetch the owning call message and its matching result within one project and
--- chat. The handler validates that tool_calls contains the requested call id.
-SELECT
-  calls.tool_calls,
-  calls.tool_call_summaries,
-  results.content::text AS result_content
-FROM chat_messages AS calls
-JOIN chat_messages AS results
-  ON results.chat_id = calls.chat_id
-  AND results.project_id = calls.project_id
-  AND results.tool_call_id = @tool_call_id
-  AND results.generation = calls.generation
-  AND results.role = 'tool'
-WHERE calls.id = @message_id
-  AND calls.chat_id = @chat_id
-  AND calls.project_id = @project_id::uuid
-  AND calls.role = 'assistant'
-ORDER BY results.created_at ASC, results.seq ASC, results.id ASC
-LIMIT 1;
-
 -- name: CreateChatMessageReturningID :one
 -- Inserts a message fixture while exposing its durable id to callers that need
 -- to refer to that exact message in subsequent operations.
 INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id)
 VALUES (@chat_id, @project_id, @role, @content, sqlc.narg('tool_calls'), sqlc.narg('tool_call_id'))
 RETURNING id;
-
--- name: StoreToolCallSummary :one
--- Preserve summaries for sibling calls carried by the same assistant message.
-UPDATE chat_messages
-SET tool_call_summaries = jsonb_set(
-  COALESCE(tool_call_summaries, '{}'::jsonb),
-  ARRAY[@tool_call_id::text],
-  @summary::jsonb
-)
-WHERE id = @message_id
-  AND chat_id = @chat_id
-  AND project_id = @project_id::uuid
-RETURNING (tool_call_summaries -> @tool_call_id::text)::text AS summary;
-
--- name: UpdateToolCallOutcome :exec
-UPDATE chat_messages
-SET tool_outcome = @tool_outcome,
-    tool_outcome_notes = @tool_outcome_notes
-WHERE id = @id AND project_id = @project_id::uuid;
 
 -- name: InsertChatResolution :one
 -- Nothing in the schema ties chat_resolutions.project_id to its chat's, so the
@@ -2105,16 +1804,6 @@ FROM ancestry ORDER BY root_id, (slack_channel_id IS NULL), depth;
 -- Test fixture: hold the lock an ordinary helper capture takes on its own row.
 SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDATE;
 
--- name: GetKitProjectionMessage :one
-SELECT * FROM chat_messages WHERE project_id = @project_id AND id = @id;
-
--- name: PatchKitProjectionMessage :execrows
-UPDATE chat_messages SET content = @content, content_raw = @content_raw,
- tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
- risk_analyzed_at = CASE WHEN content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls THEN NULL ELSE risk_analyzed_at END
-WHERE project_id = @project_id AND chat_id = @chat_id AND id = @id AND source = 'kit'
-AND (content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls OR finish_reason IS DISTINCT FROM @finish_reason);
-
 -- name: ValidateKitTranscriptBinding :one
 SELECT t.id FROM assistant_threads t
 JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id AND r.project_id = t.project_id
@@ -2175,3 +1864,130 @@ SELECT (
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.id = @id AND c.project_id = @project_id;
+
+-- name: CreateChatMessage :copyfrom
+-- id is caller-supplied because ChatMessageWriter must know the durable message
+-- identity before COPY FROM so transactional side effects use the same id.
+-- created_at is caller-supplied so hook-captured messages carry the event's
+-- original occurred_at: spool replays arrive after newer live rows, and
+-- insert-time stamps would sort them out of conversation order. Transcript
+-- readers order by (created_at, seq).
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , replayed
+  , created_at
+)
+VALUES (
+    @id
+  , @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @content_asset_url
+  , @storage_error
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @finish_reason
+  , @tool_calls
+  , @prompt_tokens
+  , @completion_tokens
+  , @total_tokens
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @content_hash
+  , @generation
+  , @replayed
+  , @created_at
+);
+
+-- name: CreateExternalChatMessage :one
+-- The writer supplies the candidate id before insertion so a newly inserted
+-- message and its atomic meter reading share one durable identity.
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , created_at
+)
+VALUES (
+    @id
+  , @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @content_asset_url
+  , @storage_error
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @external_message_id
+  , @finish_reason
+  , @tool_calls
+  , @prompt_tokens
+  , @completion_tokens
+  , @total_tokens
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @content_hash
+  , @generation
+  , @created_at
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO NOTHING
+RETURNING id;

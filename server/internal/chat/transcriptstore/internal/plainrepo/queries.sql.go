@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const getChatEntryTotals = `-- name: GetChatEntryTotals :one
@@ -103,6 +104,71 @@ func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotals
 	return i, err
 }
 
+const getKitProjectionMessage = `-- name: GetKitProjectionMessage :one
+SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.capture_kind, m.original_message_id, m.replayed, m.created_at, m.risk_analyzed_at, t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND $1::boolean
+WHERE m.project_id = $2 AND m.id = $3
+`
+
+type GetKitProjectionMessageParams struct {
+	OpenShadows bool
+	ProjectID   uuid.NullUUID
+	ID          uuid.UUID
+}
+
+type GetKitProjectionMessageRow struct {
+	ChatMessage      ChatMessage
+	ShadowCiphertext pgtype.Text
+	ShadowCurrent    bool
+}
+
+func (q *Queries) GetKitProjectionMessage(ctx context.Context, arg GetKitProjectionMessageParams) (GetKitProjectionMessageRow, error) {
+	row := q.db.QueryRow(ctx, getKitProjectionMessage, arg.OpenShadows, arg.ProjectID, arg.ID)
+	var i GetKitProjectionMessageRow
+	err := row.Scan(
+		&i.ChatMessage.ID,
+		&i.ChatMessage.Seq,
+		&i.ChatMessage.ChatID,
+		&i.ChatMessage.ProjectID,
+		&i.ChatMessage.Role,
+		&i.ChatMessage.Content,
+		&i.ChatMessage.ContentRaw,
+		&i.ChatMessage.ContentAssetUrl,
+		&i.ChatMessage.Model,
+		&i.ChatMessage.MessageID,
+		&i.ChatMessage.FinishReason,
+		&i.ChatMessage.ToolCalls,
+		&i.ChatMessage.PromptTokens,
+		&i.ChatMessage.CompletionTokens,
+		&i.ChatMessage.TotalTokens,
+		&i.ChatMessage.StorageError,
+		&i.ChatMessage.UserID,
+		&i.ChatMessage.ExternalUserID,
+		&i.ChatMessage.ExternalMessageID,
+		&i.ChatMessage.Origin,
+		&i.ChatMessage.UserAgent,
+		&i.ChatMessage.IpAddress,
+		&i.ChatMessage.Source,
+		&i.ChatMessage.ToolCallID,
+		&i.ChatMessage.ToolUrn,
+		&i.ChatMessage.ToolOutcome,
+		&i.ChatMessage.ToolOutcomeNotes,
+		&i.ChatMessage.ToolCallSummaries,
+		&i.ChatMessage.ContentHash,
+		&i.ChatMessage.Generation,
+		&i.ChatMessage.CaptureKind,
+		&i.ChatMessage.OriginalMessageID,
+		&i.ChatMessage.Replayed,
+		&i.ChatMessage.CreatedAt,
+		&i.ChatMessage.RiskAnalyzedAt,
+		&i.ShadowCiphertext,
+		&i.ShadowCurrent,
+	)
+	return i, err
+}
+
 const getProjectOrganizationID = `-- name: GetProjectOrganizationID :one
 
 SELECT organization_id FROM projects WHERE id = $1
@@ -121,6 +187,79 @@ func (q *Queries) GetProjectOrganizationID(ctx context.Context, projectID uuid.U
 	var organization_id string
 	err := row.Scan(&organization_id)
 	return organization_id, err
+}
+
+const getToolCallSummaryContext = `-- name: GetToolCallSummaryContext :one
+SELECT
+  calls.chat_id,
+  calls.tool_calls,
+  calls.tool_call_summaries,
+  results.id AS result_message_id,
+  results.content::text AS result_content,
+  tc.ciphertext AS calls_shadow_ciphertext,
+  COALESCE(tc.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,calls.content,calls.content_raw IS NULL,calls.content_raw,calls.tool_calls IS NULL,calls.tool_calls,calls.tool_outcome_notes,calls.tool_call_summaries IS NULL,calls.tool_call_summaries,calls.storage_error)::text,'UTF8')), false)::boolean AS calls_shadow_current,
+  tr.ciphertext AS result_shadow_ciphertext,
+  COALESCE(tr.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,results.content,results.content_raw IS NULL,results.content_raw,results.tool_calls IS NULL,results.tool_calls,results.tool_outcome_notes,results.tool_call_summaries IS NULL,results.tool_call_summaries,results.storage_error)::text,'UTF8')), false)::boolean AS result_shadow_current
+FROM chat_messages AS calls
+JOIN chat_messages AS results
+  ON results.chat_id = calls.chat_id
+  AND results.project_id = calls.project_id
+  AND results.tool_call_id = $1
+  AND results.generation = calls.generation
+  AND results.role = 'tool'
+LEFT JOIN chat_message_transcripts tc ON tc.message_id = calls.id AND tc.project_id = calls.project_id AND $2::boolean
+LEFT JOIN chat_message_transcripts tr ON tr.message_id = results.id AND tr.project_id = results.project_id AND $2::boolean
+WHERE calls.id = $3
+  AND calls.chat_id = $4
+  AND calls.project_id = $5::uuid
+  AND calls.role = 'assistant'
+ORDER BY results.created_at ASC, results.seq ASC, results.id ASC
+LIMIT 1
+`
+
+type GetToolCallSummaryContextParams struct {
+	ToolCallID  pgtype.Text
+	OpenShadows bool
+	MessageID   uuid.UUID
+	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type GetToolCallSummaryContextRow struct {
+	ChatID                 uuid.UUID
+	ToolCalls              []byte
+	ToolCallSummaries      []byte
+	ResultMessageID        uuid.UUID
+	ResultContent          string
+	CallsShadowCiphertext  pgtype.Text
+	CallsShadowCurrent     bool
+	ResultShadowCiphertext pgtype.Text
+	ResultShadowCurrent    bool
+}
+
+// Fetch the owning call message and its matching result within one project and
+// chat. The handler validates that tool_calls contains the requested call id.
+func (q *Queries) GetToolCallSummaryContext(ctx context.Context, arg GetToolCallSummaryContextParams) (GetToolCallSummaryContextRow, error) {
+	row := q.db.QueryRow(ctx, getToolCallSummaryContext,
+		arg.ToolCallID,
+		arg.OpenShadows,
+		arg.MessageID,
+		arg.ChatID,
+		arg.ProjectID,
+	)
+	var i GetToolCallSummaryContextRow
+	err := row.Scan(
+		&i.ChatID,
+		&i.ToolCalls,
+		&i.ToolCallSummaries,
+		&i.ResultMessageID,
+		&i.ResultContent,
+		&i.CallsShadowCiphertext,
+		&i.CallsShadowCurrent,
+		&i.ResultShadowCiphertext,
+		&i.ResultShadowCurrent,
+	)
+	return i, err
 }
 
 const listChatMessagesAfterPage = `-- name: ListChatMessagesAfterPage :many
@@ -437,6 +576,234 @@ func (q *Queries) ListChatMessagesByGeneration(ctx context.Context, arg ListChat
 			&i.ChatMessage.Replayed,
 			&i.ChatMessage.CreatedAt,
 			&i.ChatMessage.RiskAnalyzedAt,
+			&i.ShadowCiphertext,
+			&i.ShadowCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatMessagesForMatch = `-- name: ListChatMessagesForMatch :many
+SELECT m.id, m.role, m.content, m.tool_call_id, m.tool_calls, m.original_message_id,
+  COALESCE(m.capture_kind, CASE WHEN m.generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind,
+  t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND $1::boolean
+WHERE m.chat_id = $2
+  AND m.project_id = $3::uuid
+  AND m.generation = $4
+ORDER BY m.created_at ASC, m.seq ASC
+`
+
+type ListChatMessagesForMatchParams struct {
+	OpenShadows bool
+	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
+	Generation  int32
+}
+
+type ListChatMessagesForMatchRow struct {
+	ID                uuid.UUID
+	Role              string
+	Content           string
+	ToolCallID        pgtype.Text
+	ToolCalls         []byte
+	OriginalMessageID uuid.NullUUID
+	CaptureKind       string
+	ShadowCiphertext  pgtype.Text
+	ShadowCurrent     bool
+}
+
+func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMessagesForMatchParams) ([]ListChatMessagesForMatchRow, error) {
+	rows, err := q.db.Query(ctx, listChatMessagesForMatch,
+		arg.OpenShadows,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatMessagesForMatchRow
+	for rows.Next() {
+		var i ListChatMessagesForMatchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Role,
+			&i.Content,
+			&i.ToolCallID,
+			&i.ToolCalls,
+			&i.OriginalMessageID,
+			&i.CaptureKind,
+			&i.ShadowCiphertext,
+			&i.ShadowCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatTranscriptMessagesPage = `-- name: ListChatTranscriptMessagesPage :many
+SELECT
+  cm.id,
+  cm.seq,
+  cm.created_at,
+  cm.role,
+  cm.content,
+  cm.tool_calls,
+  cm.tool_call_id,
+  cm.tool_urn,
+  cm.tool_outcome,
+  cm.tool_outcome_notes,
+  t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,cm.content,cm.content_raw IS NULL,cm.content_raw,cm.tool_calls IS NULL,cm.tool_calls,cm.tool_outcome_notes,cm.tool_call_summaries IS NULL,cm.tool_call_summaries,cm.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages cm
+LEFT JOIN chat_message_transcripts t ON t.message_id = cm.id AND t.project_id = cm.project_id AND $1::boolean
+WHERE cm.chat_id = $2
+  AND cm.project_id = $3::uuid
+  AND (
+    $4::timestamptz IS NULL
+    OR (cm.created_at, cm.seq, cm.id) < (
+      $4::timestamptz,
+      $5::bigint,
+      $6::uuid
+    )
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC, cm.id DESC
+LIMIT $7::integer
+`
+
+type ListChatTranscriptMessagesPageParams struct {
+	OpenShadows     bool
+	ChatID          uuid.UUID
+	ProjectID       uuid.UUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorSeq       pgtype.Int8
+	CursorID        uuid.NullUUID
+	Lim             int32
+}
+
+type ListChatTranscriptMessagesPageRow struct {
+	ID               uuid.UUID
+	Seq              int64
+	CreatedAt        pgtype.Timestamptz
+	Role             string
+	Content          string
+	ToolCalls        []byte
+	ToolCallID       pgtype.Text
+	ToolUrn          urn.Tool
+	ToolOutcome      pgtype.Text
+	ToolOutcomeNotes pgtype.Text
+	ShadowCiphertext pgtype.Text
+	ShadowCurrent    bool
+}
+
+// Keyset page of one chat's messages, newest first, carrying only the columns
+// transcript rendering reads. A transcript reader that pulled the whole chat
+// held every message of an unbounded session in memory to then throw most of
+// them away, so it walks backwards a page at a time instead and stops as soon
+// as the rendering starts dropping messages: the trim is oldest-first, so every
+// unread row is older than the ones already being dropped and would be dropped
+// too.
+//
+// The same project filter as ListChatMessages, so a page can never cross a
+// project boundary. CountChatMessages supplies the total once per transcript;
+// repeating a windowed count on every page makes long transcripts quadratic.
+//
+// The cursor is the full transcript key (created_at, seq, id): created_at and
+// seq alone are not unique, and a tie split across a page boundary would either
+// repeat or skip a message.
+func (q *Queries) ListChatTranscriptMessagesPage(ctx context.Context, arg ListChatTranscriptMessagesPageParams) ([]ListChatTranscriptMessagesPageRow, error) {
+	rows, err := q.db.Query(ctx, listChatTranscriptMessagesPage,
+		arg.OpenShadows,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.CursorCreatedAt,
+		arg.CursorSeq,
+		arg.CursorID,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatTranscriptMessagesPageRow
+	for rows.Next() {
+		var i ListChatTranscriptMessagesPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Content,
+			&i.ToolCalls,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.ShadowCiphertext,
+			&i.ShadowCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClaudeUserMessagesForPromptAttachmentParent = `-- name: ListClaudeUserMessagesForPromptAttachmentParent :many
+SELECT m.id, m.content, t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND $1::boolean
+WHERE m.chat_id = $2
+  AND m.project_id = $3::uuid
+  AND m.role = 'user'
+  AND m.content != ''
+ORDER BY m.seq DESC, m.created_at DESC
+`
+
+type ListClaudeUserMessagesForPromptAttachmentParentParams struct {
+	OpenShadows bool
+	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type ListClaudeUserMessagesForPromptAttachmentParentRow struct {
+	ID               uuid.UUID
+	Content          string
+	ShadowCiphertext pgtype.Text
+	ShadowCurrent    bool
+}
+
+func (q *Queries) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Context, arg ListClaudeUserMessagesForPromptAttachmentParentParams) ([]ListClaudeUserMessagesForPromptAttachmentParentRow, error) {
+	rows, err := q.db.Query(ctx, listClaudeUserMessagesForPromptAttachmentParent, arg.OpenShadows, arg.ChatID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClaudeUserMessagesForPromptAttachmentParentRow
+	for rows.Next() {
+		var i ListClaudeUserMessagesForPromptAttachmentParentRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Content,
 			&i.ShadowCiphertext,
 			&i.ShadowCurrent,
 		); err != nil {
@@ -867,4 +1234,262 @@ func (q *Queries) ListSearchWindowedMessages(ctx context.Context, arg ListSearch
 		return nil, err
 	}
 	return items, nil
+}
+
+const patchKitProjectionMessage = `-- name: PatchKitProjectionMessage :execrows
+UPDATE chat_messages SET content = $1, content_raw = $2,
+ tool_calls = $3, content_hash = $4, finish_reason = $5,
+ risk_analyzed_at = CASE WHEN content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3 THEN NULL ELSE risk_analyzed_at END
+WHERE project_id = $6 AND chat_id = $7 AND id = $8 AND source = 'kit'
+AND (content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3 OR finish_reason IS DISTINCT FROM $5)
+`
+
+type PatchKitProjectionMessageParams struct {
+	Content      string
+	ContentRaw   []byte
+	ToolCalls    []byte
+	ContentHash  []byte
+	FinishReason pgtype.Text
+	ProjectID    uuid.NullUUID
+	ChatID       uuid.UUID
+	ID           uuid.UUID
+}
+
+func (q *Queries) PatchKitProjectionMessage(ctx context.Context, arg PatchKitProjectionMessageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, patchKitProjectionMessage,
+		arg.Content,
+		arg.ContentRaw,
+		arg.ToolCalls,
+		arg.ContentHash,
+		arg.FinishReason,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const storeToolCallSummary = `-- name: StoreToolCallSummary :one
+UPDATE chat_messages
+SET tool_call_summaries = jsonb_set(
+  COALESCE(tool_call_summaries, '{}'::jsonb),
+  ARRAY[$1::text],
+  $2::jsonb
+)
+WHERE id = $3
+  AND chat_id = $4
+  AND project_id = $5::uuid
+RETURNING (tool_call_summaries -> $1::text)::text AS summary
+`
+
+type StoreToolCallSummaryParams struct {
+	ToolCallID string
+	Summary    []byte
+	MessageID  uuid.UUID
+	ChatID     uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// Preserve summaries for sibling calls carried by the same assistant message.
+func (q *Queries) StoreToolCallSummary(ctx context.Context, arg StoreToolCallSummaryParams) (string, error) {
+	row := q.db.QueryRow(ctx, storeToolCallSummary,
+		arg.ToolCallID,
+		arg.Summary,
+		arg.MessageID,
+		arg.ChatID,
+		arg.ProjectID,
+	)
+	var summary string
+	err := row.Scan(&summary)
+	return summary, err
+}
+
+const updateToolCallOutcome = `-- name: UpdateToolCallOutcome :exec
+UPDATE chat_messages
+SET tool_outcome = $1,
+    tool_outcome_notes = $2
+WHERE id = $3 AND project_id = $4::uuid
+`
+
+type UpdateToolCallOutcomeParams struct {
+	ToolOutcome      pgtype.Text
+	ToolOutcomeNotes pgtype.Text
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+}
+
+func (q *Queries) UpdateToolCallOutcome(ctx context.Context, arg UpdateToolCallOutcomeParams) error {
+	_, err := q.db.Exec(ctx, updateToolCallOutcome,
+		arg.ToolOutcome,
+		arg.ToolOutcomeNotes,
+		arg.ID,
+		arg.ProjectID,
+	)
+	return err
+}
+
+const upsertCorrelatedChatMessage = `-- name: UpsertCorrelatedChatMessage :one
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , replayed
+  , created_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4::uuid
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+  , $14
+  , $15
+  , $16
+  , $17
+  , $18
+  , $19
+  , $20
+  , $21
+  , $22
+  , $23
+  , $24
+  , $25
+  , $26
+  , $27
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO UPDATE SET
+    source = EXCLUDED.source
+  , user_id = COALESCE(EXCLUDED.user_id, chat_messages.user_id)
+  , external_user_id = COALESCE(EXCLUDED.external_user_id, chat_messages.external_user_id)
+  , model = COALESCE(EXCLUDED.model, chat_messages.model)
+  , replayed = chat_messages.replayed OR EXCLUDED.replayed
+  , created_at = EXCLUDED.created_at
+  , risk_analyzed_at = NULL
+WHERE chat_messages.project_id = EXCLUDED.project_id
+  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
+  AND chat_messages.source = 'litellm'
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted
+`
+
+type UpsertCorrelatedChatMessageParams struct {
+	ID                uuid.UUID
+	ChatID            uuid.UUID
+	Role              string
+	ProjectID         uuid.UUID
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	StorageError      pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	ToolCallID        pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ContentHash       []byte
+	Generation        int32
+	Replayed          bool
+	CreatedAt         pgtype.Timestamptz
+}
+
+type UpsertCorrelatedChatMessageRow struct {
+	ID             uuid.UUID
+	Content        string
+	ToolCalls      []byte
+	Model          pgtype.Text
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Source         pgtype.Text
+	UserAgent      pgtype.Text
+	Inserted       bool
+}
+
+// Returns persisted metering fields and distinguishes initial inserts from
+// native-hook promotions, which must not emit another storage reading.
+func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (UpsertCorrelatedChatMessageRow, error) {
+	row := q.db.QueryRow(ctx, upsertCorrelatedChatMessage,
+		arg.ID,
+		arg.ChatID,
+		arg.Role,
+		arg.ProjectID,
+		arg.Content,
+		arg.ContentRaw,
+		arg.ContentAssetUrl,
+		arg.StorageError,
+		arg.Model,
+		arg.MessageID,
+		arg.ToolCallID,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.ExternalMessageID,
+		arg.FinishReason,
+		arg.ToolCalls,
+		arg.PromptTokens,
+		arg.CompletionTokens,
+		arg.TotalTokens,
+		arg.Origin,
+		arg.UserAgent,
+		arg.IpAddress,
+		arg.Source,
+		arg.ContentHash,
+		arg.Generation,
+		arg.Replayed,
+		arg.CreatedAt,
+	)
+	var i UpsertCorrelatedChatMessageRow
+	err := row.Scan(
+		&i.ID,
+		&i.Content,
+		&i.ToolCalls,
+		&i.Model,
+		&i.UserID,
+		&i.ExternalUserID,
+		&i.Source,
+		&i.UserAgent,
+		&i.Inserted,
+	)
+	return i, err
 }

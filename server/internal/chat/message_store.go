@@ -144,6 +144,15 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 	return w, shutdown
 }
 
+// Transcripts returns the reader for chat message bodies the writer captures
+// for. Nil-safe; nil reads plaintext.
+func (w *ChatMessageWriter) Transcripts() *transcriptstore.Transcripts {
+	if w == nil {
+		return nil
+	}
+	return w.transcripts
+}
+
 // WithTranscripts enables atomic encrypted shadow copies for shared writer
 // operations, for the projects the Transcripts serve. Configure it before
 // serving requests, after the schema migration and organization key
@@ -597,7 +606,7 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, err
 	}
 
-	stored, err := repo.New(tx).UpsertCorrelatedChatMessage(ctx, repo.UpsertCorrelatedChatMessageParams{
+	stored, err := w.transcripts.UpsertCorrelatedChatMessage(ctx, tx, transcriptstore.UpsertCorrelatedChatMessageParams{
 		ID:                param.ID,
 		ChatID:            param.ChatID,
 		Role:              param.Role,

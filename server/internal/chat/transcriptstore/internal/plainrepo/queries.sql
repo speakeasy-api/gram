@@ -253,3 +253,207 @@ SELECT
     OR o.id IN (SELECT id FROM attachment_risk_prompts)
   )::bigint AS risk_findings
 FROM ordered;
+
+-- name: ListChatMessagesForMatch :many
+SELECT m.id, m.role, m.content, m.tool_call_id, m.tool_calls, m.original_message_id,
+  COALESCE(m.capture_kind, CASE WHEN m.generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind,
+  t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+WHERE m.chat_id = @chat_id
+  AND m.project_id = @project_id::uuid
+  AND m.generation = @generation
+ORDER BY m.created_at ASC, m.seq ASC;
+
+-- name: GetKitProjectionMessage :one
+SELECT sqlc.embed(m), t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+WHERE m.project_id = @project_id AND m.id = @id;
+
+-- name: GetToolCallSummaryContext :one
+-- Fetch the owning call message and its matching result within one project and
+-- chat. The handler validates that tool_calls contains the requested call id.
+SELECT
+  calls.chat_id,
+  calls.tool_calls,
+  calls.tool_call_summaries,
+  results.id AS result_message_id,
+  results.content::text AS result_content,
+  tc.ciphertext AS calls_shadow_ciphertext,
+  COALESCE(tc.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,calls.content,calls.content_raw IS NULL,calls.content_raw,calls.tool_calls IS NULL,calls.tool_calls,calls.tool_outcome_notes,calls.tool_call_summaries IS NULL,calls.tool_call_summaries,calls.storage_error)::text,'UTF8')), false)::boolean AS calls_shadow_current,
+  tr.ciphertext AS result_shadow_ciphertext,
+  COALESCE(tr.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,results.content,results.content_raw IS NULL,results.content_raw,results.tool_calls IS NULL,results.tool_calls,results.tool_outcome_notes,results.tool_call_summaries IS NULL,results.tool_call_summaries,results.storage_error)::text,'UTF8')), false)::boolean AS result_shadow_current
+FROM chat_messages AS calls
+JOIN chat_messages AS results
+  ON results.chat_id = calls.chat_id
+  AND results.project_id = calls.project_id
+  AND results.tool_call_id = @tool_call_id
+  AND results.generation = calls.generation
+  AND results.role = 'tool'
+LEFT JOIN chat_message_transcripts tc ON tc.message_id = calls.id AND tc.project_id = calls.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts tr ON tr.message_id = results.id AND tr.project_id = results.project_id AND @open_shadows::boolean
+WHERE calls.id = @message_id
+  AND calls.chat_id = @chat_id
+  AND calls.project_id = @project_id::uuid
+  AND calls.role = 'assistant'
+ORDER BY results.created_at ASC, results.seq ASC, results.id ASC
+LIMIT 1;
+
+-- name: ListClaudeUserMessagesForPromptAttachmentParent :many
+SELECT m.id, m.content, t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+WHERE m.chat_id = @chat_id
+  AND m.project_id = @project_id::uuid
+  AND m.role = 'user'
+  AND m.content != ''
+ORDER BY m.seq DESC, m.created_at DESC;
+
+-- name: ListChatTranscriptMessagesPage :many
+-- Keyset page of one chat's messages, newest first, carrying only the columns
+-- transcript rendering reads. A transcript reader that pulled the whole chat
+-- held every message of an unbounded session in memory to then throw most of
+-- them away, so it walks backwards a page at a time instead and stops as soon
+-- as the rendering starts dropping messages: the trim is oldest-first, so every
+-- unread row is older than the ones already being dropped and would be dropped
+-- too.
+--
+-- The same project filter as ListChatMessages, so a page can never cross a
+-- project boundary. CountChatMessages supplies the total once per transcript;
+-- repeating a windowed count on every page makes long transcripts quadratic.
+--
+-- The cursor is the full transcript key (created_at, seq, id): created_at and
+-- seq alone are not unique, and a tie split across a page boundary would either
+-- repeat or skip a message.
+SELECT
+  cm.id,
+  cm.seq,
+  cm.created_at,
+  cm.role,
+  cm.content,
+  cm.tool_calls,
+  cm.tool_call_id,
+  cm.tool_urn,
+  cm.tool_outcome,
+  cm.tool_outcome_notes,
+  t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,cm.content,cm.content_raw IS NULL,cm.content_raw,cm.tool_calls IS NULL,cm.tool_calls,cm.tool_outcome_notes,cm.tool_call_summaries IS NULL,cm.tool_call_summaries,cm.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages cm
+LEFT JOIN chat_message_transcripts t ON t.message_id = cm.id AND t.project_id = cm.project_id AND @open_shadows::boolean
+WHERE cm.chat_id = @chat_id
+  AND cm.project_id = @project_id::uuid
+  AND (
+    sqlc.narg('cursor_created_at')::timestamptz IS NULL
+    OR (cm.created_at, cm.seq, cm.id) < (
+      sqlc.narg('cursor_created_at')::timestamptz,
+      sqlc.narg('cursor_seq')::bigint,
+      sqlc.narg('cursor_id')::uuid
+    )
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC, cm.id DESC
+LIMIT @lim::integer;
+
+-- name: PatchKitProjectionMessage :execrows
+UPDATE chat_messages SET content = @content, content_raw = @content_raw,
+ tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
+ risk_analyzed_at = CASE WHEN content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls THEN NULL ELSE risk_analyzed_at END
+WHERE project_id = @project_id AND chat_id = @chat_id AND id = @id AND source = 'kit'
+AND (content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls OR finish_reason IS DISTINCT FROM @finish_reason);
+
+-- name: UpsertCorrelatedChatMessage :one
+-- Returns persisted metering fields and distinguishes initial inserts from
+-- native-hook promotions, which must not emit another storage reading.
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , replayed
+  , created_at
+)
+VALUES (
+    @id
+  , @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @content_asset_url
+  , @storage_error
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @external_message_id
+  , @finish_reason
+  , @tool_calls
+  , @prompt_tokens
+  , @completion_tokens
+  , @total_tokens
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @content_hash
+  , @generation
+  , @replayed
+  , @created_at
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO UPDATE SET
+    source = EXCLUDED.source
+  , user_id = COALESCE(EXCLUDED.user_id, chat_messages.user_id)
+  , external_user_id = COALESCE(EXCLUDED.external_user_id, chat_messages.external_user_id)
+  , model = COALESCE(EXCLUDED.model, chat_messages.model)
+  , replayed = chat_messages.replayed OR EXCLUDED.replayed
+  , created_at = EXCLUDED.created_at
+  , risk_analyzed_at = NULL
+WHERE chat_messages.project_id = EXCLUDED.project_id
+  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
+  AND chat_messages.source = 'litellm'
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted;
+
+-- name: StoreToolCallSummary :one
+-- Preserve summaries for sibling calls carried by the same assistant message.
+UPDATE chat_messages
+SET tool_call_summaries = jsonb_set(
+  COALESCE(tool_call_summaries, '{}'::jsonb),
+  ARRAY[@tool_call_id::text],
+  @summary::jsonb
+)
+WHERE id = @message_id
+  AND chat_id = @chat_id
+  AND project_id = @project_id::uuid
+RETURNING (tool_call_summaries -> @tool_call_id::text)::text AS summary;
+
+-- name: UpdateToolCallOutcome :exec
+UPDATE chat_messages
+SET tool_outcome = @tool_outcome,
+    tool_outcome_notes = @tool_outcome_notes
+WHERE id = @id AND project_id = @project_id::uuid;
