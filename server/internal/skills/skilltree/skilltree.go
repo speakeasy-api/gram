@@ -118,7 +118,9 @@ type Entry struct {
 // backslashes, control characters, or invisible format characters such as
 // bidirectional overrides, which can disguise a file name when it is shown.
 // It may not name the skill root itself or the manifest, nor place a file
-// under a directory named like the manifest.
+// under a SKILL.md directory at the skill root, which would collide with the
+// manifest. Deeper names such as references/SKILL.md, or a file under
+// references/SKILL.md/, do not collide and are allowed.
 func ValidatePath(p string) error {
 	switch {
 	case p == "":

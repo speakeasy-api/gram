@@ -303,7 +303,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_skill_file",
 		Title:       "Read a Skill's Supporting File",
-		Description: "Read one supporting file of a skill version, such as a scripts/, references/ or assets/ entry listed in the files of get_skill or list_skill_versions. Read SKILL.md itself with get_skill and include_content. Text files come back as content and binary files as content_base64. Constraints: a file larger than 256 KiB comes back as metadata only, with content_omitted set.",
+		Description: "Read one supporting file of a skill version, such as a scripts/, references/ or assets/ entry listed in the files of get_skill or list_skill_versions. Read the same version's SKILL.md with list_skill_versions and include_content; get_skill returns only the latest version's. Text files come back as content and binary files as content_base64. Constraints: a file larger than 256 KiB comes back as metadata only, with content_omitted set.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSkillFileToolInput) (*mcp.CallToolResult, GetSkillFileOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (GetSkillFileOutput, error) {

@@ -327,3 +327,37 @@ func TestSkillsApproveSuggestionRejectsUnchangedTree(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 	require.Contains(t, err.Error(), "unchanged from base")
 }
+
+func TestSkillsGetVersionFileUpToLoadsContentOnlyWithinTheLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkillWithFiles(t, ctx, ti, skillManifest("files-up-to", "Up to.", "# Up to"), []*types.SkillFileInput{
+		fileInput("references/a.md", "hello"),
+		fileInput("references/empty.md", ""),
+	})
+	payload := func(path string) *gen.GetVersionFilePayload {
+		return &gen.GetVersionFilePayload{SkillID: created.Skill.ID, VersionID: created.Version.ID, Path: path, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}
+	}
+
+	file, omitted, err := ti.service.GetVersionFileUpTo(ctx, payload("references/a.md"), 5)
+	require.NoError(t, err)
+	require.False(t, omitted)
+	require.Equal(t, []byte("hello"), file.Content)
+
+	file, omitted, err = ti.service.GetVersionFileUpTo(ctx, payload("references/a.md"), 4)
+	require.NoError(t, err)
+	require.True(t, omitted)
+	require.Nil(t, file.Content)
+	require.Equal(t, int64(5), file.SizeBytes)
+
+	file, omitted, err = ti.service.GetVersionFileUpTo(ctx, payload("references/empty.md"), 4)
+	require.NoError(t, err)
+	require.False(t, omitted)
+	require.Equal(t, []byte{}, file.Content)
+
+	_, _, err = ti.service.GetVersionFileUpTo(ctx, payload("references/missing.md"), 4)
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, _, err = ti.service.GetVersionFileUpTo(authztest.WithExactGrants(t, ctx), payload("references/a.md"), 4)
+	requireOopsCode(t, err, oops.CodeForbidden)
+}

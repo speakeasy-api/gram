@@ -1201,6 +1201,21 @@ WHERE project_id = @project_id
   AND skill_version_id = @skill_version_id
   AND path = @path;
 
+-- name: GetSkillVersionFileUpTo :one
+-- Returns a supporting file's metadata, and its content only when the file is
+-- at most @max_content_bytes, so an oversized file is never read into memory.
+SELECT
+  path,
+  sha256,
+  size_bytes,
+  content_type,
+  (CASE WHEN size_bytes <= @max_content_bytes::bigint THEN content END)::bytea AS content
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id
+  AND path = @path;
+
 -- name: CreateSkillVersionLineage :exec
 INSERT INTO skill_version_lineages (
   skill_version_id,

@@ -109,6 +109,7 @@ func TestValidatePath(t *testing.T) {
 		{name: "under manifest", path: "SKILL.md/x", valid: false},
 		{name: "under manifest other case", path: "Skill.MD/scripts/run.sh", valid: false},
 		{name: "manifest name deeper", path: "references/SKILL.md", valid: true},
+		{name: "under nested manifest-named directory", path: "references/SKILL.md/scripts/run.py", valid: true},
 		{name: "too long", path: strings.Repeat("a", skilltree.MaxPathBytes+1), valid: false},
 	}
 

@@ -61,6 +61,7 @@ type recordingSkillsManagement struct {
 	linksErr                  error
 	versionFileRead           *genskills.GetVersionFilePayload
 	versionFile               *types.SkillVersionFileContent
+	versionFileLimit          int64
 }
 
 func (s *recordingSkillsManagement) Create(_ context.Context, payload *genskills.CreatePayload) (*genskills.RecordSkillResult, error) {
@@ -145,12 +146,18 @@ func (s *recordingSkillsManagement) ApproveSuggestion(_ context.Context, payload
 	return s.approveOut, nil
 }
 
-func (s *recordingSkillsManagement) GetVersionFile(_ context.Context, payload *genskills.GetVersionFilePayload) (*types.SkillVersionFileContent, error) {
+func (s *recordingSkillsManagement) GetVersionFileUpTo(_ context.Context, payload *genskills.GetVersionFilePayload, maxContentBytes int64) (*types.SkillVersionFileContent, bool, error) {
 	s.versionFileRead = payload
+	s.versionFileLimit = maxContentBytes
 	if s.err != nil {
-		return nil, s.err
+		return nil, false, s.err
 	}
-	return s.versionFile, nil
+	if s.versionFile.SizeBytes > maxContentBytes {
+		withoutContent := *s.versionFile
+		withoutContent.Content = nil
+		return &withoutContent, true, nil
+	}
+	return s.versionFile, false, nil
 }
 
 func (s *recordingSkillsManagement) DismissSuggestion(_ context.Context, payload *genskills.DismissSuggestionPayload) (*types.SkillEditSuggestion, error) {
@@ -1600,6 +1607,7 @@ func TestGetSkillFileReturnsTextBinaryOrMetadataOnly(t *testing.T) {
 			require.Equal(t, testSkillID, skills.versionFileRead.SkillID)
 			require.Equal(t, testSkillVersionID, skills.versionFileRead.VersionID)
 			require.Equal(t, "references/a.md", skills.versionFileRead.Path)
+			require.Equal(t, int64(maxSkillFileReadBytes), skills.versionFileLimit, "content over the inline ceiling is never loaded")
 			require.Equal(t, testSkillProjectSlug, output.ProjectSlug)
 			require.Equal(t, "def456", output.SHA256)
 			require.Equal(t, int64(len(test.content)), output.SizeBytes)
@@ -1613,17 +1621,24 @@ func TestGetSkillFileReturnsTextBinaryOrMetadataOnly(t *testing.T) {
 func TestGetSkillFileRefusesMalformedIdentifiersBeforeReading(t *testing.T) {
 	t.Parallel()
 
-	skills := &recordingSkillsManagement{skill: testSkill()}
-	service := testSkillsService(t, skills)
-	for _, input := range []GetSkillFileInput{
-		{ProjectSlug: testSkillProjectSlug, SkillID: "not-a-uuid", VersionID: testSkillVersionID, Path: "a.md"},
-		{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, VersionID: "not-a-uuid", Path: "a.md"},
-		{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, VersionID: testSkillVersionID, Path: " "},
+	for _, test := range []struct {
+		name  string
+		input GetSkillFileInput
+	}{
+		{name: "malformed skill id", input: GetSkillFileInput{ProjectSlug: testSkillProjectSlug, SkillID: "not-a-uuid", VersionID: testSkillVersionID, Path: "a.md"}},
+		{name: "malformed version id", input: GetSkillFileInput{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, VersionID: "not-a-uuid", Path: "a.md"}},
+		{name: "blank path", input: GetSkillFileInput{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, VersionID: testSkillVersionID, Path: " "}},
 	} {
-		_, err := service.GetSkillFile(t.Context(), testPrincipal(), input)
-		require.ErrorIs(t, err, ErrRegistrationInvalid)
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			skills := &recordingSkillsManagement{skill: testSkill()}
+			service := testSkillsService(t, skills)
+			_, err := service.GetSkillFile(t.Context(), testPrincipal(), test.input)
+			require.ErrorIs(t, err, ErrRegistrationInvalid)
+			require.Nil(t, skills.versionFileRead, "a malformed read never reaches the skills service")
+		})
 	}
-	require.Nil(t, skills.versionFileRead)
 }
 
 func TestGetSkillFileToolIsAReadForMembers(t *testing.T) {

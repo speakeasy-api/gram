@@ -84,7 +84,9 @@ type SkillsManagement interface {
 	Get(context.Context, *genskills.GetPayload) (*genskills.GetSkillResult, error)
 	ListDistributions(context.Context, *genskills.ListDistributionsPayload) (*genskills.ListSkillDistributionsResult, error)
 	ListVersions(context.Context, *genskills.ListVersionsPayload) (*genskills.ListSkillVersionsResult, error)
-	GetVersionFile(context.Context, *genskills.GetVersionFilePayload) (*types.SkillVersionFileContent, error)
+	// GetVersionFileUpTo reads a supporting file, loading its content only
+	// when it is at most maxContentBytes.
+	GetVersionFileUpTo(ctx context.Context, payload *genskills.GetVersionFilePayload, maxContentBytes int64) (*types.SkillVersionFileContent, bool, error)
 	ListFeedback(context.Context, *genskills.ListFeedbackPayload) (*genskills.ListSkillFeedbackResult, error)
 	ListSuggestions(context.Context, *genskills.ListSuggestionsPayload) (*genskills.ListSkillSuggestionsResult, error)
 	ListSuggestionFeedback(context.Context, *genskills.ListSuggestionFeedbackPayload) (*genskills.ListSkillSuggestionFeedbackResult, error)
@@ -536,14 +538,14 @@ func (s *SkillsService) GetSkillFile(ctx context.Context, principal Principal, i
 	if strings.TrimSpace(input.Path) == "" {
 		return GetSkillFileOutput{}, ErrRegistrationInvalid
 	}
-	file, err := s.skills.GetVersionFile(ctx, &genskills.GetVersionFilePayload{
+	file, omitted, err := s.skills.GetVersionFileUpTo(ctx, &genskills.GetVersionFilePayload{
 		SkillID:          input.SkillID,
 		VersionID:        input.VersionID,
 		Path:             input.Path,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
-	})
+	}, maxSkillFileReadBytes)
 	if err != nil {
 		return GetSkillFileOutput{}, err
 	}
@@ -560,7 +562,7 @@ func (s *SkillsService) GetSkillFile(ctx context.Context, principal Principal, i
 		ContentOmitted: false,
 	}
 	switch {
-	case len(file.Content) > maxSkillFileReadBytes:
+	case omitted:
 		output.ContentOmitted = true
 	case utf8.Valid(file.Content):
 		output.Content = string(file.Content)

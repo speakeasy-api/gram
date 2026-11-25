@@ -137,36 +137,102 @@ func listSkillFileViews(ctx context.Context, queries *repo.Queries, projectID, s
 }
 
 func (s *Service) GetVersionFile(ctx context.Context, payload *gen.GetVersionFilePayload) (*types.SkillVersionFileContent, error) {
+	target, err := s.authorizeVersionFileRead(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+	return getSkillVersionFile(ctx, target.logger, repo.New(s.db), target.projectID, target.skillID, target.versionID, payload.Path)
+}
+
+// GetVersionFileUpTo reads a supporting file like GetVersionFile, under the
+// same authorization, but loads its content only when the file is at most
+// maxContentBytes. A larger file comes back with nil Content and omitted set,
+// so callers that cap what they return never read an oversized file.
+func (s *Service) GetVersionFileUpTo(ctx context.Context, payload *gen.GetVersionFilePayload, maxContentBytes int64) (file *types.SkillVersionFileContent, omitted bool, err error) {
+	target, err := s.authorizeVersionFileRead(ctx, payload)
+	if err != nil {
+		return nil, false, err
+	}
+	queries := repo.New(s.db)
+	if err := requireSkillForVersionFile(ctx, target.logger, queries, target.projectID, target.skillID); err != nil {
+		return nil, false, err
+	}
+
+	row, err := queries.GetSkillVersionFileUpTo(ctx, repo.GetSkillVersionFileUpToParams{
+		MaxContentBytes: maxContentBytes,
+		ProjectID:       target.projectID,
+		SkillID:         target.skillID,
+		SkillVersionID:  target.versionID,
+		Path:            payload.Path,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, false, oops.E(oops.CodeNotFound, nil, "skill version file not found")
+	case err != nil:
+		return nil, false, oops.E(oops.CodeUnexpected, err, "get skill version file").LogError(ctx, target.logger)
+	}
+
+	omitted = row.SizeBytes > maxContentBytes
+	content := row.Content
+	if omitted {
+		content = nil
+	} else if content == nil {
+		content = []byte{}
+	}
+	return &types.SkillVersionFileContent{
+		Path:        row.Path,
+		ContentType: row.ContentType,
+		Sha256:      row.Sha256,
+		SizeBytes:   row.SizeBytes,
+		Content:     content,
+	}, omitted, nil
+}
+
+// versionFileTarget is an authorized supporting-file read.
+type versionFileTarget struct {
+	logger    *slog.Logger
+	projectID uuid.UUID
+	skillID   uuid.UUID
+	versionID uuid.UUID
+}
+
+func (s *Service) authorizeVersionFileRead(ctx context.Context, payload *gen.GetVersionFilePayload) (versionFileTarget, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+		return versionFileTarget{}, oops.C(oops.CodeUnauthorized)
 	}
 	logger := s.logger.With(
 		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		attr.SlogProjectID(authCtx.ProjectID.String()),
 	)
 	if err := s.requireSkillReadAccess(ctx, authCtx, payload.SkillID); err != nil {
-		return nil, err
+		return versionFileTarget{}, err
 	}
 
 	skillID, err := uuid.Parse(payload.SkillID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill id")
+		return versionFileTarget{}, oops.E(oops.CodeBadRequest, nil, "invalid skill id")
 	}
 	versionID, err := uuid.Parse(payload.VersionID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill version id")
+		return versionFileTarget{}, oops.E(oops.CodeBadRequest, nil, "invalid skill version id")
 	}
+	return versionFileTarget{logger: logger, projectID: *authCtx.ProjectID, skillID: skillID, versionID: versionID}, nil
+}
 
-	return getSkillVersionFile(ctx, logger, repo.New(s.db), *authCtx.ProjectID, skillID, versionID, payload.Path)
+func requireSkillForVersionFile(ctx context.Context, logger *slog.Logger, queries *repo.Queries, projectID, skillID uuid.UUID) error {
+	if _, err := queries.GetSkill(ctx, repo.GetSkillParams{ProjectID: projectID, ID: skillID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, nil, "skill not found")
+		}
+		return oops.E(oops.CodeUnexpected, err, "get skill for version file").LogError(ctx, logger)
+	}
+	return nil
 }
 
 func getSkillVersionFile(ctx context.Context, logger *slog.Logger, queries *repo.Queries, projectID, skillID, versionID uuid.UUID, path string) (*types.SkillVersionFileContent, error) {
-	if _, err := queries.GetSkill(ctx, repo.GetSkillParams{ProjectID: projectID, ID: skillID}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, nil, "skill not found")
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get skill for version file").LogError(ctx, logger)
+	if err := requireSkillForVersionFile(ctx, logger, queries, projectID, skillID); err != nil {
+		return nil, err
 	}
 
 	file, err := queries.GetSkillVersionFile(ctx, repo.GetSkillVersionFileParams{

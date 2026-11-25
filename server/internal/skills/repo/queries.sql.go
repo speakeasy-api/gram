@@ -3031,6 +3031,57 @@ func (q *Queries) GetSkillVersionFile(ctx context.Context, arg GetSkillVersionFi
 	return i, err
 }
 
+const getSkillVersionFileUpTo = `-- name: GetSkillVersionFileUpTo :one
+SELECT
+  path,
+  sha256,
+  size_bytes,
+  content_type,
+  (CASE WHEN size_bytes <= $1::bigint THEN content END)::bytea AS content
+FROM skill_version_files
+WHERE project_id = $2
+  AND skill_id = $3
+  AND skill_version_id = $4
+  AND path = $5
+`
+
+type GetSkillVersionFileUpToParams struct {
+	MaxContentBytes int64
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	SkillVersionID  uuid.UUID
+	Path            string
+}
+
+type GetSkillVersionFileUpToRow struct {
+	Path        string
+	Sha256      string
+	SizeBytes   int64
+	ContentType string
+	Content     []byte
+}
+
+// Returns a supporting file's metadata, and its content only when the file is
+// at most @max_content_bytes, so an oversized file is never read into memory.
+func (q *Queries) GetSkillVersionFileUpTo(ctx context.Context, arg GetSkillVersionFileUpToParams) (GetSkillVersionFileUpToRow, error) {
+	row := q.db.QueryRow(ctx, getSkillVersionFileUpTo,
+		arg.MaxContentBytes,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.SkillVersionID,
+		arg.Path,
+	)
+	var i GetSkillVersionFileUpToRow
+	err := row.Scan(
+		&i.Path,
+		&i.Sha256,
+		&i.SizeBytes,
+		&i.ContentType,
+		&i.Content,
+	)
+	return i, err
+}
+
 const getSkillVersionOrigin = `-- name: GetSkillVersionOrigin :one
 SELECT skill_version_id, skill_id, project_id, origin, created_at
 FROM skill_version_origins
