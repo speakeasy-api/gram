@@ -1,6 +1,7 @@
 package skillprompt_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -50,6 +51,31 @@ func TestSelect_ListsBinaryAndOverBudgetFilesByPath(t *testing.T) {
 		{Path: "references/big.md", Reason: skillprompt.OmitBudget},
 		{Path: "assets/logo.png", Reason: skillprompt.OmitBinary},
 	}, selection.Omitted)
+}
+
+func TestSelect_ChargesTheJSONEncodedSize(t *testing.T) {
+	t.Parallel()
+
+	// 20 raw bytes of markup encode to 120 ("<" becomes "<"), so the
+	// markup file does not fit a 64-byte budget even though its raw size does.
+	markup := strings.Repeat("<", 20)
+	selection := skillprompt.Select([]skilltree.File{
+		file("references/markup.md", markup),
+		file("references/plain.md", strings.Repeat("p", 60)),
+	}, 64)
+
+	require.Equal(t, []skillprompt.File{
+		{Path: "references/plain.md", Content: strings.Repeat("p", 60)},
+	}, selection.Included)
+	require.Equal(t, []skillprompt.OmittedFile{
+		{Path: "references/markup.md", Reason: skillprompt.OmitBudget},
+	}, selection.Omitted)
+
+	// The included content, encoded the way the prompts encode it, stays
+	// within the budget.
+	encoded, err := json.Marshal(selection.Included[0].Content)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(encoded)-2, 64)
 }
 
 func TestSelect_NoFiles(t *testing.T) {

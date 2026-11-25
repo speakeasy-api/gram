@@ -3,7 +3,9 @@
 //
 // SKILL.md is always sent whole and first by the caller. Supporting files are
 // added after it in priority order, references/ first and scripts/ last, while
-// they fit a byte budget. A file that does not fit is skipped and smaller files
+// they fit a byte budget. The budget counts each file as the caller's JSON
+// payload carries it, escapes included, so markup-heavy files cannot overrun
+// the prompt. A file that does not fit is skipped and smaller files
 // after it can still be added. Files are included whole or not at all: a
 // truncated reference reads as complete guidance and would mislead the judge.
 // Binary files and files that do not fit are listed by path so the judge knows
@@ -11,6 +13,7 @@
 package skillprompt
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 
@@ -74,15 +77,28 @@ func Select(files []skilltree.File, budgetBytes int) Selection {
 		switch {
 		case !skilldiff.IsText(file.Content):
 			selection.Omitted = append(selection.Omitted, OmittedFile{Path: file.Path, Reason: OmitBinary})
-		case len(file.Content) > remaining:
+		case encodedSize(file.Content) > remaining:
 			selection.Omitted = append(selection.Omitted, OmittedFile{Path: file.Path, Reason: OmitBudget})
 		default:
-			remaining -= len(file.Content)
+			remaining -= encodedSize(file.Content)
 			selection.Included = append(selection.Included, File{Path: file.Path, Content: string(file.Content)})
 		}
 	}
 
 	return selection
+}
+
+// encodedSize is the number of bytes content takes as a JSON string value,
+// without its quotes. encoding/json escapes control characters, quotes,
+// backslashes and, by default, <, > and &, so markup can take several times
+// its raw size.
+func encodedSize(content []byte) int {
+	encoded, err := json.Marshal(string(content))
+	if err != nil {
+		// Marshalling a string cannot fail; charge the worst case regardless.
+		return len(content) * 6
+	}
+	return len(encoded) - 2
 }
 
 // rank orders supporting files by how likely they are to carry instructions:
