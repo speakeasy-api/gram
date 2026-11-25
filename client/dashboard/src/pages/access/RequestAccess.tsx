@@ -5,14 +5,15 @@ import { useSearchParams, useNavigate } from "react-router";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { FullScreenPage } from "@/components/full-screen-page";
-import { RequestDurationSelect } from "@/components/request-duration-select";
+import {
+  RequestAccessDialog,
+  type AccessRequestDraft,
+} from "@/components/request-access-dialog";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
-import {
-  requestedDurationFields,
-  type RequestedDurationKey,
-} from "./requestedDuration";
+import { requestedDurationFields } from "./requestedDuration";
+import { scopeLabel } from "./scopeCatalogue";
 import React, { useState } from "react";
 
 /**
@@ -38,14 +39,17 @@ export default function RequestAccess(): React.JSX.Element {
   // which the access requests rollout turns on.
   const accessRequestsOn =
     useFeatureFlag(FEATURE_FLAGS.accessRequests).status === "enabled";
-  const [duration, setDuration] = useState<RequestedDurationKey>("none");
-  // Only scopes that can be given temporarily take a duration. A scope the
-  // catalogue does not describe (it may not load for this member) is offered,
-  // and the server refuses it if it cannot be given temporarily.
+  // While requests are stored, the request is made in a dialog that asks how
+  // long the access is needed and why. A link from Slack, an email or the
+  // device agent opens it straight away.
+  const [dialogOpen, setDialogOpen] = useState(true);
+  // Only scopes that can be given temporarily can be stored as a request. A
+  // scope the catalogue does not describe (it may not load for this member)
+  // is offered, and the server refuses it if it cannot be given temporarily.
   const { catalogue } = useScopeCatalogue();
   const temporaryGrantable =
     catalogue.get(scope ?? "")?.temporaryGrantable !== false;
-  const askDuration = accessRequestsOn && temporaryGrantable;
+  const askInDialog = accessRequestsOn && temporaryGrantable;
   // While requests are stored, a scope that cannot be given temporarily is
   // refused by the server, so the page says so instead of offering to send.
   const notRequestable = accessRequestsOn && !temporaryGrantable;
@@ -55,7 +59,7 @@ export default function RequestAccess(): React.JSX.Element {
   const isValidScope =
     scope && validScopes.includes(scope as RequestAccessFormScope);
 
-  const handleRequestAccess = async () => {
+  const handleRequestAccess = async (draft?: AccessRequestDraft) => {
     if (!isValidScope) return;
 
     setRequestState("sending");
@@ -66,8 +70,11 @@ export default function RequestAccess(): React.JSX.Element {
             scope: scope as RequestAccessFormScope,
             resourceId,
             resourceName,
-            ...(askDuration
-              ? requestedDurationFields(duration, new Date())
+            ...(draft
+              ? {
+                  ...requestedDurationFields(draft.duration, new Date()),
+                  message: draft.message || undefined,
+                }
               : {}),
           },
         },
@@ -137,20 +144,36 @@ export default function RequestAccess(): React.JSX.Element {
               </p>
             )}
 
-            {requestState === "idle" && askDuration && (
-              <RequestDurationSelect value={duration} onChange={setDuration} />
+            {askInDialog && (
+              <RequestAccessDialog
+                open={dialogOpen && requestState !== "sent"}
+                onOpenChange={setDialogOpen}
+                permissions={[scopeLabel(catalogue, scope ?? "")]}
+                resourceName={resourceName}
+                askDuration
+                sending={requestAccessMutation.isPending}
+                onSubmit={(draft) => {
+                  void handleRequestAccess(draft).finally(() =>
+                    setDialogOpen(false),
+                  );
+                }}
+              />
             )}
 
             {/* Request button */}
             {requestState === "idle" && !notRequestable && (
               <Button
                 variant="primary"
-                onClick={() => void handleRequestAccess()}
+                onClick={() =>
+                  askInDialog ? setDialogOpen(true) : void handleRequestAccess()
+                }
                 disabled={requestAccessMutation.isPending}
               >
                 {requestAccessMutation.isPending
                   ? "Sending..."
-                  : "Send request"}
+                  : askInDialog
+                    ? "Request access"
+                    : "Send request"}
               </Button>
             )}
 

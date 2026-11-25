@@ -53,6 +53,10 @@ describe("OwnScopeToolLogsNotice", () => {
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    // While requests are stored, the request is sent from a dialog.
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Send request" }),
+    );
 
     expect(await screen.findByText("Request sent")).toBeTruthy();
     expect(requestAccess.mutateAsync).toHaveBeenCalledWith({

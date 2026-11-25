@@ -36,11 +36,11 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/Popover";
 import { SelfGrantAccess } from "./temporary-access";
-import { RequestDurationSelect } from "./request-duration-select";
 import {
-  requestedDurationFields,
-  type RequestedDurationKey,
-} from "@/pages/access/requestedDuration";
+  RequestAccessDialog,
+  type AccessRequestDraft,
+} from "./request-access-dialog";
+import { requestedDurationFields } from "@/pages/access/requestedDuration";
 
 type RenderFn = (props: { disabled: boolean }) => React.ReactNode;
 
@@ -279,6 +279,8 @@ type RequestScopeAccessProps = {
   /** When true, every missing scope is requested, not only the first. */
   all?: boolean;
   resourceId?: string;
+  /** The gated resource's name, shown to the requester and the admins. */
+  resourceName?: string;
   /** The project the gated resource belongs to, for project-wide grants. */
   projectId?: string;
   /**
@@ -405,6 +407,7 @@ function RequestScopeAccessButton({
   scopes,
   all = false,
   resourceId,
+  resourceName,
   projectId,
   className,
   align = "center",
@@ -430,7 +433,9 @@ function RequestScopeAccessButton({
   const { hasScope } = useRBAC();
   const { catalogue } = useScopeCatalogue();
   const requestAccessMutation = useRequestAccessMutation();
-  const [duration, setDuration] = React.useState<RequestedDurationKey>("none");
+  // While requests are stored, asking opens a dialog for how long the access
+  // is needed and why; otherwise the button asks straight away.
+  const [dialogOpen, setDialogOpen] = React.useState(false);
   // Only request scopes the user is actually missing — an all-scopes gate can
   // trip on a partial grant, and admins shouldn't be asked for held scopes.
   const missingScopes = scopes.filter(
@@ -482,7 +487,7 @@ function RequestScopeAccessButton({
       </p>
     );
   }
-  const handleRequestAccess = async () => {
+  const handleRequestAccess = async (draft?: AccessRequestDraft) => {
     setRequestState("sending");
     // An "any scope suffices" gate only needs the first requestable scope; an
     // all-scopes gate must request every missing scope or granting one still
@@ -496,8 +501,12 @@ function RequestScopeAccessButton({
             requestAccessForm: {
               scope: scopeToRequest,
               resourceId,
-              ...(accessRequestsOn
-                ? requestedDurationFields(duration, new Date())
+              resourceName,
+              ...(draft
+                ? {
+                    ...requestedDurationFields(draft.duration, new Date()),
+                    message: draft.message || undefined,
+                  }
                 : {}),
             },
           },
@@ -552,31 +561,43 @@ function RequestScopeAccessButton({
         </div>
       );
     case "idle":
-    case "sending": {
-      const button = (
-        <Button
-          variant="secondary"
-          size="sm"
-          className={accessRequestsOn ? undefined : className}
-          onClick={() => void handleRequestAccess()}
-          disabled={state === "sending"}
-        >
-          {state === "sending" ? "Sending…" : "Request Access"}
-        </Button>
-      );
-      // Only a stored request keeps how long it is needed for.
-      if (!accessRequestsOn) return button;
+    case "sending":
       return (
-        <div className={cn(stack, "gap-2")}>
-          <RequestDurationSelect
-            value={duration}
-            onChange={setDuration}
+        <>
+          <Button
+            variant="secondary"
+            size="sm"
+            className={className}
+            onClick={() =>
+              accessRequestsOn
+                ? setDialogOpen(true)
+                : void handleRequestAccess()
+            }
             disabled={state === "sending"}
-          />
-          {button}
-        </div>
+          >
+            {state === "sending" && !dialogOpen ? "Sending…" : "Request Access"}
+          </Button>
+          {accessRequestsOn && (
+            <RequestAccessDialog
+              open={dialogOpen}
+              onOpenChange={setDialogOpen}
+              permissions={requestableScopes.map(
+                (scope) => catalogue.get(scope)?.label ?? scope,
+              )}
+              resourceName={
+                resourceName ?? (resourceId ? "This resource" : undefined)
+              }
+              askDuration
+              sending={state === "sending"}
+              onSubmit={(draft) => {
+                void handleRequestAccess(draft).finally(() =>
+                  setDialogOpen(false),
+                );
+              }}
+            />
+          )}
+        </>
       );
-    }
     case "sent":
       return (
         <div className={stack}>

@@ -164,6 +164,12 @@ describe("RequireScope page level", () => {
   });
 });
 
+/** Opens the request dialog and sends it with the defaults. */
+function requestThroughDialog(): void {
+  fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send request" }));
+}
+
 describe("RequestScopeAccess", () => {
   it("starts over when the resource it would ask for changes", async () => {
     const { rerender } = render(
@@ -195,11 +201,11 @@ describe("RequestScopeAccess", () => {
     });
     render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    requestThroughDialog();
     expect(await screen.findByText("Request pending")).toBeTruthy();
   });
 
-  it("asks how long the access is needed while requests are stored", async () => {
+  it("asks in a dialog how long and why while requests are stored", async () => {
     accessRequests.on = true;
     accessRequests.grantable = new Set(["log:read"]);
     mutateAsync.mockResolvedValueOnce({
@@ -208,13 +214,24 @@ describe("RequestScopeAccess", () => {
     });
     render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
 
-    expect(screen.getByLabelText("How long do you need it?")).toBeTruthy();
+    expect(screen.queryByLabelText("How long do you need it?")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByLabelText("How long do you need it?")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Why do you need it/), {
+      target: { value: "  Checking a failed tool call  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
+
     expect(await screen.findByText("Request pending")).toBeTruthy();
     // No preference is the default, so the request carries no window.
     expect(mutateAsync).toHaveBeenCalledWith({
       request: {
-        requestAccessForm: { scope: "log:read", resourceId: "project-1" },
+        requestAccessForm: {
+          scope: "log:read",
+          resourceId: "project-1",
+          message: "Checking a failed tool call",
+        },
       },
     });
   });
@@ -228,10 +245,11 @@ describe("RequestScopeAccess", () => {
     });
     render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
 
-    fireEvent.change(screen.getByLabelText("How long do you need it?"), {
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    fireEvent.change(await screen.findByLabelText("How long do you need it?"), {
       target: { value: "4h" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     expect(await screen.findByText("Request pending")).toBeTruthy();
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -245,10 +263,12 @@ describe("RequestScopeAccess", () => {
     });
   });
 
-  it("does not ask how long while requests only send email", () => {
+  it("asks straight away, without a dialog, while requests only send email", async () => {
     render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
 
-    expect(screen.queryByLabelText("How long do you need it?")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    expect(await screen.findByText("Request sent")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("shows a request made earlier as pending without asking again", () => {
@@ -289,7 +309,7 @@ describe("RequestScopeAccess", () => {
     const { rerender } = render(
       <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    requestThroughDialog();
     expect(await screen.findByText("Request pending")).toBeTruthy();
 
     // The first list read after the request no longer holds it.
@@ -313,7 +333,7 @@ describe("RequestScopeAccess", () => {
     const { rerender } = render(
       <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    requestThroughDialog();
     expect(await screen.findByText("Request pending")).toBeTruthy();
 
     // The pending list picks the request up, then drops it once an admin
