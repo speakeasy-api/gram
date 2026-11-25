@@ -1670,14 +1670,19 @@ func (s *OAuthHTTP) renderOAuthPage(ctx context.Context, w http.ResponseWriter, 
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Content-Security-Policy", oauthPageContentSecurityPolicy(data.RedirectURI, scriptNonce))
+	w.Header().Set("Content-Security-Policy", oauthPageContentSecurityPolicy(scriptNonce))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page.String()))
 }
 
-func oauthPageContentSecurityPolicy(redirectURI, scriptNonce string) string {
-	formAction := consentpage.FormActionSources(redirectURI)
-	return "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; form-action " + formAction + "; frame-ancestors 'none'"
+// oauthPageContentSecurityPolicy omits form-action on purpose. Chrome checks
+// form-action on every hop of the redirect chain after a form submission, and
+// OAuth clients such as ChatGPT redirect their callback onward to origins we
+// cannot know. Allowing only the registered callback origin blocks the final
+// navigation after the single-use state is already spent. The MCP consent page
+// leaves form-action unset for the same reason.
+func oauthPageContentSecurityPolicy(scriptNonce string) string {
+	return "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; frame-ancestors 'none'"
 }
 
 func writeOAuthError(w http.ResponseWriter, status int, code, description string) {

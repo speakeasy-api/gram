@@ -345,7 +345,7 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	require.NotEmpty(t, scriptNonce)
 	require.Contains(t, connect.Body.String(), `<script nonce="`+scriptNonce+`" src="`+oauthPageScriptURL+`"></script>`)
 	require.NotContains(t, connect.Body.String(), `action.name = "action"`, "the ingress CSP blocks inline scripts")
-	require.Contains(t, contentSecurityPolicy, "form-action 'self' http://127.0.0.1:3000")
+	require.NotContains(t, contentSecurityPolicy, "form-action", "Chrome applies form-action to the client's onward redirects")
 
 	approve := httptest.NewRecorder()
 	approveForm := url.Values{"state": {state}, "csrf_token": {csrf}, "organization_id": {"org-1"}, "action": {"approve"}}
@@ -376,21 +376,6 @@ func TestOAuthPageScriptIsServedFromHashedURL(t *testing.T) {
 	require.Contains(t, w.Header().Get("Cache-Control"), "immutable")
 	require.Contains(t, w.Body.String(), `action.name = "action"`)
 	require.Contains(t, w.Body.String(), "window.close()")
-}
-
-func TestOAuthPageContentSecurityPolicyAllowsSafeRedirectSources(t *testing.T) {
-	t.Parallel()
-
-	policy := oauthPageContentSecurityPolicy("https://client.example/callback?next=unexpected", "nonce")
-	require.Contains(t, policy, "form-action 'self' https://client.example")
-	require.NotContains(t, policy, "/callback")
-	require.NotContains(t, policy, "?next")
-
-	policy = oauthPageContentSecurityPolicy("com.example.client:/oauth/callback", "nonce")
-	require.Contains(t, policy, "form-action 'self' com.example.client:;")
-
-	policy = oauthPageContentSecurityPolicy("javascript:alert(1)", "nonce")
-	require.Contains(t, policy, "form-action 'self';")
 }
 
 func TestOAuthHTTPGateErrorsDistinguishUnavailableFromDenied(t *testing.T) {
