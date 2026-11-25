@@ -31,7 +31,7 @@ import {
  * its Agent sign-in step, opened from the agent's credentials tab.
  *
  * Its name is renamed in the agent page's header and its servers changed on
- * the Server sign-in tab, so links to the earlier steps (no step, the name, the
+ * the MCP sign-in tab, so links to the earlier steps (no step, the name, the
  * servers, their sign-in) land there instead.
  */
 export default function EditAgentIdentity(): JSX.Element {

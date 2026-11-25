@@ -12,7 +12,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 
 /**
- * The agent's Server sign-in tab: which servers it calls, and how Speakeasy
+ * The agent's MCP sign-in tab: which servers it calls, and how Speakeasy
  * signs in to each. The same views the setup wizard shows for these two
  * questions, without walking the rest of setup again.
  *
@@ -37,7 +37,7 @@ export function AgentMcpSignIn({
     return (
       <InlineEmptyState
         icon="lock"
-        heading="Only people who can change this agent can see its Server sign-in"
+        heading="Only people who can change this agent can see its MCP sign-in"
         // The servers come from its policy, which only they can read, so no
         // other tab lists them either.
         description="Ask one of them to change its servers or reconnect a server it can no longer reach."
@@ -70,7 +70,7 @@ export function AgentMcpSignIn({
         // their baseline, so the next save diffs against it; the agent and
         // its grants are read again for the rest of the page.
         onDone={() => {
-          toast.success("Server sign-in saved");
+          toast.success("MCP sign-in saved");
           refresh();
           void invalidateAgentsListPolicyGrants(queryClient, [
             { agentId: agent.id },
