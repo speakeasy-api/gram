@@ -60,9 +60,9 @@ func (s *Service) hostedRegistration(ctx context.Context, org string, projectID,
 		// An association can outlive a soft-deleted registration. The
 		// existing live-association read disambiguates that case; keep
 		// zero or multiple live registrations fail-closed.
-		rows, err := upstreamclientsrepo.New(s.db).ListServerAssociatedClients(ctx, upstreamclientsrepo.ListServerAssociatedClientsParams{
-			OrganizationID: org,
-			McpServerIds:   []uuid.UUID{serverID},
+		rows, err := upstreamclientsrepo.New(s.db).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{
+			McpServerID: serverID,
+			ProjectID:   projectID,
 		})
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("check live hosted upstream assignments: %w", err)
