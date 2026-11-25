@@ -19,7 +19,7 @@ export const FEATURE_FLAGS = {
   // device agent setup step.
   intunePackageDownload: "intune-package-download",
   killswitches: "gram-killswitches",
-  // Gates MCP Sessions connection health (Overview, Connection Logs); the server checks the same key.
+  // Gates MCP Sign-in connection health (Overview, Connection Logs); the server checks the same key.
   mcpConnectionHealth: "mcp-connection-health",
   // UI-only rollout gate for the MCP scope picker in the risk policy editor;
   // not enforced server-side.

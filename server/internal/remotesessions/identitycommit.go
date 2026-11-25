@@ -1607,6 +1607,7 @@ func (c *IdentityCommit) detachClient(ctx context.Context, tx *IdentityTx, clien
 	if err := tx.q.LockRemoteSessionClientUserSessionIssuerLink(ctx, repo.LockRemoteSessionClientUserSessionIssuerLinkParams{
 		RemoteSessionClientID: client.ID,
 		UserSessionIssuerID:   c.plan.UserSessionIssuerID,
+		OrganizationID:        c.plan.Scope.OrganizationID,
 	}); err != nil {
 		return fmt.Errorf("lock client binding to user session issuer: %w", err)
 	}

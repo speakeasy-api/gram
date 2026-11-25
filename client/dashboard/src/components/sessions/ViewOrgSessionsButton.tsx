@@ -9,7 +9,7 @@ import {
 } from "@/pages/mcp-sessions/connection-health/flag";
 import { useRoutes } from "@/routes";
 
-/** Link to the active project’s MCP sessions, matching the destination gates. */
+/** Link to the active project’s session list on the MCP Sign-in page, matching the destination gates. */
 export function ViewOrgSessionsButton(): JSX.Element | null {
   const routes = useRoutes();
   const { id: projectId } = useProject();

@@ -27,9 +27,9 @@ export function outcomeLabel(outcome: string): string {
 
 export const STEP_LABELS: Record<StepGroup, string> = {
   connect: "Connect",
-  sign_in: "MCP sign-in",
+  sign_in: "Sign-in",
   service_sign_in: "Service sign-in",
-  sign_in_renewal: "MCP sign-in renewal",
+  sign_in_renewal: "Sign-in renewal",
   service_renewal: "Service sign-in renewal",
   listing_tools: "Listing tools",
   request: "Request",

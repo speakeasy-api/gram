@@ -614,6 +614,24 @@ JOIN projects AS p
 WHERE s.user_session_issuer_id = @gateway_issuer_id
   AND s.deleted IS FALSE;
 
+-- name: LockMemberProviderClientParents :exec
+-- Lock parents before the attachment check in the delete's fresh snapshot.
+SELECT l.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
+WHERE l.user_session_issuer_id = @gateway_issuer_id
+  AND c.remote_session_issuer_id = @remote_issuer_id
+  AND EXISTS (
+    SELECT 1
+    FROM projects AS p
+    JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+    WHERE p.id = @project_id::uuid AND p.organization_id = @organization_id::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id = p.organization_id OR c.organization_id IS NULL)))
+  )
+ORDER BY l.remote_session_client_id
+FOR UPDATE OF l;
+
 -- name: AutoDetachMemberProviderClient :execrows
 -- Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
 -- client(s) for a removed member's upstream so the provider stops appearing on
@@ -629,12 +647,30 @@ USING remote_session_clients AS c
 WHERE l.remote_session_client_id = c.id
   AND l.user_session_issuer_id = @gateway_issuer_id
   AND c.remote_session_issuer_id = @remote_issuer_id
+  AND EXISTS (
+    SELECT 1
+    FROM projects AS p
+    JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+    WHERE p.id = @project_id::uuid AND p.organization_id = @organization_id::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id = p.organization_id OR c.organization_id IS NULL)))
+  )
+  -- This is mirror cleanup, not a principal attachment revocation.
   AND NOT EXISTS (
-    -- All consumers of the gateway issuer live in its project (the issuer is
-    -- project-scoped), so scope the scan there — both for tenancy and to keep
-    -- the anti-join off a cross-tenant sequential scan.
+    SELECT 1 FROM principal_remote_session_bindings AS binding
+    WHERE binding.remote_session_client_id = l.remote_session_client_id
+      AND binding.user_session_issuer_id = l.user_session_issuer_id
+      AND binding.revoked_at IS NULL
+  )
+  AND NOT EXISTS (
+    -- Project-owned links are local. A shared client on an organization
+    -- issuer must keep its link for consumers in every live project.
     SELECT 1
     FROM mcp_servers AS s
+    JOIN projects AS consumer_project
+      ON consumer_project.id = s.project_id
+     AND consumer_project.organization_id = @organization_id::text
+     AND NOT consumer_project.deleted
     JOIN mcp_server_remote_session_clients AS a
       ON a.mcp_server_id = s.id
      AND a.project_id = s.project_id
@@ -653,9 +689,13 @@ WHERE l.remote_session_client_id = c.id
     JOIN meta_mcp_servers AS mm
       ON mm.project_id = m.project_id
      AND mm.id = m.meta_mcp_server_id
+     AND mm.organization_id = consumer_project.organization_id
      AND mm.deleted IS FALSE
+    JOIN user_session_issuers AS gateway_issuer
+      ON gateway_issuer.id = mm.user_session_issuer_id
+     AND (gateway_issuer.project_id = s.project_id OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = consumer_project.organization_id))
     WHERE s.deleted IS FALSE
-      AND s.project_id = @project_id
+      AND (c.project_id IS NULL OR c.project_id = s.project_id)
       AND mm.user_session_issuer_id = @gateway_issuer_id
   );
 

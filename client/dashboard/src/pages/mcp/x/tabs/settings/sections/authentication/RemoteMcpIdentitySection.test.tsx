@@ -2818,7 +2818,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.getByText("Elsewhere (Other project)")).toBeDefined();
     expect(
       screen.getByText(
-        /2 more servers you don't have access to share this user session issuer and may be affected/,
+        /2 more servers you don't have access to share this MCP sign-in and may be affected/,
       ),
     ).toBeDefined();
     expect(screen.queryByText(/other\s+projects may share it/)).toBeNull();
@@ -2888,7 +2888,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect.objectContaining({ refetchOnMount: "always", staleTime: 0 }),
     );
     expect(
-      screen.getByText("Checking other servers on this user session issuer…"),
+      screen.getByText("Checking other servers on this MCP sign-in…"),
     ).toBeDefined();
     const save = screen.getByRole("button", { name: "Save" });
     expect((save as HTMLButtonElement).disabled).toBe(true);
@@ -3536,7 +3536,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
 
     expect(
-      screen.getByText(/Could not load this server's user session issuer/i),
+      screen.getByText(/Could not load this server's MCP sign-in/i),
     ).toBeDefined();
   });
 

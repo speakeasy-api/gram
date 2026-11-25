@@ -960,7 +960,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(screen.queryByText(/okta-sign-in/)).toBeNull();
     expect(
       screen
-        .getByRole("link", { name: "Change in Sessions" })
+        .getByRole("link", { name: "Change in MCP sign-in" })
         .getAttribute("href"),
     ).toBe("/#sessions");
     expect(vouchers()).toEqual(["Oktafor people who log in with Okta"]);
@@ -1232,7 +1232,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     );
     expect(
       screen
-        .getByRole("link", { name: "change the sign-in in Sessions" })
+        .getByRole("link", { name: "change it in MCP sign-in" })
         .getAttribute("href"),
     ).toBe("/#sessions");
     fireEvent.click(enableButton());

@@ -25,7 +25,9 @@ vi.mock("@/hooks/useMcpServerAuthenticationReadiness", () => ({
   useMcpServerAuthenticationReadiness: () => readiness.value,
 }));
 vi.mock("./authentication/UserSessionIssuerField", () => ({
-  UserSessionIssuerField: () => <span>User session issuer</span>,
+  UserSessionIssuerField: ({ label }: { label: string }) => (
+    <span>{label}</span>
+  ),
 }));
 
 const mcpServer = {
@@ -49,10 +51,11 @@ afterEach(() => {
 });
 
 describe("RemoteMcpSessionsSection", () => {
-  it("shows only the provider picker; its settings live in MCP Sessions", () => {
+  it("shows only the provider picker; its settings live in MCP Sign-in", () => {
     render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
 
-    expect(screen.getByText("User session issuer")).toBeDefined();
+    expect(screen.getByText("MCP sign-in")).toBeDefined();
+    expect(screen.getByText("Used by this server")).toBeDefined();
     expect(screen.queryByText(/Sessions last/)).toBeNull();
     expect(screen.queryByText("Shared authorization server")).toBeNull();
     expect(screen.queryByText("Session length")).toBeNull();
@@ -64,7 +67,7 @@ describe("RemoteMcpSessionsSection", () => {
     (mode) => {
       readiness.value = { ...readiness.value, remoteIdentityMode: mode };
       render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
-      expect(screen.queryByText("Sessions")).toBeNull();
+      expect(screen.queryByText("MCP sign-in")).toBeNull();
     },
   );
 
@@ -79,6 +82,6 @@ describe("RemoteMcpSessionsSection", () => {
       ...override,
     };
     render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
-    expect(screen.getByText("Sessions")).toBeDefined();
+    expect(screen.getByText("MCP sign-in")).toBeDefined();
   });
 });
