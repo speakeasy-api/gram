@@ -235,7 +235,7 @@ func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slo
 		}
 		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID, false)
 	} else {
-		ctx, members, _, err = s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID, false)
+		ctx, members, _, err = s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 	}
 	if err != nil {
 		return ctx, nil, err
