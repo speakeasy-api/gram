@@ -62,9 +62,6 @@ func preparationDCRFixture(t *testing.T, endpoint string) (context.Context, *tes
 	interactive := in.ClientID
 	err = testrepo.New(ti.conn).SetPreparationFixtureInteractiveClient(ctx, testrepo.SetPreparationFixtureInteractiveClientParams{ID: interactive, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
-	attached, err := testrepo.New(ti.conn).AttachPreparationFixtureInteractiveClient(ctx, testrepo.AttachPreparationFixtureInteractiveClientParams{ID: interactive, UserID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, attached)
 	in.ClientID = uuid.Nil
 	in.Mechanism = "dcr"
 	in.TokenEndpointAuthMethod = "client_secret_basic"
@@ -84,9 +81,6 @@ func assertPreparationInteractiveUntouched(t *testing.T, ctx context.Context, ti
 	require.Equal(t, "interactive-ciphertext", secret)
 	require.Equal(t, []string{"authorization_code", "refresh_token"}, grants)
 	require.Equal(t, []string{"openid"}, scopes)
-	attached, err := testrepo.New(ti.conn).CountPreparationFixtureAttachments(ctx, testrepo.CountPreparationFixtureAttachmentsParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), ID: id, UserID: user})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, attached)
 }
 func TestPreparationDCRIntegration_TimeoutRestartDoesNotReplay(t *testing.T) {
 	t.Parallel()

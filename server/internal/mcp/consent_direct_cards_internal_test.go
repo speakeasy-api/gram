@@ -63,7 +63,6 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 			signIn := uuid.New()
 			require.NoError(t, f.q.SeedUserSessionIssuerFixture(ctx, authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: signIn, ProjectID: validUUID(f.projectID), Slug: "usi-" + signIn.String()[:8]}))
 			if tc.issuerLinked {
-				require.NoError(t, f.q.BindClientIssuerFixture(ctx, authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: signIn}))
 				f.attach()
 			}
 			if tc.clientType != "" {

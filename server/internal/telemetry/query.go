@@ -143,7 +143,7 @@ func (s *Service) query(ctx context.Context, payload *telem_gen.QueryPayload, wi
 		topN = defaultQueryTopN
 	}
 
-	interval := calculateInterval(timeStart, timeEnd)
+	interval := CalculateInterval(timeStart, timeEnd)
 	if payload.GranularitySeconds != nil && *payload.GranularitySeconds > 0 {
 		interval = *payload.GranularitySeconds
 	}

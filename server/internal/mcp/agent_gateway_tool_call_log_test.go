@@ -62,7 +62,7 @@ func TestServeAgentGateway_ExecuteToolLogsTheCredentialUsed(t *testing.T) {
 				}
 				if credential == authz.AuthClientTypeRemoteSession {
 					wantOwner = ac.UserID
-					clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "", []uuid.UUID{issuerID})
+					clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "")
 					require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, ac.ActiveOrganizationID, projectID, []uuid.UUID{issuerID}))
 					require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, ac.ActiveOrganizationID, projectID, []uuid.UUID{issuerID}, []uuid.UUID{clientID}))
 					owner := urn.NewUserSubject(ac.UserID)
