@@ -33,8 +33,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -1329,6 +1332,40 @@ func introspectionServer(t *testing.T, body *atomic.Pointer[string]) string {
 	}))
 	t.Cleanup(srv.Close)
 	return srv.URL
+}
+
+func seedHostedGatewayValidationFixture(t *testing.T, prefix string) (context.Context, validationFixture) {
+	t.Helper()
+	ctx, fx := seedMetaValidationFixture(t, prefix)
+	projectID, orgID := consentTestTenant(t, ctx)
+	hosted := seedHostedMetaMember(t, ctx, fx.ti, fx.endpoint.MetaMcpServerID.UUID, "Hosted verify", 1, mcpservers.VisibilityPublic)
+	assigned := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-assigned", "", nil)
+	_, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+		OrganizationID: orgID, ProjectID: projectID, McpServerID: hosted.serverID, RemoteSessionClientID: assigned,
+	})
+	require.NoError(t, err)
+	var body atomic.Pointer[string]
+	body.Store(conv.PtrEmpty(`{"active":false}`))
+	_, err = testrepo.New(fx.ti.conn).ForceRemoteSessionIssuerEnrichmentEndpointsFixture(ctx, testrepo.ForceRemoteSessionIssuerEnrichmentEndpointsFixtureParams{
+		UserinfoEndpoint: pgtype.Text{}, IntrospectionEndpoint: conv.ToPGText(introspectionServer(t, &body)), JwksUri: pgtype.Text{},
+		RemoteSessionClientID: assigned, ProjectID: projectID, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, assigned, fx.subject, "assigned-token", "")
+	fx.clientID = assigned
+	fx.server = hosted.slug
+	return ctx, fx
+}
+
+func TestServeConsentAction_ValidateHostedAssignmentWithoutIssuerLink(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedHostedGatewayValidationFixture(t, "hosted-verify")
+	rec := recordValidationAttempts(t, ctx, fx)
+	requireValidated(t, fx)
+	require.Empty(t, fx.member.drain(), "hosted Verify must not send its grant to the proxied member")
+	require.Equal(t, string(remotesessions.ValidationOutcomeInactive), storedSession(t, ctx, fx).ValidationStatus.String)
+	row := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderRejected)
+	require.Equal(t, fx.clientID.String(), row.RemoteSessionClientID)
 }
 
 // Only introspection can tell a member's rejection from a token the provider no longer honours.

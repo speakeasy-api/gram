@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,12 +59,12 @@ func TestPreparationLifecycle_DetachAbsentJoinIgnoresEMABinding(t *testing.T) {
 	result, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
 	require.Equal(t, "ready", result.State)
-	payload := &clientsgen.DetachUserSessionIssuerPayload{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()}
-	_, err = ti.service.DetachUserSessionIssuer(ctx, payload)
+	payload := &remotesessions.LegacyIssuerBindingForTest{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()}
+	_, err = ti.service.DetachLegacyIssuerForTest(ctx, payload)
 	require.NoError(t, err, "absent interactive join is a no-op despite the EMA binding")
 	err = repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: in.ClientID, UserSessionIssuerID: in.UserSessionIssuerID})
 	require.NoError(t, err)
-	_, err = ti.service.DetachUserSessionIssuer(ctx, payload)
+	_, err = ti.service.DetachLegacyIssuerForTest(ctx, payload)
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, in.ClientID, in.UserSessionIssuerID), "blocked removal rolls back the join")
 }

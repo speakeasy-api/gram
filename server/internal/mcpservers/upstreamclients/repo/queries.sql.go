@@ -1967,3 +1967,19 @@ func (q *Queries) RemoveGlobalClientAssociations(ctx context.Context, remoteSess
 	}
 	return result.RowsAffected(), nil
 }
+
+const requireHostedUpstreamAssignment = `-- name: RequireHostedUpstreamAssignment :exec
+UPDATE mcp_servers
+SET requires_upstream_auth = TRUE, updated_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2 AND toolset_id IS NOT NULL AND NOT deleted
+`
+
+type RequireHostedUpstreamAssignmentParams struct {
+	ServerID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RequireHostedUpstreamAssignment(ctx context.Context, arg RequireHostedUpstreamAssignmentParams) error {
+	_, err := q.db.Exec(ctx, requireHostedUpstreamAssignment, arg.ServerID, arg.ProjectID)
+	return err
+}

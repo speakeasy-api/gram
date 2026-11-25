@@ -240,6 +240,12 @@ func (s *Service) attachServerClient(ctx context.Context, logger *slog.Logger, a
 		}
 	}
 
+	if server.ToolsetID.Valid {
+		if err := associations.RequireHostedUpstreamAssignment(ctx, upstreamclientsrepo.RequireHostedUpstreamAssignmentParams{ServerID: serverID, ProjectID: projectID}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "record hosted upstream requirement").LogError(ctx, logger)
+		}
+	}
+
 	// Where typed auth clients choose upstream authentication, an explicit
 	// attach is the undo for a detach that retired the server's link to the
 	// client's backfilled auth client, which the synchronization otherwise
@@ -504,6 +510,14 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 		McpServerID: serverID, RemoteSessionClientID: clientID, ProjectID: *authCtx.ProjectID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
+	}
+
+	if server.ToolsetID.Valid && !server.RequiresUpstreamAuth.Valid {
+		// The presence of the old placement required credentials. Removing it
+		// must not also opt the server (including a gateway member) out.
+		if err := q.RequireHostedUpstreamAssignment(ctx, upstreamclientsrepo.RequireHostedUpstreamAssignmentParams{ServerID: server.ID, ProjectID: server.ProjectID}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "preserve hosted upstream authentication requirement").LogError(ctx, logger)
+		}
 	}
 
 	// The association is what the server's link to its typed auth client was

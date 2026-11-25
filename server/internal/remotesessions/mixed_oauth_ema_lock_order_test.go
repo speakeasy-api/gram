@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -35,7 +34,7 @@ func TestMixedOAuthEMA_OpposingWriterScope(t *testing.T) {
 				auth, _ := contextvalues.GetAuthContext(ctx)
 				projectID := *auth.ProjectID
 				serverID := seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "mixed-writer", in.Resource)
-				_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
+				_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
 				require.NoError(t, err)
 				in.ConfirmGrants = []string{"authorization_code", "refresh_token", oauthwire.GrantTypeJWTBearer}
 				prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
@@ -126,7 +125,7 @@ func TestMixedOAuthEMA_OpposingWriterScope(t *testing.T) {
 						}
 						done <- err
 					case "attach":
-						_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
+						_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
 						done <- err
 					case "reconcile_inherited_tx":
 						err := upstreamclients.Reconcile(ctx, inherited, auth.ActiveOrganizationID, projectID, []uuid.UUID{in.UserSessionIssuerID})

@@ -8,6 +8,7 @@ import (
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // A binding change on an organization-level issuer reaches servers in every
@@ -29,7 +30,7 @@ func TestClientBindingWritersReachEveryProjectOnAnOrganizationIssuer(t *testing.
 		provider := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "scope-attach-provider")
 		client := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, provider, "scope-attach-cid")
 
-		_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+		_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 			ID:                  client.String(),
 			UserSessionIssuerID: orgUserIssuer.String(),
 		})
@@ -56,7 +57,7 @@ func TestClientBindingWritersReachEveryProjectOnAnOrganizationIssuer(t *testing.
 		require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, ti.conn, otherProject, other))
 		require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, other))
 
-		_, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+		_, err := ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 			ID:                  client.String(),
 			UserSessionIssuerID: orgUserIssuer.String(),
 		})

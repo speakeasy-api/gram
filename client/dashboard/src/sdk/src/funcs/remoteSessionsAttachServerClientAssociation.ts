@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * attachServerClientAssociation remoteSessions
  *
  * @remarks
- * Associate one MCP server with an upstream OAuth client. The server must not already have a different upstream client. A per-user client cannot be shared by proxied servers at different upstream addresses. When upstream auth is enforced, attach also restores a previously detached backfill-derived auth client link. Attach does not bind the client to any user session issuer. Requires mcp:write on the server.
+ * Associate one MCP server with a reachable upstream OAuth client. The association identifies the server's exact registration without requiring or creating a user session issuer binding. A server may have only one registration, and a per-user client cannot be shared by proxied servers at different upstream addresses. Attaching to a hosted server records that upstream authentication is required. When upstream auth enforcement is on, attaching can restore the derived auth client link removed by a previous detach. Requires mcp:write on the server.
  */
 export function remoteSessionsAttachServerClientAssociation(
   client: GramCore,

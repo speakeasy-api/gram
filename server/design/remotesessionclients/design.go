@@ -153,7 +153,7 @@ var _ = Service("remoteSessionClients", func() {
 	})
 
 	Method("updateRemoteSessionClient", func() {
-		Description("Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.")
+		Description("Rotate the client_secret or change the non-issuer settings on an existing remote_session_client.")
 
 		Payload(func() {
 			Extend(UpdateRemoteSessionClientForm)
@@ -175,58 +175,6 @@ var _ = Service("remoteSessionClients", func() {
 		Meta("openapi:operationId", "updateRemoteSessionClient")
 		Meta("openapi:extension:x-speakeasy-name-override", "update")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateRemoteSessionClient"}`)
-	})
-
-	Method("attachUserSessionIssuer", func() {
-		Description("Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.")
-
-		Payload(func() {
-			Extend(AttachUserSessionIssuerForm)
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-		})
-
-		Result(RemoteSessionClient)
-
-		HTTP(func() {
-			POST("/rpc/remoteSessionClients.attachUserSessionIssuer")
-			Deprecated()
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "attachUserSessionIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "attachUserSessionIssuer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AttachUserSessionIssuer"}`)
-	})
-
-	Method("detachUserSessionIssuer", func() {
-		Description("Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.")
-
-		Payload(func() {
-			Extend(DetachUserSessionIssuerForm)
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-		})
-
-		Result(RemoteSessionClient)
-
-		HTTP(func() {
-			POST("/rpc/remoteSessionClients.detachUserSessionIssuer")
-			Deprecated()
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "detachUserSessionIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "detachUserSessionIssuer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DetachUserSessionIssuer"}`)
 	})
 
 	Method("attachKeySet", func() {
@@ -922,32 +870,6 @@ var AttachKeySetForm = Type("AttachKeySetForm", func() {
 	})
 
 	Required("id", "json_web_key_set_id")
-})
-
-var AttachUserSessionIssuerForm = Type("AttachUserSessionIssuerForm", func() {
-	Description("Form for attaching a user_session_issuer to a remote_session_client via the join table.")
-
-	Attribute("id", String, "The remote_session_client id.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("user_session_issuer_id", String, "The user_session_issuer to attach.", func() {
-		Format(FormatUUID)
-	})
-
-	Required("id", "user_session_issuer_id")
-})
-
-var DetachUserSessionIssuerForm = Type("DetachUserSessionIssuerForm", func() {
-	Description("Form for detaching a user_session_issuer from a remote_session_client via the join table.")
-
-	Attribute("id", String, "The remote_session_client id.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("user_session_issuer_id", String, "The user_session_issuer to detach.", func() {
-		Format(FormatUUID)
-	})
-
-	Required("id", "user_session_issuer_id")
 })
 
 var RemoteSessionClient = Type("RemoteSessionClient", func() {

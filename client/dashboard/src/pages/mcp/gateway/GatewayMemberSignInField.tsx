@@ -1,8 +1,5 @@
-import { RemoteIdentityProvidersField } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
-import { useGramContext } from "@gram/client/react-query/_context.js";
-import { buildServerClientAssociationsQuery } from "@gram/client/react-query/serverClientAssociations.core.js";
-import { useQueries } from "@tanstack/react-query";
-import { type ComponentProps, useMemo } from "react";
+import { AuthRow } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthRow";
+import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -17,73 +14,28 @@ import { useGatewayMemberRows } from "./useGatewayMemberRows";
 
 export function GatewayAuthorizationServersField({
   metaMcpServerId,
-  ...field
-}: Omit<
-  ComponentProps<typeof RemoteIdentityProvidersField>,
-  "members" | "hiddenIssuerIds"
-> & { metaMcpServerId: string }): JSX.Element {
+}: {
+  metaMcpServerId: string;
+}): JSX.Element {
   const { rows, isLoading, isError, refetch } =
     useGatewayMemberRows(metaMcpServerId);
   const servers = rows.flatMap((row) =>
     row.classification === "proxied" && row.server ? [row.server] : [],
   );
-  const legacy = useLegacyProviderVisibility(servers);
-  const hiddenLegacyCount = field.associatedIssuers.filter((issuer) =>
-    legacy.issuerIds.has(issuer.id),
-  ).length;
   return (
-    <RemoteIdentityProvidersField
-      {...field}
-      isLoading={field.isLoading || isLoading || legacy.isLoading}
-      hiddenIssuerIds={legacy.issuerIds}
-      members={
-        <div className="space-y-3">
-          <GatewayMemberSignInField
-            servers={servers}
-            isLoading={isLoading}
-            isError={isError}
-            refetch={refetch}
-          />
-          {!field.isLoading &&
-            !isLoading &&
-            !legacy.isLoading &&
-            hiddenLegacyCount > 0 && (
-              <Text muted small>
-                {hiddenLegacyCount === 1
-                  ? "1 legacy authorization server link is hidden."
-                  : `${hiddenLegacyCount} legacy authorization server links are hidden.`}{" "}
-                These links are read-only here. Proxied members use their own
-                upstream settings.
-              </Text>
-            )}
-        </div>
-      }
-    />
+    <AuthRow
+      id={AUTHORIZATION_SERVERS_FIELD_ID}
+      label="Authorization servers"
+      hint="The gateway uses each member’s own upstream configuration."
+    >
+      <GatewayMemberSignInField
+        servers={servers}
+        isLoading={isLoading}
+        isError={isError}
+        refetch={refetch}
+      />
+    </AuthRow>
   );
-}
-
-/** Preserve the legacy provider controls' visibility until hosted migration. */
-function useLegacyProviderVisibility(servers: McpServer[]) {
-  const client = useGramContext();
-  const results = useQueries({
-    queries: servers.map((server) => ({
-      ...buildServerClientAssociationsQuery(client, {
-        mcpServerId: server.id,
-      }),
-      throwOnError: false,
-    })),
-  });
-  const ids = results.flatMap(
-    (result) =>
-      result.data?.associations.map((a) => a.remoteSessionIssuerId) ?? [],
-  );
-  const key = ids.join(",");
-  // oxlint-disable-next-line react-hooks/exhaustive-deps -- keyed by content, not by the per-render array
-  const issuerIds = useMemo(() => new Set(ids), [key]);
-  return {
-    issuerIds,
-    isLoading: results.some((result) => result.isLoading),
-  };
 }
 
 /** A proxied member brings its own upstream offers to the gateway. */

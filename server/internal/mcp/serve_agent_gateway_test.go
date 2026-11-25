@@ -842,6 +842,7 @@ func TestServeAgentGateway_ExecutesPlatformToolOnHostedMember(t *testing.T) {
 		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)
+	markHostedDownstreamOnly(t, ctx, ti.conn, serverID)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), toolset.ID)
 	token := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, toolset.ID)
@@ -886,6 +887,7 @@ func TestServeAgentGateway_PlatformToolMissingSlackTokenSaysWhatToConfigure(t *t
 		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)
+	markHostedDownstreamOnly(t, ctx, ti.conn, serverID)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), toolset.ID)
 	token := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, toolset.ID)

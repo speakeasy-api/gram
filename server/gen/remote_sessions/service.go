@@ -77,23 +77,27 @@ type Service interface {
 	// List the upstream OAuth clients an MCP server is associated with. An
 	// association is a per-server configuration fact: one client can serve several
 	// servers, and server_count reports how many live servers share each client,
-	// since editing or rotating a shared client changes every one of them.
-	// Associations are recorded ahead of the serving path that will read them;
-	// until then the server keeps signing in through its user session issuer's
-	// bindings. Requires mcp:read on the server.
+	// since editing or rotating a shared client changes every one of them. Hosted
+	// servers use this placement to select the upstream registration; a downstream
+	// sign-in issuer does not select a registration for a hosted server. Requires
+	// mcp:read on the server.
 	ListServerClientAssociations(context.Context, *ListServerClientAssociationsPayload) (res *ListServerClientAssociationsResult, err error)
-	// Associate one MCP server with an upstream OAuth client. The server must not
-	// already have a different upstream client. A per-user client cannot be shared
-	// by proxied servers at different upstream addresses. When upstream auth is
-	// enforced, attach also restores a previously detached backfill-derived auth
-	// client link. Attach does not bind the client to any user session issuer.
-	// Requires mcp:write on the server.
+	// Associate one MCP server with a reachable upstream OAuth client. The
+	// association identifies the server's exact registration without requiring or
+	// creating a user session issuer binding. A server may have only one
+	// registration, and a per-user client cannot be shared by proxied servers at
+	// different upstream addresses. Attaching to a hosted server records that
+	// upstream authentication is required. When upstream auth enforcement is on,
+	// attaching can restore the derived auth client link removed by a previous
+	// detach. Requires mcp:write on the server.
 	AttachServerClientAssociation(context.Context, *AttachServerClientAssociationPayload) (res *AttachServerClientAssociationResult, err error)
-	// Remove one MCP server's association with an upstream OAuth client and retire
-	// its backfill-derived auth client link. The client, issuer-client bindings,
-	// associations with other servers, and independent administrator-owned typed
-	// links are unchanged. Returns not found (404) if the association does not
-	// exist. Requires mcp:write on the server.
+	// Remove one MCP server's association with an upstream OAuth client. The
+	// client, its issuer bindings, and its associations with other servers are
+	// untouched. Derived auth client links are synchronized; administrator-owned
+	// typed links are untouched. A hosted server that requires upstream
+	// authentication remains configured to require it and needs a replacement
+	// registration before it can use upstream OAuth. Requires mcp:write on the
+	// server.
 	DetachServerClientAssociation(context.Context, *DetachServerClientAssociationPayload) (err error)
 	// List remote_sessions in the caller's project. Supplying both principal_id
 	// and user_session_issuer_id instead lists only the ordinary human caller's

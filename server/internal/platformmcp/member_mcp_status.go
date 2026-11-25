@@ -43,6 +43,7 @@ type MemberMCPConnectionReader interface {
 	ListClients(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) ([]remotesessions.Client, error)
 	RemoteSessionStatuses(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error)
 	ListAuthClientRegistrations(ctx context.Context, projectID uuid.UUID, organizationID string, ids []uuid.UUID) ([]remotesessions.Client, error)
+	HostedRegistrationNeedsReconnect(context.Context, remotesessions.AuthClientTokenRequest) (bool, error)
 	AuthClientRemoteSessionStatuses(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error)
 }
 
@@ -91,8 +92,8 @@ type memberMCPStatusTarget struct {
 	tunneledMCPServerID   uuid.NullUUID
 	// associatedClients is a proxied server's upstream clients: its
 	// associated ones or, with typed, the registrations its personal and
-	// identity-provider auth clients offer. nil, for a hosted server, matches
-	// clients by remoteSessionIssuerID instead.
+	// identity-provider auth clients offer. A hosted server has at most one
+	// exact placement. nil is reserved for the other legacy targets.
 	associatedClients map[uuid.UUID]bool
 
 	// typed reports a proxied server whose organization chooses upstream
@@ -108,6 +109,7 @@ type memberMCPStatusTarget struct {
 	// upstreamAuthPending reports upstream credentials no auth client
 	// records yet, which an administrator has to finish setting up.
 	upstreamAuthPending bool
+	hosted              bool
 }
 
 // signInRequired reports whether the server authenticates upstream through a
@@ -181,7 +183,7 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 	}
 	serverURL, _ := s.memberLinkBases(ctx, principal.OrganizationID)
 	output.ConnectionURL = serverURL.JoinPath("mcp", target.endpointSlug).String()
-	if target.typed && len(target.associatedClients) == 0 {
+	if (target.typed || target.hosted) && len(target.associatedClients) == 0 {
 		switch {
 		case target.sharedCredential:
 			output.State = MCPConnectionStateNotApplicable
@@ -215,7 +217,7 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 
 	// For proxied servers, read offered registrations and member grants
 	// without the legacy sign-in link.
-	resolver := target.typed
+	resolver := target.typed || target.hosted
 	clients, err := s.memberMCPConnectionClients(ctx, principal, target, resolver)
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, err
@@ -259,6 +261,36 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 		output.State = MCPConnectionStateSetupRequired
 		output.Reason = "upstream_authorization_not_configured"
 		output.NextAction = "ask_administrator"
+		return output, nil
+	}
+	if target.hosted {
+		needsReconnect, err := s.remoteSessions.HostedRegistrationNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
+			ProjectID: target.projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: target.userSessionIssuerID,
+			Subject: urn.NewUserSubject(principal.UserID), RegistrationID: clients[0].ID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
+		})
+		if err != nil {
+			return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read exact hosted authorization status: %w", err)
+		}
+		if clients[0].CredentialOwner != remotesessions.CredentialOwnerSelf {
+			statuses, err := s.remoteSessions.AuthClientRemoteSessionStatuses(ctx, urn.NewUserSubject(principal.UserID), target.projectID, principal.OrganizationID, []uuid.UUID{clients[0].ID})
+			if err != nil {
+				return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read hosted grant state: %w", err)
+			}
+			if status, ok := statuses[clients[0].ID]; ok && status.Resource == "" && (needsReconnect || status.SignInUnreadable) {
+				output.State = MCPConnectionStateReauthorizationRequired
+				output.Reason = memberMCPReauthorizationReason(status, s.now())
+				output.NextAction = "reconnect"
+				return output, nil
+			}
+		}
+		if !needsReconnect {
+			output.State = MCPConnectionStateActive
+			if clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
+				output.State = MCPConnectionStateNotApplicable
+				output.Reason = "upstream_credential_managed"
+			}
+			output.NextAction = "use_mcp"
+		}
 		return output, nil
 	}
 	if clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
@@ -388,8 +420,26 @@ func (s *PluginsService) resolveMemberMCPStatusTarget(ctx context.Context, princ
 		typed:                 server.RemoteMcpServerID.Valid || server.TunneledMcpServerID.Valid,
 		sharedCredential:      false,
 		upstreamAuthPending:   false,
+		hosted:                server.ToolsetID.Valid,
 	}
-	if target.typed {
+	if target.hosted {
+		rows, err := upstreamclientsrepo.New(s.db).ListHostedUpstreamAssignments(ctx, upstreamclientsrepo.ListHostedUpstreamAssignmentsParams{OrganizationID: principal.OrganizationID, ServerIds: []uuid.UUID{server.ID}})
+		if err != nil {
+			return memberMCPStatusTarget{}, fmt.Errorf("list hosted MCP registration placements: %w", err)
+		}
+		target.associatedClients = make(map[uuid.UUID]bool, 1)
+		switch {
+		case len(rows) != 1:
+			target.upstreamAuthPending = true
+		case rows[0].RegistrationID.Valid && server.UserSessionIssuerID.Valid:
+			target.associatedClients[rows[0].RegistrationID.UUID] = true
+		case rows[0].RegistrationID.Valid:
+			target.upstreamAuthPending = true
+		default:
+			required := rows[0].RequiresUpstreamAuth
+			target.upstreamAuthPending = required.Bool || (!required.Valid && server.UserSessionIssuerID.Valid)
+		}
+	} else if target.typed {
 		offered, err := upstreamclientsrepo.New(s.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{
 			OrganizationID: principal.OrganizationID,
 			McpServerIds:   []uuid.UUID{server.ID},

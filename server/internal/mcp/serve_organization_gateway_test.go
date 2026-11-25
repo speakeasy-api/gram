@@ -280,8 +280,9 @@ func TestServeOrganizationGateway_DirectConnectionListsMemberTools(t *testing.T)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.NotContains(t, w.Body.String(), "unknown tool")
 
-	// An explicit no-upstream server and a required server with no placement
-	// look the same to issuer-wide credential lookup. Only the first can run.
+	// An explicit no-upstream hosted server remains callable, while a hosted
+	// server that requires upstream auth without a placement is withheld from
+	// gateway admission.
 	for _, required := range []bool{false, true} {
 		err = testrepo.New(ti.conn).SetMCPServerRequiresUpstreamAuthFixture(ctx, testrepo.SetMCPServerRequiresUpstreamAuthFixtureParams{
 			ID: hosted.serverID, RequiresUpstreamAuth: pgtype.Bool{Bool: required, Valid: true},
@@ -293,8 +294,9 @@ func TestServeOrganizationGateway_DirectConnectionListsMemberTools(t *testing.T)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 		if required {
-			require.Contains(t, w.Body.String(), "has no usable upstream configuration")
+			require.Contains(t, w.Body.String(), "unknown server")
 		} else {
+			require.NotContains(t, w.Body.String(), "unknown server")
 			require.NotContains(t, w.Body.String(), "has no usable upstream configuration")
 		}
 	}
