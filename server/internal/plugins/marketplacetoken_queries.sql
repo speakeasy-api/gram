@@ -147,9 +147,9 @@ LIMIT @limit_value;
 -- connections of the organization's projects stored without organization_id,
 -- and connections that still hold a plaintext token the marketplace token
 -- backfill has not moved. Either keeps the organization from finalizing.
--- value_count and last_written_at cover the organization's own values under
--- either key, soft-deleted rows included: the rows the backfill and clear
--- reach, as ListOrganizationsWith* reports them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE c.organization_id = @organization_id::text

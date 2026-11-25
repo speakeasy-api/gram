@@ -172,7 +172,7 @@ func TestBackfillVerifyAndFinalizeMoveCredentialsToTheOrganizationKey(t *testing
 	store := ingresscredentials.NewCopyStore(ti.conn)
 	counts, err := store.Count(t.Context(), ti.orgID)
 	require.NoError(t, err)
-	require.False(t, counts.LastWrittenAt.IsZero())
+	require.True(t, deleted.UpdatedAt.Time.Equal(counts.LastWrittenAt), "want %s, got %s", deleted.UpdatedAt.Time, counts.LastWrittenAt)
 	require.Equal(t, orgencryption.CopyCounts{Waiting: 1, Unreadable: 0, Unattributed: 0, PlatformCopies: 1, Values: 1, LastWrittenAt: counts.LastWrittenAt}, counts)
 
 	ti.enroll(t)

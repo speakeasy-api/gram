@@ -293,8 +293,8 @@ export function EncryptionTransitions(): JSX.Element {
             platform key to its own key. New organizations that could not start
             on their own key appear in platform key. Enroll them here in
             batches; roll back and finalize one organization at a time from its
-            Encryption page. The list shows organizations with values for the
-            use case, most recently written first, unless you ask for all.
+            Encryption page. By default the list shows organizations with values
+            for the use case, most recently written first.
           </p>
         </div>
       </div>

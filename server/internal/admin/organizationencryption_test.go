@@ -584,7 +584,8 @@ func TestOrganizationEncryption_ListAllPutsRecentlyWrittenOrganizationsFirst(t *
 	for _, count := range list.StateCounts {
 		total += count.Organizations
 	}
-	require.GreaterOrEqual(t, total, int64(3), "the counts cover every organization")
+	require.False(t, list.HasMore)
+	require.Equal(t, int64(len(list.Organizations)), total, "the counts cover every organization the list shows")
 }
 
 func TestOrganizationEncryption_ListFiltersOrganizationsWithValuesByState(t *testing.T) {

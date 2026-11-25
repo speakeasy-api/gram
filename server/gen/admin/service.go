@@ -1891,9 +1891,11 @@ type AdminOrganizationEncryptionTransitionRow struct {
 	// soft-deleted rows included. A row storing values in two columns counts once
 	// in each.
 	ValueCount int64
-	// The latest update of a row storing one of the organization's values. Any
-	// write to such a row moves it, such as a session's token refresh. Absent when
-	// the organization has none.
+	// The latest updated_at of a row storing one of the organization's values. A
+	// change that updates the row's updated_at moves it, such as a session's token
+	// refresh or an OpenRouter key's limit change; a write that leaves updated_at
+	// alone, such as a backfill seal, does not. Absent when the organization has
+	// none.
 	LastWrittenAt *string
 }
 
@@ -3749,7 +3751,8 @@ type ListOrganizationEncryptionTransitionsPayload struct {
 	Values string
 	// last_written lists the most recently written organizations first, then
 	// organizations without values oldest first. oldest lists the oldest
-	// organizations first.
+	// organizations first. The list pages by offset, so an organization whose last
+	// write changes between page requests can repeat or be skipped.
 	Sort string
 	// Organizations per page.
 	Limit int

@@ -137,9 +137,9 @@ type CountNetworkIngressCredentialCopiesRow struct {
 // credentials recorded as unreadable count as unreadable only while the
 // recorded hash still matches the stored platform-key copy. organization_id is
 // NOT NULL, so nothing is unattributed.
-// value_count and last_written_at cover the organization's own values under
-// either key, soft-deleted rows included: the rows the backfill and clear
-// reach, as ListOrganizationsWith* reports them.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountNetworkIngressCredentialCopies(ctx context.Context, organizationID string) (CountNetworkIngressCredentialCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countNetworkIngressCredentialCopies, organizationID)
 	var i CountNetworkIngressCredentialCopiesRow

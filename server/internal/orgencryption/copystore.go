@@ -73,15 +73,17 @@ type CopyCounts struct {
 	// with or without an organization-key copy.
 	PlatformCopies int64
 
-	// Values counts the organization's values under either key, soft-deleted
-	// rows included: the rows the backfill and clear reach. It leaves out
-	// what Unattributed counts, so a zero Values with a nonzero Unattributed
-	// still leaves values to move.
+	// Values counts every row of the organization storing a value under
+	// either key, soft-deleted rows included. It leaves out what Unattributed
+	// counts, so a zero Values with a nonzero Unattributed still leaves values
+	// to move.
 	Values int64
 
-	// LastWrittenAt is the latest updated_at of the rows Values counts. Any
-	// write to such a row moves it, not only a write to the value, such as a
-	// session's refresh. It is zero when Values is zero.
+	// LastWrittenAt is the latest updated_at of the rows Values counts. A
+	// change that updates a row's updated_at moves it, not only a write to
+	// the value, such as a session's refresh; a write that leaves updated_at
+	// alone, such as a backfill seal, does not. It is zero when Values is
+	// zero.
 	LastWrittenAt time.Time
 }
 
@@ -95,8 +97,8 @@ type OrganizationValues struct {
 	Values int64
 
 	// LastWrittenAt is the latest updated_at of the organization's rows that
-	// store a value. Any write to such a row moves it, not only a write to the
-	// value, such as a session's refresh. It is zero when Values is zero.
+	// store a value, with the same meaning as CopyCounts.LastWrittenAt. It is
+	// zero when Values is zero.
 	LastWrittenAt time.Time
 }
 

@@ -87,7 +87,7 @@ var AdminOrganizationEncryptionTransitionRow = Type("AdminOrganizationEncryption
 	Attribute("last_backfill_error", String, "Why the last backfill run stopped early.")
 	Attribute("last_verified_at", String, "When the last clean verification pass started.", func() { Format(FormatDateTime) })
 	Attribute("value_count", Int64, "How many values the organization stores for the use case under either key, soft-deleted rows included. A row storing values in two columns counts once in each.")
-	Attribute("last_written_at", String, "The latest update of a row storing one of the organization's values. Any write to such a row moves it, such as a session's token refresh. Absent when the organization has none.", func() { Format(FormatDateTime) })
+	Attribute("last_written_at", String, "The latest updated_at of a row storing one of the organization's values. A change that updates the row's updated_at moves it, such as a session's token refresh or an OpenRouter key's limit change; a write that leaves updated_at alone, such as a backfill seal, does not. Absent when the organization has none.", func() { Format(FormatDateTime) })
 })
 
 var AdminOrganizationEncryptionStateCount = Type("AdminOrganizationEncryptionStateCount", func() {
@@ -166,7 +166,7 @@ func organizationEncryptionMethods() {
 				Enum(transitionListValues...)
 				Default("present")
 			})
-			Attribute("sort", String, "last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first.", func() {
+			Attribute("sort", String, "last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.", func() {
 				Enum(transitionListSorts...)
 				Default("last_written")
 			})

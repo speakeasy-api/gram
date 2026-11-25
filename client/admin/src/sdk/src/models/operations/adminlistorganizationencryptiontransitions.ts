@@ -32,14 +32,14 @@ export const Values = {
 export type Values = ClosedEnum<typeof Values>;
 
 /**
- * last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first.
+ * last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.
  */
 export const Sort = {
   LastWritten: "last_written",
   Oldest: "oldest",
 } as const;
 /**
- * last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first.
+ * last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.
  */
 export type Sort = ClosedEnum<typeof Sort>;
 
@@ -57,7 +57,7 @@ export type AdminListOrganizationEncryptionTransitionsRequest = {
    */
   values?: Values | undefined;
   /**
-   * last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first.
+   * last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.
    */
   sort?: Sort | undefined;
   /**

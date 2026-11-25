@@ -430,8 +430,8 @@ func TestCopyStoreReportsStoredTokens(t *testing.T) {
 	organizationID := conv.ToPGText(ti.orgID)
 	platformOnly := plant(ti.createConnection(t, ti.orgID), organizationID, none, conv.ToPGText("platform-copy"), none)
 	orgOnly := plant(ti.createConnection(t, ti.orgID), organizationID, none, none, conv.ToPGText("org-copy"))
-	// A plaintext token is not a organizations value, and an unattributed copy belongs
-	// to no organization.
+	// A plaintext token is not one of the organization's values, and an
+	// unattributed copy belongs to no organization.
 	plant(ti.createConnection(t, ti.orgID), organizationID, conv.ToPGText("legacy-token"), none, none)
 	plant(ti.createConnection(t, ti.orgID), none, none, conv.ToPGText("unattributed-copy"), none)
 

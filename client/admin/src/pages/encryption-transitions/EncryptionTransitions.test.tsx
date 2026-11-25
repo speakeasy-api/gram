@@ -9,6 +9,7 @@ import {
   EncryptionTransitions,
 } from "@/pages/encryption-transitions/EncryptionTransitions";
 import { encryptionTransitionsSearch } from "@/pages/encryption-transitions/encryptionTransitionsSearch";
+import { formatTimestamp } from "@/lib/organizationEncryption";
 import { renderRouteTree } from "@/test/harness";
 
 const mocks = vi.hoisted(() => ({
@@ -171,14 +172,10 @@ describe("EncryptionTransitions", () => {
     );
   });
 
-  it("lists organizations with values, most recently written first, by default", async () => {
+  it("requests organizations with values, most recently written first, and shows their value count and last write", async () => {
+    const lastWrittenAt = new Date("2026-03-02T12:00:00Z");
     mocks.list.mockResolvedValue(
-      aList([
-        aRow("a", {
-          valueCount: 1234,
-          lastWrittenAt: new Date("2026-03-02T12:00:00Z"),
-        }),
-      ]),
+      aList([aRow("a", { valueCount: 1234, lastWrittenAt })]),
     );
     await mount();
 
@@ -194,6 +191,7 @@ describe("EncryptionTransitions", () => {
       screen.getByRole("columnheader", { name: "Last written" }),
     ).toBeTruthy();
     expect(screen.getByText((1234).toLocaleString())).toBeTruthy();
+    expect(screen.getByText(formatTimestamp(lastWrittenAt))).toBeTruthy();
     expect(
       screen
         .getByRole("button", { name: "With values" })
@@ -329,6 +327,11 @@ describe("EncryptionTransitions after leaving or switching", () => {
     });
     fireEvent.click(
       screen.getByRole("button", { name: "Select next in platform key" }),
+    );
+    await waitFor(() =>
+      expect(mocks.list).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 200, values: "all" }),
+      ),
     );
     fireEvent.click(screen.getByRole("button", { name: "With values" }));
     answerAll(aList([aRow("a"), aRow("b")]));

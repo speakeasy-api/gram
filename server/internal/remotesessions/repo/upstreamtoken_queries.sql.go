@@ -508,9 +508,9 @@ type CountEMACredentialAccessTokenCopiesRow struct {
 // project_id are NULL together (remote_session_ema_credentials_project_ref_check),
 // so a slot without an organization belongs to none and is never
 // unattributed: it stays on the platform key.
-// value_count and last_written_at cover the organization's own values under
-// either key, soft-deleted rows included: the rows the backfill and clear
-// reach, as ListOrganizationsWith* reports them.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountEMACredentialAccessTokenCopies(ctx context.Context, organizationID string) (CountEMACredentialAccessTokenCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countEMACredentialAccessTokenCopies, organizationID)
 	var i CountEMACredentialAccessTokenCopiesRow
@@ -583,9 +583,9 @@ type CountRemoteSessionAccessTokenCopiesRow struct {
 // counts sessions without organization_id whose client belongs to the
 // organization, directly or through its project: the organization-scoped
 // queries never reach them.
-// value_count and last_written_at cover the organization's own values under
-// either key, soft-deleted rows included: the rows the backfill and clear
-// reach, as ListOrganizationsWith* reports them.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountRemoteSessionAccessTokenCopies(ctx context.Context, organizationID string) (CountRemoteSessionAccessTokenCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countRemoteSessionAccessTokenCopies, organizationID)
 	var i CountRemoteSessionAccessTokenCopiesRow
@@ -654,9 +654,9 @@ type CountRemoteSessionRefreshTokenCopiesRow struct {
 
 // The organization's refresh token counts, under the same rules as
 // CountRemoteSessionAccessTokenCopies.
-// value_count and last_written_at cover the organization's own values under
-// either key, soft-deleted rows included: the rows the backfill and clear
-// reach, as ListOrganizationsWith* reports them.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountRemoteSessionRefreshTokenCopies(ctx context.Context, organizationID string) (CountRemoteSessionRefreshTokenCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countRemoteSessionRefreshTokenCopies, organizationID)
 	var i CountRemoteSessionRefreshTokenCopiesRow
@@ -725,9 +725,9 @@ type CountTrustedIssuerSessionIdentityAssertionCopiesRow struct {
 // The organization's counts for the value. Unattributed counts sessions
 // without organization_id whose trusted client belongs to the organization:
 // the organization-scoped queries never reach them.
-// value_count and last_written_at cover the organization's own values under
-// either key, soft-deleted rows included: the rows the backfill and clear
-// reach, as ListOrganizationsWith* reports them.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountTrustedIssuerSessionIdentityAssertionCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionIdentityAssertionCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countTrustedIssuerSessionIdentityAssertionCopies, organizationID)
 	var i CountTrustedIssuerSessionIdentityAssertionCopiesRow
@@ -796,9 +796,9 @@ type CountTrustedIssuerSessionNonceCopiesRow struct {
 // The organization's counts for the value. Unattributed counts sessions
 // without organization_id whose trusted client belongs to the organization:
 // the organization-scoped queries never reach them.
-// value_count and last_written_at cover the organization's own values under
-// either key, soft-deleted rows included: the rows the backfill and clear
-// reach, as ListOrganizationsWith* reports them.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountTrustedIssuerSessionNonceCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionNonceCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countTrustedIssuerSessionNonceCopies, organizationID)
 	var i CountTrustedIssuerSessionNonceCopiesRow
@@ -867,9 +867,9 @@ type CountTrustedIssuerSessionRefreshTokenCopiesRow struct {
 // The organization's counts for the value. Unattributed counts sessions
 // without organization_id whose trusted client belongs to the organization:
 // the organization-scoped queries never reach them.
-// value_count and last_written_at cover the organization's own values under
-// either key, soft-deleted rows included: the rows the backfill and clear
-// reach, as ListOrganizationsWith* reports them.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountTrustedIssuerSessionRefreshTokenCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionRefreshTokenCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countTrustedIssuerSessionRefreshTokenCopies, organizationID)
 	var i CountTrustedIssuerSessionRefreshTokenCopiesRow
@@ -938,9 +938,9 @@ type CountTrustedIssuerSessionUpstreamSubjectCopiesRow struct {
 // The organization's counts for the value. Unattributed counts sessions
 // without organization_id whose trusted client belongs to the organization:
 // the organization-scoped queries never reach them.
-// value_count and last_written_at cover the organization's own values under
-// either key, soft-deleted rows included: the rows the backfill and clear
-// reach, as ListOrganizationsWith* reports them.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountTrustedIssuerSessionUpstreamSubjectCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionUpstreamSubjectCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countTrustedIssuerSessionUpstreamSubjectCopies, organizationID)
 	var i CountTrustedIssuerSessionUpstreamSubjectCopiesRow

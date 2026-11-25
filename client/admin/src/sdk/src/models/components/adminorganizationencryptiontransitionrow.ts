@@ -57,7 +57,7 @@ export type AdminOrganizationEncryptionTransitionRow = {
    */
   lastVerifiedAt?: Date | undefined;
   /**
-   * The latest update of a row storing one of the organization's values. Any write to such a row moves it, such as a session's token refresh. Absent when the organization has none.
+   * The latest updated_at of a row storing one of the organization's values. A change that updates the row's updated_at moves it, such as a session's token refresh or an OpenRouter key's limit change; a write that leaves updated_at alone, such as a backfill seal, does not. Absent when the organization has none.
    */
   lastWrittenAt?: Date | undefined;
   /**

@@ -164,3 +164,26 @@ func TestCopyStore_ReportsStoredKeys(t *testing.T) {
 	require.Zero(t, empty.Values)
 	require.True(t, empty.LastWrittenAt.IsZero())
 }
+
+func TestCopyStore_CountsKeysStoredOnlyUnderTheOrganizationKey(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	project := ti.createProject(t, ti.orgID)
+	id := ti.create(t, ti.createFunction(t, ti.orgID, project))
+	ti.enroll(t)
+	ti.finalize(t)
+	row := ti.stored(t, id)
+	require.Empty(t, row.EncryptionKey.Reveal(), "finalize leaves only the organization-key copy")
+
+	store := runnerkeys.NewCopyStore(ti.conn)
+	counts, err := store.Count(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Zero(t, counts.PlatformCopies)
+	require.Equal(t, int64(1), counts.Values, "a key stored only under the organization key is still a value")
+	require.True(t, row.UpdatedAt.Time.Equal(counts.LastWrittenAt), "want %s, got %s", row.UpdatedAt.Time, counts.LastWrittenAt)
+
+	listed, err := store.ListOrganizationsWithValues(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, listed, orgencryption.OrganizationValues{OrganizationID: ti.orgID, Values: 1, LastWrittenAt: counts.LastWrittenAt})
+}

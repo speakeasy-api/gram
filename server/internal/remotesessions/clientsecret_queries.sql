@@ -102,9 +102,9 @@ LIMIT @limit_value;
 -- hash still matches the stored platform-key copy. Unattributed counts project
 -- clients of the organization's projects stored without organization_id,
 -- which the organization-scoped queries never reach.
--- value_count and last_written_at cover the organization's own values under
--- either key, soft-deleted rows included: the rows the backfill and clear
--- reach, as ListOrganizationsWith* reports them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE c.organization_id = @organization_id::text

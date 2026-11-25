@@ -6022,12 +6022,12 @@ paths:
               - all
             type: string
         - allowEmptyValue: true
-          description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first.
+          description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.
           in: query
           name: sort
           schema:
             default: last_written
-            description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first.
+            description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.
             enum:
               - last_written
               - oldest
@@ -13695,7 +13695,7 @@ components:
           format: date-time
         last_written_at:
           type: string
-          description: The latest update of a row storing one of the organization's values. Any write to such a row moves it, such as a session's token refresh. Absent when the organization has none.
+          description: The latest updated_at of a row storing one of the organization's values. A change that updates the row's updated_at moves it, such as a session's token refresh or an OpenRouter key's limit change; a write that leaves updated_at alone, such as a backfill seal, does not. Absent when the organization has none.
           format: date-time
         name:
           type: string

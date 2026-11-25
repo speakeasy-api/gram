@@ -91,9 +91,9 @@ LIMIT @limit_value;
 -- platform-key copy. Unattributed counts keys of the organization's projects
 -- stored without organization_id, which the organization-scoped queries never
 -- reach.
--- value_count and last_written_at cover the organization's own values under
--- either key, soft-deleted rows included: the rows the backfill and clear
--- reach, as ListOrganizationsWith* reports them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 WITH platform_copies AS (
   SELECT fa.encryption_key_org_encrypted, u.id AS unreadable_id
   FROM functions_access AS fa
@@ -105,6 +105,14 @@ WITH platform_copies AS (
     AND u.platform_ciphertext_sha256 = sha256(fa.encryption_key)
   WHERE fa.organization_id = @organization_id::text
     AND fa.encryption_key IS NOT NULL
+),
+-- One scan reads both value columns: a value stored only under the
+-- organization key has no platform-key copy, so platform_copies leaves it out.
+stored_values AS (
+  SELECT COUNT(*) AS value_count, MAX(fa.updated_at) AS last_written_at
+  FROM functions_access AS fa
+  WHERE fa.organization_id = @organization_id::text
+    AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
 )
 SELECT
     COUNT(*) FILTER (
@@ -124,18 +132,8 @@ SELECT
         AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*)::bigint AS platform_copies,
-    (
-      SELECT COUNT(*)
-      FROM functions_access AS fa
-      WHERE fa.organization_id = @organization_id::text
-        AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
-    )::bigint AS value_count,
-    (
-      SELECT MAX(fa.updated_at)
-      FROM functions_access AS fa
-      WHERE fa.organization_id = @organization_id::text
-        AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
-    )::timestamptz AS last_written_at
+    (SELECT v.value_count FROM stored_values AS v)::bigint AS value_count,
+    (SELECT v.last_written_at FROM stored_values AS v)::timestamptz AS last_written_at
 FROM platform_copies AS k;
 
 -- name: ClearRunnerKeyPlatformCopies :one

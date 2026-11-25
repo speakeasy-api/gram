@@ -93,9 +93,9 @@ LIMIT @limit_value;
 -- counts sessions without organization_id whose client belongs to the
 -- organization, directly or through its project: the organization-scoped
 -- queries never reach them.
--- value_count and last_written_at cover the organization's own values under
--- either key, soft-deleted rows included: the rows the backfill and clear
--- reach, as ListOrganizationsWith* reports them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
@@ -217,9 +217,9 @@ LIMIT @limit_value;
 -- name: CountRemoteSessionRefreshTokenCopies :one
 -- The organization's refresh token counts, under the same rules as
 -- CountRemoteSessionAccessTokenCopies.
--- value_count and last_written_at cover the organization's own values under
--- either key, soft-deleted rows included: the rows the backfill and clear
--- reach, as ListOrganizationsWith* reports them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
@@ -365,9 +365,9 @@ LIMIT @limit_value;
 -- project_id are NULL together (remote_session_ema_credentials_project_ref_check),
 -- so a slot without an organization belongs to none and is never
 -- unattributed: it stays on the platform key.
--- value_count and last_written_at cover the organization's own values under
--- either key, soft-deleted rows included: the rows the backfill and clear
--- reach, as ListOrganizationsWith* reports them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE c.access_token_encrypted <> ''
@@ -524,9 +524,9 @@ LIMIT @limit_value;
 -- The organization's counts for the value. Unattributed counts sessions
 -- without organization_id whose trusted client belongs to the organization:
 -- the organization-scoped queries never reach them.
--- value_count and last_written_at cover the organization's own values under
--- either key, soft-deleted rows included: the rows the backfill and clear
--- reach, as ListOrganizationsWith* reports them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
@@ -649,9 +649,9 @@ LIMIT @limit_value;
 -- The organization's counts for the value. Unattributed counts sessions
 -- without organization_id whose trusted client belongs to the organization:
 -- the organization-scoped queries never reach them.
--- value_count and last_written_at cover the organization's own values under
--- either key, soft-deleted rows included: the rows the backfill and clear
--- reach, as ListOrganizationsWith* reports them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
@@ -774,9 +774,9 @@ LIMIT @limit_value;
 -- The organization's counts for the value. Unattributed counts sessions
 -- without organization_id whose trusted client belongs to the organization:
 -- the organization-scoped queries never reach them.
--- value_count and last_written_at cover the organization's own values under
--- either key, soft-deleted rows included: the rows the backfill and clear
--- reach, as ListOrganizationsWith* reports them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
@@ -899,9 +899,9 @@ LIMIT @limit_value;
 -- The organization's counts for the value. Unattributed counts sessions
 -- without organization_id whose trusted client belongs to the organization:
 -- the organization-scoped queries never reach them.
--- value_count and last_written_at cover the organization's own values under
--- either key, soft-deleted rows included: the rows the backfill and clear
--- reach, as ListOrganizationsWith* reports them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
