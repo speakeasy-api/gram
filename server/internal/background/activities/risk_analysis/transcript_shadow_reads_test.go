@@ -92,28 +92,37 @@ func captureShadows(t *testing.T, conn *pgxpool.Pool, store *transcriptstore.Sto
 }
 
 // shadowReadMessages sums chat.transcript_shadow.read.messages by outcome.
-func shadowReadMessages(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
+// shadowReads reports how many LoadMany calls ran (one read-duration
+// observation each) and how many messages they opened by outcome.
+func shadowReads(t *testing.T, reader *sdkmetric.ManualReader) (uint64, map[string]int64) {
 	t.Helper()
 	var collected metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &collected))
+	var calls uint64
 	counts := map[string]int64{}
 	for _, scope := range collected.ScopeMetrics {
 		for _, m := range scope.Metrics {
-			if m.Name != "chat.transcript_shadow.read.messages" {
-				continue
-			}
-			data, ok := m.Data.(metricdata.Sum[int64])
-			require.True(t, ok)
-			for _, point := range data.DataPoints {
-				outcome, ok := point.Attributes.Value(attr.OutcomeKey)
+			switch m.Name {
+			case "chat.transcript_shadow.read.duration":
+				data, ok := m.Data.(metricdata.Histogram[float64])
 				require.True(t, ok)
-				if point.Value != 0 {
-					counts[outcome.AsString()] += point.Value
+				for _, point := range data.DataPoints {
+					calls += point.Count
+				}
+			case "chat.transcript_shadow.read.messages":
+				data, ok := m.Data.(metricdata.Sum[int64])
+				require.True(t, ok)
+				for _, point := range data.DataPoints {
+					outcome, ok := point.Attributes.Value(attr.OutcomeKey)
+					require.True(t, ok)
+					if point.Value != 0 {
+						counts[outcome.AsString()] += point.Value
+					}
 				}
 			}
 		}
 	}
-	return counts
+	return calls, counts
 }
 
 func shadowReadingAnalyzer(t *testing.T, conn *pgxpool.Pool, store *transcriptstore.Store, readProjects ...uuid.UUID) (*risk_analysis.AnalyzeBatch, *[]*riskv1.PromptInjectionAnalysis) {
@@ -185,7 +194,9 @@ func TestAnalyzeBatch_ReadEnabledProjectScansEncryptedShadows(t *testing.T) {
 
 	requirePublishedTrajectory(t, *published, tr)
 	// The scanned message and both context messages open in one read.
-	require.Equal(t, map[string]int64{"success": 3}, shadowReadMessages(t, reader))
+	calls, messages := shadowReads(t, reader)
+	require.Equal(t, uint64(1), calls)
+	require.Equal(t, map[string]int64{"success": 3}, messages)
 }
 
 func TestAnalyzeBatch_ReadEnabledProjectScansPlaintextWhenNoShadowExists(t *testing.T) {
@@ -200,7 +211,9 @@ func TestAnalyzeBatch_ReadEnabledProjectScansPlaintextWhenNoShadowExists(t *test
 	require.NoError(t, executeShadowBatch(t, ab, tr))
 
 	requirePublishedTrajectory(t, *published, tr)
-	require.Equal(t, map[string]int64{"success": 1, "plaintext_fallback": 2}, shadowReadMessages(t, reader))
+	calls, messages := shadowReads(t, reader)
+	require.Equal(t, uint64(1), calls)
+	require.Equal(t, map[string]int64{"success": 1, "plaintext_fallback": 2}, messages)
 }
 
 func TestAnalyzeBatch_ReadEnabledProjectFailsOnAStaleShadow(t *testing.T) {
@@ -220,7 +233,9 @@ func TestAnalyzeBatch_ReadEnabledProjectFailsOnAStaleShadow(t *testing.T) {
 
 	// An existing shadow that fails verification never falls back to plaintext.
 	require.Empty(t, *published)
-	require.Equal(t, map[string]int64{"stale": 3}, shadowReadMessages(t, reader))
+	calls, messages := shadowReads(t, reader)
+	require.Equal(t, uint64(1), calls)
+	require.Equal(t, map[string]int64{"stale": 3}, messages)
 }
 
 func TestAnalyzeBatch_OtherProjectsKeepScanningPlaintext(t *testing.T) {
@@ -234,5 +249,7 @@ func TestAnalyzeBatch_OtherProjectsKeepScanningPlaintext(t *testing.T) {
 	require.NoError(t, executeShadowBatch(t, ab, tr))
 
 	requirePublishedTrajectory(t, *published, tr)
-	require.Empty(t, shadowReadMessages(t, reader))
+	calls, messages := shadowReads(t, reader)
+	require.Zero(t, calls)
+	require.Empty(t, messages)
 }

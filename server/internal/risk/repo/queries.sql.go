@@ -2125,7 +2125,7 @@ type GetMessageContentBatchRow struct {
 // The context messages' ids (the nil UUID when there is none) ride along so a
 // project that reads through encrypted transcript shadows can open them in the
 // same LoadMany call as the batch itself; batchContextMaxRunes in
-// batch_messages.go mirrors LEFT here.
+// transcript_shadow_reads.go mirrors LEFT here.
 //
 // Both message queries validate their chat against the row's project before
 // returning linkage. Content-part parents additionally must belong to the
