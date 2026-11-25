@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -466,6 +467,19 @@ func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
 	shadow := s.newMandatoryShadow(ctx, organizationID)
 	var servingClientsErr error
 	servingClientsLoaded := false
+	loadHostedAssignments := sync.OnceValues(func() (map[uuid.UUID]hostedAssignment, error) {
+		ids := make([]uuid.UUID, 0, len(members))
+		for _, member := range members {
+			if member.backend == metaMemberBackendHosted {
+				ids = append(ids, member.serverID)
+			}
+		}
+		assignments, err := s.hostedAssignments(ctx, organizationID, ids)
+		if err != nil {
+			logger.WarnContext(ctx, "load hosted gateway placements", attr.SlogError(err))
+		}
+		return assignments, err
+	})
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
 		if recheck != nil && (member.serverID != recheck.serverID || member.backend != metaMemberBackendProxied) {
@@ -519,7 +533,11 @@ func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
 		// and toolset permission checks. Consent retains the compatibility
 		// inventory used by the existing writers and callback.
 		if serving && member.backend == metaMemberBackendHosted && needsOAuth && userSessionIssuerID != uuid.Nil {
-			registration, err := s.hostedRegistration(ctx, organizationID, member.projectID, member.serverID)
+			assignments, err := loadHostedAssignments()
+			if err != nil {
+				continue
+			}
+			registration, err := s.resolveHostedAssignment(ctx, member.projectID, member.serverID, assignments[member.serverID])
 			if err != nil && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
 				logger.WarnContext(ctx, "load hosted gateway placement", attr.SlogError(err))
 			}

@@ -55,7 +55,10 @@ func (s *Service) hostedRegistration(ctx context.Context, org string, projectID,
 	if err != nil {
 		return uuid.Nil, err
 	}
-	assignment := assignments[serverID]
+	return s.resolveHostedAssignment(ctx, projectID, serverID, assignments[serverID])
+}
+
+func (s *Service) resolveHostedAssignment(ctx context.Context, projectID, serverID uuid.UUID, assignment hostedAssignment) (uuid.UUID, error) {
 	if assignment.duplicate && assignment.projectID == projectID {
 		// An association can outlive a soft-deleted registration. The
 		// existing live-association read disambiguates that case; keep

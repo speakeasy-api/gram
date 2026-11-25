@@ -458,8 +458,8 @@ func TestMemberAuthFailure_NoConnectPageNamesAdministrator(t *testing.T) {
 	require.EqualError(t, memberAuthFailure(member, memberDial{}, http.StatusUnauthorized, false, true), `server "m" rejected the stored credential. Ask your administrator to reconnect it`)
 }
 
-// A proxied member with associations resolves from its own clients; any other
-// member keeps its project's credentials.
+// Hosted members and proxied members with associations use member resolution.
+// Unassociated proxied members retain project resolution.
 func TestMemberTokens_ProxiedMemberResolvesFromItsAssociations(t *testing.T) {
 	t.Parallel()
 
