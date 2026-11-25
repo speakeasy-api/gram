@@ -257,7 +257,8 @@ var contracts = []Contract{
 		Conditions: []Condition{
 			label("", LabelEffectCoverage, OpIsNot, CoverageUnderstood),
 			label("and", LabelEffectClass, OpIncludesOtherThan, EffectRead),
-			label("and", LabelExecCodeOrigin, OpIsNot, CodeOriginProjectTask),
+			label("and", LabelEffectClass, OpIncludesOtherThan, EffectRead, EffectExec),
+			label("or", LabelExecCodeOrigin, OpIsNot, CodeOriginProjectTask),
 		},
 		Expression: `label.effect_coverage != 'understood' && action.effect_class.exists(e, e != 'read' && !(e == 'exec' && label.exec_code_origin == 'project_task')) ? CLARIFY : ABSTAIN`,
 	},
