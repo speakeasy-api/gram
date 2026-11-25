@@ -119,14 +119,18 @@ before these columns existed hold NULL until a backfill recaptures them.
 
 ## Every plaintext read goes through the store
 
-Every query that reads the plaintext body columns of `chat_messages`
+Every reader query that reads the plaintext body columns of `chat_messages`
 (`content`, `content_raw`, `tool_calls`, `tool_outcome_notes`,
 `tool_call_summaries`, `storage_error`) lives in
-`transcriptstore/internal/plainrepo`. Go's `internal` rule means no other
-package can call one; readers call methods on `transcriptstore.Transcripts`
-instead. The `no-plaintext-transcript-read` glint rule catches a new query that
-reads those columns from anywhere else. `chat/repo.ListChatMessages` stays for
-tests and fixtures only, and the rule rejects production calls to it.
+`transcriptstore/internal/plainrepo`. The store's own capture and shadow-load
+queries in `transcriptstore/queries.sql` read and hash those columns too, to
+seal and check shadows. Go's `internal` rule means no other package can call
+one; readers call methods on `transcriptstore.Transcripts` instead. A reader
+that needs only message IDs, or a message's chat and role, uses a narrow query
+in `chat/repo` that reads no body. The `no-plaintext-transcript-read` glint
+rule catches a new query that reads those columns from anywhere else.
+`chat/repo.ListChatMessages` stays for tests and fixtures only, and the rule
+rejects production calls to it.
 
 Each query LEFT JOINs the message's shadow when `@open_shadows` is true, so the
 ciphertext and a source-hash check arrive in the same round trip, and opens it
@@ -134,9 +138,13 @@ in Go with the same fallback and stale rules as `LoadMany`. For a project off th
 list the join is skipped by a one-time filter. Where the SQL truncates or blanks
 a body field (risk context, Platform MCP size caps, the sigint budget), the
 store applies the same rule to the opened shadow, or for the judge window does
-the capping in Go for every project. Writes that change a shadowed field after
-insert (`UpdateToolCallOutcome`, `StoreToolCallSummary`) recapture the shadow in
-the same transaction.
+the capping in Go for every project. The Platform MCP caps measure JSON columns
+by their jsonb text, which a shadow's compact JSON cannot reproduce, so the
+query returns a per-field oversized flag and the store blanks the same fields
+of the shadow. Writes that change a shadowed field after insert
+(`UpdateToolCallOutcome`, `StoreToolCallSummary`) recapture the shadow as one
+unit with the write: in their own transaction, or under a savepoint inside a
+caller's transaction, so a failed recapture also rolls back its write.
 
 A process that reads chat messages without the shadow store (today `streams`,
 for the prompt-injection judge and signal evaluation) builds read-only
@@ -152,8 +160,11 @@ serving it.
 
 Still open: search (`ILIKE`), tool-call counts and the hooks tool-call lookup,
 byte budgets, and the kit projection compare still work on plaintext inside SQL.
-Plain inserts
-stay in `chat/repo`; the writer captures their shadows in the same transaction.
+Standalone ops
+tools under `server/cmd/tools` (for example the preset and false-positive
+sweeps) configure no organization encryption and read plaintext directly; the
+glint rule checks sqlc queries, not raw SQL strings. Plain inserts stay in
+`chat/repo`; the writer captures their shadows in the same transaction.
 
 ## Shadow reads
 

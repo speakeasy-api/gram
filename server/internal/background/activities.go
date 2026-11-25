@@ -318,7 +318,7 @@ func NewActivities(
 	chatAnalysisJudges, err := analysis.NewJudges(
 		analysis.NewWorkUnitsJudge(logger, tracerProvider, chatClient, judgeRateLimiter),
 		businessmemory.NewJudge(logger, tracerProvider, db, chatClient, judgeRateLimiter),
-		summaryjudge.NewJudge(logger, db, chatClient, judgeRateLimiter),
+		summaryjudge.NewJudge(logger, db, chatClient, judgeRateLimiter).WithTranscripts(transcripts),
 	)
 	if err != nil {
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
@@ -480,7 +480,7 @@ func NewActivities(
 		segmentChat:                      resolution_activities.NewSegmentChat(logger, db, chatClient, transcripts),
 		deleteChatResolutions:            resolution_activities.NewDeleteChatResolutions(db),
 		analyzeSegment:                   resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger, transcripts),
-		getUserFeedbackForChat:           resolution_activities.NewGetUserFeedbackForChat(logger, db, transcripts),
+		getUserFeedbackForChat:           resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:          risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                     analyzeBatch,
 		markMessagesAnalyzed:             risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),

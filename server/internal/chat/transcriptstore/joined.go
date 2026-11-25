@@ -18,7 +18,9 @@ import (
 // joinedRow is one message loaded together with its shadow by the same query.
 // Every query in internal/plainrepo that reads plaintext body fields LEFT
 // JOINs chat_message_transcripts when the project keeps shadows, so the
-// ciphertext arrives in the same round trip and no second query runs.
+// ciphertext arrives in the same round trip as the row. The organization
+// lookup that opening needs runs once per project per process, on the first
+// shadow read, and is cached after that.
 type joinedRow struct {
 	body       Body
 	chatID     uuid.UUID

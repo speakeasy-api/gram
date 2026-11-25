@@ -1037,6 +1037,30 @@ func (q *Queries) GetChatMemorySummaryEligibility(ctx context.Context, arg GetCh
 	return eligible, err
 }
 
+const getChatMessageChatAndRole = `-- name: GetChatMessageChatAndRole :one
+SELECT chat_id, role FROM chat_messages
+WHERE project_id = $1::uuid AND id = $2
+`
+
+type GetChatMessageChatAndRoleParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+type GetChatMessageChatAndRoleRow struct {
+	ChatID uuid.UUID
+	Role   string
+}
+
+// The chat and role of one message, for correlation checks that never read
+// its body.
+func (q *Queries) GetChatMessageChatAndRole(ctx context.Context, arg GetChatMessageChatAndRoleParams) (GetChatMessageChatAndRoleRow, error) {
+	row := q.db.QueryRow(ctx, getChatMessageChatAndRole, arg.ProjectID, arg.ID)
+	var i GetChatMessageChatAndRoleRow
+	err := row.Scan(&i.ChatID, &i.Role)
+	return i, err
+}
+
 const getChatMessageStats = `-- name: GetChatMessageStats :one
 SELECT
   COUNT(*)::bigint AS total,
@@ -1266,6 +1290,27 @@ func (q *Queries) GetImportedSessionObservations(ctx context.Context, arg GetImp
 		return nil, err
 	}
 	return items, nil
+}
+
+const getLastChatMessageID = `-- name: GetLastChatMessageID :one
+SELECT m.id FROM chat_messages m
+WHERE m.chat_id = $1 AND m.project_id = $2::uuid
+  AND m.generation = (SELECT MAX(latest.generation) FROM chat_messages latest WHERE latest.chat_id = $1 AND latest.project_id = $2::uuid)
+ORDER BY m.created_at DESC, m.seq DESC
+LIMIT 1
+`
+
+type GetLastChatMessageIDParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The newest message of the chat's latest generation, without its body.
+func (q *Queries) GetLastChatMessageID(ctx context.Context, arg GetLastChatMessageIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getLastChatMessageID, arg.ChatID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getLatestChatUserPromptSource = `-- name: GetLatestChatUserPromptSource :one
@@ -1966,6 +2011,40 @@ func (q *Queries) ListChatContentPartsByChatID(ctx context.Context, arg ListChat
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatMessageIDsByGeneration = `-- name: ListChatMessageIDsByGeneration :many
+SELECT id FROM chat_messages
+WHERE chat_id = $1 AND project_id = $2::uuid AND generation = $3::integer
+ORDER BY created_at ASC, seq ASC
+`
+
+type ListChatMessageIDsByGenerationParams struct {
+	ChatID     uuid.UUID
+	ProjectID  uuid.UUID
+	Generation int32
+}
+
+// The IDs of one generation's messages in transcript order, for readers that
+// index messages and never read their bodies.
+func (q *Queries) ListChatMessageIDsByGeneration(ctx context.Context, arg ListChatMessageIDsByGenerationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listChatMessageIDsByGeneration, arg.ChatID, arg.ProjectID, arg.Generation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

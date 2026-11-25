@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	analysisrepo "github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -80,6 +81,13 @@ func NewJudge(logger *slog.Logger, db *pgxpool.Pool, client openrouter.Completio
 		client:    client,
 		limiter:   limiter,
 	}
+}
+
+// WithTranscripts makes the summary read message bodies through transcripts,
+// opening encrypted shadows for the projects that keep them.
+func (j *Judge) WithTranscripts(transcripts *transcriptstore.Transcripts) *Judge {
+	j.summaries = j.summaries.WithTranscripts(transcripts)
+	return j
 }
 
 func (j *Judge) Name() string { return JudgeName }
