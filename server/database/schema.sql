@@ -10589,6 +10589,9 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   -- When an admin marked the upstream provider's manual setup guide as done.
   -- NULL means not done yet.
   setup_guide_completed_at timestamptz,
+  -- Copy of mcp_server_feedback_configs.enabled, kept on the server row so the
+  -- gateway's serving queries can tell whether to load the feedback tool.
+  feedback_tool_enabled boolean NOT NULL DEFAULT false,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -10628,6 +10631,8 @@ COMMENT ON COLUMN mcp_servers.updated_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.deleted IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.setup_guide_completed_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.feedback_tool_enabled IS 'Whether the server offers the built-in feedback tool. Kept equal to mcp_server_feedback_configs.enabled, false when the server has no config.
+@access: confidential';
 COMMENT ON COLUMN mcp_servers.requires_upstream_auth IS 'Whether the upstream needs authentication: true needs it, false explicitly needs none, NULL is undecided.
 @access: confidential';
 
