@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -154,8 +153,8 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 }
 
 // authorizePlatformToolset gates entry to a platform toolset before any work
-// runs. The managed-assistant toolset carries the dashboard egress tool;
-// runtime-bound credentials remain restricted to the managed assistant. Ordinary
+// runs. The managed-only toolsets (Platform MCP read, Speakeasy Slack) stay
+// restricted to the managed assistant for runtime-bound credentials. Ordinary
 // agent credentials instead use live agent policy and per-tool authorization;
 // neither runtime variant requires a managed-assistant row for those callers.
 func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
@@ -169,7 +168,7 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		// quietly grant them. If the runner is ever moved onto the assistant
 		// runtime, this is where its principal is checked.
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug, platformtools.SpeakeasySlackPlatformToolsetSlug:
+	case platformtools.PlatformMCPReadToolsetSlug, platformtools.SpeakeasySlackPlatformToolsetSlug:
 	default:
 		return nil
 	}
@@ -195,48 +194,7 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 
 	}
 
-	// The Speakeasy Slack app toolset is not a rollout variant: the managed
-	// assistant has it alongside whichever variant it is on. Each call
-	// resolves the workspace that routes to the project, and fails when
-	// there is none.
-	if slug == platformtools.SpeakeasySlackPlatformToolsetSlug {
-		return nil
-	}
-
-	// The two managed-only toolsets are rollout variants of each other: an org
-	// reaches exactly one, never both. The attachment decision in the
-	// assistants service resolves the same variant, but the assistant token
-	// lives inside the runner VM, so the serve path re-resolves rather than
-	// trusting attachment. A variant that cannot be resolved falls back to
-	// legacy, matching attachment, so an outage never leaves the managed
-	// assistant with no toolset at all.
-	variant := feature.VariantAssistantToolsLegacy
-	if s.features != nil {
-		resolved, err := feature.FlagVariant(ctx, s.features, feature.FlagAssistantPlatformMCP,
-			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
-		if err != nil {
-			s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
-		} else {
-			variant = feature.AssistantToolsVariant(resolved)
-		}
-	}
-
-	if slug != wantedToolsetSlug(variant) {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	}
-
 	return nil
-}
-
-// wantedToolsetSlug maps a resolved rollout variant to the single managed-only
-// platform toolset that variant serves. Keep in lockstep with
-// assistantPlatformSlugs in the assistants service — the two must agree or a
-// toolset is attached at bootstrap and then 404s on every request.
-func wantedToolsetSlug(variant feature.Variant) string {
-	if variant == feature.VariantAssistantToolsPlatformMCP {
-		return platformtools.PlatformMCPReadToolsetSlug
-	}
-	return platformtools.ManagedAssistantPlatformToolsetSlug
 }
 
 func (s *Service) handlePlatformToolsetRequest(
