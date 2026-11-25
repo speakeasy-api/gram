@@ -209,6 +209,14 @@ type recordedUpload struct {
 
 func skillUploadServer(t *testing.T, v2Status int) (*httptest.Server, func() []recordedUpload) {
 	t.Helper()
+	return skillUploadServerSequence(t, []int{v2Status})
+}
+
+// skillUploadServerSequence answers successive v2 uploads with v2Statuses in
+// order, repeating the last status once the sequence is spent.
+func skillUploadServerSequence(t *testing.T, v2Statuses []int) (*httptest.Server, func() []recordedUpload) {
+	t.Helper()
+	var v2Calls int
 	var mu sync.Mutex
 	var uploads []recordedUpload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -224,6 +232,10 @@ func skillUploadServer(t *testing.T, v2Status int) (*httptest.Server, func() []r
 		require.NoError(t, json.NewDecoder(reader).Decode(&body))
 		mu.Lock()
 		uploads = append(uploads, recordedUpload{schemaVersion: body.SchemaVersion, files: body.Files, encoding: r.Header.Get("Content-Encoding")})
+		v2Status := v2Statuses[min(v2Calls, len(v2Statuses)-1)]
+		if body.SchemaVersion == skillContentSchemaV2 {
+			v2Calls++
+		}
 		mu.Unlock()
 		if body.SchemaVersion == skillContentSchemaV2 {
 			w.WriteHeader(v2Status)
@@ -276,4 +288,29 @@ func TestExecuteSkillUploadDoesNotFallBackOnServerError(t *testing.T) {
 
 	require.Error(t, executeSkillUpload(t.Context(), treeUploadTask(server.URL)))
 	require.Len(t, uploads(), 1)
+}
+
+// A transient 429 or 5xx on the v2 upload is retried, as the SDK retries the
+// v1 upload, instead of losing the capture. (cubic)
+func TestExecuteSkillUploadRetriesTransientV2Status(t *testing.T) {
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		server, uploads := skillUploadServerSequence(t, []int{status, http.StatusNoContent})
+
+		require.NoError(t, executeSkillUpload(t.Context(), treeUploadTask(server.URL)), "status %d", status)
+		got := uploads()
+		require.Len(t, got, 2, "status %d", status)
+		require.Equal(t, skillContentSchemaV2, got[0].schemaVersion)
+		require.Equal(t, skillContentSchemaV2, got[1].schemaVersion)
+	}
+}
+
+func TestExecuteSkillUploadStopsRetryingPersistentServerError(t *testing.T) {
+	server, uploads := skillUploadServer(t, http.StatusInternalServerError)
+
+	require.Error(t, executeSkillUpload(t.Context(), treeUploadTask(server.URL)))
+	got := uploads()
+	require.Len(t, got, sendAttempts)
+	for _, upload := range got {
+		require.Equal(t, skillContentSchemaV2, upload.schemaVersion)
+	}
 }

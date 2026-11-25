@@ -84,9 +84,15 @@ func treeUploadRejected(err error) bool {
 	}
 }
 
+// retryableSkillUploadStatus reports whether an upload response is transient:
+// the same 429 and 5xx answers the SDK retries for the v1 upload.
+func retryableSkillUploadStatus(status int) bool {
+	return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+}
+
 // uploadSkillTree posts a hook.skill-content.v2 upload, gzip-compressed since
-// skill trees are mostly text. Connection failures are retried like the v1
-// upload; any HTTP answer is final.
+// skill trees are mostly text. Connection failures and 429/5xx answers are
+// retried like the v1 upload; any other HTTP answer is final.
 func (cl *client) uploadSkillTree(ctx context.Context, c creds, task skillUploadTask) error {
 	body := skillContentV2Body{
 		SchemaVersion: skillContentSchemaV2,
@@ -119,7 +125,10 @@ func (cl *client) uploadSkillTree(ctx context.Context, c creds, task skillUpload
 			if status == http.StatusNoContent {
 				return nil
 			}
-			return &skillUploadStatusError{status: status}
+			err = &skillUploadStatusError{status: status}
+			if !retryableSkillUploadStatus(status) {
+				return err
+			}
 		}
 		if attempt >= sendAttempts-1 || ctx.Err() != nil {
 			return err
