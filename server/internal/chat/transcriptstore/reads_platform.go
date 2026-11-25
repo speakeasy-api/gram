@@ -10,20 +10,22 @@ import (
 
 // Readers for the Platform MCP chat tools.
 
-// platformBodyBytes is the largest body field the Platform MCP chat tools
-// return. A larger field is blanked and the row is marked oversized, in SQL
-// for plaintext and by platformShape for opened shadows.
-const platformBodyBytes = 131072
-
-func platformShape(m *transcriptcrypto.Message) {
-	if len(m.Content) > platformBodyBytes {
-		m.Content = ""
-	}
-	if len(m.ToolCalls) > platformBodyBytes {
-		m.ToolCalls = nil
-	}
-	if len(m.ContentRaw) > platformBodyBytes {
-		m.ContentRaw = nil
+// The Platform MCP chat tools return no body field over 128 KiB. The query
+// decides which fields are over the cap, from the shadow's metadata for a
+// project that keeps shadows, blanks them in the plaintext columns and
+// reports each decision. platformShape blanks the same fields of the opened
+// shadow by those flags, so the two never measure separately.
+func platformShape(contentOversized, toolCallsOversized, contentRawOversized bool) func(*transcriptcrypto.Message) {
+	return func(m *transcriptcrypto.Message) {
+		if contentOversized {
+			m.Content = ""
+		}
+		if toolCallsOversized {
+			m.ToolCalls = nil
+		}
+		if contentRawOversized {
+			m.ContentRaw = nil
+		}
 	}
 }
 
@@ -44,7 +46,7 @@ func (t *Transcripts) SearchPlatformChatMessages(ctx context.Context, db DBTX, p
 	joined := make([]joinedRow, len(rows))
 	for i := range rows {
 		r := &rows[i]
-		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape}
+		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape(r.ContentOversized, r.ToolCallsOversized, r.ContentRawOversized)}
 	}
 	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
 		return nil, err
@@ -69,7 +71,7 @@ func (t *Transcripts) ReadPlatformChatMessages(ctx context.Context, db DBTX, par
 	joined := make([]joinedRow, len(rows))
 	for i := range rows {
 		r := &rows[i]
-		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape}
+		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape(r.ContentOversized, r.ToolCallsOversized, r.ContentRawOversized)}
 	}
 	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
 		return nil, err

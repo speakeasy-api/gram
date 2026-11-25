@@ -14,29 +14,42 @@ import (
 )
 
 const findAssistantToolCallMessageID = `-- name: FindAssistantToolCallMessageID :one
-SELECT id
-FROM chat_messages
-WHERE project_id = $1
-  AND chat_id = $2
-  AND role = 'assistant'
-  AND tool_calls IS NOT NULL
+SELECT m.id
+FROM chat_messages m
+WHERE m.project_id = $1
+  AND m.chat_id = $2
+  AND m.role = 'assistant'
+  AND NOT ($3::boolean AND EXISTS (
+    SELECT 1 FROM chat_message_transcripts t
+    WHERE t.message_id = m.id AND t.project_id = m.project_id AND t.tool_call_count IS NOT NULL
+  ))
+  AND m.tool_calls IS NOT NULL
   AND EXISTS (
     SELECT 1
-    FROM jsonb_array_elements(tool_calls) tc
-    WHERE tc->>'id' = $3::text
+    FROM jsonb_array_elements(m.tool_calls) tc
+    WHERE tc->>'id' = $4::text
   )
-ORDER BY created_at DESC
+ORDER BY m.created_at DESC
 LIMIT 1
 `
 
 type FindAssistantToolCallMessageIDParams struct {
-	ProjectID  uuid.NullUUID
-	ChatID     uuid.UUID
-	ToolCallID string
+	ProjectID   uuid.NullUUID
+	ChatID      uuid.UUID
+	SkipIndexed bool
+	ToolCallID  string
 }
 
+// With @skip_indexed, a message whose shadow indexes its tool-call IDs is left
+// to FindIndexedToolCallMessageID, so only messages with no shadow (or one
+// captured before the index existed) are scanned here.
 func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAssistantToolCallMessageIDParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, findAssistantToolCallMessageID, arg.ProjectID, arg.ChatID, arg.ToolCallID)
+	row := q.db.QueryRow(ctx, findAssistantToolCallMessageID,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.SkipIndexed,
+		arg.ToolCallID,
+	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -48,6 +61,7 @@ WITH ordered AS (
     cm.id,
     cm.role,
     CASE
+      WHEN t.tool_call_count IS NOT NULL THEN t.tool_call_count > 0
       WHEN cm.tool_calls IS NULL THEN false
       WHEN jsonb_typeof(cm.tool_calls) = 'array'
         THEN jsonb_array_length(cm.tool_calls) > 0
@@ -58,18 +72,19 @@ WITH ordered AS (
       ELSE false
     END AS has_tool_calls
   FROM chat_messages cm
-  WHERE cm.chat_id = $2
-    AND cm.project_id = $3::uuid
-    AND cm.generation = $4::integer
+  LEFT JOIN chat_message_transcripts t ON t.message_id = cm.id AND t.project_id = cm.project_id AND $2::boolean
+  WHERE cm.chat_id = $3
+    AND cm.project_id = $4::uuid
+    AND cm.generation = $5::integer
 ),
 attachment_risk_prompts AS (
   SELECT ccp.parent_chat_message_id AS id
   FROM chat_content_parts ccp
-  WHERE ccp.chat_id = $2
-    AND ccp.project_id = $3::uuid
+  WHERE ccp.chat_id = $3
+    AND ccp.project_id = $4::uuid
     AND ccp.deleted IS FALSE
     AND ccp.parent_chat_message_id IS NOT NULL
-    AND ccp.id = ANY($5::uuid[])
+    AND ccp.id = ANY($6::uuid[])
 )
 SELECT
   COUNT(*) FILTER (WHERE has_tool_calls OR role IN ('user', 'assistant', 'tool'))::bigint AS total,
@@ -87,6 +102,7 @@ FROM ordered
 
 type GetChatEntryTotalsParams struct {
 	RiskMessageIds     []uuid.UUID
+	OpenShadows        bool
 	ChatID             uuid.UUID
 	ProjectID          uuid.UUID
 	Generation         int32
@@ -111,11 +127,16 @@ type GetChatEntryTotalsRow struct {
 // counts messages the caller's ClickHouse finding anchors flag
 // (@risk_message_ids), directly or through an attachment hanging off them
 // (@risk_content_part_ids).
+//
+// For a project that keeps shadows (@open_shadows) the tool-call count comes
+// from the shadow's metadata, so the plaintext tool_calls column is consulted
+// only for a message with no shadow or one captured before the count existed.
 // Prompts whose attachments hold an active finding. Such a finding has no
 // chat_message_id, so it flags the prompt the attachment hangs off.
 func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
 	row := q.db.QueryRow(ctx, getChatEntryTotals,
 		arg.RiskMessageIds,
+		arg.OpenShadows,
 		arg.ChatID,
 		arg.ProjectID,
 		arg.Generation,
@@ -186,6 +207,43 @@ func (q *Queries) GetChatMessageForUnmask(ctx context.Context, arg GetChatMessag
 		&i.Content,
 		&i.ToolCalls,
 		&i.CreatedAt,
+		&i.ShadowCiphertext,
+		&i.ShadowCurrent,
+	)
+	return i, err
+}
+
+const getCorrelatedChatMessageBody = `-- name: GetCorrelatedChatMessageBody :one
+SELECT m.chat_id, m.content, m.tool_calls, t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND $1::boolean
+WHERE m.project_id = $2::uuid AND m.id = $3
+`
+
+type GetCorrelatedChatMessageBodyParams struct {
+	OpenShadows bool
+	ProjectID   uuid.UUID
+	ID          uuid.UUID
+}
+
+type GetCorrelatedChatMessageBodyRow struct {
+	ChatID           uuid.UUID
+	Content          string
+	ToolCalls        []byte
+	ShadowCiphertext pgtype.Text
+	ShadowCurrent    bool
+}
+
+// The stored body of a correlated message, with its shadow, for a project
+// that keeps shadows.
+func (q *Queries) GetCorrelatedChatMessageBody(ctx context.Context, arg GetCorrelatedChatMessageBodyParams) (GetCorrelatedChatMessageBodyRow, error) {
+	row := q.db.QueryRow(ctx, getCorrelatedChatMessageBody, arg.OpenShadows, arg.ProjectID, arg.ID)
+	var i GetCorrelatedChatMessageBodyRow
+	err := row.Scan(
+		&i.ChatID,
+		&i.Content,
+		&i.ToolCalls,
 		&i.ShadowCiphertext,
 		&i.ShadowCurrent,
 	)
@@ -511,6 +569,44 @@ func (q *Queries) GetProjectOrganizationID(ctx context.Context, projectID uuid.U
 	var organization_id string
 	err := row.Scan(&organization_id)
 	return organization_id, err
+}
+
+const getToolCallSummaries = `-- name: GetToolCallSummaries :one
+SELECT m.tool_call_summaries, t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND $1::boolean
+WHERE m.id = $2
+  AND m.chat_id = $3
+  AND m.project_id = $4::uuid
+`
+
+type GetToolCallSummariesParams struct {
+	OpenShadows bool
+	MessageID   uuid.UUID
+	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type GetToolCallSummariesRow struct {
+	ToolCallSummaries []byte
+	ShadowCiphertext  pgtype.Text
+	ShadowCurrent     bool
+}
+
+// An assistant message's tool-call summaries, read after LockChatMessage
+// locked the row so a merge done in Go cannot lose a concurrent summary for a
+// sibling call.
+func (q *Queries) GetToolCallSummaries(ctx context.Context, arg GetToolCallSummariesParams) (GetToolCallSummariesRow, error) {
+	row := q.db.QueryRow(ctx, getToolCallSummaries,
+		arg.OpenShadows,
+		arg.MessageID,
+		arg.ChatID,
+		arg.ProjectID,
+	)
+	var i GetToolCallSummariesRow
+	err := row.Scan(&i.ToolCallSummaries, &i.ShadowCiphertext, &i.ShadowCurrent)
+	return i, err
 }
 
 const getToolCallSummaryContext = `-- name: GetToolCallSummaryContext :one
@@ -1099,7 +1195,8 @@ LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m
 WHERE m.chat_id = $2
   AND m.project_id = $3::uuid
   AND m.role = 'user'
-  AND m.content != ''
+  -- A shadowed prompt is measured by its metadata, not its plaintext.
+  AND CASE WHEN t.content_bytes IS NOT NULL THEN t.content_bytes > 0 ELSE m.content != '' END
 ORDER BY m.seq DESC, m.created_at DESC
 `
 
@@ -1677,16 +1774,18 @@ WITH candidates AS MATERIALIZED (
     LIMIT $9
 ), sized AS (
     SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls, m.origin, m.external_message_id,
-           (octet_length(m.role)::bigint + octet_length(m.content)::bigint
-            + COALESCE(octet_length(m.content_raw::text), 0)::bigint
+           (octet_length(m.role)::bigint
+            + COALESCE(mt.content_bytes::bigint, octet_length(m.content)::bigint)
+            + COALESCE(mt.content_raw_bytes::bigint, octet_length(m.content_raw::text)::bigint, 0)
             + COALESCE(octet_length(m.content_asset_url), 0)::bigint
-            + COALESCE(octet_length(m.tool_calls::text), 0)::bigint
+            + COALESCE(mt.tool_calls_bytes::bigint, octet_length(m.tool_calls::text)::bigint, 0)
             + COALESCE((SELECT sum(octet_length(cp.content_asset_url)::bigint + 8)
                         FROM chat_content_parts cp
                         WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
                           AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE), 0)
            ) AS payload_bytes
     FROM candidates m
+    LEFT JOIN chat_message_transcripts mt ON mt.message_id = m.id AND mt.project_id = m.project_id AND $1::boolean
 ), bounded AS (
     SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls, m.origin, m.external_message_id, m.payload_bytes,
            (sum(payload_bytes) OVER (ORDER BY created_at DESC, seq DESC ROWS UNBOUNDED PRECEDING)
@@ -1753,6 +1852,8 @@ type LoadEvaluationHistoryRow struct {
 // Bound the cumulative inline payload before transferring it to the application.
 // Keep overflow rows as markers: skipping them would change window membership.
 // Reserve eight bytes per attachment locator for array element framing.
+// For a project that keeps shadows the body sizes come from the shadow's
+// metadata, falling back to the plaintext only where it has none.
 func (q *Queries) LoadEvaluationHistory(ctx context.Context, arg LoadEvaluationHistoryParams) ([]LoadEvaluationHistoryRow, error) {
 	rows, err := q.db.Query(ctx, loadEvaluationHistory,
 		arg.OpenShadows,
@@ -1901,9 +2002,9 @@ func (q *Queries) LoadEvaluationMessages(ctx context.Context, arg LoadEvaluation
 const patchKitProjectionMessage = `-- name: PatchKitProjectionMessage :execrows
 UPDATE chat_messages SET content = $1, content_raw = $2,
  tool_calls = $3, content_hash = $4, finish_reason = $5,
- risk_analyzed_at = CASE WHEN content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3 THEN NULL ELSE risk_analyzed_at END
-WHERE project_id = $6 AND chat_id = $7 AND id = $8 AND source = 'kit'
-AND (content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3 OR finish_reason IS DISTINCT FROM $5)
+ risk_analyzed_at = CASE WHEN $6::boolean THEN NULL ELSE risk_analyzed_at END
+WHERE project_id = $7 AND chat_id = $8 AND id = $9 AND source = 'kit'
+AND ($6::boolean OR finish_reason IS DISTINCT FROM $5)
 `
 
 type PatchKitProjectionMessageParams struct {
@@ -1912,11 +2013,14 @@ type PatchKitProjectionMessageParams struct {
 	ToolCalls    []byte
 	ContentHash  []byte
 	FinishReason pgtype.Text
+	BodyChanged  bool
 	ProjectID    uuid.NullUUID
 	ChatID       uuid.UUID
 	ID           uuid.UUID
 }
 
+// @body_changed is decided in Go against the previous row the caller loaded
+// (and locked) through the store, so this write never compares plaintext.
 func (q *Queries) PatchKitProjectionMessage(ctx context.Context, arg PatchKitProjectionMessageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, patchKitProjectionMessage,
 		arg.Content,
@@ -1924,6 +2028,7 @@ func (q *Queries) PatchKitProjectionMessage(ctx context.Context, arg PatchKitPro
 		arg.ToolCalls,
 		arg.ContentHash,
 		arg.FinishReason,
+		arg.BodyChanged,
 		arg.ProjectID,
 		arg.ChatID,
 		arg.ID,
@@ -1955,11 +2060,13 @@ WITH anchor AS (
 SELECT n.id, n.chat_id, n.seq, n.created_at, n.role, n.generation,
        COALESCE(CASE WHEN octet_length(n.source) <= 512 THEN n.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(n.user_id) <= 512 THEN n.user_id END, '')::text AS user_id,
-       CASE WHEN octet_length(n.content) <= 131072 THEN n.content ELSE '' END::text AS content,
-       CASE WHEN octet_length(n.tool_calls::text) <= 131072 THEN n.tool_calls END::jsonb AS tool_calls,
-       CASE WHEN octet_length(n.content_raw::text) <= 131072 THEN n.content_raw END::jsonb AS content_raw,
-       (octet_length(n.content) > 131072 OR COALESCE(octet_length(n.tool_calls::text), 0) > 131072
-        OR COALESCE(octet_length(n.content_raw::text), 0) > 131072)::boolean AS oversized,
+       CASE WHEN sz.content_oversized THEN '' ELSE n.content END::text AS content,
+       CASE WHEN sz.tool_calls_oversized THEN NULL ELSE n.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN sz.content_raw_oversized THEN NULL ELSE n.content_raw END::jsonb AS content_raw,
+       (sz.content_oversized OR sz.tool_calls_oversized OR sz.content_raw_oversized)::boolean AS oversized,
+       sz.content_oversized::boolean AS content_oversized,
+       sz.tool_calls_oversized::boolean AS tool_calls_oversized,
+       sz.content_raw_oversized::boolean AS content_raw_oversized,
        COALESCE((
          SELECT jsonb_agg(jsonb_build_object(
                   'provider', CASE WHEN octet_length(cp.provider) <= 512 THEN cp.provider END, 'provider_user_id', CASE WHEN octet_length(cp.provider_user_id) <= 512 THEN cp.provider_user_id END,
@@ -1972,6 +2079,11 @@ SELECT n.id, n.chat_id, n.seq, n.created_at, n.role, n.generation,
        COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,n.content,n.content_raw IS NULL,n.content_raw,n.tool_calls IS NULL,n.tool_calls,n.tool_outcome_notes,n.tool_call_summaries IS NULL,n.tool_call_summaries,n.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
 FROM neighbors n
 LEFT JOIN chat_message_transcripts t ON t.message_id = n.id AND t.project_id = n.project_id AND $2::boolean
+CROSS JOIN LATERAL (
+  SELECT COALESCE(t.content_bytes, octet_length(n.content)) > 131072 AS content_oversized,
+         COALESCE(t.tool_calls_bytes, octet_length(n.tool_calls::text), 0) > 131072 AS tool_calls_oversized,
+         COALESCE(t.content_raw_bytes, octet_length(n.content_raw::text), 0) > 131072 AS content_raw_oversized
+) sz
 ORDER BY n.seq
 `
 
@@ -1986,25 +2098,30 @@ type ReadPlatformChatMessagesParams struct {
 }
 
 type ReadPlatformChatMessagesRow struct {
-	ID               uuid.UUID
-	ChatID           uuid.UUID
-	Seq              int64
-	CreatedAt        pgtype.Timestamptz
-	Role             string
-	Generation       int32
-	Source           string
-	UserID           string
-	Content          string
-	ToolCalls        []byte
-	ContentRaw       []byte
-	Oversized        bool
-	Participants     []byte
-	ShadowCiphertext pgtype.Text
-	ShadowCurrent    bool
+	ID                  uuid.UUID
+	ChatID              uuid.UUID
+	Seq                 int64
+	CreatedAt           pgtype.Timestamptz
+	Role                string
+	Generation          int32
+	Source              string
+	UserID              string
+	Content             string
+	ToolCalls           []byte
+	ContentRaw          []byte
+	Oversized           bool
+	ContentOversized    bool
+	ToolCallsOversized  bool
+	ContentRawOversized bool
+	Participants        []byte
+	ShadowCiphertext    pgtype.Text
+	ShadowCurrent       bool
 }
 
 // Capture-sequence window around one message of this chat, or its latest one,
 // with up to five recorded participants per message.
+// Field sizes come from the shadow's metadata when the project keeps shadows,
+// as in SearchPlatformChatMessages.
 func (q *Queries) ReadPlatformChatMessages(ctx context.Context, arg ReadPlatformChatMessagesParams) ([]ReadPlatformChatMessagesRow, error) {
 	rows, err := q.db.Query(ctx, readPlatformChatMessages,
 		arg.ProjectID,
@@ -2035,6 +2152,9 @@ func (q *Queries) ReadPlatformChatMessages(ctx context.Context, arg ReadPlatform
 			&i.ToolCalls,
 			&i.ContentRaw,
 			&i.Oversized,
+			&i.ContentOversized,
+			&i.ToolCallsOversized,
+			&i.ContentRawOversized,
 			&i.Participants,
 			&i.ShadowCiphertext,
 			&i.ShadowCurrent,
@@ -2056,17 +2176,24 @@ SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
        COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
        c.title_manually_set AS chat_title_manually_set,
        COALESCE(c.user_id, '')::text AS owner_user_id,
-       CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
-       CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
-       CASE WHEN octet_length(m.content_raw::text) <= 131072 THEN m.content_raw END::jsonb AS content_raw,
-       (octet_length(m.content) > 131072 OR COALESCE(octet_length(m.tool_calls::text), 0) > 131072
-        OR COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS oversized,
+       CASE WHEN sz.content_oversized THEN '' ELSE m.content END::text AS content,
+       CASE WHEN sz.tool_calls_oversized THEN NULL ELSE m.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN sz.content_raw_oversized THEN NULL ELSE m.content_raw END::jsonb AS content_raw,
+       (sz.content_oversized OR sz.tool_calls_oversized OR sz.content_raw_oversized)::boolean AS oversized,
+       sz.content_oversized::boolean AS content_oversized,
+       sz.tool_calls_oversized::boolean AS tool_calls_oversized,
+       sz.content_raw_oversized::boolean AS content_raw_oversized,
        t.ciphertext AS shadow_ciphertext,
        COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
 LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND $1::boolean
+CROSS JOIN LATERAL (
+  SELECT COALESCE(t.content_bytes, octet_length(m.content)) > 131072 AS content_oversized,
+         COALESCE(t.tool_calls_bytes, octet_length(m.tool_calls::text), 0) > 131072 AS tool_calls_oversized,
+         COALESCE(t.content_raw_bytes, octet_length(m.content_raw::text), 0) > 131072 AS content_raw_oversized
+) sz
 WHERE m.project_id = $2::uuid
   AND c.organization_id = $3 AND p.organization_id = $3
   AND c.deleted IS FALSE AND p.deleted IS FALSE
@@ -2142,6 +2269,9 @@ type SearchPlatformChatMessagesRow struct {
 	ToolCalls            []byte
 	ContentRaw           []byte
 	Oversized            bool
+	ContentOversized     bool
+	ToolCallsOversized   bool
+	ContentRawOversized  bool
 	ShadowCiphertext     pgtype.Text
 	ShadowCurrent        bool
 }
@@ -2149,6 +2279,9 @@ type SearchPlatformChatMessagesRow struct {
 // Literal substring search over captured messages in one project and interval,
 // newest or oldest first by (created_at, id). Fields over 128 KiB are neither
 // matched nor returned. The caller requests one extra row to detect more pages.
+// For a project that keeps shadows the size of each returned field comes from
+// the shadow's metadata (sz), and the store blanks the opened shadow by the
+// same *_oversized flags.
 func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlatformChatMessagesParams) ([]SearchPlatformChatMessagesRow, error) {
 	rows, err := q.db.Query(ctx, searchPlatformChatMessages,
 		arg.OpenShadows,
@@ -2193,6 +2326,9 @@ func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlat
 			&i.ToolCalls,
 			&i.ContentRaw,
 			&i.Oversized,
+			&i.ContentOversized,
+			&i.ToolCallsOversized,
+			&i.ContentRawOversized,
 			&i.ShadowCiphertext,
 			&i.ShadowCurrent,
 		); err != nil {
@@ -2204,6 +2340,36 @@ func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlat
 		return nil, err
 	}
 	return items, nil
+}
+
+const setToolCallSummaries = `-- name: SetToolCallSummaries :execrows
+UPDATE chat_messages
+SET tool_call_summaries = $1::jsonb
+WHERE id = $2
+  AND chat_id = $3
+  AND project_id = $4::uuid
+`
+
+type SetToolCallSummariesParams struct {
+	ToolCallSummaries []byte
+	MessageID         uuid.UUID
+	ChatID            uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+// Write the whole merged summaries value of a message locked by
+// LockChatMessage.
+func (q *Queries) SetToolCallSummaries(ctx context.Context, arg SetToolCallSummariesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setToolCallSummaries,
+		arg.ToolCallSummaries,
+		arg.MessageID,
+		arg.ChatID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const storeToolCallSummary = `-- name: StoreToolCallSummary :one
@@ -2228,6 +2394,7 @@ type StoreToolCallSummaryParams struct {
 }
 
 // Preserve summaries for sibling calls carried by the same assistant message.
+// Used for projects that do not keep shadows; the others merge in Go.
 func (q *Queries) StoreToolCallSummary(ctx context.Context, arg StoreToolCallSummaryParams) (string, error) {
 	row := q.db.QueryRow(ctx, storeToolCallSummary,
 		arg.ToolCallID,
@@ -2336,7 +2503,10 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
-RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted
+RETURNING id,
+  (CASE WHEN $28::boolean THEN '' ELSE content END)::text AS content,
+  (CASE WHEN $28::boolean THEN NULL ELSE tool_calls END)::jsonb AS tool_calls,
+  model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted
 `
 
 type UpsertCorrelatedChatMessageParams struct {
@@ -2367,6 +2537,7 @@ type UpsertCorrelatedChatMessageParams struct {
 	Generation        int32
 	Replayed          bool
 	CreatedAt         pgtype.Timestamptz
+	OpenShadows       bool
 }
 
 type UpsertCorrelatedChatMessageRow struct {
@@ -2382,7 +2553,9 @@ type UpsertCorrelatedChatMessageRow struct {
 }
 
 // Returns persisted metering fields and distinguishes initial inserts from
-// native-hook promotions, which must not emit another storage reading.
+// native-hook promotions, which must not emit another storage reading. A
+// project that keeps shadows (@open_shadows) gets no body back; the store
+// reads it from the shadow instead.
 func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (UpsertCorrelatedChatMessageRow, error) {
 	row := q.db.QueryRow(ctx, upsertCorrelatedChatMessage,
 		arg.ID,
@@ -2412,6 +2585,7 @@ func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCor
 		arg.Generation,
 		arg.Replayed,
 		arg.CreatedAt,
+		arg.OpenShadows,
 	)
 	var i UpsertCorrelatedChatMessageRow
 	err := row.Scan(

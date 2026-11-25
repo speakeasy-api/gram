@@ -606,7 +606,9 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, err
 	}
 
-	stored, err := w.transcripts.UpsertCorrelatedChatMessage(ctx, tx, transcriptstore.UpsertCorrelatedChatMessageParams{
+	// The upsert captures the shadow too, and for a project that keeps
+	// shadows returns the stored body opened from it.
+	stored, err := w.transcripts.UpsertCorrelatedChatMessage(ctx, tx, organizationID, transcriptstore.UpsertCorrelatedChatMessageParams{
 		ID:                param.ID,
 		ChatID:            param.ChatID,
 		Role:              param.Role,
@@ -634,6 +636,7 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		Generation:        param.Generation,
 		Replayed:          param.Replayed,
 		CreatedAt:         param.CreatedAt,
+		OpenShadows:       false,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
@@ -667,9 +670,6 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
 			return 0, err
 		}
-	}
-	if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, []uuid.UUID{stored.ID}); err != nil {
-		return 0, err
 	}
 	// A correlated promotion only updates attribution/source metadata on an
 	// existing message; its content is unchanged and its insertion already

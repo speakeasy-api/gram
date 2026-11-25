@@ -66,3 +66,25 @@ INSERT INTO chat_message_transcript_tool_calls (message_id, tool_call_id, chat_i
 SELECT @message_id, ids.tool_call_id, @chat_id, @project_id
 FROM unnest(@tool_call_ids::text[]) AS ids(tool_call_id)
 ON CONFLICT (message_id, tool_call_id) DO NOTHING;
+
+-- name: FindIndexedToolCallMessageID :one
+-- The newest assistant message of a chat whose shadow indexes the tool call.
+-- Reads no plaintext.
+SELECT m.id
+FROM chat_message_transcript_tool_calls tc
+JOIN chat_messages m ON m.id = tc.message_id AND m.project_id = tc.project_id
+WHERE tc.chat_id = @chat_id
+  AND tc.tool_call_id = @tool_call_id
+  AND tc.project_id = @project_id
+  AND m.chat_id = @chat_id
+  AND m.role = 'assistant'
+ORDER BY m.created_at DESC
+LIMIT 1;
+
+-- name: LockChatMessage :exec
+-- Lock one message for the rest of the transaction. It is a statement of its
+-- own, so the read that follows takes a fresh snapshot and sees the message
+-- and its shadow as the previous lock holder committed them. A locking read
+-- that joined the shadow would recheck only the message row after waiting and
+-- pair it with the shadow it saw before.
+SELECT 1 FROM chat_messages WHERE project_id = @project_id::uuid AND id = @id FOR UPDATE;

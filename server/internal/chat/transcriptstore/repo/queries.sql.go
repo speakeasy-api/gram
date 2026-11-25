@@ -109,6 +109,34 @@ func (q *Queries) DeleteToolCallIDs(ctx context.Context, messageID uuid.UUID) er
 	return err
 }
 
+const findIndexedToolCallMessageID = `-- name: FindIndexedToolCallMessageID :one
+SELECT m.id
+FROM chat_message_transcript_tool_calls tc
+JOIN chat_messages m ON m.id = tc.message_id AND m.project_id = tc.project_id
+WHERE tc.chat_id = $1
+  AND tc.tool_call_id = $2
+  AND tc.project_id = $3
+  AND m.chat_id = $1
+  AND m.role = 'assistant'
+ORDER BY m.created_at DESC
+LIMIT 1
+`
+
+type FindIndexedToolCallMessageIDParams struct {
+	ChatID     uuid.UUID
+	ToolCallID string
+	ProjectID  uuid.UUID
+}
+
+// The newest assistant message of a chat whose shadow indexes the tool call.
+// Reads no plaintext.
+func (q *Queries) FindIndexedToolCallMessageID(ctx context.Context, arg FindIndexedToolCallMessageIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findIndexedToolCallMessageID, arg.ChatID, arg.ToolCallID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertToolCallIDs = `-- name: InsertToolCallIDs :exec
 INSERT INTO chat_message_transcript_tool_calls (message_id, tool_call_id, chat_id, project_id)
 SELECT $1, ids.tool_call_id, $2, $3
@@ -240,6 +268,25 @@ func (q *Queries) LoadMany(ctx context.Context, arg LoadManyParams) ([]LoadManyR
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockChatMessage = `-- name: LockChatMessage :exec
+SELECT 1 FROM chat_messages WHERE project_id = $1::uuid AND id = $2 FOR UPDATE
+`
+
+type LockChatMessageParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+// Lock one message for the rest of the transaction. It is a statement of its
+// own, so the read that follows takes a fresh snapshot and sees the message
+// and its shadow as the previous lock holder committed them. A locking read
+// that joined the shadow would recheck only the message row after waiting and
+// pair it with the shadow it saw before.
+func (q *Queries) LockChatMessage(ctx context.Context, arg LockChatMessageParams) error {
+	_, err := q.db.Exec(ctx, lockChatMessage, arg.ProjectID, arg.ID)
+	return err
 }
 
 const progress = `-- name: Progress :one

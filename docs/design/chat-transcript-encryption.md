@@ -138,8 +138,26 @@ the capping in Go for every project. Writes that change a shadowed field after
 insert (`UpdateToolCallOutcome`, `StoreToolCallSummary`) recapture the shadow in
 the same transaction.
 
-Still open: search (`ILIKE`), tool-call counts and the hooks tool-call lookup,
-byte budgets, and the kit projection compare still work on plaintext inside SQL.
+For a project that keeps shadows, values derived from a body come from the
+shadow's metadata, never from plaintext inside SQL. Each falls back to the
+plaintext expression only for a message with no shadow, or one captured before
+the metadata existed (NULL):
+
+- Chat entry totals count tool calls from `tool_call_count`.
+- The hooks tool-call lookup reads `chat_message_transcript_tool_calls` first,
+  then scans plaintext tool calls only of messages whose IDs are not indexed.
+- Platform MCP size caps and the sigint history budget use the `*_bytes`
+  columns. The query reports which fields it blanked, and the store blanks the
+  same fields of the opened shadow.
+- The prompt-attachment parent lookup skips empty prompts by `content_bytes`.
+- The kit projection compares the new body with the previous row, locked and
+  opened through the store, in Go, and passes the result to the update.
+- `StoreToolCallSummary` locks the message, merges the opened summaries in Go
+  and writes the whole value before it recaptures.
+- `UpsertCorrelatedChatMessage` captures the shadow and returns the body
+  opened from it instead of the plaintext columns.
+
+Still open: search (`ILIKE`) still matches plaintext inside SQL.
 The `streams` process does not configure shadows, so its prompt-injection judge
 window and signal evaluation read plaintext for every project. Plain inserts
 stay in `chat/repo`; the writer captures their shadows in the same transaction.

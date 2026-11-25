@@ -2,13 +2,16 @@ package transcriptstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/internal/plainrepo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 )
 
 // DBTX is what every read accepts: a pool, a connection or a transaction.
@@ -163,14 +166,17 @@ func (t *Transcripts) ListSearchWindowedMessages(ctx context.Context, db DBTX, w
 }
 
 // GetChatEntryTotalsParams selects a generation and its risk anchors.
+// OpenShadows is set by the method; leave it false.
 type GetChatEntryTotalsParams = plainrepo.GetChatEntryTotalsParams
 
 // GetChatEntryTotalsRow counts a generation's trace entries by kind.
 type GetChatEntryTotalsRow = plainrepo.GetChatEntryTotalsRow
 
 // GetChatEntryTotals counts a generation's trace entries. It returns no
-// message body.
+// message body. For a project that keeps shadows, whether a message carries
+// tool calls comes from its shadow's metadata, not its plaintext.
 func (t *Transcripts) GetChatEntryTotals(ctx context.Context, db DBTX, params GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
+	params.OpenShadows = t.Enabled(params.ProjectID)
 	row, err := plainrepo.New(db).GetChatEntryTotals(ctx, params)
 	if err != nil {
 		return row, fmt.Errorf("get chat entry totals: %w", err)
@@ -200,9 +206,14 @@ func (t *Transcripts) ListChatMessagesForMatch(ctx context.Context, db DBTX, pro
 	return rows, nil
 }
 
-// GetKitProjectionMessage returns one message of a project, or
-// pgx.ErrNoRows (wrapped) when it does not exist.
+// GetKitProjectionMessage locks one message of a project for the rest of the
+// caller's transaction and returns it, or pgx.ErrNoRows (wrapped) when it does
+// not exist. PatchKitProjectionMessage compares the new body with it, so the
+// lock keeps that compare true until the write.
 func (t *Transcripts) GetKitProjectionMessage(ctx context.Context, db DBTX, projectID, messageID uuid.UUID) (chatrepo.ChatMessage, error) {
+	if err := repo.New(db).LockChatMessage(ctx, repo.LockChatMessageParams{ProjectID: projectID, ID: messageID}); err != nil {
+		return chatrepo.ChatMessage{}, fmt.Errorf("lock kit projection message: %w", err)
+	}
 	row, err := plainrepo.New(db).GetKitProjectionMessage(ctx, plainrepo.GetKitProjectionMessageParams{OpenShadows: t.Enabled(projectID), ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ID: messageID})
 	if err != nil {
 		return chatrepo.ChatMessage{}, fmt.Errorf("get kit projection message: %w", err)
@@ -250,7 +261,8 @@ func (t *Transcripts) GetToolCallSummaryContext(ctx context.Context, db DBTX, c 
 type ListClaudeUserMessagesForPromptAttachmentParentRow = plainrepo.ListClaudeUserMessagesForPromptAttachmentParentRow
 
 // ListClaudeUserMessagesForPromptAttachmentParent returns a chat's non-empty
-// user prompts, newest first.
+// user prompts, newest first. For a project that keeps shadows, whether a
+// prompt is empty comes from its shadow's metadata, not its plaintext.
 func (t *Transcripts) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Context, db DBTX, projectID, chatID uuid.UUID) ([]ListClaudeUserMessagesForPromptAttachmentParentRow, error) {
 	rows, err := plainrepo.New(db).ListClaudeUserMessagesForPromptAttachmentParent(ctx, plainrepo.ListClaudeUserMessagesForPromptAttachmentParentParams{OpenShadows: t.Enabled(projectID), ChatID: chatID, ProjectID: projectID})
 	if err != nil {
@@ -317,8 +329,25 @@ func (p TranscriptPages) ListChatTranscriptMessagesPage(ctx context.Context, pag
 
 // FindAssistantToolCallMessageID returns the newest assistant message of a
 // chat that issued the tool call, or pgx.ErrNoRows (wrapped).
+//
+// For a project that keeps shadows, the tool-call IDs each shadow indexes
+// answer first. Only when they have no match are the plaintext tool calls
+// scanned, and then only for messages whose IDs are not indexed: messages with
+// no shadow (written before capture began, or by a writer that does not seal)
+// or with a shadow captured before the index existed. That is the same
+// fallback every read applies, so such a message is still found.
 func (t *Transcripts) FindAssistantToolCallMessageID(ctx context.Context, db DBTX, projectID, chatID uuid.UUID, toolCallID string) (uuid.UUID, error) {
-	id, err := plainrepo.New(db).FindAssistantToolCallMessageID(ctx, plainrepo.FindAssistantToolCallMessageIDParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: chatID, ToolCallID: toolCallID})
+	indexed := t.Enabled(projectID)
+	if indexed {
+		id, err := repo.New(db).FindIndexedToolCallMessageID(ctx, repo.FindIndexedToolCallMessageIDParams{ChatID: chatID, ToolCallID: toolCallID, ProjectID: projectID})
+		if err == nil {
+			return id, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, fmt.Errorf("find indexed assistant tool call message: %w", err)
+		}
+	}
+	id, err := plainrepo.New(db).FindAssistantToolCallMessageID(ctx, plainrepo.FindAssistantToolCallMessageIDParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: chatID, SkipIndexed: indexed, ToolCallID: toolCallID})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("find assistant tool call message: %w", err)
 	}

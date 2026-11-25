@@ -211,11 +211,16 @@ ORDER BY o.created_at ASC, o.seq ASC;
 -- counts messages the caller's ClickHouse finding anchors flag
 -- (@risk_message_ids), directly or through an attachment hanging off them
 -- (@risk_content_part_ids).
+--
+-- For a project that keeps shadows (@open_shadows) the tool-call count comes
+-- from the shadow's metadata, so the plaintext tool_calls column is consulted
+-- only for a message with no shadow or one captured before the count existed.
 WITH ordered AS (
   SELECT
     cm.id,
     cm.role,
     CASE
+      WHEN t.tool_call_count IS NOT NULL THEN t.tool_call_count > 0
       WHEN cm.tool_calls IS NULL THEN false
       WHEN jsonb_typeof(cm.tool_calls) = 'array'
         THEN jsonb_array_length(cm.tool_calls) > 0
@@ -226,6 +231,7 @@ WITH ordered AS (
       ELSE false
     END AS has_tool_calls
   FROM chat_messages cm
+  LEFT JOIN chat_message_transcripts t ON t.message_id = cm.id AND t.project_id = cm.project_id AND @open_shadows::boolean
   WHERE cm.chat_id = @chat_id
     AND cm.project_id = @project_id::uuid
     AND cm.generation = @generation::integer
@@ -310,7 +316,8 @@ LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m
 WHERE m.chat_id = @chat_id
   AND m.project_id = @project_id::uuid
   AND m.role = 'user'
-  AND m.content != ''
+  -- A shadowed prompt is measured by its metadata, not its plaintext.
+  AND CASE WHEN t.content_bytes IS NOT NULL THEN t.content_bytes > 0 ELSE m.content != '' END
 ORDER BY m.seq DESC, m.created_at DESC;
 
 -- name: ListChatTranscriptMessagesPage :many
@@ -358,15 +365,19 @@ ORDER BY cm.created_at DESC, cm.seq DESC, cm.id DESC
 LIMIT @lim::integer;
 
 -- name: PatchKitProjectionMessage :execrows
+-- @body_changed is decided in Go against the previous row the caller loaded
+-- (and locked) through the store, so this write never compares plaintext.
 UPDATE chat_messages SET content = @content, content_raw = @content_raw,
  tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
- risk_analyzed_at = CASE WHEN content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls THEN NULL ELSE risk_analyzed_at END
+ risk_analyzed_at = CASE WHEN @body_changed::boolean THEN NULL ELSE risk_analyzed_at END
 WHERE project_id = @project_id AND chat_id = @chat_id AND id = @id AND source = 'kit'
-AND (content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls OR finish_reason IS DISTINCT FROM @finish_reason);
+AND (@body_changed::boolean OR finish_reason IS DISTINCT FROM @finish_reason);
 
 -- name: UpsertCorrelatedChatMessage :one
 -- Returns persisted metering fields and distinguishes initial inserts from
--- native-hook promotions, which must not emit another storage reading.
+-- native-hook promotions, which must not emit another storage reading. A
+-- project that keeps shadows (@open_shadows) gets no body back; the store
+-- reads it from the shadow instead.
 INSERT INTO chat_messages (
     id
   , chat_id
@@ -437,10 +448,14 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
-RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted;
+RETURNING id,
+  (CASE WHEN @open_shadows::boolean THEN '' ELSE content END)::text AS content,
+  (CASE WHEN @open_shadows::boolean THEN NULL ELSE tool_calls END)::jsonb AS tool_calls,
+  model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted;
 
 -- name: StoreToolCallSummary :one
 -- Preserve summaries for sibling calls carried by the same assistant message.
+-- Used for projects that do not keep shadows; the others merge in Go.
 UPDATE chat_messages
 SET tool_call_summaries = jsonb_set(
   COALESCE(tool_call_summaries, '{}'::jsonb),
@@ -451,6 +466,36 @@ WHERE id = @message_id
   AND chat_id = @chat_id
   AND project_id = @project_id::uuid
 RETURNING (tool_call_summaries -> @tool_call_id::text)::text AS summary;
+
+-- name: GetToolCallSummaries :one
+-- An assistant message's tool-call summaries, read after LockChatMessage
+-- locked the row so a merge done in Go cannot lose a concurrent summary for a
+-- sibling call.
+SELECT m.tool_call_summaries, t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+WHERE m.id = @message_id
+  AND m.chat_id = @chat_id
+  AND m.project_id = @project_id::uuid;
+
+-- name: SetToolCallSummaries :execrows
+-- Write the whole merged summaries value of a message locked by
+-- LockChatMessage.
+UPDATE chat_messages
+SET tool_call_summaries = @tool_call_summaries::jsonb
+WHERE id = @message_id
+  AND chat_id = @chat_id
+  AND project_id = @project_id::uuid;
+
+-- name: GetCorrelatedChatMessageBody :one
+-- The stored body of a correlated message, with its shadow, for a project
+-- that keeps shadows.
+SELECT m.chat_id, m.content, m.tool_calls, t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+WHERE m.project_id = @project_id::uuid AND m.id = @id;
 
 -- name: UpdateToolCallOutcome :exec
 UPDATE chat_messages
@@ -603,23 +648,33 @@ ORDER BY evidence.created_at, evidence.seq;
 -- Literal substring search over captured messages in one project and interval,
 -- newest or oldest first by (created_at, id). Fields over 128 KiB are neither
 -- matched nor returned. The caller requests one extra row to detect more pages.
+-- For a project that keeps shadows the size of each returned field comes from
+-- the shadow's metadata (sz), and the store blanks the opened shadow by the
+-- same *_oversized flags.
 SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
        COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
        COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
        c.title_manually_set AS chat_title_manually_set,
        COALESCE(c.user_id, '')::text AS owner_user_id,
-       CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
-       CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
-       CASE WHEN octet_length(m.content_raw::text) <= 131072 THEN m.content_raw END::jsonb AS content_raw,
-       (octet_length(m.content) > 131072 OR COALESCE(octet_length(m.tool_calls::text), 0) > 131072
-        OR COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS oversized,
+       CASE WHEN sz.content_oversized THEN '' ELSE m.content END::text AS content,
+       CASE WHEN sz.tool_calls_oversized THEN NULL ELSE m.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN sz.content_raw_oversized THEN NULL ELSE m.content_raw END::jsonb AS content_raw,
+       (sz.content_oversized OR sz.tool_calls_oversized OR sz.content_raw_oversized)::boolean AS oversized,
+       sz.content_oversized::boolean AS content_oversized,
+       sz.tool_calls_oversized::boolean AS tool_calls_oversized,
+       sz.content_raw_oversized::boolean AS content_raw_oversized,
        t.ciphertext AS shadow_ciphertext,
        COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
 LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+CROSS JOIN LATERAL (
+  SELECT COALESCE(t.content_bytes, octet_length(m.content)) > 131072 AS content_oversized,
+         COALESCE(t.tool_calls_bytes, octet_length(m.tool_calls::text), 0) > 131072 AS tool_calls_oversized,
+         COALESCE(t.content_raw_bytes, octet_length(m.content_raw::text), 0) > 131072 AS content_raw_oversized
+) sz
 WHERE m.project_id = @project_id::uuid
   AND c.organization_id = @organization_id AND p.organization_id = @organization_id
   AND c.deleted IS FALSE AND p.deleted IS FALSE
@@ -680,11 +735,13 @@ WITH anchor AS (
 SELECT n.id, n.chat_id, n.seq, n.created_at, n.role, n.generation,
        COALESCE(CASE WHEN octet_length(n.source) <= 512 THEN n.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(n.user_id) <= 512 THEN n.user_id END, '')::text AS user_id,
-       CASE WHEN octet_length(n.content) <= 131072 THEN n.content ELSE '' END::text AS content,
-       CASE WHEN octet_length(n.tool_calls::text) <= 131072 THEN n.tool_calls END::jsonb AS tool_calls,
-       CASE WHEN octet_length(n.content_raw::text) <= 131072 THEN n.content_raw END::jsonb AS content_raw,
-       (octet_length(n.content) > 131072 OR COALESCE(octet_length(n.tool_calls::text), 0) > 131072
-        OR COALESCE(octet_length(n.content_raw::text), 0) > 131072)::boolean AS oversized,
+       CASE WHEN sz.content_oversized THEN '' ELSE n.content END::text AS content,
+       CASE WHEN sz.tool_calls_oversized THEN NULL ELSE n.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN sz.content_raw_oversized THEN NULL ELSE n.content_raw END::jsonb AS content_raw,
+       (sz.content_oversized OR sz.tool_calls_oversized OR sz.content_raw_oversized)::boolean AS oversized,
+       sz.content_oversized::boolean AS content_oversized,
+       sz.tool_calls_oversized::boolean AS tool_calls_oversized,
+       sz.content_raw_oversized::boolean AS content_raw_oversized,
        COALESCE((
          SELECT jsonb_agg(jsonb_build_object(
                   'provider', CASE WHEN octet_length(cp.provider) <= 512 THEN cp.provider END, 'provider_user_id', CASE WHEN octet_length(cp.provider_user_id) <= 512 THEN cp.provider_user_id END,
@@ -697,6 +754,13 @@ SELECT n.id, n.chat_id, n.seq, n.created_at, n.role, n.generation,
        COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,n.content,n.content_raw IS NULL,n.content_raw,n.tool_calls IS NULL,n.tool_calls,n.tool_outcome_notes,n.tool_call_summaries IS NULL,n.tool_call_summaries,n.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
 FROM neighbors n
 LEFT JOIN chat_message_transcripts t ON t.message_id = n.id AND t.project_id = n.project_id AND @open_shadows::boolean
+-- Field sizes come from the shadow's metadata when the project keeps shadows,
+-- as in SearchPlatformChatMessages.
+CROSS JOIN LATERAL (
+  SELECT COALESCE(t.content_bytes, octet_length(n.content)) > 131072 AS content_oversized,
+         COALESCE(t.tool_calls_bytes, octet_length(n.tool_calls::text), 0) > 131072 AS tool_calls_oversized,
+         COALESCE(t.content_raw_bytes, octet_length(n.content_raw::text), 0) > 131072 AS content_raw_oversized
+) sz
 ORDER BY n.seq;
 
 -- name: ListOwnedChatTranscriptMessagesForRecall :many
@@ -766,6 +830,8 @@ WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
 -- Bound the cumulative inline payload before transferring it to the application.
 -- Keep overflow rows as markers: skipping them would change window membership.
 -- Reserve eight bytes per attachment locator for array element framing.
+-- For a project that keeps shadows the body sizes come from the shadow's
+-- metadata, falling back to the plaintext only where it has none.
 WITH candidates AS MATERIALIZED (
     SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq,
            m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
@@ -783,16 +849,18 @@ WITH candidates AS MATERIALIZED (
     LIMIT @history_limit
 ), sized AS (
     SELECT m.*,
-           (octet_length(m.role)::bigint + octet_length(m.content)::bigint
-            + COALESCE(octet_length(m.content_raw::text), 0)::bigint
+           (octet_length(m.role)::bigint
+            + COALESCE(mt.content_bytes::bigint, octet_length(m.content)::bigint)
+            + COALESCE(mt.content_raw_bytes::bigint, octet_length(m.content_raw::text)::bigint, 0)
             + COALESCE(octet_length(m.content_asset_url), 0)::bigint
-            + COALESCE(octet_length(m.tool_calls::text), 0)::bigint
+            + COALESCE(mt.tool_calls_bytes::bigint, octet_length(m.tool_calls::text)::bigint, 0)
             + COALESCE((SELECT sum(octet_length(cp.content_asset_url)::bigint + 8)
                         FROM chat_content_parts cp
                         WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
                           AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE), 0)
            ) AS payload_bytes
     FROM candidates m
+    LEFT JOIN chat_message_transcripts mt ON mt.message_id = m.id AND mt.project_id = m.project_id AND @open_shadows::boolean
 ), bounded AS (
     SELECT m.*,
            (sum(payload_bytes) OVER (ORDER BY created_at DESC, seq DESC ROWS UNBOUNDED PRECEDING)
@@ -827,16 +895,23 @@ LEFT JOIN chat_messages src ON src.id = t.message_id
 ORDER BY m.created_at DESC, m.seq DESC;
 
 -- name: FindAssistantToolCallMessageID :one
-SELECT id
-FROM chat_messages
-WHERE project_id = sqlc.arg(project_id)
-  AND chat_id = sqlc.arg(chat_id)
-  AND role = 'assistant'
-  AND tool_calls IS NOT NULL
+-- With @skip_indexed, a message whose shadow indexes its tool-call IDs is left
+-- to FindIndexedToolCallMessageID, so only messages with no shadow (or one
+-- captured before the index existed) are scanned here.
+SELECT m.id
+FROM chat_messages m
+WHERE m.project_id = sqlc.arg(project_id)
+  AND m.chat_id = sqlc.arg(chat_id)
+  AND m.role = 'assistant'
+  AND NOT (sqlc.arg(skip_indexed)::boolean AND EXISTS (
+    SELECT 1 FROM chat_message_transcripts t
+    WHERE t.message_id = m.id AND t.project_id = m.project_id AND t.tool_call_count IS NOT NULL
+  ))
+  AND m.tool_calls IS NOT NULL
   AND EXISTS (
     SELECT 1
-    FROM jsonb_array_elements(tool_calls) tc
+    FROM jsonb_array_elements(m.tool_calls) tc
     WHERE tc->>'id' = sqlc.arg(tool_call_id)::text
   )
-ORDER BY created_at DESC
+ORDER BY m.created_at DESC
 LIMIT 1;

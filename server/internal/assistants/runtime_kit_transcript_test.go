@@ -220,7 +220,7 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 		} else {
 			patch.ToolCalls = []byte(`[{"id":"new-call"}]`)
 		}
-		_, err := (*transcriptstore.Transcripts)(nil).PatchKitProjectionMessage(t.Context(), db, patch)
+		_, err := (*transcriptstore.Transcripts)(nil).PatchKitProjectionMessage(t.Context(), db, row, patch)
 		require.NoError(t, err)
 		row, err = (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), db, project, row.ID)
 		require.NoError(t, err)

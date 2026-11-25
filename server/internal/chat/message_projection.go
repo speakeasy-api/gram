@@ -70,7 +70,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	var changed int64
 	var organizationID string
 	if exists {
-		changed, err = w.transcripts.PatchKitProjectionMessage(ctx, tx, transcriptstore.PatchKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: write.Params.ChatID, ID: messageID, Content: write.Params.Content, ContentRaw: write.Params.ContentRaw, ToolCalls: write.Params.ToolCalls, ContentHash: write.Params.ContentHash, FinishReason: write.Params.FinishReason})
+		// row is the locked previous message, opened from its shadow for a
+		// project that keeps shadows; the patch compares the body against it.
+		changed, err = w.transcripts.PatchKitProjectionMessage(ctx, tx, row, transcriptstore.PatchKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: write.Params.ChatID, ID: messageID, Content: write.Params.Content, ContentRaw: write.Params.ContentRaw, ToolCalls: write.Params.ToolCalls, ContentHash: write.Params.ContentHash, FinishReason: write.Params.FinishReason, BodyChanged: false})
 	} else {
 		changed, err = q.CreateChatMessage(ctx, []repo.CreateChatMessageParams{write.Params})
 		if err == nil && changed > 0 {

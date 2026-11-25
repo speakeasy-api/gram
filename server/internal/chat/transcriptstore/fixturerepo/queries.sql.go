@@ -141,6 +141,18 @@ func (q *Queries) LockChat(ctx context.Context, iD uuid.UUID, projectID uuid.UUI
 	return err
 }
 
+const markRiskAnalyzed = `-- name: MarkRiskAnalyzed :execrows
+UPDATE chat_messages SET risk_analyzed_at=clock_timestamp() WHERE id=$1
+`
+
+func (q *Queries) MarkRiskAnalyzed(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markRiskAnalyzed, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const messageSnapshot = `-- name: MessageSnapshot :one
 SELECT row_to_json(m)::text FROM chat_messages m WHERE id=$1 AND project_id=$2
 `
@@ -205,6 +217,34 @@ func (q *Queries) ReplaceCiphertext(ctx context.Context, ciphertext string, mess
 	return result.RowsAffected(), nil
 }
 
+const riskAnalyzedAt = `-- name: RiskAnalyzedAt :one
+SELECT risk_analyzed_at FROM chat_messages WHERE id=$1
+`
+
+func (q *Queries) RiskAnalyzedAt(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, riskAnalyzedAt, id)
+	var risk_analyzed_at pgtype.Timestamptz
+	err := row.Scan(&risk_analyzed_at)
+	return risk_analyzed_at, err
+}
+
+const setExternalMessageID = `-- name: SetExternalMessageID :execrows
+UPDATE chat_messages SET external_message_id=$1, source=$2 WHERE id=$3 AND project_id=$4
+`
+
+func (q *Queries) SetExternalMessageID(ctx context.Context, externalMessageID pgtype.Text, source pgtype.Text, messageID uuid.UUID, projectID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setExternalMessageID,
+		externalMessageID,
+		source,
+		messageID,
+		projectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setJSONField = `-- name: SetJSONField :execrows
 UPDATE chat_messages SET
 content_raw=CASE WHEN $1::text='content_raw' THEN $2::jsonb ELSE content_raw END,
@@ -219,6 +259,41 @@ func (q *Queries) SetJSONField(ctx context.Context, column1 string, column2 []by
 		column2,
 		iD,
 		projectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setRoleAndSource = `-- name: SetRoleAndSource :execrows
+UPDATE chat_messages SET role=$1, source=$2 WHERE id=$3 AND project_id=$4
+`
+
+func (q *Queries) SetRoleAndSource(ctx context.Context, role string, source pgtype.Text, messageID uuid.UUID, projectID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setRoleAndSource,
+		role,
+		source,
+		messageID,
+		projectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setShadowMetadata = `-- name: SetShadowMetadata :execrows
+UPDATE chat_message_transcripts SET tool_call_count=$1, content_bytes=$2, content_raw_bytes=$3, tool_calls_bytes=$4 WHERE message_id=$5
+`
+
+func (q *Queries) SetShadowMetadata(ctx context.Context, toolCallCount pgtype.Int4, contentBytes pgtype.Int4, contentRawBytes pgtype.Int4, toolCallsBytes pgtype.Int4, messageID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setShadowMetadata,
+		toolCallCount,
+		contentBytes,
+		contentRawBytes,
+		toolCallsBytes,
+		messageID,
 	)
 	if err != nil {
 		return 0, err

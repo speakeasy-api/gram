@@ -68,3 +68,18 @@ SELECT tool_call_id FROM chat_message_transcript_tool_calls WHERE message_id=$1 
 
 -- name: SetToolCalls :execrows
 UPDATE chat_messages SET tool_calls=$1 WHERE id=$2 AND project_id=$3;
+
+-- name: SetShadowMetadata :execrows
+UPDATE chat_message_transcripts SET tool_call_count=sqlc.narg(tool_call_count), content_bytes=sqlc.narg(content_bytes), content_raw_bytes=sqlc.narg(content_raw_bytes), tool_calls_bytes=sqlc.narg(tool_calls_bytes) WHERE message_id=sqlc.arg(message_id);
+
+-- name: SetRoleAndSource :execrows
+UPDATE chat_messages SET role=sqlc.arg(role), source=sqlc.arg(source) WHERE id=sqlc.arg(message_id) AND project_id=sqlc.arg(project_id);
+
+-- name: SetExternalMessageID :execrows
+UPDATE chat_messages SET external_message_id=sqlc.arg(external_message_id), source=sqlc.arg(source) WHERE id=sqlc.arg(message_id) AND project_id=sqlc.arg(project_id);
+
+-- name: RiskAnalyzedAt :one
+SELECT risk_analyzed_at FROM chat_messages WHERE id=$1;
+
+-- name: MarkRiskAnalyzed :execrows
+UPDATE chat_messages SET risk_analyzed_at=clock_timestamp() WHERE id=$1;
