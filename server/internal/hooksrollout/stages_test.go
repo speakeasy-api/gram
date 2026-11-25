@@ -72,8 +72,8 @@ func TestStageStore_AdvancesThroughStagesAndMovesDefaultPin(t *testing.T) {
 	ctx := t.Context()
 
 	require.NoError(t, pins.SetDefault(ctx, 40, operator))
-	require.ErrorIs(t, stages.Start(ctx, 40, operator), hooksrollout.ErrStageVersionBehind)
-	require.NoError(t, stages.Start(ctx, 42, operator))
+	require.ErrorIs(t, stages.Start(ctx, 0, 40, operator), hooksrollout.ErrStageVersionBehind)
+	require.NoError(t, stages.Start(ctx, 0, 42, operator))
 
 	current, err := stages.Current(ctx)
 	require.NoError(t, err)
@@ -114,11 +114,11 @@ func TestStageStore_PauseResumeCancel(t *testing.T) {
 	stages := hooksrollout.NewStageStore(conn)
 	ctx := t.Context()
 
-	require.ErrorIs(t, stages.Pause(ctx, "alert", operator), hooksrollout.ErrNoActiveStage)
-	require.NoError(t, stages.Start(ctx, 42, operator))
-	require.ErrorIs(t, stages.Resume(ctx, operator), hooksrollout.ErrStageNotPaused)
+	require.ErrorIs(t, stages.Pause(ctx, 0, "alert", operator), hooksrollout.ErrNoActiveStage)
+	require.NoError(t, stages.Start(ctx, 0, 42, operator))
+	require.ErrorIs(t, stages.Resume(ctx, revision(t, stages), operator), hooksrollout.ErrStageNotPaused)
 
-	require.NoError(t, stages.Pause(ctx, "delivery errors climbing", operator))
+	require.NoError(t, stages.Pause(ctx, revision(t, stages), "delivery errors climbing", operator))
 	current, err := stages.Current(ctx)
 	require.NoError(t, err)
 	require.Equal(t, hooksrollout.StagePaused, current.State)
@@ -128,22 +128,93 @@ func TestStageStore_PauseResumeCancel(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, advanced, "a paused rollout never advances")
 
-	require.ErrorIs(t, stages.Pause(ctx, "again", operator), hooksrollout.ErrStageNotRunning)
-	require.NoError(t, stages.Resume(ctx, operator))
-	require.NoError(t, stages.Cancel(ctx, "bad release", operator))
+	require.ErrorIs(t, stages.Pause(ctx, revision(t, stages), "again", operator), hooksrollout.ErrStageNotRunning)
+	require.NoError(t, stages.Resume(ctx, revision(t, stages), operator))
+	require.NoError(t, stages.Cancel(ctx, revision(t, stages), "bad release", operator))
 
 	current, err = stages.Current(ctx)
 	require.NoError(t, err)
 	require.Equal(t, hooksrollout.StageCancelled, current.State)
 	require.False(t, current.Active())
-	require.ErrorIs(t, stages.Cancel(ctx, "again", operator), hooksrollout.ErrNoActiveStage)
+	require.ErrorIs(t, stages.Cancel(ctx, revision(t, stages), "again", operator), hooksrollout.ErrNoActiveStage)
+}
+
+func TestStageStore_RejectsStaleRevision(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	stages := hooksrollout.NewStageStore(conn)
+	ctx := t.Context()
+
+	require.NoError(t, stages.Start(ctx, 0, 42, operator))
+	shown := revision(t, stages)
+	require.ErrorIs(t, stages.Start(ctx, 0, 43, operator), hooksrollout.ErrStageChanged, "starting over a rollout the operator wasn't shown")
+	require.NoError(t, stages.Start(ctx, shown, 43, operator), "another operator replaces the rollout")
+
+	require.ErrorIs(t, stages.Cancel(ctx, shown, "cancel 42", operator), hooksrollout.ErrStageChanged)
+	require.ErrorIs(t, stages.Pause(ctx, shown, "pause 42", operator), hooksrollout.ErrStageChanged)
+	require.ErrorIs(t, stages.Resume(ctx, shown, operator), hooksrollout.ErrStageChanged)
+
+	current, err := stages.Current(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 43, current.Version)
+	require.Equal(t, hooksrollout.StageRunning, current.State)
+}
+
+func TestStageStore_CompletionKeepsNewerDefaultPin(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	pins := hooksrollout.NewStore(conn)
+	stages := hooksrollout.NewStageStore(conn)
+	ctx := t.Context()
+
+	require.NoError(t, stages.Start(ctx, 0, 20, operator))
+	require.NoError(t, pins.SetDefault(ctx, 30, operator))
+
+	current, err := stages.Current(ctx)
+	require.NoError(t, err)
+	require.Equal(t, hooksrollout.StageCancelled, current.State, "moving the default past the rollout supersedes it")
+
+	for range 3 {
+		_, err := stages.Advance(ctx, time.Now().Add(72*time.Hour))
+		require.NoError(t, err)
+	}
+
+	defaultPin, err := pins.DefaultPin(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 30, defaultPin.Version)
+}
+
+func TestStageStore_DefaultBelowRolloutKeepsItRunning(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	pins := hooksrollout.NewStore(conn)
+	stages := hooksrollout.NewStageStore(conn)
+	ctx := t.Context()
+
+	require.NoError(t, stages.Start(ctx, 0, 30, operator))
+	require.NoError(t, pins.SetDefault(ctx, 20, operator))
+
+	current, err := stages.Current(ctx)
+	require.NoError(t, err)
+	require.Equal(t, hooksrollout.StageRunning, current.State)
+	require.Equal(t, 30, current.Version)
+}
+
+func revision(t *testing.T, stages *hooksrollout.StageStore) int64 {
+	t.Helper()
+	current, err := stages.Current(t.Context())
+	require.NoError(t, err)
+	return current.CurrentRevision()
 }
 
 func TestStore_OrganizationPinsIncludesStage(t *testing.T) {
 	t.Parallel()
 
 	conn := newTestDB(t)
-	require.NoError(t, hooksrollout.NewStageStore(conn).Start(t.Context(), 42, operator))
+	require.NoError(t, hooksrollout.NewStageStore(conn).Start(t.Context(), 0, 42, operator))
 
 	pins, err := hooksrollout.NewStore(conn).OrganizationPins(t.Context(), createOrganization(t, conn))
 	require.NoError(t, err)
