@@ -740,7 +740,7 @@ func newStartCommand() *cli.Command {
 	clickhouseShutdown := noopShutdown
 	clickhouseReadShutdown := noopShutdown
 	flags := append(serverFlags(), clickHouseReadFlags()...)
-	flags = append(flags, transcriptShadowFlag(), transcriptShadowReadFlag())
+	flags = append(flags, transcriptShadowFlag())
 
 	return &cli.Command{
 		Name:  "start",
@@ -1328,7 +1328,7 @@ func newStartCommand() *cli.Command {
 				WithWorkloadInference(mcpService).
 				WithTurnStream(turnStream).
 				WithRiskFindings(chatRiskFindings).
-				WithTranscriptShadowReads(shadow.Store, shadow.ReadProjectIDs...).
+				WithTranscriptShadowReads(shadow.Store, shadow.ProjectIDs...).
 				WithStreamRotation(meterProvider, c.Duration("stream-max-age")).
 				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
@@ -1676,7 +1676,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("hooks version policy: %w", err)
 			}
 			hooksService.SetVersionPolicy(hooksVersionPolicy)
-			hooksService.SetTranscriptShadowReads(shadow.Store, shadow.ReadProjectIDs...)
+			hooksService.SetTranscriptShadowReads(shadow.Store, shadow.ProjectIDs...)
 			hooks.Attach(mux, hooksService)
 			if err := hooks.AttachAHP(mux, hooksService); err != nil {
 				return fmt.Errorf("attach AHP hooks: %w", err)

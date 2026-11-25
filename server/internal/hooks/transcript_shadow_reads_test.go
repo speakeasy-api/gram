@@ -427,7 +427,7 @@ func TestIngest_OtherProjectsMatchPromptAttachmentsFromPlaintext(t *testing.T) {
 	entry := f.attachToPrompt(ctx, t, "Outline the invented festival")
 
 	require.Equal(t, map[string]uuid.UUID{entry: prompt}, f.attachmentParents(ctx, t, prompt))
-	require.Empty(t, reader.recorded(), "a project off the read allowlist never opens shadows")
+	require.Empty(t, reader.recorded(), "a project that does not capture shadows never opens them")
 }
 
 func TestBrokenTranscriptShadowSeparatesIntegrityFromOtherFailures(t *testing.T) {
