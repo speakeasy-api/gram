@@ -161,7 +161,7 @@ export function refusalNotes(
     const when = formatRelativeTime(refusal.lastRefusedAt) ?? "recently";
     const summary =
       refusal.refusedBy === "identity_provider"
-        ? `Your identity provider refused ${people(refusal.people)} in the last day, most recently ${when}. Check they are assigned to the app there.`
+        ? `Your identity provider refused ${people(refusal.people)} in the last day, most recently ${when}. Check they are assigned to the app and allowed these permissions there.`
         : `The service refused ${people(refusal.people)} in the last day, most recently ${when}. Check the service accepts sign-ins from your identity provider and that its client is set up.`;
     return {
       summary,
