@@ -36,6 +36,7 @@ import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
 import { adminGetHookClients } from "../funcs/adminGetHookClients.js";
+import { adminGetHooksReleaseProgress } from "../funcs/adminGetHooksReleaseProgress.js";
 import { adminGetHooksRollout } from "../funcs/adminGetHooksRollout.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
@@ -148,6 +149,7 @@ import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatan
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
 import { AdminHookClientsResult } from "../models/components/adminhookclientsresult.js";
 import { AdminHookFleetResult } from "../models/components/adminhookfleetresult.js";
+import { AdminHooksReleaseProgress } from "../models/components/adminhooksreleaseprogress.js";
 import { AdminHooksRollout } from "../models/components/adminhooksrollout.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
@@ -563,6 +565,21 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminHooksRollout> {
     return unwrapAsync(adminGetHooksRollout(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * getHooksReleaseProgress admin
+   *
+   * @remarks
+   * Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.
+   */
+  async getHooksReleaseProgress(
+    options?: RequestOptions,
+  ): Promise<AdminHooksReleaseProgress> {
+    return unwrapAsync(adminGetHooksReleaseProgress(
       this,
       options,
     ));
@@ -1554,7 +1571,7 @@ export class Admin extends ClientSDK {
    * listOrganizationEncryptionTransitions admin
    *
    * @remarks
-   * Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.
+   * Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.
    */
   async listOrganizationEncryptionTransitions(
     request?: AdminListOrganizationEncryptionTransitionsRequest | undefined,

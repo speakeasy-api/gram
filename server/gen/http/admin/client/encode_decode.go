@@ -29741,6 +29741,237 @@ func DecodeGetHooksRolloutResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildGetHooksReleaseProgressRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getHooksReleaseProgress"
+// endpoint
+func (c *Client) BuildGetHooksReleaseProgressRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetHooksReleaseProgressAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getHooksReleaseProgress", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetHooksReleaseProgressRequest returns an encoder for requests sent to
+// the admin getHooksReleaseProgress server.
+func EncodeGetHooksReleaseProgressRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetHooksReleaseProgressPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getHooksReleaseProgress", "*admin.GetHooksReleaseProgressPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetHooksReleaseProgressResponse returns a decoder for responses
+// returned by the admin getHooksReleaseProgress endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetHooksReleaseProgressResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetHooksReleaseProgressResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetHooksReleaseProgressResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHooksReleaseProgress", err)
+			}
+			err = ValidateGetHooksReleaseProgressResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHooksReleaseProgress", err)
+			}
+			res := NewGetHooksReleaseProgressAdminHooksReleaseProgressOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetHooksReleaseProgressUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHooksReleaseProgress", err)
+			}
+			err = ValidateGetHooksReleaseProgressUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHooksReleaseProgress", err)
+			}
+			return nil, NewGetHooksReleaseProgressUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetHooksReleaseProgressForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHooksReleaseProgress", err)
+			}
+			err = ValidateGetHooksReleaseProgressForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHooksReleaseProgress", err)
+			}
+			return nil, NewGetHooksReleaseProgressForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetHooksReleaseProgressBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHooksReleaseProgress", err)
+			}
+			err = ValidateGetHooksReleaseProgressBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHooksReleaseProgress", err)
+			}
+			return nil, NewGetHooksReleaseProgressBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetHooksReleaseProgressNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHooksReleaseProgress", err)
+			}
+			err = ValidateGetHooksReleaseProgressNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHooksReleaseProgress", err)
+			}
+			return nil, NewGetHooksReleaseProgressNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetHooksReleaseProgressConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHooksReleaseProgress", err)
+			}
+			err = ValidateGetHooksReleaseProgressConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHooksReleaseProgress", err)
+			}
+			return nil, NewGetHooksReleaseProgressConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetHooksReleaseProgressUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHooksReleaseProgress", err)
+			}
+			err = ValidateGetHooksReleaseProgressUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHooksReleaseProgress", err)
+			}
+			return nil, NewGetHooksReleaseProgressUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetHooksReleaseProgressInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHooksReleaseProgress", err)
+			}
+			err = ValidateGetHooksReleaseProgressInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHooksReleaseProgress", err)
+			}
+			return nil, NewGetHooksReleaseProgressInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetHooksReleaseProgressInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getHooksReleaseProgress", err)
+				}
+				err = ValidateGetHooksReleaseProgressInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getHooksReleaseProgress", err)
+				}
+				return nil, NewGetHooksReleaseProgressInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetHooksReleaseProgressUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getHooksReleaseProgress", err)
+				}
+				err = ValidateGetHooksReleaseProgressUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getHooksReleaseProgress", err)
+				}
+				return nil, NewGetHooksReleaseProgressUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getHooksReleaseProgress", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetHooksReleaseProgressGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getHooksReleaseProgress", err)
+			}
+			err = ValidateGetHooksReleaseProgressGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getHooksReleaseProgress", err)
+			}
+			return nil, NewGetHooksReleaseProgressGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getHooksReleaseProgress", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSetHooksRolloutDefaultRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "setHooksRolloutDefault"
 // endpoint
@@ -31460,6 +31691,8 @@ func EncodeListOrganizationEncryptionTransitionsRequest(encoder func(*http.Reque
 		if p.State != nil {
 			values.Add("state", *p.State)
 		}
+		values.Add("values", p.Values)
+		values.Add("sort", p.Sort)
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		values.Add("offset", fmt.Sprintf("%v", p.Offset))
 		req.URL.RawQuery = values.Encode()
@@ -34951,6 +35184,55 @@ func unmarshalAdminHooksRolloutChangeResponseBodyToAdminAdminHooksRolloutChange(
 	return res
 }
 
+// unmarshalAdminHooksReleaseRepoVersionResponseBodyToAdminAdminHooksReleaseRepoVersion
+// builds a value of type *admin.AdminHooksReleaseRepoVersion from a value of
+// type *AdminHooksReleaseRepoVersionResponseBody.
+func unmarshalAdminHooksReleaseRepoVersionResponseBodyToAdminAdminHooksReleaseRepoVersion(v *AdminHooksReleaseRepoVersionResponseBody) *admin.AdminHooksReleaseRepoVersion {
+	res := &admin.AdminHooksReleaseRepoVersion{
+		Version: *v.Version,
+		Repos:   *v.Repos,
+	}
+
+	return res
+}
+
+// unmarshalAdminHooksReleaseFleetResponseBodyToAdminAdminHooksReleaseFleet
+// builds a value of type *admin.AdminHooksReleaseFleet from a value of type
+// *AdminHooksReleaseFleetResponseBody.
+func unmarshalAdminHooksReleaseFleetResponseBodyToAdminAdminHooksReleaseFleet(v *AdminHooksReleaseFleetResponseBody) *admin.AdminHooksReleaseFleet {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminHooksReleaseFleet{
+		WindowDays:        *v.WindowDays,
+		Installs:          *v.Installs,
+		InstallsOnCurrent: *v.InstallsOnCurrent,
+	}
+	res.Versions = make([]*admin.AdminHooksReleaseInstallVersion, len(v.Versions))
+	for i, val := range v.Versions {
+		if val == nil {
+			res.Versions[i] = nil
+			continue
+		}
+		res.Versions[i] = unmarshalAdminHooksReleaseInstallVersionResponseBodyToAdminAdminHooksReleaseInstallVersion(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminHooksReleaseInstallVersionResponseBodyToAdminAdminHooksReleaseInstallVersion
+// builds a value of type *admin.AdminHooksReleaseInstallVersion from a value
+// of type *AdminHooksReleaseInstallVersionResponseBody.
+func unmarshalAdminHooksReleaseInstallVersionResponseBodyToAdminAdminHooksReleaseInstallVersion(v *AdminHooksReleaseInstallVersionResponseBody) *admin.AdminHooksReleaseInstallVersion {
+	res := &admin.AdminHooksReleaseInstallVersion{
+		Version:  *v.Version,
+		Status:   *v.Status,
+		Installs: *v.Installs,
+	}
+
+	return res
+}
+
 // unmarshalAdminTailscaleOAuthMigrationOrganizationResponseBodyToAdminAdminTailscaleOAuthMigrationOrganization
 // builds a value of type *admin.AdminTailscaleOAuthMigrationOrganization from
 // a value of type *AdminTailscaleOAuthMigrationOrganizationResponseBody.
@@ -35044,6 +35326,8 @@ func unmarshalAdminOrganizationEncryptionTransitionRowResponseBodyToAdminAdminOr
 		LastBackfillUnreadable:  v.LastBackfillUnreadable,
 		LastBackfillError:       v.LastBackfillError,
 		LastVerifiedAt:          v.LastVerifiedAt,
+		ValueCount:              *v.ValueCount,
+		LastWrittenAt:           v.LastWrittenAt,
 	}
 
 	return res

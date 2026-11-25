@@ -11,37 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const lockRemoteSessionClientUserSessionIssuerLink = `-- name: LockRemoteSessionClientUserSessionIssuerLink :exec
-SELECT 1
-FROM remote_session_client_user_session_issuers AS l
-JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
-JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
-WHERE l.remote_session_client_id = $1
-  AND l.user_session_issuer_id = $2
-  AND EXISTS (
-    SELECT 1 FROM projects AS p
-    WHERE p.organization_id = $3::text AND NOT p.deleted
-      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
-      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
-  )
-FOR UPDATE OF l
-`
-
-type LockRemoteSessionClientUserSessionIssuerLinkParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-	OrganizationID        string
-}
-
-// Lock the join-table row an agent attachment's foreign key check reads, before
-// the caller checks for attachments that deleting the row would cascade to. A
-// concurrent attachment either commits first, and the check sees it, or waits
-// for this transaction to end.
-func (q *Queries) LockRemoteSessionClientUserSessionIssuerLink(ctx context.Context, arg LockRemoteSessionClientUserSessionIssuerLinkParams) error {
-	_, err := q.db.Exec(ctx, lockRemoteSessionClientUserSessionIssuerLink, arg.RemoteSessionClientID, arg.UserSessionIssuerID, arg.OrganizationID)
-	return err
-}
-
 const lockingFixtureClearRemoteIssuer = `-- name: LockingFixtureClearRemoteIssuer :exec
 UPDATE mcp_servers SET remote_session_issuer_id=NULL WHERE project_id=$1::uuid AND id=$2::uuid
 `
@@ -99,25 +68,6 @@ func (q *Queries) LockingFixtureCountEnabledOAuthChoices(ctx context.Context, ar
 	return count, err
 }
 
-const lockingFixtureCountExternalBindings = `-- name: LockingFixtureCountExternalBindings :one
-SELECT count(*) FROM remote_session_client_user_session_issuers AS binding
-                  JOIN remote_session_clients AS client ON client.id=binding.remote_session_client_id
-                  WHERE client.project_id=$1::uuid AND client.client_id=$2::text AND binding.user_session_issuer_id=$3::uuid
-`
-
-type LockingFixtureCountExternalBindingsParams struct {
-	ProjectID    uuid.UUID
-	ExternalID   string
-	UserIssuerID uuid.UUID
-}
-
-func (q *Queries) LockingFixtureCountExternalBindings(ctx context.Context, arg LockingFixtureCountExternalBindingsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, lockingFixtureCountExternalBindings, arg.ProjectID, arg.ExternalID, arg.UserIssuerID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const lockingFixtureCountHeaderCopies = `-- name: LockingFixtureCountHeaderCopies :one
 SELECT count(*) FROM mcp_auth_client_headers WHERE organization_id=$1::text AND auth_client_id=ANY($2::uuid[]) AND name='X-Mixed-Lock' AND NOT deleted
 `
@@ -129,24 +79,6 @@ type LockingFixtureCountHeaderCopiesParams struct {
 
 func (q *Queries) LockingFixtureCountHeaderCopies(ctx context.Context, arg LockingFixtureCountHeaderCopiesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, lockingFixtureCountHeaderCopies, arg.OrganizationID, arg.AuthClientIds)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const lockingFixtureCountIssuerBindings = `-- name: LockingFixtureCountIssuerBindings :one
-SELECT count(*) FROM remote_session_client_user_session_issuers AS binding
-                 JOIN remote_session_clients AS client ON client.id=binding.remote_session_client_id
-                 WHERE client.project_id=$1::uuid AND binding.user_session_issuer_id=$2::uuid
-`
-
-type LockingFixtureCountIssuerBindingsParams struct {
-	ProjectID    uuid.UUID
-	UserIssuerID uuid.UUID
-}
-
-func (q *Queries) LockingFixtureCountIssuerBindings(ctx context.Context, arg LockingFixtureCountIssuerBindingsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, lockingFixtureCountIssuerBindings, arg.ProjectID, arg.UserIssuerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

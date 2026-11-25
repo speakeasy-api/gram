@@ -159,9 +159,6 @@ func TestClientMcpServers_IncludeOfferingServersWithoutASignInLink(t *testing.T)
 	// A stale sign-in link is neither a typed offer nor a server association.
 	otherSignIn := createUserSessionIssuer(t, ctx, ti.conn, "usi-offered-impact-linked")
 	linkedServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, otherSignIn, "linked-impact", "https://linked-impact.example.com/mcp")
-	for _, id := range []uuid.UUID{signIn, otherSignIn} {
-		require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: registration, UserSessionIssuerID: id}))
-	}
 
 	preflight, err = ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{ID: registration.String()})
 	require.NoError(t, err)
@@ -259,7 +256,6 @@ func TestResourceForClientAtUpstream_OfferDecidesOverAssociation(t *testing.T) {
 	siblingServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "offer-decides-b", sibling)
 	issuerID := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(organizationID), "offer-decides-issuer", "https://issuer.example.com/offer-decides")
 	registration := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, projectID, issuerID, "offer-decides-cid")
-	ensureAttachmentParent(t, ctx, ti.conn, registration, signIn)
 	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
 	got, err := mgr.ResourceForClientAtUpstream(ctx, organizationID, registration, nil, sibling)
 	require.NoError(t, err)
@@ -286,10 +282,6 @@ func TestDisconnectAuthClientRemoteSession_RevokesUpstreamWithoutASignInLink(t *
 	spy := &revocationSpy{}
 	upstream := newRevocationUpstream(t, spy)
 	fx := seedRevocableSession(t, ctx, ti, "offered-disconnect", upstream.URL+"/revoke", "s3cret", true)
-	require.NoError(t, testrepo.New(ti.conn).DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{
-		RemoteSessionClientID: fx.clientID,
-		ProjectID:             conv.ToNullUUID(fx.projectID),
-	}))
 
 	n, err := newDisconnectChallengeManager(t, ti).DisconnectAuthClientRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID)
 	require.NoError(t, err)
@@ -405,7 +397,6 @@ func TestClientMcpServers_AlwaysUsesTenantTypedOffers(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	projectID, organizationID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
-	q := repo.New(ti.conn)
 
 	issuerID := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(organizationID), "mode-list-issuer", "https://issuer.example.com/mode-list")
 	registration := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, projectID, issuerID, "mode-list-cid")
@@ -423,9 +414,6 @@ func TestClientMcpServers_AlwaysUsesTenantTypedOffers(t *testing.T) {
 	require.NoError(t, fixtures.SeedTunneledMCPServerFixture(ctx, authclientbackfill.SeedTunneledMCPServerFixtureParams{ID: unnamedServer, ProjectID: projectID, Slug: conv.ToPGText("mode-list-unnamed"), TunneledMcpServerID: conv.ToNullUUID(tunnelID)}))
 	offerRegistration(t, ctx, ti.conn, organizationID, projectID, unnamedServer, registration)
 	seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "mode-list-linked", "https://mode-list-linked.example.com/mcp")
-	for _, id := range []uuid.UUID{signIn, otherSignIn} {
-		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: registration, UserSessionIssuerID: id}))
-	}
 
 	listed := func() []string {
 		servers, err := ti.service.ListClientMcpServers(ctx, &orgclientsgen.ListClientMcpServersPayload{ClientID: registration.String()})
@@ -469,7 +457,6 @@ func TestClientMcpServers_PlatformGlobalClientIsOutOfReach(t *testing.T) {
 	require.NoError(t, err)
 	signIn := createUserSessionIssuer(t, ctx, ti.conn, "global-list-usi")
 	seedRemoteMcpServerForLogin(t, ctx, ti.conn, *authCtx.ProjectID, signIn, "global-list-server", "https://global-list.example.com/mcp")
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: signIn}))
 
 	_, err = ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{ID: client.ID.String()})
 	var refused *oops.ShareableError

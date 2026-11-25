@@ -469,7 +469,7 @@ func TestConnectionOutcome_FirstTimeMemberIsNotConnected(t *testing.T) {
 		}))
 		t.Cleanup(deny.Close)
 		memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Tracker", "tracker-"+uuid.NewString()[:8], 1, deny.URL)
-		remote := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "first-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+		remote := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "first-"+uuid.NewString()[:8], "")
 		_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpServerID: memberID, RemoteSessionClientID: remote})
 		require.NoError(t, err)
 		seedConsentAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, memberID, remote, "remote_session")

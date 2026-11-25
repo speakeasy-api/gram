@@ -193,7 +193,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 			remoteIssuer := uuid.NullUUID{}
 			var registration uuid.UUID
 			if tc.signIn {
-				registration = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-key", "", []uuid.UUID{sharedIssuerID})
+				registration = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-key", "")
 				remoteIssuer = conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, registration))
 			}
 			serverID, remoteID := createKeyMember(t, ctx, ti, projectID, meta.ID, upstream.URL, remoteIssuer)

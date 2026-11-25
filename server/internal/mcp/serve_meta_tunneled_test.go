@@ -119,10 +119,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesOwnToken(t *te
 	t.Cleanup(gatewayServer.Close)
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Hour))
 
-	// The member's provider client is bound to the gateway's issuer (so the
-	// session can hold its credential) and to the member's own issuer (so the
-	// resync derives the mcp_servers.remote_session_issuer_id routing key).
-	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-a", "", []uuid.UUID{sharedIssuerID, memberIssuerID})
+	// The member's scoped placement supplies its routing key. Its typed offer
+	// supplies the credential choice for the gateway session.
+	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-a", "")
 	subject := createTestUser(t, ctx, ti, "meta-tunnel-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, client, subject, "token-tunnel", "")
 
@@ -144,7 +143,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesOwnToken(t *te
 
 	// A sibling credential for some other upstream must not disturb routing:
 	// the member still forwards its own keyed token.
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-sibling-b", "", []uuid.UUID{sharedIssuerID})
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-sibling-b", "")
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-elsewhere", "https://elsewhere.example.com/mcp")
 
 	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
@@ -181,7 +180,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesIdentifierQual
 	t.Cleanup(gatewayServer.Close)
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Hour))
 
-	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-rid", "", []uuid.UUID{sharedIssuerID, memberIssuerID})
+	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-rid", "")
 	subject := createTestUser(t, ctx, ti, "meta-tunnel-rid-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, client, subject, "token-qualified", identifier)
 
@@ -228,12 +227,12 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledIdentifierNeverHarvestsSib
 	// issuer to key on — the routing decision is about which entry it may
 	// take, not about the member being unroutable. The subject never
 	// connected that provider, so the map holds no entry under it.
-	ownClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-own", "", []uuid.UUID{sharedIssuerID, memberIssuerID})
+	ownClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-own", "")
 
 	// The victim credential belongs to a different provider client, minted
 	// against the vendor's authorization server and correctly audienced to
 	// it — so a resource scan would match the tunnel's claimed identifier.
-	vendorClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-vendor", "", []uuid.UUID{sharedIssuerID})
+	vendorClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-vendor", "")
 	subject := createTestUser(t, ctx, ti, "meta-tunnel-harvest-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, vendorClient, subject, "victim-vendor-token", vendorResource)
 
@@ -282,8 +281,8 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberNeverBorrowsSiblingT
 	// Both members' providers are attached to the gateway, but the subject
 	// connected only member A's — so the resolved map holds exactly one
 	// unqualified credential, and it is not member B's.
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-leak-a", "", []uuid.UUID{sharedIssuerID, memberAIssuerID})
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-leak-b", "", []uuid.UUID{sharedIssuerID, memberBIssuerID})
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-leak-a", "")
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-leak-b", "")
 	subject := createTestUser(t, ctx, ti, "meta-tunnel-leak-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-member-a", "")
 

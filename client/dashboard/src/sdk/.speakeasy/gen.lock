@@ -8467,7 +8467,7 @@ examples:
   getObservabilityOverview:
     speakeasy-default-get-observability-overview:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "include_time_series": true, "to": "2025-12-19T11:00:00Z"}
+        application/json: {"from": "2025-12-19T10:00:00Z", "include_time_series": true, "to": "2025-12-19T11:00:00Z", "tool_calls_only": false}
       responses:
         "200":
           application/json: {"comparison": {"avg_latency_ms": 5127.98, "avg_resolution_time_ms": 6526.16, "avg_session_duration_ms": 2329.54, "cache_creation_input_tokens": 692955, "cache_read_input_tokens": 84255, "failed_chats": 887520, "failed_tool_calls": 365738, "resolved_chats": 399299, "total_chats": 784070, "total_cost": 4077.03, "total_input_tokens": 909191, "total_output_tokens": 591733, "total_tokens": 918591, "total_tool_calls": 617784}, "interval_seconds": 341256, "summary": {"avg_latency_ms": 3857.2, "avg_resolution_time_ms": 5632.09, "avg_session_duration_ms": 6426.44, "cache_creation_input_tokens": 844170, "cache_read_input_tokens": 875850, "failed_chats": 411493, "failed_tool_calls": 369654, "resolved_chats": 601657, "total_chats": 778118, "total_cost": 4488.34, "total_input_tokens": 516564, "total_output_tokens": 396368, "total_tokens": 255551, "total_tool_calls": 136888}, "time_series": [], "top_tools_by_count": [{"avg_latency_ms": 7986.12, "call_count": 373081, "failure_count": 471755, "failure_rate": 54.59, "gram_urn": "<value>", "success_count": 74511}], "top_tools_by_failure_rate": [{"avg_latency_ms": 6544.77, "call_count": 563679, "failure_count": 464561, "failure_rate": 9129.96, "gram_urn": "<value>", "success_count": 333408}]}

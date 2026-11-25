@@ -259,10 +259,6 @@ INSERT INTO remote_session_issuers (id, project_id, slug, issuer) VALUES (@id, @
 INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id)
 VALUES (@id, @project_id, @organization_id, @remote_session_issuer_id, @client_id);
 
--- name: SeedClientBindingFixture :exec
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-VALUES (@remote_session_client_id, @user_session_issuer_id);
-
 -- name: SeedRemoteMCPServerFixture :exec
 INSERT INTO remote_mcp_servers (id, project_id, transport_type, url) VALUES (@id, @project_id, 'streamable-http', 'https://upstream.example.com/mcp');
 
@@ -304,10 +300,6 @@ SELECT mcp_server_id, remote_session_client_id, no_auth, source
 FROM upstream_client_selections
 WHERE credential_kind = @credential_kind AND credential_id = @credential_id AND deleted IS FALSE
 ORDER BY mcp_server_id;
-
--- name: UnbindClientFixture :exec
-DELETE FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = @remote_session_client_id AND user_session_issuer_id = @user_session_issuer_id;
 
 -- name: SeedLinkedHeaderAuthClientFixture :exec
 -- A static-credential auth client in the project, linked to one server.

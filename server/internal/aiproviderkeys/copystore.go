@@ -22,6 +22,7 @@ type copyQueries struct {
 	sealWaiting func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, rowID, platform, org string) (int64, error)
 	listSealed  func(ctx context.Context, q *repo.Queries, organizationID string, after string, limit int32) ([]orgencryption.SealedValue, error)
 	count       func(ctx context.Context, q *repo.Queries, organizationID string) (orgencryption.CopyCounts, error)
+	listValues  func(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error)
 	clear       func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error)
 }
 
@@ -85,6 +86,15 @@ func (c *CopyStore) Count(ctx context.Context, organizationID string) (orgencryp
 	return counts, nil
 }
 
+func (c *CopyStore) ListOrganizationsWithValues(ctx context.Context) ([]orgencryption.OrganizationValues, error) {
+	organizations, err := c.queries.listValues(ctx, repo.New(c.db))
+	if err != nil {
+		return nil, fmt.Errorf("list organizations with %s values: %w", c.columns.PlatformColumn, err)
+	}
+
+	return organizations, nil
+}
+
 func (c *CopyStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
 	cleared, err := c.queries.clear(ctx, repo.New(c.db), organizationID, generation, limit)
 	if err != nil {
@@ -111,6 +121,15 @@ func textAfter(after string) pgtype.Text {
 	return pgtype.Text{String: after, Valid: after != ""}
 }
 
+func organizationValues[R any](rows []R, get func(R) (string, int64, pgtype.Timestamptz)) []orgencryption.OrganizationValues {
+	organizations := make([]orgencryption.OrganizationValues, 0, len(rows))
+	for _, row := range rows {
+		organizationID, values, lastWrittenAt := get(row)
+		organizations = append(organizations, orgencryption.NewOrganizationValues(organizationID, values, lastWrittenAt))
+	}
+	return organizations
+}
+
 func waiting[R any](rows []R, get func(R) (string, string)) []orgencryption.WaitingValue {
 	values := make([]orgencryption.WaitingValue, 0, len(rows))
 	for _, row := range rows {
@@ -129,8 +148,8 @@ func sealed[R any](rows []R, get func(R) (string, string, string)) []orgencrypti
 	return values
 }
 
-func counts(waiting, unreadable, platformCopies int64) orgencryption.CopyCounts {
-	return orgencryption.CopyCounts{Waiting: waiting, Unreadable: unreadable, Unattributed: 0, PlatformCopies: platformCopies}
+func counts(waiting, unreadable, platformCopies, values int64, lastWrittenAt pgtype.Timestamptz) orgencryption.CopyCounts {
+	return orgencryption.CopyCounts{Waiting: waiting, Unreadable: unreadable, Unattributed: 0, PlatformCopies: platformCopies, Values: values, LastWrittenAt: orgencryption.LastWrittenAt(lastWrittenAt)}
 }
 
 var aiIntegrationQueries = copyQueries{
@@ -163,7 +182,13 @@ var aiIntegrationQueries = copyQueries{
 	},
 	count: func(ctx context.Context, q *repo.Queries, organizationID string) (orgencryption.CopyCounts, error) {
 		row, err := q.CountAIIntegrationConfigAPIKeyCopies(ctx, organizationID)
-		return counts(row.Waiting, row.Unreadable, row.PlatformCopies), err
+		return counts(row.Waiting, row.Unreadable, row.PlatformCopies, row.ValueCount, row.LastWrittenAt), err
+	},
+	listValues: func(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error) {
+		rows, err := q.ListOrganizationsWithAIIntegrationConfigAPIKeys(ctx)
+		return organizationValues(rows, func(r repo.ListOrganizationsWithAIIntegrationConfigAPIKeysRow) (string, int64, pgtype.Timestamptz) {
+			return r.OrganizationID, r.ValueCount, r.LastWrittenAt
+		}), err
 	},
 	clear: func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
 		row, err := q.ClearAIIntegrationConfigAPIKeyPlatformCopies(ctx, repo.ClearAIIntegrationConfigAPIKeyPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
@@ -204,7 +229,13 @@ var modelProviderQueries = copyQueries{
 	},
 	count: func(ctx context.Context, q *repo.Queries, organizationID string) (orgencryption.CopyCounts, error) {
 		row, err := q.CountModelProviderKeyCopies(ctx, organizationID)
-		return counts(row.Waiting, row.Unreadable, row.PlatformCopies), err
+		return counts(row.Waiting, row.Unreadable, row.PlatformCopies, row.ValueCount, row.LastWrittenAt), err
+	},
+	listValues: func(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error) {
+		rows, err := q.ListOrganizationsWithModelProviderKeys(ctx)
+		return organizationValues(rows, func(r repo.ListOrganizationsWithModelProviderKeysRow) (string, int64, pgtype.Timestamptz) {
+			return r.OrganizationID, r.ValueCount, r.LastWrittenAt
+		}), err
 	},
 	clear: func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
 		row, err := q.ClearModelProviderKeyPlatformCopies(ctx, repo.ClearModelProviderKeyPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
@@ -233,7 +264,13 @@ var openRouterQueries = copyQueries{
 	},
 	count: func(ctx context.Context, q *repo.Queries, organizationID string) (orgencryption.CopyCounts, error) {
 		row, err := q.CountOpenRouterAPIKeyCopies(ctx, organizationID)
-		return counts(row.Waiting, row.Unreadable, row.PlatformCopies), err
+		return counts(row.Waiting, row.Unreadable, row.PlatformCopies, row.ValueCount, row.LastWrittenAt), err
+	},
+	listValues: func(ctx context.Context, q *repo.Queries) ([]orgencryption.OrganizationValues, error) {
+		rows, err := q.ListOrganizationsWithOpenRouterAPIKeys(ctx)
+		return organizationValues(rows, func(r repo.ListOrganizationsWithOpenRouterAPIKeysRow) (string, int64, pgtype.Timestamptz) {
+			return r.OrganizationID, r.ValueCount, r.LastWrittenAt
+		}), err
 	},
 	clear: func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
 		row, err := q.ClearOpenRouterAPIKeyPlatformCopies(ctx, repo.ClearOpenRouterAPIKeyPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})

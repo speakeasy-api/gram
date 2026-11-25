@@ -59,20 +59,20 @@ const (
 )
 
 // createConsentRemoteClient mints a remote_session_issuer plus a client
-// with optional compatibility rows for the principal attachment FK.
+// without configuring a sign-in or offer.
 // To configure sign-in behavior, seed server associations or typed offers.
 // asBase "" uses fake AS
 // endpoints (BuildAuthorizationUrl never contacts them); pass an httptest
 // base URL to run a real code exchange against it.
-func createConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug, asBase string, userSessionIssuerIDs []uuid.UUID) uuid.UUID {
+func createConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug, asBase string) uuid.UUID {
 	t.Helper()
-	return createConsentRemoteClientWithCallback(t, ctx, conn, projectID, organizationID, slug, asBase, userSessionIssuerIDs, "")
+	return createConsentRemoteClientWithCallback(t, ctx, conn, projectID, organizationID, slug, asBase, "")
 }
 
 // createConsentRemoteClientWithCallback is createConsentRemoteClient with the
 // registration's callback landing on callbackBase, or on the default origin
 // when it is empty.
-func createConsentRemoteClientWithCallback(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug, asBase string, userSessionIssuerIDs []uuid.UUID, callbackBase string) uuid.UUID {
+func createConsentRemoteClientWithCallback(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug, asBase string, callbackBase string) uuid.UUID {
 	t.Helper()
 	if asBase == "" {
 		asBase = "https://" + slug + "-as.example.com"
@@ -101,9 +101,6 @@ func createConsentRemoteClientWithCallback(t *testing.T, ctx context.Context, co
 		CallbackBaseUrl:       conv.ToPGTextEmpty(callbackBase),
 	})
 	require.NoError(t, err)
-	for _, usi := range userSessionIssuerIDs {
-		retainClientIssuerFK(t, ctx, conn, rsc.ID, usi)
-	}
 	return rsc.ID
 }
 
@@ -221,10 +218,10 @@ func seedMultiClientConsentEndpointWithService(t *testing.T, ctx context.Context
 	serverA := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerA, "age3328-srv-a", consentUpstreamA+"/")
 	serverB := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerB, "age3328-srv-b", consentUpstreamB)
 
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-a", "", nil)
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-b", "", nil)
-	clientC := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-c", "", nil)
-	clientD := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-d", "", nil)
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-a", "")
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-b", "")
+	clientC := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-c", "")
+	clientD := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-d", "")
 
 	seedConsentSignInPlacement(t, ctx, ti, shared, clientA, clientB, clientC, clientD)
 	for _, target := range []struct{ server, client uuid.UUID }{{serverA, clientA}, {serverB, clientB}, {serverA, clientD}, {serverB, clientD}} {
@@ -442,8 +439,8 @@ func seedSharedUpstreamEndpoint(t *testing.T, slug string) (context.Context, con
 func TestServeConsentAction_ConnectSharedClientRecordsEndpointUpstream(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-sole")
-	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-sole", "", []uuid.UUID{fx.shared, other})
+	ctx, fx, _ := seedSharedUpstreamEndpoint(t, "aim362-sole")
+	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-sole", "")
 
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, shared, "remote_session")
 	loc := postConnectAction(t, fx, shared)
@@ -456,9 +453,9 @@ func TestServeConsentAction_ConnectSharedClientRecordsEndpointUpstream(t *testin
 func TestServeConsentAction_ConnectSharedClientUsesItsExplicitOffer(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-owned")
-	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-owner", "", []uuid.UUID{fx.shared})
-	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-shared", "", []uuid.UUID{fx.shared, other})
+	ctx, fx, _ := seedSharedUpstreamEndpoint(t, "aim362-owned")
+	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-owner", "")
+	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-shared", "")
 
 	for _, id := range []uuid.UUID{owner, shared} {
 		seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, id, "remote_session")
@@ -475,9 +472,9 @@ func TestServeConsentAction_ConnectSharedClientUsesItsExplicitOffer(t *testing.T
 func TestServeConsentAction_ConnectTwoOffersKeepTheSameTarget(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-two")
-	first := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-first", "", []uuid.UUID{fx.shared, other})
-	second := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-second", "", []uuid.UUID{fx.shared, other})
+	ctx, fx, _ := seedSharedUpstreamEndpoint(t, "aim362-two")
+	first := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-first", "")
+	second := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-second", "")
 
 	for _, id := range []uuid.UUID{first, second} {
 		seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, id, "remote_session")
@@ -629,8 +626,8 @@ func TestServeConsentAction_MultiBindingExchangePersistsPerClientResource(t *tes
 	var postedA, postedB atomic.Value
 	asA := newConsentExchangeAS(t, &postedA, "exchanged-a")
 	asB := newConsentExchangeAS(t, &postedB, "exchanged-b")
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-xa", asA.URL, nil)
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-xb", asB.URL, nil)
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-xa", asA.URL)
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-xb", asB.URL)
 
 	seedConsentSignInPlacement(t, ctx, ti, shared, clientA, clientB)
 	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, serverA, clientA)
@@ -713,7 +710,7 @@ func TestServeConsentAction_ConnectSendsRegisteredResourceVerbatim(t *testing.T)
 
 			var posted atomic.Value
 			as := newConsentExchangeAS(t, &posted, "exchanged-"+tc.slug)
-			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tc.slug, as.URL, nil)
+			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tc.slug, as.URL)
 			associateServerRegistration(t, ctx, ti.conn, orgID, projectID, server, clientID)
 
 			endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, tc.slug+"-consent")
@@ -750,9 +747,9 @@ func TestServeConsentAction_ConnectSendsRegisteredResourceVerbatim(t *testing.T)
 func TestResourceOwners_MatchesConnectOwnership(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim431-owners")
-	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-owner", "", []uuid.UUID{fx.shared})
-	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-shared", "", []uuid.UUID{fx.shared, other})
+	ctx, fx, _ := seedSharedUpstreamEndpoint(t, "aim431-owners")
+	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-owner", "")
+	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-shared", "")
 
 	_, err := authclientfixtures.New(fx.ti.conn).SeedAssociationFixture(ctx, authclientfixtures.SeedAssociationFixtureParams{
 		ProjectID: fx.projectID, OrganizationID: fx.orgID,

@@ -188,11 +188,6 @@ func createRemoteSessionResolverFixture(
 	})
 	require.NoError(t, err)
 
-	err = remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: remoteClient.ID,
-		UserSessionIssuerID:   userIssuer.ID,
-	})
-	require.NoError(t, err)
 	assignHostedOAuth(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, toolset.ID, remoteClient.ID)
 
 	return remoteSessionResolverFixture{

@@ -13,6 +13,14 @@ import (
 
 var transitionStates = []any{"platform_key", "dual_write", "org_kms"}
 
+// transitionListValues selects which organizations the transition list
+// reports: those with values for the use case, or every organization.
+var transitionListValues = []any{"present", "all"}
+
+// transitionListSorts orders the transition list: most recently written
+// values first, or oldest organization first.
+var transitionListSorts = []any{"last_written", "oldest"}
+
 var AdminOrganizationEncryptionConfig = Type("AdminOrganizationEncryptionConfig", func() {
 	Description("An organization's encryption configuration: who controls its key, and whether the key is usable.")
 	Required("mode", "state")
@@ -63,7 +71,7 @@ var AdminOrganizationEncryption = Type("AdminOrganizationEncryption", func() {
 
 var AdminOrganizationEncryptionTransitionRow = Type("AdminOrganizationEncryptionTransitionRow", func() {
 	Description("One organization's transition state for a use case, from stored state only.")
-	Required("organization_id", "name", "slug", "disabled", "state")
+	Required("organization_id", "name", "slug", "disabled", "state", "value_count")
 
 	Attribute("organization_id", String, "The organization ID.")
 	Attribute("name", String, "The organization name.")
@@ -78,6 +86,8 @@ var AdminOrganizationEncryptionTransitionRow = Type("AdminOrganizationEncryption
 	Attribute("last_backfill_unreadable", Int64, "Values recorded as unreadable when the last backfill run ended.")
 	Attribute("last_backfill_error", String, "Why the last backfill run stopped early.")
 	Attribute("last_verified_at", String, "When the last clean verification pass started.", func() { Format(FormatDateTime) })
+	Attribute("value_count", Int64, "How many values the organization stores for the use case under either key, soft-deleted rows included. A row storing values in two columns counts once in each.")
+	Attribute("last_written_at", String, "The latest updated_at of a row storing one of the organization's values. A change that updates the row's updated_at moves it, such as a session's token refresh or an OpenRouter key's limit change; a write that leaves updated_at alone, such as a backfill seal, does not. Absent when the organization has none.", func() { Format(FormatDateTime) })
 })
 
 var AdminOrganizationEncryptionStateCount = Type("AdminOrganizationEncryptionStateCount", func() {
@@ -92,8 +102,8 @@ var AdminOrganizationEncryptionTransitionList = Type("AdminOrganizationEncryptio
 
 	Attribute("use_case", String, "The use case listed.")
 	Attribute("use_cases", ArrayOf(String), "Every use case that moves from the platform key to organization keys.")
-	Attribute("organizations", ArrayOf(AdminOrganizationEncryptionTransitionRow), "The page of organizations, oldest first.")
-	Attribute("state_counts", ArrayOf(AdminOrganizationEncryptionStateCount), "How many organizations are in each state, across every page.")
+	Attribute("organizations", ArrayOf(AdminOrganizationEncryptionTransitionRow), "The page of organizations, in the requested order.")
+	Attribute("state_counts", ArrayOf(AdminOrganizationEncryptionStateCount), "How many organizations the values filter keeps are in each state, across every page.")
 	Attribute("has_more", Boolean, "Whether another page follows.")
 })
 
@@ -145,13 +155,21 @@ func organizationEncryptionMethods() {
 	})
 
 	Method("listOrganizationEncryptionTransitions", func() {
-		Description("Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.")
+		Description("Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
 
 			Attribute("use_case", String, "The use case, such as oauth-client-secrets. Absent lists the first use case that moves to organization keys.")
 			Attribute("state", String, "Only organizations in this state.", func() { Enum(transitionStates...) })
+			Attribute("values", String, "present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.", func() {
+				Enum(transitionListValues...)
+				Default("present")
+			})
+			Attribute("sort", String, "last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.", func() {
+				Enum(transitionListSorts...)
+				Default("last_written")
+			})
 			Attribute("limit", Int, "Organizations per page.", func() {
 				Minimum(1)
 				Maximum(200)
@@ -170,6 +188,8 @@ func organizationEncryptionMethods() {
 			GET("/admin/organizationEncryption.listTransitions")
 			Param("use_case")
 			Param("state")
+			Param("values")
+			Param("sort")
 			Param("limit")
 			Param("offset")
 			Response(StatusOK)

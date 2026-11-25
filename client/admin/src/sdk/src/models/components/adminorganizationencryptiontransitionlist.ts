@@ -22,11 +22,11 @@ export type AdminOrganizationEncryptionTransitionList = {
    */
   hasMore: boolean;
   /**
-   * The page of organizations, oldest first.
+   * The page of organizations, in the requested order.
    */
   organizations: Array<AdminOrganizationEncryptionTransitionRow>;
   /**
-   * How many organizations are in each state, across every page.
+   * How many organizations the values filter keeps are in each state, across every page.
    */
   stateCounts: Array<AdminOrganizationEncryptionStateCount>;
   /**

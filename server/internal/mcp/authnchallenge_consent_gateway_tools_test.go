@@ -287,8 +287,8 @@ func TestGatewayConsentListsConnectedSourcesWhenOneProviderIsMissing(t *testing.
 	docsID := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, gateway.ID, "Docs", docsSlug, 2, connected.url)
 
 	// Each member signs in through its own provider; only Docs's is connected.
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-partial-a-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-partial-b-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-partial-a-"+uuid.NewString()[:8], "")
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-partial-b-"+uuid.NewString()[:8], "")
 	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, trackerID, clientA, "remote_session")
 	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, docsID, clientB, "remote_session")
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, clientB, urn.NewUserSubject(mockidp.MockUserID), "token-docs", connected.url)
