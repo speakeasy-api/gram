@@ -8,11 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/attribute"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -105,29 +101,6 @@ func TestUpstreamIssuerFlag_TunneledGatewayMemberUnderEitherSource(t *testing.T)
 	require.False(t, isError, "the member call must succeed: %s", text)
 	require.Equal(t, "Bearer token-member", gateway.forwardFor(`"tools/call"`).Get("Authorization"),
 		"on, the member still receives its own token")
-}
-
-// upstreamIssuerParityPoints reads the mcp.upstream_issuer.parity counter
-// back, keyed by attribute set.
-func upstreamIssuerParityPoints(t *testing.T, reader *sdkmetric.ManualReader) map[attribute.Set]int64 {
-	t.Helper()
-
-	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(t.Context(), &rm))
-	points := map[attribute.Set]int64{}
-	for _, scope := range rm.ScopeMetrics {
-		for _, m := range scope.Metrics {
-			if m.Name != "mcp.upstream_issuer.parity" {
-				continue
-			}
-			sum, ok := m.Data.(metricdata.Sum[int64])
-			require.True(t, ok, "the parity instrument must be an int64 counter")
-			for _, dp := range sum.DataPoints {
-				points[dp.Attributes] = dp.Value
-			}
-		}
-	}
-	return points
 }
 
 // Hosted credentials follow exact placement regardless of the routing stamp flag.
