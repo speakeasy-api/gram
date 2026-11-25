@@ -39,7 +39,7 @@ it("selects only unconditioned Connect grants on this exact server and project",
   ];
   expect(
     directServerConnectGrants(grants, "project", "server").map((g) => g.id),
-  ).toEqual(["direct", "direct without project"]);
+  ).toEqual(["direct"]);
 });
 
 const role: ResourceAudienceEntry = {

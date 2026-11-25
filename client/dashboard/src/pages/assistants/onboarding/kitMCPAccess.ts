@@ -6,8 +6,8 @@ import {
   scopeState,
 } from "@/pages/mcp/access/accessRows";
 
-/** Only edit full Connect grants for this server. A wildcard, narrowed rule,
- * or another scope belongs to the normal access editor. */
+/** Only edit full Connect grants naming this server and project. Leave
+ * wildcard, project-unscoped, conditional, and other scopes untouched. */
 export function directServerConnectGrants(
   grants: AgentPolicyGrant[],
   projectId: string,
@@ -19,7 +19,7 @@ export function directServerConnectGrants(
       scope === "mcp:connect" &&
       selector.resourceKind === "mcp" &&
       selector.resourceId === resourceId &&
-      (selector.projectId === undefined || selector.projectId === projectId) &&
+      selector.projectId === projectId &&
       Object.entries(selector).every(
         ([key, value]) =>
           value === undefined ||

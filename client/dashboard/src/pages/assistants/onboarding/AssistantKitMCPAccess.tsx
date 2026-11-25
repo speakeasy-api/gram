@@ -1,3 +1,9 @@
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
+import { ChevronRight } from "lucide-react";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
@@ -118,9 +124,6 @@ function ProjectMCPAccessRow({
   const queryClient = useQueryClient();
   const resourceId = server.toolsetId ?? server.id;
   const resource = { resourceKind: "mcp", resourceId } as const;
-  const audience = useResourceAudience(resource, undefined, {
-    throwOnError: false,
-  });
   const add = useAgentsCreatePolicyGrantMutation();
   const remove = useAgentsDeletePolicyGrantMutation();
   const [saving, setSaving] = useState(false);
@@ -180,14 +183,6 @@ function ProjectMCPAccessRow({
     }
   };
 
-  const access =
-    server.visibility === "disabled"
-      ? "Server disabled"
-      : audience.isError
-        ? "Access unavailable"
-        : audience.data
-          ? agentConnectAccess(audience.data.entries, agentId)
-          : "Checking access…";
   return (
     <li className="flex items-start gap-2 py-2">
       {grants !== undefined && (
@@ -200,10 +195,52 @@ function ProjectMCPAccessRow({
       )}
       <div className="min-w-0">
         <Text small>{serverName(server)}</Text>
-        <Text small muted>
-          Agent access: {access}
-        </Text>
+        {server.visibility === "disabled" ? (
+          <Text small muted>
+            Server disabled
+          </Text>
+        ) : (
+          <Collapsible>
+            <CollapsibleTrigger
+              aria-label={`Check agent access to ${serverName(server)}`}
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs [&[data-state=open]>svg]:rotate-90"
+            >
+              <ChevronRight className="size-3" aria-hidden />
+              Check agent access
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <AgentConnectAccess agentId={agentId} resourceId={resourceId} />
+            </CollapsibleContent>
+          </Collapsible>
+        )}
       </div>
     </li>
+  );
+}
+
+function AgentConnectAccess({
+  agentId,
+  resourceId,
+}: {
+  agentId: string;
+  resourceId: string;
+}): JSX.Element {
+  const audience = useResourceAudience(
+    { resourceKind: "mcp", resourceId },
+    undefined,
+    {
+      retry: false,
+      throwOnError: false,
+    },
+  );
+  const access = audience.isError
+    ? "Access unavailable"
+    : audience.data
+      ? agentConnectAccess(audience.data.entries, agentId)
+      : "Checking access…";
+  return (
+    <Text small muted>
+      Agent access: {access}
+    </Text>
   );
 }

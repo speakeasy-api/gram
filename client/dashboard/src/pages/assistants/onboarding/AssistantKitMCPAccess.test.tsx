@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   create: vi.fn().mockResolvedValue(undefined),
   remove: vi.fn().mockResolvedValue(undefined),
   canWrite: true,
+  loadAudience: vi.fn(),
   grants: [] as unknown[],
 }));
 vi.mock("@/contexts/Auth", () => ({
@@ -43,20 +44,23 @@ vi.mock("@gram/client/react-query/agentsListPolicyGrants.js", () => ({
   invalidateAgentsListPolicyGrants: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
-  useResourceAudience: () => ({
-    data: {
-      entries: [
-        {
-          principalUrn: "role:research",
-          displayName: "Research",
-          kind: "role",
-          appliesTo: "resource",
-          level: "use",
-          agentIds: ["agent"],
-        },
-      ],
-    },
-  }),
+  useResourceAudience: (request: unknown) => {
+    state.loadAudience(request);
+    return {
+      data: {
+        entries: [
+          {
+            principalUrn: "role:research",
+            displayName: "Research",
+            kind: "role",
+            appliesTo: "resource",
+            level: "use",
+            agentIds: ["agent"],
+          },
+        ],
+      },
+    };
+  },
   invalidateResourceAudience: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/agentsCreatePolicyGrant.js", () => ({
@@ -89,6 +93,14 @@ function renderEditor() {
 
 it("keeps inherited access separate from the checkbox and grants on the hosted resource ID", async () => {
   renderEditor();
+  expect(state.loadAudience).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Check agent access to Hosted server" }),
+  );
+  expect(state.loadAudience).toHaveBeenCalledWith({
+    resourceKind: "mcp",
+    resourceId: "toolset",
+  });
   expect(
     screen.getByText("Agent access: All tools · via Research"),
   ).toBeTruthy();
@@ -113,6 +125,12 @@ it("keeps inherited access separate from the checkbox and grants on the hosted r
 
 it("removes only the direct Connect grant using its expected policy", async () => {
   state.grants = [
+    {
+      id: "unscoped",
+      effect: "allow",
+      scope: "mcp:connect",
+      selector: { ...selector, projectId: undefined },
+    },
     { id: "direct", effect: "allow", scope: "mcp:connect", selector },
     {
       id: "conditioned",
@@ -141,6 +159,14 @@ it("removes only the direct Connect grant using its expected policy", async () =
 it("leaves the access explanation visible without showing write controls to readers", () => {
   state.canWrite = false;
   renderEditor();
+  expect(state.loadAudience).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Check agent access to Hosted server" }),
+  );
+  expect(state.loadAudience).toHaveBeenCalledWith({
+    resourceKind: "mcp",
+    resourceId: "toolset",
+  });
   expect(
     screen.getByText("Agent access: All tools · via Research"),
   ).toBeTruthy();

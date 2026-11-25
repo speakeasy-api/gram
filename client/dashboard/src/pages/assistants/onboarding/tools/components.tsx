@@ -894,6 +894,7 @@ type SlackSetupResult = {
   ok?: boolean;
   cancelled?: boolean;
   toolset_slug?: string;
+  mcp_server_slug?: string;
   trigger_id?: string;
   webhook_url?: string;
   error?: string;
@@ -1063,7 +1064,11 @@ export function ProposeSlackSetupComponent({
         icon={<Check className="text-emerald-600" size={16} />}
       >
         <Text small muted>
-          {`Created a Slack toolset for ${assistantName} and wired up its triggers.`}
+          {r.mcp_server_slug
+            ? `Set up Slack tools for ${assistantName}${r.trigger_id ? " and connected its Slack trigger" : ""}.`
+            : r.toolset_slug
+              ? `Created a Slack toolset for ${assistantName} and wired up its triggers.`
+              : `Saved Slack settings for ${assistantName}.`}
         </Text>
       </ToolCard>
     );
@@ -1099,8 +1104,10 @@ export function ProposeSlackSetupComponent({
       icon={<Icon name="bot" className="text-muted-foreground h-4 w-4" />}
     >
       <Text small muted className="mb-3">
-        Pick what {assistantName} can do in Slack and when it should reply. You
-        can adjust this later from the assistant's settings.
+        Pick what {assistantName} can do in Slack and when it should reply.{" "}
+        {draft.assistant?.runtimeVersion === 3
+          ? "If you select tools, saving gives the agent access to them through a private MCP server."
+          : "You can adjust this later from the assistant's settings."}
       </Text>
 
       <div className="space-y-4">

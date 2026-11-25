@@ -85,7 +85,7 @@ describe("isOnboardingToolAllowed", () => {
   });
 });
 
-it("does not offer attachment writes for assistants with project MCP access", () => {
+it("reserves MCP mutations for the Slack setup workflow for Kit assistants", () => {
   const permissions = {
     canWriteAssistant: true,
     canReadProject: true,
@@ -100,7 +100,8 @@ it("does not offer attachment writes for assistants with project MCP access", ()
     "detach_mcp_server",
     "attach_toolset",
     "detach_toolset",
-    "propose_slack_setup",
+    "create_toolset",
+    "add_tools_to_toolset",
   ] as const) {
     expect(isOnboardingToolAllowed(tool, permissions)).toBe(true);
     expect(
@@ -110,10 +111,13 @@ it("does not offer attachment writes for assistants with project MCP access", ()
       }),
     ).toBe(false);
   }
+  const kit = { ...permissions, usesProjectMCPAccess: true };
+  expect(isOnboardingToolAllowed("list_mcp_servers", kit)).toBe(true);
+  expect(isOnboardingToolAllowed("propose_slack_setup", kit)).toBe(true);
   expect(
-    isOnboardingToolAllowed("list_mcp_servers", {
-      ...permissions,
-      usesProjectMCPAccess: true,
+    isOnboardingToolAllowed("propose_slack_setup", {
+      ...kit,
+      canWriteMCP: false,
     }),
-  ).toBe(true);
+  ).toBe(false);
 });

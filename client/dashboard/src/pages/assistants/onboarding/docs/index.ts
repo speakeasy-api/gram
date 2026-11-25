@@ -1,4 +1,4 @@
-import { SLACK_DOCS } from "./slack";
+import { KIT_SLACK_DOCS, SLACK_DOCS } from "./slack";
 import { CRON_DOCS } from "./cron";
 
 export type IntegrationDoc = {
@@ -24,6 +24,10 @@ export function listIntegrationDocs(): Pick<
   }));
 }
 
-export function getIntegrationDoc(slug: string): IntegrationDoc | undefined {
+export function getIntegrationDoc(
+  slug: string,
+  usesProjectMCPAccess = false,
+): IntegrationDoc | undefined {
+  if (slug === "slack" && usesProjectMCPAccess) return KIT_SLACK_DOCS;
   return INTEGRATION_DOCS[slug];
 }

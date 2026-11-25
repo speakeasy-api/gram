@@ -26,19 +26,10 @@ import (
 // its unbound root triggers bound. The caller owns the transaction; a failed
 // call must roll it back.
 //
-// Legacy agents start with project-wide Connect. Users refine that policy on
-// the agent afterwards; it is never re-synchronised.
+// Legacy agents start with project-wide Connect; Kit agents use explicit
+// server grants. The persisted runtime controls the initial policy for every
+// caller, including staff provisioning. Existing policies remain unchanged.
 func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
-	return s.provision(ctx, tx, p, true)
-}
-
-// ProvisionKit creates a dedicated agent whose server access is assigned
-// through ordinary policy grants. Existing agent policies are left intact.
-func (s *Service) ProvisionKit(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
-	return s.provision(ctx, tx, p, false)
-}
-
-func (s *Service) provision(ctx context.Context, tx pgx.Tx, p ProvisionParams, projectConnect bool) error {
 	actor, err := provisionActor(p)
 	if err != nil {
 		return err
@@ -83,7 +74,7 @@ func (s *Service) provision(ctx context.Context, tx pgx.Tx, p ProvisionParams, p
 	if err != nil {
 		return err
 	}
-	grants := initialGrants(p.ProjectID, p.AssistantID, projectConnect)
+	grants := initialGrants(p.ProjectID, p.AssistantID, assistant.RuntimeVersion != 3)
 	// A dedicated agent may inherit inference only within this project and
 	// only when everyone delegating it already has it: the provisioning user
 	// and the owner, or the owner alone when staff provision.
@@ -198,7 +189,7 @@ func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams,
 // initialGrants grants project metadata and skills, and administration of the
 // assistant itself. Only legacy runtimes bootstrap project-wide Connect.
 func initialGrants(project, assistant uuid.UUID, projectConnect bool) []authz.Grant {
-	projectMCP := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource)
+	projectMCP := authz.NewSelector(authz.ScopeMCPRead, authz.WildcardResource)
 	projectMCP[authz.SelectorKeyProjectID] = project.String()
 	grants := []authz.Grant{
 		authz.NewGrantWithSelector(authz.ScopeMCPRead, projectMCP),

@@ -190,7 +190,7 @@ func TestKitGKEEligibilityUsesProjectGatewayWithoutAttachments(t *testing.T) {
 		t.Helper()
 		tx := testenv.BeginTx(t, t.Context(), db)
 		defer func() { _ = tx.Rollback(t.Context()) }()
-		eligible, err := core.kitGKEAssistantEligible(t.Context(), tx, assistant, config)
+		eligible, err := core.kitAssistantEligible(t.Context(), tx, assistant, config.OrgHosts)
 		require.NoError(t, err)
 		require.Equal(t, want, eligible)
 	}

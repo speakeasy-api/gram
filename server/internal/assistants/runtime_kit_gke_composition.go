@@ -139,7 +139,7 @@ func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
 	}
 	// Projects without a served gateway keep the legacy default.
 	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
-		return s.kitGKEAssistantEligible(ctx, tx, assistant, c.KitLocalCompositionConfig)
+		return s.kitAssistantEligible(ctx, tx, assistant, c.OrgHosts)
 	}
 	return nil
 }
@@ -220,9 +220,9 @@ func (s *ServiceCore) kitGKELifecycle(ctx context.Context, r assistantRuntimeRec
 	return operationErr
 }
 
-// kitGKEAssistantEligible retains the legacy default where the project gateway
+// kitAssistantEligible retains the legacy default where the project gateway
 // is not served. Tool assignments do not affect runtime selection.
-func (s *ServiceCore) kitGKEAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, c KitLocalCompositionConfig) (bool, error) {
+func (s *ServiceCore) kitAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, hosts *orghost.Resolver) (bool, error) {
 	if s.featureFlags == nil {
 		return false, nil
 	}
@@ -233,7 +233,7 @@ func (s *ServiceCore) kitGKEAssistantEligible(ctx context.Context, tx pgx.Tx, as
 	if !enabled {
 		return false, nil
 	}
-	_, _, err = s.kitProjectGateway(ctx, tx, assistant, c.OrgHosts)
+	_, _, err = s.kitProjectGateway(ctx, tx, assistant, hosts)
 	if errors.Is(err, errKitMCPIneligible) {
 		return false, nil
 	}

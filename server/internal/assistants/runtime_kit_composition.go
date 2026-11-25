@@ -132,9 +132,9 @@ func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error 
 	if err := s.installKitRuntime(backend); err != nil {
 		return err
 	}
-	// Local installation explicitly opts new assistants into this backend.
-	// Existing assistants retain their persisted runtime selection.
-	s.newAssistantRuntimeVersion = 3
+	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
+		return s.kitAssistantEligible(ctx, tx, assistant, c.OrgHosts)
+	}
 	return nil
 }
 
