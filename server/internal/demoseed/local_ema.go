@@ -105,7 +105,7 @@ func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts Loca
 	clientID := opts.DevIDPClientID
 
 	spec := LocalSpec()
-	s := &seeder{spec: spec, q: repo.New(tx), logger: logger, enc: opts.Encryption, assistantIssuer: "", serverURL: opts.ServerURL, now: time.Now(), signalSequences: nil}
+	s := &seeder{spec: spec, catalog: nil, q: repo.New(tx), logger: logger, enc: opts.Encryption, assistantIssuer: "", serverURL: opts.ServerURL, now: time.Now(), signalSequences: nil}
 	q := s.q
 	org := spec.OrgID
 	proj := s.projectID()

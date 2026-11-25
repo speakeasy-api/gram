@@ -622,3 +622,11 @@ func searchOnlyConnect(server uuid.UUID) []Grant {
 	selector[SelectorKeyTool] = "search"
 	return []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)}
 }
+
+func TestValidateSelector_refusesNilResourceID(t *testing.T) {
+	t.Parallel()
+
+	require.ErrorContains(t, ValidateSelector(ScopeProjectRead, NewSelector(ScopeProjectRead, "00000000-0000-0000-0000-000000000000")), "nil UUID")
+	require.ErrorContains(t, ValidateSelector(ScopeMCPConnect, NewSelector(ScopeMCPConnect, "00000000-0000-0000-0000-000000000000")), "nil UUID")
+	require.NoError(t, ValidateSelector(ScopeProjectRead, NewSelector(ScopeProjectRead, WildcardResource)))
+}

@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -341,8 +343,8 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	scriptNonce, _, found := strings.Cut(noncePart, "'")
 	require.True(t, found)
 	require.NotEmpty(t, scriptNonce)
-	require.Contains(t, connect.Body.String(), `nonce="`+scriptNonce+`"`)
-	require.Contains(t, connect.Body.String(), `action.name = "action"`)
+	require.Contains(t, connect.Body.String(), `<script nonce="`+scriptNonce+`" src="`+oauthPageScriptURL+`"></script>`)
+	require.NotContains(t, connect.Body.String(), `action.name = "action"`, "the ingress CSP blocks inline scripts")
 	require.Contains(t, contentSecurityPolicy, "form-action 'self' http://127.0.0.1:3000")
 
 	approve := httptest.NewRecorder()
@@ -359,6 +361,21 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	replayed := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(replayed, approveRequest)
 	require.Equal(t, http.StatusBadRequest, replayed.Code)
+}
+
+func TestOAuthPageScriptIsServedFromHashedURL(t *testing.T) {
+	t.Parallel()
+
+	require.Regexp(t, `^/platform-mcp/oauth-page-[0-9a-f]{8}\.js$`, oauthPageScriptURL)
+	mux := goahttp.NewMuxer()
+	newTestOAuthHTTP(t).Attach(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, oauthPageScriptURL, nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "application/javascript; charset=utf-8", w.Header().Get("Content-Type"))
+	require.Contains(t, w.Header().Get("Cache-Control"), "immutable")
+	require.Contains(t, w.Body.String(), `action.name = "action"`)
+	require.Contains(t, w.Body.String(), "window.close()")
 }
 
 func TestOAuthPageContentSecurityPolicyAllowsSafeRedirectSources(t *testing.T) {
@@ -548,6 +565,7 @@ func newTestOAuthHTTP(t *testing.T) *OAuthHTTP {
 	base, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
 	service, err := NewOAuthHTTP(OAuthHTTPConfig{
+		AICatalog:     aivendorstest.NewStore(),
 		BaseURL:       base,
 		Cache:         &memoryCache{values: map[string]any{}},
 		Store:         platformoauth.NewInMemoryStore(),
@@ -601,6 +619,7 @@ func TestOAuthHTTPPinsIDPCallbackToOutboundOrigin(t *testing.T) {
 			t.Parallel()
 			var callbacks []string
 			service, err := NewOAuthHTTP(OAuthHTTPConfig{
+				AICatalog:          aivendorstest.NewStore(),
 				BaseURL:            base,
 				IDPCallbackBaseURL: tc.pinned,
 				Cache:              &memoryCache{values: map[string]any{}},

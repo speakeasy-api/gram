@@ -342,6 +342,20 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	scopeProjectID uuid.UUID,
 	serving bool,
 ) (context.Context, []metaMember, []metaMember, error) {
+	return s.resolveOrganizationMemberSnapshotWithRecheck(ctx, logger, authzSurface, organizationID, organizationGateway, userSessionIssuerID, scopeProjectID, serving, nil)
+}
+
+func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
+	ctx context.Context,
+	logger *slog.Logger,
+	authzSurface string,
+	organizationID string,
+	organizationGateway bool,
+	userSessionIssuerID uuid.UUID,
+	scopeProjectID uuid.UUID,
+	serving bool,
+	recheck *recheckMemberScope,
+) (context.Context, []metaMember, []metaMember, error) {
 	// Unconditional for the same reason resolveMetaMemberSnapshot prepares it.
 	ctx, err := s.authz.PrepareContext(ctx)
 	if err != nil {
@@ -401,25 +415,31 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	// Hosted members and issuerless agent gateways retain their legacy rules.
 	var offers map[uuid.UUID]configuredAuthOffer
 	var offerMetadata gatewayOfferMetadata
-	if userSessionIssuerID != uuid.Nil {
-		enforced := serving
+	typedOffers := recheck != nil && recheck.typedOffer
+	if recheck == nil && userSessionIssuerID != uuid.Nil {
+		typedOffers = serving
 		if !serving {
-			enforced, err = s.typedConsentAuth(ctx, organizationID)
+			typedOffers, err = s.typedConsentAuth(ctx, organizationID)
 			if err != nil {
 				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check gateway consent auth choices").LogError(ctx, logger)
 			}
 		}
-		if enforced {
-			ids := make([]uuid.UUID, 0, len(members))
-			for _, member := range members {
-				if member.backend == metaMemberBackendProxied {
-					ids = append(ids, member.serverID)
-				}
+	}
+	if typedOffers {
+		ids := make([]uuid.UUID, 0, len(members))
+		for _, member := range members {
+			if member.backend == metaMemberBackendProxied && (recheck == nil || member.serverID == recheck.serverID) {
+				ids = append(ids, member.serverID)
 			}
-			offers, err = s.configuredAuthOffers(ctx, organizationID, ids)
-			if err != nil {
-				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway auth offers").LogError(ctx, logger)
-			}
+		}
+		offers, err = s.configuredAuthOffers(ctx, organizationID, ids)
+		if err != nil {
+			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway auth offers").LogError(ctx, logger)
+		}
+	}
+	if recheck != nil && recheck.typedOffer {
+		if offer, known := offers[recheck.serverID]; known {
+			offers[recheck.serverID] = offer.forPersonalRegistration(recheck.registrationID)
 		}
 	}
 	if offers != nil {
@@ -431,7 +451,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 
 	var clients []remotesessions.Client
 	typedConsent := authzSurface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx)
-	if !serving && userSessionIssuerID != uuid.Nil {
+	if recheck == nil && !serving && userSessionIssuerID != uuid.Nil {
 		if typedConsent {
 			applyTypedMemberRegistrations(members, offers)
 		}
@@ -452,7 +472,13 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	shadow := s.newMandatoryShadow(ctx, organizationID)
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
+		if recheck != nil && (member.serverID != recheck.serverID || member.backend != metaMemberBackendProxied) {
+			continue
+		}
 		offer, known := offers[member.serverID]
+		if recheck != nil && recheck.typedOffer && (!known || len(offer.clients) == 0) {
+			continue
+		}
 		if offers != nil && member.backend == metaMemberBackendProxied {
 			if !known {
 				continue
@@ -493,7 +519,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		if !supported || (serving && known && len(offer.clients) == 0 && needsOAuth) {
 			continue
 		}
-		if member.backend != metaMemberBackendHosted && needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
+		if recheck == nil && member.backend != metaMemberBackendHosted && needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
 			return !typedConsent && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
 		}) {
 			continue

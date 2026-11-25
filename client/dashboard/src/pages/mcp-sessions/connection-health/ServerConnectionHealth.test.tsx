@@ -5,15 +5,23 @@ import { SERVICE_DEFINITION } from "./format";
 import { ServerConnectionHealth } from "./ServerConnectionHealth";
 
 const state = vi.hoisted(() => ({
-  problems: [] as { id: string; part: string }[],
+  problems: [] as Record<string, unknown>[],
+  problemsError: false,
+  loggingEnabled: true,
   logsProps: [] as Record<string, unknown>[],
 }));
 
 vi.mock("./api", async (original) => ({
   ...(await original<object>()),
-  useSuspectedProblems: () => ({ data: { problems: state.problems } }),
-  useSignInSummary: () => ({
-    data: { loggingEnabled: true, viewerScope: "all" },
+  useSuspectedProblems: () => ({
+    data: {
+      problems: state.problems,
+      problemsTotal: state.problems.length,
+      loggingEnabled: state.loggingEnabled,
+      viewerScope: "all",
+    },
+    isPending: false,
+    isError: state.problemsError,
   }),
 }));
 
@@ -24,12 +32,22 @@ vi.mock("./ConnectionLogsView", () => ({
   },
 }));
 
-vi.mock("./SuspectedProblems", () => ({
-  SuspectedProblems: ({ problems }: { problems: unknown[] }) =>
-    problems.length ? <div data-testid="problems" /> : null,
-}));
-
 vi.mock("./ProblemDetailSheet", () => ({ ProblemDetailSheet: () => null }));
+
+function problem(id: string, part: string) {
+  return {
+    id,
+    part,
+    headline: `Problem ${id}`,
+    fact: "",
+    since: "2026-11-20T10:00:00Z",
+    lastFailedAt: "2026-11-20T11:00:00Z",
+    peopleCount: 2,
+    scope: { kind: "server", id: "srv_1", name: "Linear" },
+    rule: "same_server",
+    filters: { from: "2026-11-20T09:45:00Z" },
+  };
+}
 
 function renderTab(url = "/") {
   render(
@@ -47,6 +65,8 @@ describe("ServerConnectionHealth", () => {
   afterEach(() => {
     cleanup();
     state.problems = [];
+    state.problemsError = false;
+    state.loggingEnabled = true;
     state.logsProps = [];
   });
 
@@ -68,12 +88,37 @@ describe("ServerConnectionHealth", () => {
   });
 
   it("explains a service only when a service problem is listed", () => {
-    state.problems = [{ id: "p1", part: "server" }];
+    state.problems = [problem("p1", "speakeasy")];
     renderTab();
     expect(screen.queryByText(SERVICE_DEFINITION)).toBeNull();
     cleanup();
-    state.problems = [{ id: "p2", part: "service" }];
+    state.problems = [problem("p2", "service")];
     renderTab();
     expect(screen.getByText(SERVICE_DEFINITION)).toBeTruthy();
+  });
+
+  it("shows no panel and no gap when there are no problems", () => {
+    renderTab();
+    expect(screen.queryByText(/Suspected problems/)).toBeNull();
+    expect(screen.queryByText(/No suspected problems/)).toBeNull();
+    expect(screen.queryByText(SERVICE_DEFINITION)).toBeNull();
+    // The view switch is in the tab's first block, so nothing above it leaves a gap.
+    const views = screen.getByRole("group", { name: "Connections view" });
+    expect(
+      views.closest(".space-y-8")?.firstElementChild?.contains(views),
+    ).toBe(true);
+  });
+
+  it("shows no problems while logging is off", () => {
+    state.problems = [problem("p1", "service")];
+    state.loggingEnabled = false;
+    renderTab();
+    expect(screen.queryByText(/Problem p1/)).toBeNull();
+  });
+
+  it("says when problems could not load", () => {
+    state.problemsError = true;
+    renderTab();
+    expect(screen.getByText(/Couldn't load suspected problems/)).toBeTruthy();
   });
 });

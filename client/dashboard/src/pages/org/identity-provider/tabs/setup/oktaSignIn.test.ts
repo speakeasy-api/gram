@@ -190,7 +190,7 @@ describe("signInIssuerRows", () => {
   });
 });
 
-describe("sign-in issuer slugs", () => {
+describe("MCP sign-in slugs", () => {
   it("normalizes typed slugs", () => {
     expect(normalizeIssuerSlug("Okta Linear!")).toBe("okta-linear-");
   });

@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -85,7 +86,6 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 		WithRiskFindingList(NewRiskFindingListService(pool, nil, key), budget).
 		WithChatMetadata(NewChatMetadataService(pool, engine, chatfindings.New(pool, findings), budget, key)).
 		WithOrganizationGateway(NewOrganizationGatewayService(pool, dashboardURL)).
-		WithGatewayProxy(&recordingGatewayProxy{}, flags).
 		WithToolExposure(toolExposure).
 		WithProjectLifecycle(projectLifecycle).
 		WithShadowInventory(shadowInventory).
@@ -176,6 +176,7 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 		distributions, skills, diagnostics, NewWorkflowRunService(logger, &captureWorkflowRunEmitter{}), pluginInventory, sessionRecall, riskMutations,
 		CatalogDescriptor{}, accessReads, accessRoleMutations, nil, signalAuthoring)
 	registrar.withLogger(logger)
+	registrar.withAICatalog(aivendorstest.NewStore())
 	return registrar
 }
 

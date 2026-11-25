@@ -48,13 +48,15 @@ vi.mock("@/components/user-session-issuer-select", () => ({
     issuers,
     value,
     onValueChange,
+    ariaLabel,
   }: {
     issuers: UserSessionIssuer[];
     value: string;
     onValueChange: (value: string) => void;
+    ariaLabel?: string;
   }) => (
     <select
-      aria-label="User session issuer"
+      aria-label={ariaLabel}
       value={value}
       onChange={(event) => onValueChange(event.target.value)}
     >
@@ -164,6 +166,7 @@ const link = vi.fn<(userSessionIssuerId: string) => Promise<void>>();
 function renderField(
   currentIssuerId: string | null,
   mcpServerId?: string,
+  label?: string,
 ): void {
   const target: AuthTarget = {
     mcpServerId,
@@ -184,6 +187,7 @@ function renderField(
           issuers={[issuer("current"), issuer("candidate")]}
           isLoading={false}
           isError={false}
+          label={label}
         />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -191,7 +195,7 @@ function renderField(
 }
 
 function chooseCandidateAndSave(): void {
-  fireEvent.change(screen.getByLabelText("User session issuer"), {
+  fireEvent.change(screen.getByRole("combobox", { name: "MCP sign-in" }), {
     target: { value: "candidate" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -209,6 +213,15 @@ afterEach(() => {
 });
 
 describe("UserSessionIssuerField", () => {
+  it.each([
+    [undefined, "MCP sign-in"],
+    ["Used by this server", "Used by this server"],
+  ])("names the picker after its row (%s)", (label, name) => {
+    renderField("current", undefined, label);
+    expect(screen.getByText(name)).toBeTruthy();
+    expect(screen.getByRole("combobox", { name })).toBeTruthy();
+  });
+
   it("confirms before replacing an issuer and names the new authorization server", async () => {
     testState.impact.data = {
       authorizationServerChanges: true,
@@ -218,9 +231,7 @@ describe("UserSessionIssuerField", () => {
 
     chooseCandidateAndSave();
 
-    expect(
-      screen.getByText("Change MCP Authentication Provider?"),
-    ).toBeDefined();
+    expect(screen.getByText("Change MCP sign-in?")).toBeDefined();
     expect(link).not.toHaveBeenCalled();
     expect(testState.impactRequests).toContainEqual({
       toolsetId: "toolset-1",
@@ -234,7 +245,7 @@ describe("UserSessionIssuerField", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Change MCP Authentication Provider",
+        name: "Change MCP sign-in",
       }),
     );
     await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
@@ -260,7 +271,7 @@ describe("UserSessionIssuerField", () => {
     expect(screen.getByText(/Couldn't check whether/)).toBeDefined();
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Change MCP Authentication Provider",
+        name: "Change MCP sign-in",
       }),
     );
     await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
@@ -296,7 +307,7 @@ describe("UserSessionIssuerField", () => {
 
     expect(
       screen
-        .getByRole("button", { name: "Change MCP Authentication Provider" })
+        .getByRole("button", { name: "Change MCP sign-in" })
         .hasAttribute("disabled"),
     ).toBe(true);
   });
@@ -315,7 +326,7 @@ describe("UserSessionIssuerField", () => {
     // The row badge, and the note explaining it.
     expect(screen.getAllByText("Shared sign-in")).toHaveLength(2);
     const confirm = screen.getByRole("button", {
-      name: "Change MCP Authentication Provider",
+      name: "Change MCP sign-in",
     });
     expect(confirm.hasAttribute("disabled")).toBe(true);
 

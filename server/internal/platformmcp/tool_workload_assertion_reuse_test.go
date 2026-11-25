@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -308,6 +309,7 @@ func TestWorkloadAssertionReuseDiscoveryUsesExistingScopes(t *testing.T) {
 			grants = append(grants, authz.NewGrant(authz.ScopeOrgAdmin, p.OrganizationID))
 		}
 		ctx := authz.GrantsToContext(t.Context(), grants)
+		reg.withAICatalog(aivendorstest.NewStore())
 		visible := reg.FilterExternalTools(ctx, p, tools)
 		var names []string
 		for _, tool := range visible {

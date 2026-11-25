@@ -9,6 +9,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -26,6 +27,8 @@ const (
 // one transaction, removing each key's grants and auditing the revocation the
 // same way a manual revoke does. It returns how many keys it revoked.
 func ReapStalePluginAPIKeys(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Logger, batchSize int32) (int, error) {
+	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
+
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("begin transaction: %w", err)

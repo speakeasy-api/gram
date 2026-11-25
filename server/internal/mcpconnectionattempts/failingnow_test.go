@@ -3,6 +3,8 @@ package mcpconnectionattempts
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,6 +85,9 @@ func (f *failingFixture) failing() []FailingPerson { return f.read(FailingNowFil
 
 // client sets the client a row's User-Agent named.
 func client(family string) Option { return Option{apply: func(r *Row) { r.ClientFamily = family }} }
+
+// version sets the client version a row's User-Agent named.
+func version(v string) Option { return Option{apply: func(r *Row) { r.ClientVersion = v }} }
 
 func person() urn.SessionSubject { return urn.NewUserSubject("user-" + uuid.NewString()) }
 
@@ -945,9 +950,8 @@ func TestFailingNow_AnEpisodeNamesItsLatestFailure(t *testing.T) {
 	t.Parallel()
 	f := newFailingFixture(t)
 	p := person()
-	version := func(v string) Option { return Option{apply: func(r *Row) { r.ClientVersion = v }} }
-	f.attempt(f.direct(AppDCR), 40*time.Minute, StepProviderRefresh, CodeInvalidGrant, Subject(&p), Provider("https://old.example.com"), version("1.0.0"))
-	f.attempt(f.direct(AppDCR), 30*time.Minute, StepMCPRequest, CodeProviderRejected, Subject(&p), Provider("https://auth.example.com"), version("1.2.0"))
+	f.attempt(f.direct(AppDCR), 40*time.Minute, StepProviderRefresh, CodeInvalidGrant, Subject(&p), Provider("https://old.example.com"), client(FamilyCursor), version("1.0.0"))
+	f.attempt(f.direct(AppDCR), 30*time.Minute, StepMCPRequest, CodeProviderRejected, Subject(&p), Provider("https://auth.example.com"), client(FamilyCursor), version("1.2.0"))
 	got := f.failing()
 	require.Len(t, got, 1)
 	require.Equal(t, StepMCPRequest.String(), got[0].Step)
@@ -955,4 +959,255 @@ func TestFailingNow_AnEpisodeNamesItsLatestFailure(t *testing.T) {
 	require.Equal(t, "auth.example.com", got[0].ProviderHost)
 	require.Equal(t, CodeInvalidGrant.String(), got[0].OpeningReason)
 	require.Equal(t, CodeProviderRejected.String(), got[0].Reason)
+}
+
+// More server ids than one batch are read in batches, every row kept and none from other servers.
+func TestReadServedByFamily_ReadsInBatches(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	failing := make([]FailingPerson, 0, servedByFamilyBatch+1)
+	for range servedByFamilyBatch + 1 {
+		failing = append(failing, FailingPerson{Episode: Episode{ServerKind: serverKindMCP, ServerID: uuid.NewString()}})
+	}
+	first, last := f.conn(person(), serverKindMCP, uuid.MustParse(failing[0].ServerID), AppDCR), f.conn(person(), serverKindMCP, uuid.MustParse(failing[servedByFamilyBatch].ServerID), AppDCR)
+	f.served(first, time.Minute)
+	f.answered(last, 2*time.Minute)
+	f.served(f.conn(person(), serverKindMCP, uuid.New(), AppDCR), time.Minute)
+
+	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, uuid.Nil, failing)
+	require.NoError(t, err)
+	byServer := map[string]ServedByFamily{}
+	for _, s := range got {
+		byServer[s.ServerID] = s
+	}
+	require.Len(t, byServer, 2)
+	require.True(t, byServer[first.ServerID].LastAnsweredAt.IsZero(), "served by Speakeasy only")
+	require.Equal(t, f.at(2*time.Minute), byServer[last.ServerID].LastAnsweredAt.UTC())
+}
+
+func TestReadServedByFamily_NeverReturnsAnotherOrganizationsRows(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	other := newFailingFixture(t)
+	other.server = f.server
+	mine := f.onServer(person(), AppDCR)
+	mine.ClientFamily = FamilyCursor
+	theirs := other.onServer(person(), AppDCR)
+	theirs.ClientFamily = FamilyClaudeCode
+	f.served(mine, time.Minute)
+	other.served(theirs, time.Minute)
+
+	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, uuid.Nil, []FailingPerson{{Episode: Episode{ServerKind: serverKindMCP, ServerID: f.server.String()}}})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, FamilyCursor, got[0].ClientFamily)
+	require.Equal(t, f.at(time.Minute), got[0].LastServedAt.UTC())
+}
+
+// The version comes from the row that named the client, never from another row of the attempt.
+func TestFailingNow_TheVersionComesFromTheRowThatNamedTheClient(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	started := f.at(time.Hour)
+	attempt := AttemptAt(uuid.New(), started, f.direct(AppDCR))
+	named, err := RowAt(attempt, StepMCPRequest, CodeStaticKeyRejected, false, started, Subject(&p), client(FamilyCursor))
+	require.NoError(t, err)
+	generic, err := RowAt(attempt, StepMCPRequest, CodeStaticKeyRejected, true, started.Add(time.Second), Subject(&p), client(FamilyScript), version("8.7"))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), f.ch, []Row{named, generic}))
+
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, FamilyCursor, got[0].ClientFamily)
+	require.Empty(t, got[0].ClientVersion)
+}
+
+// Reading served connections in batches of one finds what one query finds.
+func TestFailingNow_ReadsServedConnectionsInBatches(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	var failures []failure
+	fail := func(p urn.SessionSubject, kind string, server uuid.UUID) {
+		failures = append(failures, failure{a: attemptFacts{AttemptSummary: AttemptSummary{ServerKind: kind, ServerID: server.String(), SubjectURN: p.String()}}})
+	}
+	// Two people on one server fall in different batches of one.
+	shared := uuid.New()
+	for range 2 {
+		p := person()
+		fail(p, serverKindMCP, shared)
+		f.answered(f.conn(p, serverKindMCP, shared, AppDCR), time.Minute)
+	}
+	// A gateway member's row sits at a batch boundary.
+	gateway, onMember := uuid.New(), person()
+	fail(onMember, serverKindMeta, gateway)
+	memberRow := f.conn(onMember, serverKindMeta, gateway, AppDCR)
+	memberRow.MemberID = uuid.NewString()
+	f.answered(memberRow, time.Minute)
+	alone, server := person(), uuid.New()
+	fail(alone, serverKindMCP, server)
+	f.answered(f.conn(alone, serverKindMCP, server, AppDCR), time.Minute)
+
+	oneServed, oneAnswers, err := readServed(t.Context(), f.ch, f.org, uuid.Nil, failures, servedBatch)
+	require.NoError(t, err)
+	require.Len(t, oneServed, 4)
+	require.Len(t, oneAnswers, 3)
+	require.True(t, slices.ContainsFunc(oneServed, func(s lastServed) bool { return s.MemberID == memberRow.MemberID }))
+	served, answers, err := readServed(t.Context(), f.ch, f.org, uuid.Nil, failures, 1)
+	require.NoError(t, err)
+	require.ElementsMatch(t, oneServed, served)
+	require.ElementsMatch(t, oneAnswers, answers)
+	none, noAnswers, err := readServed(t.Context(), f.ch, f.org, uuid.Nil, nil, 1)
+	require.NoError(t, err)
+	require.Empty(t, none, "nothing failing reads nothing")
+	require.Empty(t, noAnswers)
+}
+
+// A project's read leaves out other projects and organization gateways.
+func TestFailingNow_KeepsOneProject(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	for _, scope := range []Scope{f.direct(AppDCR), ServerScope(f.org, uuid.New(), uuid.New(), AppDCR), OrganizationGatewayScope(f.org, uuid.New(), AppDCR)} {
+		p := urn.NewUserSubject("user-" + uuid.NewString())
+		f.attempt(scope, time.Hour, StepMCPRequest, CodeStaticKeyRejected, Subject(&p))
+	}
+	require.Len(t, f.failing(), 3)
+	got := f.read(FailingNowFilter{ProjectID: f.project})
+	require.Len(t, got, 1)
+	require.Equal(t, f.project, got[0].ProjectID)
+}
+
+// Served and answered rows in another project never end this project's failures.
+func TestFailingNow_ServedRowsOfAnotherProjectEndNothing(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	f.attempt(f.direct(AppDCR), time.Hour, StepMCPRequest, CodeProviderServerError, Subject(&p))
+	foreign := f.onServer(p, AppDCR)
+	foreign.ProjectID = uuid.New()
+	f.answered(foreign, 10*time.Minute)
+
+	require.Len(t, f.read(FailingNowFilter{ProjectID: f.project}), 1, "another project's answer does not end it")
+	require.Empty(t, f.read(FailingNowFilter{}), "read across projects, the answer ends it")
+}
+
+// Served-by-family rows of another project do not count for this one.
+func TestReadServedByFamily_KeepsOneProject(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	foreign := f.onServer(p, AppDCR)
+	foreign.ProjectID = uuid.New()
+	f.answered(foreign, time.Minute)
+	failing := []FailingPerson{{Episode: Episode{ServerKind: serverKindMCP, ServerID: f.server.String()}}}
+	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, f.project, failing)
+	require.NoError(t, err)
+	require.Empty(t, got)
+	got, err = ReadServedByFamily(t.Context(), f.ch, f.org, uuid.Nil, failing)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+}
+
+// providerRead reads as one provider's page does: its project, its servers and the provider itself.
+func (f *failingFixture) providerRead(issuer uuid.UUID) []FailingPerson {
+	return f.read(FailingNowFilter{ProjectID: f.project, IssuerID: issuer, IssuerServerIDs: []string{f.server.String()}})
+}
+
+// failServiceSignIn has p fail to sign in to the direct server's service, stamped with issuer, 40 minutes ago, with connection.
+func (f *failingFixture) failServiceSignIn(p urn.SessionSubject, issuer, connection uuid.UUID) {
+	f.t.Helper()
+	f.attempt(f.direct(AppDCR), 40*time.Minute, StepProviderRefresh, CodeInvalidGrant, Subject(&p), UserSessionIssuer(issuer), RemoteSessionClient(connection))
+	require.Len(f.t, f.providerRead(issuer), 1)
+}
+
+// Signing in to the service again through another provider's gateway, whose member is the failing server, ends it.
+func TestFailingNow_AProviderPageCountsASignInThroughAnotherProvidersGateway(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p, issuer := person(), uuid.New()
+	f.failServiceSignIn(p, issuer, uuid.New())
+	f.attempt(GatewayScope(f.org, f.project, uuid.New(), AppDCR), 20*time.Minute, StepProviderSignIn, ResultSignedIn, Subject(&p), Member(f.server), UserSessionIssuer(uuid.New()))
+	require.Empty(t, f.providerRead(issuer))
+}
+
+// Signing in to the service again through the organization gateway, which has no project, ends it.
+func TestFailingNow_AProviderPageCountsASignInThroughTheOrganizationGateway(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p, issuer := person(), uuid.New()
+	f.failServiceSignIn(p, issuer, uuid.New())
+	f.attempt(OrganizationGatewayScope(f.org, uuid.New(), AppDCR), 20*time.Minute, StepProviderSignIn, ResultSignedIn, Subject(&p), Member(f.server))
+	require.Empty(t, f.providerRead(issuer))
+}
+
+// A background refresh on the same service connection, with no server and no provider, ends it.
+func TestFailingNow_AProviderPageCountsABackgroundRefresh(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p, issuer, connection := person(), uuid.New(), uuid.New()
+	f.failServiceSignIn(p, issuer, connection)
+	f.attempt(ProviderSessionScope(f.org, f.project, AppBackground), 20*time.Minute, StepProviderRefresh, ResultRefreshed, Subject(&p), RemoteSessionClient(connection))
+	require.Empty(t, f.providerRead(issuer))
+}
+
+// The same sign-in in another organization ends nothing here.
+func TestFailingNow_AProviderPageIgnoresAnotherOrganizationsSignIn(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p, issuer, connection := person(), uuid.New(), uuid.New()
+	f.failServiceSignIn(p, issuer, connection)
+	other := "org-" + uuid.NewString()
+	f.attempt(ServerScope(other, f.project, f.server, AppDCR), 20*time.Minute, StepProviderSignIn, ResultSignedIn, Subject(&p), Member(f.server))
+	f.attempt(ProviderSessionScope(other, f.project, AppBackground), 20*time.Minute, StepProviderRefresh, ResultRefreshed, Subject(&p), RemoteSessionClient(connection))
+	require.Len(t, f.providerRead(issuer), 1)
+}
+
+// Failures of the same person on another provider's servers, or in another project, are not this page's.
+func TestFailingNow_AProviderPageKeepsOnlyItsOwnFailures(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p, issuer := person(), uuid.New()
+	f.attempt(ServerScope(f.org, f.project, uuid.New(), AppDCR), 40*time.Minute, StepProviderRefresh, CodeInvalidGrant, Subject(&p), UserSessionIssuer(uuid.New()))
+	f.attempt(ServerScope(f.org, uuid.New(), f.server, AppDCR), 40*time.Minute, StepProviderRefresh, CodeInvalidGrant, Subject(&p))
+	f.attempt(f.direct(AppDCR), 40*time.Minute, StepProviderRefresh, CodeInvalidGrant, Subject(&p), UserSessionIssuer(uuid.New()))
+	require.Empty(t, f.providerRead(issuer), "another provider's server, another project, and a row stamped only with another provider")
+	f.attempt(f.direct(AppDCR), 30*time.Minute, StepProviderRefresh, CodeInvalidGrant, Subject(&p))
+	require.Len(t, f.providerRead(issuer), 1)
+}
+
+func TestEpisode_BackingServerIDAndOnMCPServer(t *testing.T) {
+	t.Parallel()
+	id := uuid.New()
+	cases := []struct {
+		name    string
+		episode Episode
+		backing string
+		onMCP   bool
+	}{
+		{"a direct server", Episode{ServerKind: serverKindMCP, ServerID: strings.ToUpper(id.String())}, id.String(), true},
+		{"a gateway member", Episode{ServerKind: serverKindMeta, ServerID: "gw", MemberID: id.String()}, id.String(), true},
+		{"a gateway with no member", Episode{ServerKind: serverKindMeta, ServerID: id.String()}, "", true},
+		{"a toolset", Episode{ServerKind: serverKindToolset, ServerID: id.String()}, "", true},
+		{"an authorization server", Episode{ServerKind: serverKindAuthorizationServer, ServerID: "https://auth.example.com"}, "", false},
+		{"no server", Episode{ServerKind: serverKindIdentityProvider, ServerID: ""}, "", false},
+		{"an MCP server with no id", Episode{ServerKind: serverKindMCP, ServerID: ""}, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.backing, tc.episode.BackingServerID())
+			require.Equal(t, tc.onMCP, tc.episode.OnMCPServer())
+		})
+	}
+}
+
+func TestReadServedByFamily_ReadsOnlyMCPServers(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	issuer := Served{OrganizationID: f.org, ProjectID: f.project, ServerKind: serverKindAuthorizationServer, ServerID: "https://auth.example.com", SubjectURN: person().String(), ClientFamily: FamilyCursor}
+	f.served(issuer, time.Minute)
+
+	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, uuid.Nil, []FailingPerson{{Episode: Episode{ServerKind: serverKindAuthorizationServer, ServerID: issuer.ServerID}}})
+	require.NoError(t, err)
+	require.Empty(t, got)
 }

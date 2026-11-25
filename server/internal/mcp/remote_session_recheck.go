@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,7 +22,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -316,6 +316,8 @@ func (s *Service) releaseRemoteSessionRecheckLeases(ctx context.Context, logger 
 		if _, err := remotesessions_repo.New(s.db).ClearRemoteSessionRecheckLease(detached, remotesessions_repo.ClearRemoteSessionRecheckLeaseParams{
 			ID:              row.ID,
 			OrganizationIds: row.OrganizationIds,
+			ClaimedAt:       row.ClaimedAt,
+			NowTs:           conv.ToPGTimestamptz(time.Now()),
 		}); err != nil {
 			logger.WarnContext(detached, "release unprobed remote session re-check lease", attr.SlogRemoteSessionID(row.ID.String()), attr.SlogError(err))
 			return
@@ -356,13 +358,12 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 	sess := candidate.RemoteSession
 	logger = logger.With(attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()))
 
-	placements, err := remotesessions_repo.New(s.db).GetRemoteSessionRecheckEndpoints(ctx, remotesessions_repo.GetRemoteSessionRecheckEndpointsParams{
-		UserSessionIssuerID:   sess.UserSessionIssuerID,
-		RemoteSessionClientID: sess.RemoteSessionClientID,
-		OrganizationIds:       row.OrganizationIds,
-		SubjectUrn:            sess.SubjectUrn,
-		NowTs:                 conv.ToPGTimestamptz(now),
-	})
+	q := remotesessions_repo.New(s.db)
+	placementParams := remotesessions_repo.GetRemoteSessionRecheckEndpointsParams{
+		ID: sess.ID, UserSessionIssuerID: sess.UserSessionIssuerID, UpdatedAt: sess.UpdatedAt, GrantGeneration: sess.GrantGeneration,
+		OrganizationIds: row.OrganizationIds, NowTs: conv.ToPGTimestamptz(now),
+	}
+	placements, err := q.GetRemoteSessionRecheckEndpoints(ctx, placementParams)
 	if err != nil {
 		logger.ErrorContext(ctx, "find endpoint for remote session re-check", attr.SlogError(err))
 		return recheckSkipped
@@ -370,7 +371,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 	for _, placement := range placements {
 		logger := logger.With(attr.SlogOrganizationID(placement.OrganizationID))
 		ref, endpoint := s.placeRemoteSessionRecheck(ctx, logger, placement.OrganizationID, placement)
-		if endpoint == nil {
+		if endpoint == nil || endpoint.OrganizationID != placement.OrganizationID || (!placement.OrganizationGateway && endpoint.ProjectID != placement.ReachProjectID) {
 			logger.InfoContext(ctx, "remote session re-check skipped: no endpoint serves this grant")
 			continue
 		}
@@ -403,51 +404,66 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			AutoConnectDone:          false,
 			FocusServer:              "",
 		}
-		hosted, err := s.recheckHostedRemoteSession(ctx, logger, endpoint, state, sess, row.OrganizationIds)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) && !errors.Is(err, errRemoteSessionUnroutable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) && !errors.Is(err, errRemoteSessionRecheckRateLimited) && !errors.Is(err, errRemoteSessionVerdictNotRecorded) && !errors.Is(err, errHostedValidationPlacementChanged) {
-			logger.ErrorContext(ctx, "check exact hosted placement for remote session re-check", attr.SlogError(err))
+		hosted, probeErr := s.recheckHostedRemoteSession(ctx, logger, endpoint, state, sess, row.OrganizationIds)
+		if probeErr != nil && !errors.Is(probeErr, pgx.ErrNoRows) && !errors.Is(probeErr, errRemoteSessionUnroutable) && !errors.Is(probeErr, remotesessions.ErrRemoteSessionMisconfigured) && !errors.Is(probeErr, errRemoteSessionRecheckRateLimited) && !errors.Is(probeErr, errRemoteSessionVerdictNotRecorded) && !errors.Is(probeErr, errHostedValidationPlacementChanged) {
+			logger.ErrorContext(ctx, "check exact hosted placement for remote session re-check", attr.SlogError(probeErr))
 			continue
 		}
-		if !hosted && err == nil {
-			recheckCtx := ctx
-			enforced, enforcementErr := authenforcement.ReadEnforced(ctx, s.db, endpoint.OrganizationID)
-			if enforcementErr != nil {
-				logger.ErrorContext(ctx, "read upstream auth enforcement for remote session re-check", attr.SlogError(enforcementErr))
+		if !hosted && probeErr == nil {
+			clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, placement.ReachProjectID, placement.OrganizationID, []uuid.UUID{sess.RemoteSessionClientID})
+			if err != nil || len(clients) != 1 || clients[0].CredentialOwner != remotesessions.CredentialOwnerSubject {
+				if err != nil {
+					logger.ErrorContext(ctx, "load registration for remote session re-check", attr.SlogError(err))
+				}
 				continue
 			}
-			if !enforced {
-				recheckCtx = context.WithValue(ctx, recheckLegacyInventoryKey{}, true)
+			client := clients[0]
+			entry, err := s.remoteChallengeMgr.OpenRecheckToken(ctx, sess)
+			if err != nil {
+				logger.InfoContext(ctx, "remote session re-check skipped: exact grant is unusable", attr.SlogError(err))
+				return recheckSkipped
 			}
-			clients, offered, inventoryErr := s.listEndpointClientsAndRegistrations(recheckCtx, endpoint, state)
-			if inventoryErr != nil {
-				logger.ErrorContext(ctx, "list clients for remote session re-check", attr.SlogError(inventoryErr))
+			tokens := map[uuid.UUID]remotesessions.UpstreamToken{client.RemoteSessionIssuerID: entry}
+			memberTokens := func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+				return tokens, nil
+			}
+			scope := recheckMemberScope{projectID: placement.ReachProjectID, typedOffer: placement.TypedOffer, serverID: placement.ServerID, registrationID: sess.RemoteSessionClientID}
+			probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, state, client, tokens, memberTokens, &scope)
+			if err != nil {
+				logger.InfoContext(ctx, "remote session re-check endpoint cannot present this grant", attr.SlogError(err))
 				continue
 			}
-			clients = subjectConnectedClients(clients)
-			client := findConsentClient(clients, sess.RemoteSessionClientID)
-			if client == nil {
-				logger.InfoContext(ctx, "remote session re-check skipped: client is not bound to the endpoint")
+			// Recheck exact generation and the placement's live reach after target
+			// authorization and immediately before the grant can go to the wire.
+			placementParams.NowTs = conv.ToPGTimestamptz(time.Now())
+			current, err := q.GetRemoteSessionRecheckEndpoints(ctx, placementParams)
+			if err != nil {
+				logger.ErrorContext(ctx, "revalidate remote session re-check placement", attr.SlogError(err))
+				return recheckSkipped
+			}
+			if !slices.Contains(current, placement) {
 				continue
 			}
-			// The probe logs its own refusals; only a dialled probe ends the search.
-			err = s.probeRemoteSession(recheckCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppBackground)), logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, *client, offered, nil, remotesessionmetrics.ValidationTriggerKeepalive)
+			probeErr = s.runRemoteSessionProbe(ctx, probeCtx, logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, client, entry, placement.ReachProjectID, target, remotesessionmetrics.ValidationTriggerKeepalive)
 		}
 		switch {
-		case errors.Is(err, errRemoteSessionRecheckRateLimited):
+		case errors.Is(probeErr, errRemoteSessionRecheckRateLimited):
 			// Stay inside this probe's budget; a detached cleanup would extend the shutdown drain.
 			if _, err := remotesessions_repo.New(s.db).ClearRemoteSessionRecheckLease(ctx, remotesessions_repo.ClearRemoteSessionRecheckLeaseParams{
 				ID:              row.ID,
 				OrganizationIds: row.OrganizationIds,
+				ClaimedAt:       row.ClaimedAt,
+				NowTs:           conv.ToPGTimestamptz(time.Now()),
 			}); err != nil {
-				logger.ErrorContext(ctx, "release remote session re-check lease", attr.SlogError(err))
+				logger.ErrorContext(ctx, "release remote session re-check lease", attr.SlogError(probeErr))
 			}
 			return recheckRateLimited
-		case errors.Is(err, errRemoteSessionVerdictNotRecorded):
-			logger.InfoContext(ctx, "remote session re-check did not record a verdict", attr.SlogError(err))
+		case errors.Is(probeErr, errRemoteSessionVerdictNotRecorded):
+			logger.InfoContext(ctx, "remote session re-check did not record a verdict", attr.SlogError(probeErr))
 			return recheckProbed
-		case err != nil:
+		case probeErr != nil:
 			// Nothing was dialled or written: this endpoint cannot route, reach, or authorize the grant; a sibling may. The claim lease paces the retry.
-			logger.InfoContext(ctx, "remote session re-check endpoint cannot present this grant", attr.SlogError(err))
+			logger.InfoContext(ctx, "remote session re-check endpoint cannot present this grant", attr.SlogError(probeErr))
 			continue
 		}
 		return recheckProbed

@@ -74,6 +74,7 @@ import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
   AlertTriangle,
   Database,
+  MessageSquareQuote,
   MessageSquareText,
   ShieldCheck,
   WandSparkles,
@@ -101,6 +102,12 @@ const GUARDRAILS_TAB: McpDetailTabDef<TabValue> = {
   key: "guardrails",
   title: "Guardrails",
   Icon: ShieldCheck,
+};
+// Named as on a skill's page, where agents' reports about it live too.
+const FEEDBACK_TAB: McpDetailTabDef<TabValue> = {
+  key: "feedback",
+  title: "Agent Feedback",
+  Icon: MessageSquareQuote,
 };
 
 /**
@@ -216,9 +223,13 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const { data: pluginsData } = usePlugins(pluginScope, undefined, {
     enabled: canReadPlugins,
   });
-  const { data: publishStatus } = usePublishStatus(pluginScope, undefined, {
-    enabled: canReadPlugins,
-  });
+  // Only the readiness row reads this; a failed status read leaves that row
+  // unknown rather than taking down every tab of the server.
+  const { data: publishStatus, isError: publishStatusFailed } =
+    usePublishStatus(pluginScope, undefined, {
+      enabled: canReadPlugins,
+      throwOnError: false,
+    });
   const isCanonical = !!mcpServer && isCanonicalHostedWrapper(mcpServer);
   // The same load the detail page does, so it is shared from the cache; it
   // finds the toolset from the list when the read omits its summary.
@@ -418,9 +429,11 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
                 label: "Included in a plugin",
                 description: isTrulyIncluded
                   ? `Published to ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}.`
-                  : isPluginMember
-                    ? "Marketplace needs publishing before this plugin is installable."
-                    : "Add this server to a plugin so your team can install it.",
+                  : isPluginMember && publishStatusFailed
+                    ? "Couldn't check whether the marketplace is published."
+                    : isPluginMember
+                      ? "Marketplace needs publishing before this plugin is installable."
+                      : "Add this server to a plugin so your team can install it.",
                 ready: isTrulyIncluded,
                 // Distribution is a later choice, not part of making the
                 // server work, so it never counts as a step left.
@@ -494,6 +507,9 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       // vendor with the vendor's own credentials, so Speakeasy never mints a session
       // or registers a client for them and the tab would always be empty.
       !isUnproxied && "sessions",
+      // Only for servers built from an API or functions: Speakeasy does not
+      // add a tool to a third party's server, so nothing could be collected.
+      !!mcpServer?.toolsetId && FEEDBACK_TAB,
       "settings",
     ],
     activeTab,

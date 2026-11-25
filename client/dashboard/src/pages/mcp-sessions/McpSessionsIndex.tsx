@@ -16,7 +16,7 @@ import {
   useProjectProviders,
 } from "./providers";
 
-const MCP_SESSIONS_TITLE = "MCP Sessions";
+const MCP_SESSIONS_TITLE = "MCP Sign-in";
 
 /** The filter the old single list used to narrow to one provider. */
 const LEGACY_PROVIDER_PARAM = "issuerId";
@@ -55,8 +55,7 @@ export default function McpSessionsIndex(): JSX.Element {
       >
         {isError ? (
           <Text destructive>
-            Couldn&apos;t load MCP Authentication Providers. Reload the page to
-            try again.
+            Couldn&apos;t load MCP sign-ins. Reload the page to try again.
           </Text>
         ) : (
           <MCPSessionsEmptyState />

@@ -10,6 +10,8 @@ export interface CommandAction {
   group?: string;
   /** Release stage of the target (e.g. a pre-GA page); renders a badge. */
   stage?: ReleaseStage;
+  /** Extra search terms, such as a page's former name. */
+  keywords?: string[];
 }
 
 interface CommandPaletteContextType {

@@ -930,6 +930,9 @@ type Client struct {
 	CredentialOwner CredentialOwner
 }
 
+// CanStartSignIn reports whether the client's authorization server can start a browser sign-in.
+func (c Client) CanStartSignIn() bool { return c.AuthorizationEndpoint != "" }
+
 // needsRegistrationRotation reports whether the client's upstream registration
 // should be replaced before sending a user to the authorize endpoint: the
 // issuer has rejected the client_id, or the secret it issued has expired. A
@@ -1714,7 +1717,7 @@ func (m *ChallengeManager) mintAuthorization(
 		m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
 	}
 
-	if client.AuthorizationEndpoint == "" {
+	if !client.CanStartSignIn() {
 		return "", fmt.Errorf("remote_session_issuer %s: %w", client.IssuerSlug, ErrIssuerNoAuthorizationEndpoint)
 	}
 	if client.TokenEndpoint == "" {
@@ -2426,17 +2429,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 	}
 
-	// The upstream exchange has already happened, so the token pair exists
-	// either way; this transaction decides whether Speakeasy stores it. The
-	// client-row lock serializes the write against the issuer-delete orphan
-	// cascade, which locks the same row before sweeping the client's
-	// sessions: a callback that acquires the lock after that cascade
-	// committed re-reads the binding as dead and is rejected here, instead
-	// of resurrecting a grant no live issuer can reach or revoke. A rejected
-	// callback leaves the revocation armed above still standing.
-	//
-	// No row means the client itself is gone, which the binding recheck below
-	// rejects on its own — there is nothing left to serialize against.
+	// The client lock serializes publication with registration deletion and
+	// issuer retirement. If the client is already gone, the binding check
+	// below rejects the exchange and leaves its upstream revoke armed.
 	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)

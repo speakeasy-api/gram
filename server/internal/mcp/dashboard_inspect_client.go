@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -61,8 +62,8 @@ func isLoopbackDashboardHost(host string) bool {
 // registerDashboardInspectClient lazily provisions the public client at the
 // issuer selected by /authorize. The usual consent, grant and runtime paths
 // resolve its persisted client row like any other OAuth client.
-func (s *Service) registerDashboardInspectClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, redirectURIs []string) (*usersessions_repo.UserSessionClient, error) {
-	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, dashboardInspectClientID, lookupClientOnly)
+func (s *Service) registerDashboardInspectClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientCatalog *aivendors.Snapshot, redirectURIs []string) (*usersessions_repo.UserSessionClient, error) {
+	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientCatalog, dashboardInspectClientID, lookupClientOnly)
 	if err == nil {
 		// Only current deployment configuration is authoritative for redirects,
 		// even when the row predates an origin change.
@@ -88,7 +89,7 @@ func (s *Service) registerDashboardInspectClient(ctx context.Context, logger *sl
 	})
 	if isUniqueViolation(err) {
 		// Another request already registered the client for this issuer.
-		client, err = s.resolveUserSessionClient(ctx, logger, endpoint, dashboardInspectClientID, lookupClientOnly)
+		client, err = s.resolveUserSessionClient(ctx, logger, endpoint, clientCatalog, dashboardInspectClientID, lookupClientOnly)
 		if err == nil {
 			client.RedirectUris = redirectURIs
 		}

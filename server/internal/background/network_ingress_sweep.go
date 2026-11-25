@@ -29,6 +29,15 @@ const (
 	// Leave room for workflow tasks and activity scheduling around both budgets.
 	networkIngressSweepWorkflowOverhead = 5 * time.Minute
 	networkIngressSweepExecutionTimeout = 2*networkIngressSweepActivityRetryBudget + networkIngressSweepWorkflowOverhead
+
+	// networkIngressSweepDropOrphanInventoryChangeID marks the sweep that no
+	// longer inventories Kubernetes operator resources. Runs started before
+	// it replay the inventory activity, which is now a no-op.
+	networkIngressSweepDropOrphanInventoryChangeID = "drop-orphan-inventory"
+
+	// networkIngressOrphanInventoryActivityName stays registered as a no-op
+	// for runs started before the inventory was dropped.
+	networkIngressOrphanInventoryActivityName = "FindNetworkIngressOrphans"
 )
 
 func NetworkIngressSweepWorkflow(ctx workflow.Context) error {
@@ -40,8 +49,10 @@ func NetworkIngressSweepWorkflow(ctx workflow.Context) error {
 	if err := workflow.ExecuteActivity(ctx, "SweepNetworkIngresses").Get(ctx, nil); err != nil {
 		return fmt.Errorf("sweep network ingresses: %w", err)
 	}
-	if err := workflow.ExecuteActivity(ctx, "FindNetworkIngressOrphans").Get(ctx, nil); err != nil {
-		return fmt.Errorf("inventory network ingress orphans: %w", err)
+	if workflow.GetVersion(ctx, networkIngressSweepDropOrphanInventoryChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		if err := workflow.ExecuteActivity(ctx, networkIngressOrphanInventoryActivityName).Get(ctx, nil); err != nil {
+			return fmt.Errorf("inventory network ingress orphans: %w", err)
+		}
 	}
 	return nil
 }

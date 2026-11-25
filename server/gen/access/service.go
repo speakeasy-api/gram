@@ -397,6 +397,13 @@ type AccessRequest struct {
 	ResourceName *string
 	// The requester's note to the administrators.
 	Message *string
+	// How long the requester asked to have the access, in seconds counted from
+	// approval. A suggestion; the approver picks the window. Absent when none was
+	// asked for.
+	RequestedDurationSeconds *int
+	// When the requester asked to have the access until. A suggestion; the
+	// approver picks the window. Absent when none was asked for.
+	RequestedUntil *string
 	// pending: waiting for a decision. approved: a temporary grant was given.
 	// denied, expired or withdrawn: no access was given.
 	Status string
@@ -1481,6 +1488,15 @@ type RequestAccessPayload struct {
 	ResourceName *string
 	// Optional message from the requester explaining why they need access.
 	Message *string
+	// How long the requester would like the access for, counted from approval: 1h,
+	// 2h or 4h. A suggestion shown to the approver, who still picks the window.
+	// Stored only when the request is stored. Cannot be sent with requested_until.
+	Duration *string
+	// When the requester would like the access until, such as the end of their day
+	// as their own clock reads it. Must be in the future and at most 24 hours
+	// away. A suggestion shown to the approver, who still picks the window. Cannot
+	// be sent with duration.
+	RequestedUntil *string
 }
 
 // RequestAccessResult is the result type of the access service requestAccess

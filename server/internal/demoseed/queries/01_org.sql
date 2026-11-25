@@ -300,6 +300,15 @@ SELECT @org_id::text, f
 FROM unnest(@features::text[]) AS f
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
+-- name: OrgBackdateLogsFeature :exec
+-- Logs count as on from before the seeded connection events, so their problems are read.
+UPDATE organization_features
+SET created_at = @since::timestamptz
+WHERE organization_id = @org_id::text
+  AND feature_name = 'logs'
+  AND deleted IS FALSE
+  AND created_at > @since::timestamptz;
+
 -- name: OrgInsertGatewayDisabledFeature :exec
 -- Start with access review required, preserving an explicit opt-in on reseed.
 INSERT INTO organization_features (organization_id, feature_name)

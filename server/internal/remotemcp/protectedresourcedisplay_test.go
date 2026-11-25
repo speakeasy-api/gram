@@ -259,6 +259,40 @@ func TestUpdateServer_ReprobesResourceDisplayOnClientRegardlessOfIssuerSlug(t *t
 	require.Equal(t, beforeAudit+2, afterAudit, "one row for the claim on the new URL, one for the members discovery fills")
 }
 
+func TestUpdateServer_OfferWithdrawnDuringDiscoveryKeepsBareClaim(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestServiceForProbe(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, getProjectID(t, ctx)))
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, "https://old.example.test")
+	attached := seedAttachedResource(t, ctx, ti, server, server.Url)
+	withdrawn := make(chan error, 1)
+	var once sync.Once
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != wellknown.OAuthProtectedResourcePath {
+			http.NotFound(w, r)
+			return
+		}
+		once.Do(func() {
+			withdrawn <- authclientbackfill.New(ti.conn).SoftDeleteServerAuthClientLinksFixture(r.Context(), attached.serverID)
+		})
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"resource":              "http://" + r.Host,
+			"authorization_servers": []string{"https://auth.example.test"},
+			"resource_name":         "Must not be written after detach",
+		})
+	}))
+	t.Cleanup(upstream.Close)
+	updateServerURL(t, ctx, ti, server, upstream.URL)
+	select {
+	case err := <-withdrawn:
+		require.NoError(t, err)
+	default:
+		t.Fatal("the protected resource was not discovered")
+	}
+	requireClaimWithoutDisplay(t, loadClient(t, ctx, ti, attached.client), upstream.URL)
+}
+
 // A client that already shows what the document advertises is neither
 // written nor audited.
 func TestUpdateServer_ReprobeUnchangedDocumentWritesNothing(t *testing.T) {

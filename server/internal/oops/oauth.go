@@ -34,11 +34,16 @@ func NewOAuthError(status int, code, description string, cause error) *OAuthErro
 	}
 }
 
+// Error is "code: description: cause", or "code: cause" when the error has both a cause and a URI, keeping a person-facing link out of logs.
 func (e *OAuthError) Error() string {
-	if e.Cause != nil {
+	switch {
+	case e.Cause != nil && e.Response.URI != "":
+		return fmt.Sprintf("%s: %v", e.Response.Code, e.Cause)
+	case e.Cause != nil:
 		return fmt.Sprintf("%s: %v", e.Response.Error(), e.Cause)
+	default:
+		return e.Response.Error()
 	}
-	return e.Response.Error()
 }
 
 func (e *OAuthError) Unwrap() error { return e.Cause }

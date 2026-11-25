@@ -793,3 +793,18 @@ func BuildCreateSessionHandoffPayload(agentCreateSessionHandoffBody string, agen
 
 	return v, nil
 }
+
+// BuildListPendingAccessRequestsPayload builds the payload for the agent
+// listPendingAccessRequests endpoint from CLI flags.
+func BuildListPendingAccessRequestsPayload(agentListPendingAccessRequestsApikeyToken string) (*agent.ListPendingAccessRequestsPayload, error) {
+	var apikeyToken *string
+	{
+		if agentListPendingAccessRequestsApikeyToken != "" {
+			apikeyToken = &agentListPendingAccessRequestsApikeyToken
+		}
+	}
+	v := &agent.ListPendingAccessRequestsPayload{}
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}

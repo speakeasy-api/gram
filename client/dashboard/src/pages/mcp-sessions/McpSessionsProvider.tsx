@@ -81,7 +81,7 @@ const SCROLLABLE_SETTINGS_IDS = [
 ];
 
 /**
- * `/mcp-sessions/:issuerId/*`: one MCP Authentication Provider, picked in
+ * `/mcp-sessions/:issuerId/*`: one MCP sign-in, picked in
  * the header, with its connections, the MCP servers that use it, and how
  * sign-in through it works.
  */
@@ -168,7 +168,7 @@ function ProviderPage(): JSX.Element {
   return (
     <DetailFrame
       breadcrumbs={{ substitutions: {} }}
-      tabsLabel="MCP Authentication Provider sections"
+      tabsLabel="MCP sign-in sections"
       tabs={tabs}
       activeTab={activeTab}
       contentRef={contentRef}
@@ -187,7 +187,7 @@ function ProviderPage(): JSX.Element {
             title={
               provider ? (
                 <DetailHeaderTitle
-                  eyebrow="MCP Authentication Provider"
+                  eyebrow="MCP sign-in"
                   name={
                     <ProviderPicker
                       current={provider}
@@ -327,9 +327,7 @@ function ProviderUnavailable({ error }: { error: unknown }): JSX.Element {
     <InlineEmptyState
       icon="triangle-alert"
       heading={
-        notFound
-          ? "MCP Authentication Provider not found"
-          : "Couldn't load this MCP Authentication Provider"
+        notFound ? "MCP sign-in not found" : "Couldn't load this MCP sign-in"
       }
       description={
         notFound
@@ -375,8 +373,8 @@ function ProviderMcpServers({ issuerId }: { issuerId: string }): JSX.Element {
   return (
     <div className="space-y-4">
       <Text muted small className="max-w-2xl">
-        Every MCP server and gateway that signs people in through this provider.
-        Changes to its settings apply to all of them.
+        Every MCP server and gateway that uses this MCP sign-in. Changes to its
+        settings apply to all of them.
       </Text>
       <McpServersSection
         issuer={issuer}
