@@ -21,7 +21,7 @@ CREATE INDEX "cimd_client_candidates_status_first_seen_at_idx" ON "cimd_client_c
 -- Create index "cimd_client_candidates_url_key" to table: "cimd_client_candidates"
 CREATE UNIQUE INDEX "cimd_client_candidates_url_key" ON "cimd_client_candidates" ("url");
 -- Set comment to table: "cimd_client_candidates"
-COMMENT ON TABLE "cimd_client_candidates" IS 'Staff review queue of CIMD client URLs no catalog document covers. One row per URL; the decision is permanent.';
+COMMENT ON TABLE "cimd_client_candidates" IS 'Staff review queue of CIMD client URLs no catalog document covers. One row per URL; rows are never deleted.';
 -- Set comment to column: "id" on table: "cimd_client_candidates"
 COMMENT ON COLUMN "cimd_client_candidates"."id" IS '@access: confidential';
 -- Set comment to column: "url" on table: "cimd_client_candidates"
@@ -31,7 +31,7 @@ COMMENT ON COLUMN "cimd_client_candidates"."url" IS 'The client_id the client pr
 COMMENT ON COLUMN "cimd_client_candidates"."client_name" IS 'client_name from the fetched metadata document; null when absent.
 @access: opaque-confidential';
 -- Set comment to column: "status" on table: "cimd_client_candidates"
-COMMENT ON COLUMN "cimd_client_candidates"."status" IS 'One of pending, approved, dismissed, customer_specific. Only pending rows are open; the others never return to pending.
+COMMENT ON COLUMN "cimd_client_candidates"."status" IS 'One of pending, approved, dismissed, customer_specific; validated in application code.
 @access: confidential';
 -- Set comment to column: "reason" on table: "cimd_client_candidates"
 COMMENT ON COLUMN "cimd_client_candidates"."reason" IS 'Staff note recorded with the decision.
