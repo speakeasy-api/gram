@@ -217,12 +217,13 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 		{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: s.healthServerID("support").String()}, People: people("ana", "mei"), Servers: serverIDs("support")},
 	}, listedProblems, "an app version takes only servers where another app worked: Claude Code on GitHub and on Notion")
 
-	// The Project Overview lists what the seed's MCP sign-ins list between them: the health
-	// stories, and the failed refreshes of the saved Linear connection, which record its MCP sign-in.
+	// The Project Overview lists exactly the health stories: the daily failed refreshes of the saved
+	// Linear connection record its MCP sign-in, and the sweep that refreshed it just before seeding ends them.
 	linear, err := problemsOf(problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
 		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false, IssuerID: s.det("issuer-linear"), IssuerServerIDs: []string{s.det("mcpserver-linear").String()},
 	}, time.Time{}, now))
 	require.NoError(t, err)
+	require.Empty(t, linear, "the person whose refreshes failed is not failing")
 	projectWide, err := problemsOf(problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
 		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false,
 	}, time.Time{}, now))
@@ -234,7 +235,8 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 		}
 		return out
 	}
-	require.ElementsMatch(t, append(ids(got), ids(linear)...), ids(projectWide))
+	require.Len(t, projectWide, 4)
+	require.ElementsMatch(t, ids(got), ids(projectWide))
 }
 
 func problemsOf(g problems.Grouped, err error) ([]problems.Problem, error) { return g.Problems, err }
