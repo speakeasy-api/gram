@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/intent_policies"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/intentpolicy"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -101,6 +102,48 @@ func TestUploadAndAnalyzeWithGemini(t *testing.T) {
 	require.Equal(t, 1, res.Totals.Blocked)
 	require.InDelta(t, 0.004, res.Totals.CostUsd, 1e-9)
 	require.False(t, res.LimitHit)
+}
+
+func TestAnalyzePublishesAssessments(t *testing.T) {
+	t.Parallel()
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagIntentPolicies, feature.AnyDistinctID, true)
+	ctx, svc, results := newTestServiceWithResults(t, classifier.Noop{}, flags)
+
+	up, err := svc.UploadTranscript(ctx, &gen.UploadTranscriptPayload{SessionToken: nil, ProjectSlugInput: nil, Name: "upload.json", Content: transcript})
+	require.NoError(t, err)
+
+	res, err := svc.AnalyzeSession(ctx, &gen.AnalyzeSessionPayload{SessionToken: nil, ProjectSlugInput: nil, ChatID: up.ChatID, Evaluator: "gemini", Generation: nil, Offset: 0, Limit: nil})
+	require.NoError(t, err)
+
+	published := results.published()
+	require.Len(t, published, 2)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	for i, msg := range published {
+		require.Equal(t, published[0].GetAnalysisId(), msg.GetAnalysisId(), "one analysis id per request")
+		require.Equal(t, authCtx.ActiveOrganizationID, msg.GetOrganizationId())
+		require.Equal(t, authCtx.ProjectID.String(), msg.GetProjectId())
+		require.Equal(t, authCtx.UserID, msg.GetActor().GetUserId())
+		require.Equal(t, up.ChatID, msg.GetToolCall().GetChatId())
+		require.Equal(t, res.Assessments[i].ToolCallID, msg.GetToolCall().GetToolCallId())
+		require.Equal(t, res.Assessments[i].Decision, msg.GetDecision())
+		require.Equal(t, "gemini", msg.GetEvaluator().GetKind())
+		require.Equal(t, intentpolicy.DefaultGuardrail().Version, msg.GetGuardrail().GetVersion())
+		require.Equal(t, intentpolicy.TriggerDashboard, msg.GetTriggerKind())
+		require.Len(t, msg.GetLabels(), 6)
+		require.Len(t, msg.GetContracts(), len(intentpolicy.DefaultGuardrail().Contracts))
+		require.Len(t, msg.GetToolCall().GetArgumentsSha256(), 64)
+	}
+	require.Equal(t, []string{"no_remote_destruction"}, published[1].GetDecidedBy())
+
+	// A second run of the same calls shares logical ids but not the analysis id.
+	_, err = svc.AnalyzeSession(ctx, &gen.AnalyzeSessionPayload{SessionToken: nil, ProjectSlugInput: nil, ChatID: up.ChatID, Evaluator: "gemini", Generation: nil, Offset: 0, Limit: nil})
+	require.NoError(t, err)
+	again := results.published()[2:]
+	require.Len(t, again, 2)
+	require.Equal(t, published[0].GetId(), again[0].GetId())
+	require.NotEqual(t, published[0].GetAnalysisId(), again[0].GetAnalysisId())
 }
 
 func TestAnalyzeInBatches(t *testing.T) {

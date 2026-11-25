@@ -1,0 +1,149 @@
+edition = "2024";
+
+package gram.intentpolicy.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v1;intentpolicyv1";
+
+// Assessment is the intent-guardrail result for one recorded tool call: the
+// labels an evaluator inferred, each contract's outcome, and the combined
+// decision. Decisions are advisory and never enforced.
+// Analysis and delivery are at-least-once: the same id can carry different
+// answers from different analyses. Storage consumers deduplicate on id and pick
+// the latest evaluated_at, or group by analysis_id to compare runs.
+// Raw tool-call arguments are never published. Join back to the chat message
+// through chat_id and message_id when the arguments are needed.
+message Assessment {
+  // Who requested the analysis.
+  message Actor {
+    // Speakeasy user ID of the person who ran the analysis.
+    string user_id = 1;
+    // Email of the person who ran the analysis, as seen by their session.
+    string user_email = 2;
+  }
+  // The recorded tool call that was assessed.
+  message ToolCall {
+    // Speakeasy chat UUID the call belongs to.
+    string chat_id = 1;
+    // Chat generation the call was read from.
+    int32 generation = 2;
+    // Assistant message UUID that carried the call.
+    string message_id = 3;
+    // Sequence number of the carrying message.
+    int64 sequence = 4;
+    // Provider-assigned call ID, scoped to its chat.
+    string tool_call_id = 5;
+    // Raw tool name as recorded.
+    string tool_name = 6;
+    // MCP server parsed from tool_name; empty for native tools.
+    string mcp_server = 7;
+    // MCP function parsed from tool_name; empty for native tools.
+    string mcp_function = 8;
+    // Lowercase hex SHA-256 of the recorded argument payload, for grouping
+    // identical calls without exporting their content.
+    string arguments_sha256 = 9;
+    // Byte length of the recorded argument payload.
+    int64 arguments_bytes = 10;
+    // UTC RFC3339Nano time the carrying message was recorded.
+    string occurred_at = 11;
+  }
+  // The evaluator that inferred labels.
+  message Evaluator {
+    // Evaluator kind, e.g. "jev" or "gemini".
+    string kind = 1;
+    // Inference transport, e.g. "openrouter".
+    string provider = 2;
+    // Configured model ID.
+    string model = 3;
+    // Version of the question-to-prompt compilation rules.
+    string prompt_version = 4;
+  }
+  // The guardrail the call was assessed against.
+  message Guardrail {
+    string id = 1;
+    // Changes whenever statements, questions or contracts change.
+    string version = 2;
+  }
+  // Evaluator cost for this call.
+  message Usage {
+    int64 input_tokens = 1;
+    int64 output_tokens = 2;
+    // Provider-reported cost; zero when unreported.
+    double cost_usd = 3;
+    // Wall-clock duration of the evaluator call.
+    int64 latency_ms = 4;
+  }
+  // One inferred label.
+  message Label {
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      // Yes/no; bool_value is set.
+      KIND_NOUL = 1;
+      // One option; choice_value is set.
+      KIND_CHOICE = 2;
+      // Independent yes/no members; members lists those answered yes.
+      KIND_MULTI_NOUL = 3;
+    }
+    // Label key, exposed to contracts as label.<key>.
+    string key = 1;
+    Kind kind = 2;
+    bool bool_value = 3;
+    string choice_value = 4;
+    repeated string members = 5;
+    // Ordinal of a choice value; -1 when categorical or uncertain.
+    int32 rank = 6;
+    // Evaluator probability for the selected value.
+    double probability = 7;
+    // Per-option probabilities for choice and multi-noul labels.
+    map<string, double> distribution = 8;
+    // Evaluator explanation, when given.
+    string rationale = 9;
+  }
+  // One contract's result.
+  message ContractOutcome {
+    string contract_id = 1;
+    // "permit", "clarify", "block" or "abstain"; empty when the contract errored.
+    string result = 2;
+    // Evaluation error, when any.
+    string error = 3;
+    // Each label or tool path the contract read, mapped to its JSON-encoded value.
+    map<string, string> inputs = 4;
+  }
+
+  // UUIDv5 of chat_id, generation, tool_call_id, guardrail version and
+  // evaluator model: the logical identity of this call's assessment. Repeated
+  // analyses of the same call with the same guardrail and model share it.
+  string id = 1;
+  // Fresh UUID per analysis request, shared by every assessment it produced.
+  string analysis_id = 2;
+  // Speakeasy organization owning the project.
+  string organization_id = 3;
+  // Speakeasy project UUID owning the chat.
+  string project_id = 4;
+  Actor actor = 5;
+  ToolCall tool_call = 6;
+  Guardrail guardrail = 7;
+  Evaluator evaluator = 8;
+  // Combined decision: "permit", "clarify" or "block".
+  string decision = 9;
+  // Contracts that produced decision.
+  repeated string decided_by = 10;
+  // One entry per contract, in guardrail order.
+  repeated ContractOutcome contracts = 11;
+  // One entry per answered label, sorted by key. Missing labels were not answered.
+  repeated Label labels = 12;
+  // Set on any evaluator error, including partial failures.
+  string evaluator_error = 13;
+  Usage usage = 14;
+  // What started the analysis, e.g. "dashboard".
+  string trigger_kind = 15;
+  // UTC RFC3339Nano time the analysis request began, shared by its assessments.
+  string analysis_requested_at = 16;
+  // UTC RFC3339Nano time this assessment was produced.
+  string evaluated_at = 17;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: { seconds: 345600 /* 4 days */ }
+  };
+}

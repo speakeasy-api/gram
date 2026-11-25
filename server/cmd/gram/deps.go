@@ -52,6 +52,7 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/speakeasy-api/gram/infra/gen"
+	intentpolicyv1 "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -1557,6 +1558,14 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "meterReadings", pub: meterReadings})
 
+	intentPolicyAssessments, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &intentpolicyv1.Assessment{},
+		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for intent policy assessments: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "intentPolicyAssessments", pub: intentPolicyAssessments})
+
 	// OTLP ingest publishes on the request path and waits for the result before
 	// answering the exporter. Bound buffering so Pub/Sub stalls reject exports
 	// that clients can retry instead of holding requests open indefinitely.
@@ -1638,6 +1647,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		OTELLogs:                otelLogs,
 		OTELMetrics:             otelMetrics,
 		OTELSpans:               otelSpans,
+		IntentPolicyAssessments: intentPolicyAssessments,
 	}, shutdown, nil
 }
 

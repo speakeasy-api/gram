@@ -879,6 +879,7 @@ func newStreamsCommand() *cli.Command {
 				// newLakeStorage returns no store when the lake is disabled.
 				if lakeStore != nil {
 					mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
+					mustStreamToStorage(rg, storagebindings.GramIntentpolicyV1LakePrimary())
 				}
 				mustReceiveBatch(rg, &sigintv1.Reading{}, &sigintv1.ReadingCHWriter{}, sigint.NewReadingCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceiveBatch(rg, &sigintv1.Outcome{}, &sigintv1.OutcomeCHWriter{}, sigint.NewOutcomeCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
