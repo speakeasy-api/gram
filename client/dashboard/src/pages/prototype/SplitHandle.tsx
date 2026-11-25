@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 export function SplitHandle({
   dragging,
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & {
+}: Omit<React.HTMLAttributes<HTMLDivElement>, "className" | "title"> & {
   dragging: boolean;
 }): JSX.Element {
   return (

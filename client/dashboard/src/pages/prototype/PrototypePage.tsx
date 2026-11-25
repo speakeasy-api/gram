@@ -44,7 +44,8 @@ import { pageAddress, usePageHistory } from "./page-history";
 interface ChatContext {
   organization: { name: string; slug: string };
   project: { name: string; slug: string; id: string };
-  user: { name: string; email: string };
+  /** Display name only; the server already knows who is calling. */
+  userName: string | null;
   canChange: string[];
   page: {
     title: string;
@@ -64,7 +65,7 @@ function contextBlock(c: ChatContext): string {
   const lines = [
     `Organization: "${c.organization.name}" (slug: ${c.organization.slug}).`,
     `Current project: "${c.project.name}" (project_slug: ${c.project.slug}, id: ${c.project.id}). Use it whenever the user says "this project" or names no project; do not ask which project.`,
-    `User: ${c.user.name} <${c.user.email}>.`,
+    ...(c.userName ? [`The user's name is ${c.userName}.`] : []),
     c.canChange.length > 0
       ? `The user can change: ${c.canChange.join(", ")}. Anything else, explain who can.`
       : "The user can view but not change things in this project.",
@@ -147,10 +148,7 @@ function PrototypeShell(): JSX.Element {
   const chatContext: ChatContext = {
     organization: { name: organization.name, slug: organization.slug },
     project: { name: project.name, slug: project.slug, id: project.id },
-    user: {
-      name: user.displayName ?? user.email.split("@")[0] ?? "",
-      email: user.email,
-    },
+    userName: user.displayName ?? null,
     canChange: [
       ["mcp:write", "MCP servers"],
       ["plugin:write", "plugins"],

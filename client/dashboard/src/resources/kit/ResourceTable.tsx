@@ -243,12 +243,17 @@ function ResourceCard<Row extends object, Rec>({
   definition: ResourceDefinition<Row, Rec>;
   row: Row;
   onOpen: () => void;
-}): JSX.Element | null {
+}): JSX.Element {
   const identityColumn = definition.list.columns.find(
     (c) => c.kind === "identity",
   );
-  if (!identityColumn || identityColumn.kind !== "identity") return null;
-  const identity = identityColumn.value(row);
+  // A card needs an identity; without an identity column, name the card by
+  // the row's search text rather than dropping it.
+  const fallbackTitle = definition.list.searchText(row);
+  const identity =
+    identityColumn?.kind === "identity"
+      ? identityColumn.value(row)
+      : { title: fallbackTitle, mark: { label: fallbackTitle } };
   const badge = definition.list.card?.badge?.(row);
   const facts = definition.list.card?.facts?.(row) ?? [];
   return (

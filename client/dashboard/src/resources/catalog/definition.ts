@@ -83,7 +83,8 @@ export const catalogDefinition = defineResource<CatalogRow, CatalogRecord>({
           { value: "new", label: "Not added" },
           { value: "added", label: "Added" },
         ],
-        matches: (row, value) => (value === "added" ? row.added : !row.added),
+        matches: (row, value) =>
+          value === "added" ? row.added === true : row.added === false,
       },
     ],
     empty: {
@@ -103,7 +104,7 @@ export const catalogDefinition = defineResource<CatalogRow, CatalogRecord>({
         ? { label: "Added to this project", tone: "success" }
         : undefined,
     }),
-    primaryAction: (rec) => (rec.added ? undefined : "add"),
+    primaryAction: (rec) => (rec.added === false ? "add" : undefined),
     secondaryActions: ["ask"],
     sections: [
       {
@@ -123,10 +124,13 @@ export const catalogDefinition = defineResource<CatalogRow, CatalogRecord>({
           },
           {
             label: "Access",
-            value: (rec) => ({
-              kind: "text",
-              text: rec.readOnly ? "Read-only" : "Read and write",
-            }),
+            value: (rec) =>
+              rec.readOnly === undefined
+                ? { kind: "empty", text: "Not stated" }
+                : {
+                    kind: "text",
+                    text: rec.readOnly ? "Read-only" : "Read and write",
+                  },
           },
           {
             label: "Version",

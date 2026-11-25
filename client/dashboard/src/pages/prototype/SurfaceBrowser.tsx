@@ -172,12 +172,17 @@ export function StartPage({
     const text = query.trim();
     if (!text) return;
     const parsed = parseAddress(text, project);
-    if (parsed !== "invalid" && parsed !== null) {
+    if (parsed === null) {
+      // The start page's own address: already here.
+      setQuery("");
+    } else if (parsed !== "invalid") {
       history.open(parsed);
+      setQuery("");
     } else if (bridge.available) {
       bridge.ask(text);
+      setQuery("");
     }
-    setQuery("");
+    // Otherwise the assistant isn't ready: keep the text so it isn't lost.
   };
 
   return (

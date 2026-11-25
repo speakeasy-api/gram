@@ -2,6 +2,7 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { useEffect, useState } from "react";
 import { actionDef } from "./action-def";
 import { ActionButton } from "./actions";
 import { useReportPageTitle } from "./page-title";
@@ -33,6 +34,17 @@ export function ResourceRecord<Row, Rec>({
   const rec = query.status === "ready" ? query.data : undefined;
   const handlers = data.useRecordActions(rec);
   useReportPageTitle(rec ? definition.record.header(rec).identity.title : null);
+  // A `leavesRecord` action (delete) can make the record vanish before the
+  // action settles; leave as soon as that happens instead of showing an error.
+  const [leaving, setLeaving] = useState(false);
+  const gone = query.status === "error";
+  useEffect(() => {
+    if (leaving && gone) onBack();
+  }, [leaving, gone, onBack]);
+  const leaveProps = (actionId: string) =>
+    actionDef(definition, actionId).leavesRecord
+      ? { onStart: () => setLeaving(true), onDone: onBack }
+      : {};
 
   if (query.status === "loading") {
     return (
@@ -135,6 +147,7 @@ export function ResourceRecord<Row, Rec>({
                 handlers={handlers}
                 emphasis="primary"
                 subject={header.identity.title}
+                {...leaveProps(primaryId)}
               />
             )}
             {secondary
@@ -146,6 +159,7 @@ export function ResourceRecord<Row, Rec>({
                   handlers={handlers}
                   emphasis="secondary"
                   subject={header.identity.title}
+                  {...leaveProps(a)}
                 />
               ))}
           </div>
@@ -190,6 +204,7 @@ export function ResourceRecord<Row, Rec>({
                     handlers={handlers}
                     emphasis="danger"
                     label={def.confirm?.confirmLabel}
+                    {...leaveProps(a)}
                   />
                 </div>
               );

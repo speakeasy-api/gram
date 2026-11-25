@@ -263,20 +263,28 @@ type ActionKind =
   /** Hands the job to the assistant with a prepared prompt. */
   | "chat";
 
-export interface ActionDef {
+interface ConfirmSpec {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  pendingLabel: string;
+}
+
+interface ActionBase {
   id: string;
   label: string;
-  kind: ActionKind;
   /** Write scope that must be held; the kit hides the action otherwise. */
   scope?: Scope;
-  /** Destructive: red, and placed in the danger section. */
+  /**
+   * Destructive: drawn red in its confirm dialog. Placement in the danger
+   * section comes from `record.dangerActions`, not from this flag.
+   */
   danger?: boolean;
-  confirm?: {
-    title: string;
-    description: string;
-    confirmLabel: string;
-    pendingLabel: string;
-  };
+  /**
+   * After the action settles without an error, the record page returns to
+   * the list. Use it for actions that remove the record, such as delete.
+   */
+  leavesRecord?: boolean;
   /** Prompt the assistant receives for `kind: "chat"` actions. */
   prompt?: string;
   /**
@@ -285,6 +293,13 @@ export interface ActionDef {
    */
   sdk: string[];
 }
+
+/** A `confirm` action always carries the dialog it asks with. */
+export type ActionDef = ActionBase &
+  (
+    | { kind: "confirm"; confirm: ConfirmSpec }
+    | { kind: Exclude<ActionKind, "confirm">; confirm?: undefined }
+  );
 
 // ---------------------------------------------------------------------------
 // Chat routing
@@ -337,6 +352,8 @@ export type Query<T> =
 interface ActionState {
   run: (input?: string) => void;
   pending: boolean;
+  /** The last run failed; a `leavesRecord` action then stays on the record. */
+  failed?: boolean;
   /** Present when the user cannot run it; the kit shows the reason. */
   disabledReason?: string;
 }

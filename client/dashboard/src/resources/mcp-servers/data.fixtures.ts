@@ -1,10 +1,11 @@
 import { fixtureData, type FixtureState } from "../kit/fixtures";
 import type { ResourceData } from "../kit/types";
 import { mcpServersDefinition } from "./definition";
-import type {
-  McpServerAvailability,
-  McpServerRecord,
-  McpServerRow,
+import {
+  GATEWAY_PREFIX,
+  type McpServerAvailability,
+  type McpServerRecord,
+  type McpServerRow,
 } from "./model";
 
 const day = 24 * 60 * 60 * 1000;
@@ -28,7 +29,8 @@ function server(
     Pick<McpServerRecord, "id" | "name" | "source" | "summary">,
 ): McpServerRecord {
   return {
-    serverId: partial.id,
+    // The backend id, as the SDK adapter produces it: no `gateway:` prefix.
+    serverId: partial.id.replace(GATEWAY_PREFIX, ""),
     availability: "private",
     toolCount: partial.tools?.length,
     mark: { label: partial.name },
@@ -73,7 +75,7 @@ const MCP_SERVER_RECORDS: McpServerRecord[] = [
     id: "gateway:engineering",
     name: "Engineering",
     source: "gateway",
-    summary: "Fronts Datadog, Notion and 6 more",
+    summary: "Fronts Datadog and Notion at one URL",
     toolCount: 97,
     mark: { label: "Datadog", secondary: { label: "Notion" } },
     members: [

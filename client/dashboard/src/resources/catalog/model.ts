@@ -10,8 +10,11 @@ export interface CatalogRow {
   description: string;
   signIn: CatalogSignIn;
   toolCount?: number;
-  /** This project already has a server from this entry. */
-  added: boolean;
+  /**
+   * This project already has a server from this entry. Undefined while that
+   * isn't known yet, so nothing offers to add it twice.
+   */
+  added: boolean | undefined;
   mark: Mark;
 }
 
@@ -19,7 +22,8 @@ export interface CatalogRecord extends CatalogRow {
   version: string;
   url?: string;
   repository?: string;
-  readOnly: boolean;
+  /** Undefined when the catalog doesn't say. */
+  readOnly: boolean | undefined;
 }
 
 export const SIGN_IN_LABEL: Record<CatalogSignIn, string> = {

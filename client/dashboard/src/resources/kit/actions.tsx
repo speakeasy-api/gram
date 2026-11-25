@@ -5,7 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fillPrompt, useChatBridge } from "./chat-bridge";
 import type { ActionDef, ActionHandlers } from "./types";
 
@@ -24,6 +24,8 @@ export function ActionButton({
   subject,
   label,
   size = "md",
+  onStart,
+  onDone,
 }: {
   def: ActionDef;
   handlers: ActionHandlers;
@@ -35,21 +37,32 @@ export function ActionButton({
   /** Overrides the action's label where context already names it. */
   label?: string;
   size?: "sm" | "md";
+  /** Called when a run starts. */
+  onStart?: () => void;
+  /** Called once a run settles without an error. */
+  onDone?: () => void;
 }): JSX.Element | null {
   const [confirming, setConfirming] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const bridge = useChatBridge();
   const state = handlers[def.id];
   const pending = state?.pending ?? false;
+  const failed = state?.failed ?? false;
+  // Set when this button starts a run and sees it go pending. React Query
+  // reports pending a render after `run`, so "not pending" right after a
+  // click does not mean the run has settled.
+  const running = useRef<"idle" | "started" | "pending">("idle");
 
   // The confirm dialog stays open and locked while the action runs, then
   // closes when it settles.
   useEffect(() => {
-    if (submitted && !pending) {
-      setSubmitted(false);
+    if (pending && running.current === "started") {
+      running.current = "pending";
+    } else if (!pending && running.current === "pending") {
+      running.current = "idle";
       setConfirming(false);
+      if (!failed) onDone?.();
     }
-  }, [submitted, pending]);
+  }, [pending, failed, onDone]);
 
   if (!state) return null;
   // Chat actions hand the job to the assistant; without one they don't exist.
@@ -64,13 +77,32 @@ export function ActionButton({
           ? "secondary"
           : "tertiary";
 
+  // Danger-zone buttons always ask first, even for an action declared
+  // without its own dialog.
+  const confirm =
+    def.confirm ??
+    (emphasis === "danger"
+      ? {
+          title: `${def.label}?`,
+          description: "This can't be undone.",
+          confirmLabel: def.label,
+          pendingLabel: "Working…",
+        }
+      : undefined);
+
+  const start = () => {
+    running.current = "started";
+    onStart?.();
+    state.run(input);
+  };
+
   const onClick = () => {
     if (def.kind === "chat") {
       bridge.ask(fillPrompt(def.prompt ?? def.label, subject ?? ""));
-    } else if (def.kind === "confirm" && def.confirm) {
+    } else if (confirm) {
       setConfirming(true);
     } else {
-      state.run(input);
+      start();
     }
   };
 
@@ -81,9 +113,7 @@ export function ActionButton({
       onClick={onClick}
       disabled={state.pending || state.disabledReason != null}
     >
-      {state.pending && def.confirm
-        ? def.confirm.pendingLabel
-        : (label ?? def.label)}
+      {state.pending && confirm ? confirm.pendingLabel : (label ?? def.label)}
     </Button>
   );
 
@@ -100,20 +130,21 @@ export function ActionButton({
       ) : (
         button
       )}
-      {def.confirm && (
+      {confirm && (
         <ConfirmDialog
           open={confirming}
           onOpenChange={setConfirming}
-          title={def.confirm.title}
-          description={def.confirm.description}
-          confirmLabel={def.confirm.confirmLabel}
-          pendingLabel={def.confirm.pendingLabel}
-          confirmVariant={def.danger ? "destructive-primary" : "primary"}
+          title={confirm.title}
+          description={confirm.description}
+          confirmLabel={confirm.confirmLabel}
+          pendingLabel={confirm.pendingLabel}
+          confirmVariant={
+            def.danger || emphasis === "danger"
+              ? "destructive-primary"
+              : "primary"
+          }
           isPending={state.pending}
-          onConfirm={() => {
-            state.run(input);
-            setSubmitted(true);
-          }}
+          onConfirm={start}
         />
       )}
     </>

@@ -2,6 +2,7 @@ import {
   listedMcpServers,
   mcpServerDisplayName,
 } from "@/components/mcp/mcp-server-kind";
+import { useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useToolset } from "@/hooks/toolTypes";
@@ -11,6 +12,10 @@ import {
   mcpServerVisibilityUpdateForm,
 } from "@/lib/mcp-server-visibility";
 import { getMcpServerArgs } from "@/lib/sources";
+import {
+  pluginServerRef,
+  serverMatchesRef,
+} from "@/pages/mcp/overview/serverMatchesRef";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
@@ -105,15 +110,24 @@ function gatewayRow(gateway: MetaMcpServer): McpServerRow {
   };
 }
 
+/** In a plugin. Hosted entries can be keyed by toolset, like the MCP pages match them. */
 function isDistributed(
   plugins: Plugin[] | undefined,
-  match: { mcpServerId?: string; metaMcpServerId?: string },
+  match:
+    | {
+        server: McpServer;
+        toolset?: { id: string; slug: string; name: string };
+      }
+    | { metaMcpServerId: string },
 ): boolean {
+  const ref =
+    "server" in match ? pluginServerRef(match.server, match.toolset) : null;
   return (plugins ?? []).some((plugin) =>
-    (plugin.servers ?? []).some(
-      (s) =>
-        (match.mcpServerId && s.mcpServerId === match.mcpServerId) ||
-        (match.metaMcpServerId && s.metaMcpServerId === match.metaMcpServerId),
+    (plugin.servers ?? []).some((s) =>
+      ref
+        ? serverMatchesRef(s, ref)
+        : "metaMcpServerId" in match &&
+          s.metaMcpServerId === match.metaMcpServerId,
     ),
   );
 }
@@ -209,8 +223,17 @@ function useRecord(id: string): Query<McpServerRecord> {
   }
 
   if (gateway && meta.data) {
+    // An unknown member list must not read as "fronts no servers".
+    if (members.isPending) return { status: "loading" };
+    if (members.isError) {
+      return {
+        status: "error",
+        message: errorText(members.error),
+        retry: () => void members.refetch(),
+      };
+    }
     const row = gatewayRow(meta.data);
-    const memberList = members.data?.members ?? [];
+    const memberList = members.data.members ?? [];
     return {
       status: "ready",
       data: {
@@ -237,6 +260,7 @@ function useRecord(id: string): Query<McpServerRecord> {
     status: "ready",
     data: {
       ...row,
+      toolsetId: s.toolsetId ?? undefined,
       url: mcpUrl,
       tools: (toolset.data?.tools ?? []).map((tool) => ({
         name: tool.name,
@@ -244,7 +268,8 @@ function useRecord(id: string): Query<McpServerRecord> {
       })),
       members: [],
       distributed: isDistributed(plugins.data?.plugins, {
-        mcpServerId: s.id,
+        server: s,
+        toolset: toolset.data,
       }),
       // The setup guide is marked complete once someone has connected.
       used: s.setupGuideCompletedAt != null,
@@ -266,6 +291,7 @@ function useListActions(): ActionHandlers {
 
 function useRecordActions(rec: McpServerRecord | undefined): ActionHandlers {
   const { hasScope } = useRBAC();
+  const project = useProject();
   const queryClient = useQueryClient();
   const client = useSdkClient();
   const gramProject = useProjectSlugForRequests();
@@ -279,7 +305,8 @@ function useRecordActions(rec: McpServerRecord | undefined): ActionHandlers {
   if (!rec) return {};
   const gateway = isGatewayId(rec.id);
   const rawId = rec.serverId;
-  const canWrite = hasScope("mcp:write", rawId);
+  // Checked like the API does: a hosted server is granted under its toolset id.
+  const canWrite = hasScope("mcp:write", rec.toolsetId ?? rawId);
 
   const refresh = async () => {
     await invalidateMcpServerQueries(queryClient);
@@ -356,7 +383,7 @@ function useRecordActions(rec: McpServerRecord | undefined): ActionHandlers {
   return {
     ask: { run: () => {}, pending: false },
     tryIt: { run: () => {}, pending: false },
-    distribute: hasScope("plugin:write")
+    distribute: hasScope("plugin:write", project.id)
       ? { run: () => {}, pending: false }
       : undefined,
     turnOn: {
@@ -380,6 +407,7 @@ function useRecordActions(rec: McpServerRecord | undefined): ActionHandlers {
     },
     delete: {
       pending: deleteServer.isPending || deleteGateway.isPending,
+      failed: deleteServer.isError || deleteGateway.isError,
       // Source-backed servers delete their source too, behind a typed
       // confirmation. The kit has no type-to-confirm kind yet, so the
       // classic page still owns that path.

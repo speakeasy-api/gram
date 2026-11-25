@@ -2,6 +2,7 @@ import { useIdentityTint } from "@/components/gradient-colors";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
+import { useState } from "react";
 import type { Identity, Mark, Status, Tone, Value } from "./types";
 
 const TONE_TEXT: Record<Tone, string> = {
@@ -51,6 +52,11 @@ function Tile({
 }): JSX.Element {
   const tint = useIdentityTint(label);
   const initial = label.trim().charAt(0).toUpperCase() || "?";
+  // Logos come from external registries: load only HTTPS, and fall back to
+  // the initial when the image fails.
+  const [broken, setBroken] = useState<string | null>(null);
+  const src =
+    iconUrl?.startsWith("https://") && broken !== iconUrl ? iconUrl : undefined;
   return (
     <span
       aria-hidden="true"
@@ -61,14 +67,15 @@ function Tile({
       style={{
         width: size,
         height: size,
-        ...(iconUrl ? {} : tint),
+        ...(src ? {} : tint),
         fontSize: Math.round(size * 0.44),
       }}
     >
-      {iconUrl ? (
+      {src ? (
         <img
-          src={iconUrl}
+          src={src}
           alt=""
+          onError={() => setBroken(src)}
           className="size-full object-contain p-[12%]"
         />
       ) : (

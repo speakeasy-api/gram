@@ -65,7 +65,9 @@ export function findResource(id: string): RegisteredResource | undefined {
  * arrive as `mcp__p-platform_find_mcp` or `platform__get_mcp`.
  */
 function bareToolName(name: string): string {
-  return (name.split("__").pop() ?? name).replace(/^p-[a-z0-9-]+?_/, "");
+  // `mcp__p-platform_get_mcp` (assistant), `platform--get_mcp` (code mode).
+  const last = name.split(/__|--/).pop() ?? name;
+  return last.replace(/^p-[a-z0-9-]+?_/, "");
 }
 
 /** Calls made inside a code-mode script: `tool('mcp__p-platform_get_mcp', {mcp_id = 'x'})`. */
@@ -77,11 +79,13 @@ function scriptCalls(input: unknown): { name: string; args: unknown }[] {
       : undefined;
   if (typeof script !== "string") return [];
   const calls: { name: string; args: unknown }[] = [];
-  const pattern = /tool\(\s*['"]([^'"]+)['"]\s*(?:,\s*\{([^}]*)\})?/g;
+  // Lua `tool('name', {k = 'v'})` and Python `tools.call("name", {"k": "v"})`.
+  const pattern =
+    /(?:tools\.call|tool)\(\s*['"]([^'"]+)['"]\s*(?:,\s*\{([^}]*)\})?/g;
   for (const match of script.matchAll(pattern)) {
     const args: Record<string, string> = {};
     for (const pair of (match[2] ?? "").matchAll(
-      /([a-z_]+)\s*=\s*['"]([^'"]+)['"]/g,
+      /['"]?([a-z_]+)['"]?\s*[:=]\s*['"]([^'"]+)['"]/g,
     )) {
       args[pair[1]!] = pair[2]!;
     }
@@ -106,8 +110,20 @@ export function routeToolCall(
       return route ? [route] : [];
     });
   }
+  // Progressive discovery wraps the real tool in call_platform_tool.
+  if (bareToolName(toolName) === "call_platform_tool" && isRecord(input)) {
+    const name = input["name"];
+    if (typeof name === "string") {
+      const route = routeDirect(name, input["arguments"], output);
+      return route ? [route] : [];
+    }
+  }
   const route = routeDirect(toolName, input, output);
   return route ? [route] : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object";
 }
 
 /**
@@ -144,10 +160,12 @@ function routeDirect(
     if (route.opens === "list") {
       return { resource: resource.id, location: { view: "list" } };
     }
+    // A lookup we can't tie to one record opens nothing, rather than a list
+    // the thing it looked up may not even be in.
     const id = route.id(input, output);
     return id
       ? { resource: resource.id, location: { view: "record", id } }
-      : { resource: resource.id, location: { view: "list" } };
+      : undefined;
   }
   return undefined;
 }

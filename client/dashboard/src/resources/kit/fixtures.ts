@@ -22,6 +22,7 @@ export function fixtureData<Row, Rec>({
   state = "ready",
   readOnly = false,
   apply,
+  rowFor,
 }: {
   definition: ResourceDefinition<Row, Rec>;
   rows: Row[];
@@ -33,8 +34,13 @@ export function fixtureData<Row, Rec>({
   readOnly?: boolean;
   /** How an action changes a record, so stories react to clicks. */
   apply?: (rec: Rec, actionId: string, input?: string) => Rec;
+  /** Rebuilds a list row from an edited record, so the list shows edits. */
+  rowFor?: (rec: Rec) => Row;
 }): ResourceData<Row, Rec> {
   const overrides = new Map<string, Rec>();
+  // The id each served record was looked up by, so actions write back under
+  // that id whatever shape the record has.
+  const idOf = new Map<Rec, string>();
   const pending = new Set<string>();
   const listeners = new Set<() => void>();
   let version = 0;
@@ -57,7 +63,8 @@ export function fixtureData<Row, Rec>({
     retry: () => {},
   });
 
-  const handlersFor = (key: string, rec: Rec | undefined): ActionHandlers => {
+  /** `id` is the record's lookup id, or undefined for list actions. */
+  const handlersFor = (key: string, id?: string): ActionHandlers => {
     if (readOnly) return {};
     const out: ActionHandlers = {};
     for (const action of definition.actions) {
@@ -69,9 +76,10 @@ export function fixtureData<Row, Rec>({
           emit();
           setTimeout(() => {
             pending.delete(pendingKey);
-            if (rec && apply) {
-              const id = recordKey(rec);
-              if (id) overrides.set(id, apply(rec, action.id, input));
+            // Apply to the latest copy, so quick successive edits stack.
+            const latest = id != null ? lookup(id) : undefined;
+            if (id != null && latest && apply) {
+              overrides.set(id, apply(latest, action.id, input));
             }
             emit();
           }, 600);
@@ -81,22 +89,26 @@ export function fixtureData<Row, Rec>({
     return out;
   };
 
-  // Records carry their id under `id` in every fixture we write.
-  const recordKey = (rec: Rec): string | undefined =>
-    (rec as { id?: string }).id;
-
   return {
     useList: () => {
       useVersion();
       if (state === "loading") return { status: "loading" };
       if (state === "error") return errorQuery();
-      return { status: "ready", data: state === "empty" ? [] : rows };
+      if (state === "empty") return { status: "ready", data: [] };
+      const data = rowFor
+        ? rows.map((row) => {
+            const edited = overrides.get(definition.list.rowId(row));
+            return edited ? rowFor(edited) : row;
+          })
+        : rows;
+      return { status: "ready", data };
     },
     useRecord: (id) => {
       useVersion();
       if (state === "loading") return { status: "loading" };
       if (state === "error") return errorQuery();
       const rec = lookup(id);
+      if (rec) idOf.set(rec, id);
       return rec
         ? { status: "ready", data: rec }
         : {
@@ -107,11 +119,12 @@ export function fixtureData<Row, Rec>({
     },
     useListActions: () => {
       useVersion();
-      return handlersFor("list", undefined);
+      return handlersFor("list");
     },
     useRecordActions: (rec) => {
       useVersion();
-      return handlersFor(rec ? (recordKey(rec) ?? "record") : "none", rec);
+      const id = rec ? idOf.get(rec) : undefined;
+      return handlersFor(id ?? "none", id);
     },
   };
 }

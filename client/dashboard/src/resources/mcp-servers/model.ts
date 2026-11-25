@@ -31,6 +31,8 @@ export interface McpServerRow {
 }
 
 export interface McpServerRecord extends McpServerRow {
+  /** A hosted server is granted, and checked, under its toolset's id. */
+  toolsetId?: string;
   url?: string;
   /** Tools, or for a gateway the servers behind it. */
   tools: { name: string; description?: string }[];

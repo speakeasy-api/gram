@@ -83,13 +83,26 @@ export function parseAddress(
   input: string,
   project: string,
 ): OpenPage | null | "invalid" {
-  const trimmed = input
-    .trim()
+  const raw = input.trim();
+  const full = raw.startsWith("speakeasy://");
+  const segments = raw
     .replace(/^speakeasy:\/\//, "")
-    .replace(new RegExp(`^${project}/?`), "")
-    .replace(/^\/+|\/+$/g, "");
-  if (!trimmed) return null;
-  const [resource, ...rest] = trimmed.split("/");
+    .split("/")
+    .filter(Boolean);
+  // A full address always starts with the project. A bare one starts with it
+  // only when that segment is the project and is followed by a resource (or
+  // is not itself a resource), so `catalog` in project "catalog" still opens
+  // the catalog.
+  const [first, second] = segments;
+  if (
+    full ||
+    (first === project &&
+      (second ? findResource(second) !== undefined : !findResource(first)))
+  ) {
+    segments.shift();
+  }
+  if (segments.length === 0) return null;
+  const [resource, ...rest] = segments;
   if (!resource || !findResource(resource)) return "invalid";
   const id = rest.join("/");
   return id

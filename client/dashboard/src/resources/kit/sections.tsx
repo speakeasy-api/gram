@@ -341,7 +341,8 @@ function FieldRow<Rec>({
 }): JSX.Element {
   const labelId = useId();
   const state = handlers[field.action];
-  const readOnly = state == null;
+  // No handler: the viewer lacks the scope. A reason: it can't run right now.
+  const readOnly = state == null || state.disabledReason != null;
 
   return (
     <div className="flex flex-col gap-3 border-b px-4 py-4 last:border-b-0 sm:flex-row sm:items-start sm:gap-6">
@@ -356,6 +357,9 @@ function FieldRow<Rec>({
       <div className="min-w-0 flex-1">
         {field.kind === "text" && (
           <TextField
+            // A new value from the server (another user, the assistant)
+            // replaces any stale draft.
+            key={field.value(rec)}
             labelId={labelId}
             value={field.value(rec)}
             readOnly={readOnly}
@@ -384,7 +388,7 @@ function FieldRow<Rec>({
         )}
         {readOnly && (
           <p className="text-muted-foreground mt-2 text-xs">
-            You can view this but not change it.
+            {state?.disabledReason ?? "You can view this but not change it."}
           </p>
         )}
       </div>
@@ -421,7 +425,7 @@ function TextField({
           value={current}
           onChange={setDraft}
           onEnter={() => {
-            if (dirty && !error) onSave(current);
+            if (dirty && !error && !pending) onSave(current);
           }}
           error={error != null}
           className="flex-1"

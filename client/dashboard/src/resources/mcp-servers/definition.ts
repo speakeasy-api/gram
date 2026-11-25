@@ -9,19 +9,25 @@ import {
   GATEWAY_PREFIX,
   isGatewayId,
   SOURCE_LABEL,
+  type McpServerAvailability,
   type McpServerRecord,
   type McpServerRow,
 } from "./model";
 
+const AVAILABILITY_TONE: Record<McpServerAvailability, Status["tone"]> = {
+  disabled: "neutral",
+  private: "success",
+  public: "warning",
+};
+
+/** Matches the existing MCP settings pages. */
+const NAME_MAX_LENGTH = 40;
+
 function availabilityStatus(row: McpServerRow): Status {
-  switch (row.availability) {
-    case "disabled":
-      return { label: "Off", tone: "neutral" };
-    case "public":
-      return { label: "Public", tone: "warning" };
-    case "private":
-      return { label: "On", tone: "success" };
-  }
+  return {
+    label: AVAILABILITY_LABEL[row.availability],
+    tone: AVAILABILITY_TONE[row.availability],
+  };
 }
 
 /** Pulls an MCP server reference out of a Platform MCP tool call. */
@@ -198,8 +204,10 @@ export const mcpServersDefinition = defineResource<
         title: "Connect it yourself",
         description:
           "Add it to your client and sign in with your Speakeasy account when it asks.",
+        // A command without a real URL would break when copied.
+        when: (rec) => rec.url != null,
         samples: (rec) => {
-          const url = rec.url ?? "[server URL appears once it has an address]";
+          const url = rec.url ?? "";
           return [
             {
               id: "claude",
@@ -260,7 +268,12 @@ export const mcpServersDefinition = defineResource<
             kind: "text",
             value: (rec) => rec.name,
             action: "rename",
-            validate: (v) => (v.trim() ? undefined : "Give it a name."),
+            validate: (v) =>
+              !v.trim()
+                ? "Give it a name."
+                : v.trim().length > NAME_MAX_LENGTH
+                  ? `Keep it to ${NAME_MAX_LENGTH} characters or fewer.`
+                  : undefined,
           },
           {
             id: "availability",
@@ -278,7 +291,11 @@ export const mcpServersDefinition = defineResource<
                 label: AVAILABILITY_LABEL.disabled,
                 description: "Offline. Nobody can connect.",
               },
-              ...(rec.source === "hosted"
+              // Hosted servers can go public. Tunneled ones need the tunnel
+              // owner's consent first, which the server's settings page
+              // collects; one that is already public keeps that choice here.
+              ...(rec.source === "hosted" ||
+              (rec.source === "tunneled" && rec.availability === "public")
                 ? [
                     {
                       value: "public",
@@ -360,6 +377,7 @@ export const mcpServersDefinition = defineResource<
       label: "Delete this server",
       kind: "confirm",
       danger: true,
+      leavesRecord: true,
       scope: "mcp:write",
       confirm: {
         title: "Delete this server?",

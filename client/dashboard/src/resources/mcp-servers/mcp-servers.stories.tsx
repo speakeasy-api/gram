@@ -45,9 +45,9 @@ export const ListEmpty: Story = { args: { location: list, state: "empty" } };
 export const ListError: Story = { args: { location: list, state: "error" } };
 export const ListNarrow: Story = { args: { location: list, width: 400 } };
 
-/** Just created: the checklist leads, and the primary action is the next step. */
+/** Just created: the setup checklist leads with the next step. */
 export const RecordNew: Story = { args: { location: record("srv-linear") } };
-/** Off: the primary action turns it on. */
+/** Off: the checklist's first step turns it on. */
 export const RecordOff: Story = { args: { location: record("srv-notion") } };
 /** Fully set up: no checklist, quiet header. */
 export const RecordHealthy: Story = {

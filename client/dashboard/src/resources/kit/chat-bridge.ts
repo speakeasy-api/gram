@@ -23,5 +23,6 @@ export function useChatBridge(): ChatBridge {
 
 /** Fills `{title}` in an action's prompt with the record's name. */
 export function fillPrompt(prompt: string, title: string): string {
-  return prompt.replaceAll("{title}", title);
+  // A replacer keeps `$&` and similar sequences in the title verbatim.
+  return prompt.replaceAll("{title}", () => title);
 }

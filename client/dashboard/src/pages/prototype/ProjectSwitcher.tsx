@@ -10,6 +10,7 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 
 function ProjectTile({ name }: { name: string }): JSX.Element {
@@ -34,6 +35,7 @@ export function ProjectSwitcher(): JSX.Element {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const projects = [...organization.projects].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
@@ -66,6 +68,9 @@ export function ProjectSwitcher(): JSX.Element {
             key={p.id}
             onSelect={() => {
               if (p.slug !== project.slug) {
+                // Same as the app's switchers: drop cached queries so data
+                // from the previous project can't show in the new one.
+                queryClient.clear();
                 void navigate(`/${orgSlug}/projects/${p.slug}/prototype`);
               }
             }}

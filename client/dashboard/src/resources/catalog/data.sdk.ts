@@ -3,6 +3,8 @@ import {
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
 import type { CatalogServer } from "@/pages/catalog/hooks";
+import { supportsAutomaticOAuth } from "@/pages/catalog/hooks/serverMetadata";
+import type { CatalogInstallState } from "@/pages/catalog/catalogInstall";
 import { useRBAC } from "@/hooks/useRBAC";
 import type { ActionHandlers, Query, ResourceData } from "../kit/types";
 import type { CatalogRecord, CatalogRow, CatalogSignIn } from "./model";
@@ -18,13 +20,16 @@ function signIn(server: CatalogServer): CatalogSignIn {
       return "none";
     case "unknown":
     case undefined:
-      return server.supportsDcr ? "automatic" : "unknown";
+      return supportsAutomaticOAuth(server) ? "automatic" : "unknown";
     default:
       return "unknown";
   }
 }
 
-function toRecord(server: CatalogServer, added: boolean): CatalogRecord {
+function toRecord(
+  server: CatalogServer,
+  install: CatalogInstallState,
+): CatalogRecord {
   const name = server.title ?? server.registrySpecifier;
   return {
     id: server.registrySpecifier,
@@ -32,12 +37,12 @@ function toRecord(server: CatalogServer, added: boolean): CatalogRecord {
     description: server.description,
     signIn: signIn(server),
     toolCount: server.toolCount,
-    added,
+    added: install === "unknown" ? undefined : install === "added",
     mark: { label: name, iconUrl: server.iconUrl },
     version: server.version,
     url: server.remotes?.[0]?.url,
     repository: server.repository?.url,
-    readOnly: server.isReadOnly ?? false,
+    readOnly: server.isReadOnly,
   };
 }
 
@@ -60,7 +65,7 @@ function useCatalog(): Query<CatalogRecord[]> {
   return {
     status: "ready",
     data: (query.data.servers as CatalogServer[]).map((server) =>
-      toRecord(server, installState(server) === "added"),
+      toRecord(server, installState(server)),
     ),
   };
 }
@@ -84,7 +89,11 @@ function useRecordActions(rec: CatalogRecord | undefined): ActionHandlers {
   // Adding runs the catalog install flow, which the assistant drives.
   return {
     ask: { run: () => {}, pending: false },
-    add: hasScope("mcp:write") ? { run: () => {}, pending: false } : undefined,
+    // Offered only once we know it isn't added yet.
+    add:
+      hasScope("mcp:write") && rec.added === false
+        ? { run: () => {}, pending: false }
+        : undefined,
   };
 }
 
