@@ -158,6 +158,7 @@ const (
 	CIMDCandidateRowsScannedKey       = attribute.Key("gram.cimd.candidate_rows_scanned")
 	CIMDCandidateSightingsRecordedKey = attribute.Key("gram.cimd.candidate_sightings_recorded")
 	CIMDCandidateRowsSkippedKey       = attribute.Key("gram.cimd.candidate_rows_skipped")
+	CIMDCandidateRowsHeldKey          = attribute.Key("gram.cimd.candidate_rows_held")
 	AdminOIDCSubjectKey               = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                     = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey    = attribute.Key("gram.authorization.organization_id")
@@ -4747,4 +4748,7 @@ func SlogCIMDCandidateSightingsRecorded(v int64) slog.Attr {
 }
 func SlogCIMDCandidateRowsSkipped(v int64) slog.Attr {
 	return slog.Int64(string(CIMDCandidateRowsSkippedKey), v)
+}
+func SlogCIMDCandidateRowsHeld(v int64) slog.Attr {
+	return slog.Int64(string(CIMDCandidateRowsHeldKey), v)
 }

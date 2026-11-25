@@ -75,8 +75,12 @@ type recentKey struct {
 // Recorder writes candidates and sightings off the request path, at most once
 // per sighting per process window.
 type Recorder struct {
-	db     *pgxpool.Pool
-	now    func() time.Time
+	db  *pgxpool.Pool
+	now func() time.Time
+
+	// timeout bounds one write; recordTimeout outside tests.
+	timeout time.Duration
+
 	writes metric.Int64Counter
 
 	slots    chan struct{}
@@ -99,6 +103,7 @@ func NewRecorder(db *pgxpool.Pool, meterProvider metric.MeterProvider, logger *s
 	return &Recorder{
 		db:       db,
 		now:      time.Now,
+		timeout:  recordTimeout,
 		writes:   writes,
 		slots:    make(chan struct{}, recordConcurrency),
 		inflight: sync.WaitGroup{},
@@ -133,7 +138,7 @@ func (r *Recorder) Record(ctx context.Context, logger *slog.Logger, sighting Sig
 		defer r.inflight.Done()
 		defer func() { <-r.slots }()
 
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recordTimeout)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.timeout)
 		defer cancel()
 		r.write(ctx, logger, key, sighting)
 	}()

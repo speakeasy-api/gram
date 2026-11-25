@@ -393,7 +393,17 @@ func TestRecorder_DropsWhenEverySlotIsBusy(t *testing.T) {
 	ctx := t.Context()
 	conn := newTestDB(t, "cimd_candidates_dropped")
 	issuer := seedIssuer(t, conn, "issuer", admission.ModeOpen)
-	recorder, reader := newRecorder(t, conn)
+	// The default pool holds max(4, NumCPU) connections, so on a small runner
+	// writers would queue for a connection instead of blocking on the held
+	// insert. A pool of its own gives every slot a connection, and a long write
+	// timeout keeps blocked writes from expiring before they are observed.
+	cfg := conn.Config()
+	cfg.MaxConns = 12
+	writers, err := pgxpool.NewWithConfig(ctx, cfg)
+	require.NoError(t, err)
+	t.Cleanup(writers.Close)
+	recorder, reader := newRecorder(t, writers)
+	recorder.SetWriteTimeout(time.Minute)
 	logger := testenv.NewLogger(t)
 
 	var blocked []testIssuer

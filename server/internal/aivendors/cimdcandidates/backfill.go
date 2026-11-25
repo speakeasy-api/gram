@@ -159,7 +159,8 @@ func backfill(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, catalo
 		logger.InfoContext(ctx, "cimd client candidate backfill progress",
 			attr.SlogCIMDCandidateRowsScanned(counts.Scanned),
 			attr.SlogCIMDCandidateSightingsRecorded(counts.Recorded),
-			attr.SlogCIMDCandidateRowsSkipped(counts.Skipped+int64(len(deferred))),
+			attr.SlogCIMDCandidateRowsSkipped(counts.Skipped),
+			attr.SlogCIMDCandidateRowsHeld(int64(len(deferred))),
 		)
 	}
 

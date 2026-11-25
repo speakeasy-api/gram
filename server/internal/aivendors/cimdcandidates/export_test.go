@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/url"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -14,3 +15,7 @@ import (
 func BackfillWithLimits(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, catalog *aivendors.Snapshot, assistantOrigin *url.URL, issuerPage, clientPage int32, maxHeld int) (BackfillCounts, error) {
 	return backfill(ctx, logger, db, catalog, assistantOrigin, issuerPage, clientPage, maxHeld)
 }
+
+// SetWriteTimeout replaces the per-write timeout, so a test holding writes
+// blocked is not raced by it.
+func (r *Recorder) SetWriteTimeout(d time.Duration) { r.timeout = d }
