@@ -44,6 +44,16 @@ func registerGetMCPTool(reg *Registrar, reader Reader) {
 					}
 				}
 			}
+			// An mcp_id that is not an MCP server ID, such as a gateway ID,
+			// is the caller's to correct, so it gets the same readable refusal.
+			if errors.Is(err, ErrMCPIDInvalid) {
+				if result, handled := operationBudgetToolResult(err); handled {
+					if refusal, ok := refusalFromResult(result); ok {
+						refusal.Code = "invalid_request"
+						return nil, MCP{}, refusal
+					}
+				}
+			}
 			return nil, MCP{}, fmt.Errorf("get configured mcp: %w", err)
 		}
 		return nil, output, nil

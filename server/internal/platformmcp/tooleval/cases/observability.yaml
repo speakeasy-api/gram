@@ -44,6 +44,14 @@
     project_slug: payments
     target_kind: mcp
     target_id: 5f1e2a00-0000-4000-8000-000000000021
+- id: obs-gateway-traffic-not-mcp-tools
+  prompt: Tell me about Acme Gateway in Default, gateway 7a9d0c00-0000-4000-8000-000000000031. Is traffic still reaching it publicly this week?
+  expect: [get_mcp_network_traffic]
+  allow: [get_mcp_connection_settings]
+  args:
+    project_slug: default
+    target_kind: gateway
+    target_id: 7a9d0c00-0000-4000-8000-000000000031
 - id: obs-org-event-feed
   prompt: what's been going on across Acme lately? give me the org's recent activity feed
   expect: [list_organization_events]

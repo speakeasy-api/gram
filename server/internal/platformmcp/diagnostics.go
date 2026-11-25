@@ -37,6 +37,10 @@ const maxOverviewProjects = 100
 
 var ErrDiagnosticsTargetNotFound = errors.New("platform mcp diagnostics target not found")
 
+// ErrMCPIDInvalid is returned when an mcp_id is not an MCP server ID at all,
+// such as a gateway ID with a kind prefix. It is the caller's to correct.
+var ErrMCPIDInvalid = errors.New("mcp_id is not an MCP server ID")
+
 // FeatureChecker answers whether an organization has a product feature enabled.
 // It mirrors the telemetry service's checker so both surfaces resolve the
 // organization's metrics mode from the same source.
@@ -390,7 +394,7 @@ type GetMCPDiagnosticsInput struct {
 	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
 	ProjectID string `json:"-"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP server ID as returned by find_mcp, get_mcp, or get_project_overview, with no prefix. Never a gateway ID: a gateway is not an MCP server"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h (default) or 24h"`
 }
 
