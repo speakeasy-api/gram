@@ -60,12 +60,12 @@ func TestServeOrganizationGateway_HostedAuthenticationEligibility(t *testing.T) 
 					client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), OrganizationID: conv.ToPGTextEmpty(auth.ActiveOrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: "gateway-oauth-client"})
 					require.NoError(t, err)
 					require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: fx.issuerID}))
-				require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
-					ProjectID:             *auth.ProjectID,
-					OrganizationID:        auth.ActiveOrganizationID,
-					McpServerID:           server.ID,
-					RemoteSessionClientID: client.ID,
-				}))
+					require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+						ProjectID:             *auth.ProjectID,
+						OrganizationID:        auth.ActiveOrganizationID,
+						McpServerID:           server.ID,
+						RemoteSessionClientID: client.ID,
+					}))
 				}
 			} else {
 				ti.addToolWithSecurity(ctx, t, toolset.ID, *auth.ProjectID, auth.ActiveOrganizationID)
