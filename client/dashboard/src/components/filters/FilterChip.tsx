@@ -101,7 +101,7 @@ export function FilterChip({
         type="button"
         aria-label={ariaLabel}
         onClick={onClick}
-        className="hover:text-foreground flex items-center gap-2 transition-colors"
+        className="hover:text-foreground flex cursor-pointer items-center gap-2 transition-colors"
       >
         <span
           aria-hidden="true"
@@ -117,7 +117,7 @@ export function FilterChip({
           type="button"
           onClick={onRemove}
           aria-label={`Remove ${label} filter`}
-          className="text-muted-foreground hover:text-foreground transition-colors"
+          className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
         >
           <X className="size-4" />
         </button>
@@ -273,7 +273,7 @@ export function CustomFilterChip({
             e.stopPropagation();
             onRemove(filter.id);
           }}
-          className="text-muted-foreground hover:text-foreground transition-colors"
+          className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
         >
           <X className="size-4" />
         </button>
