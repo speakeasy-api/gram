@@ -55,8 +55,10 @@ type Entry struct {
 	// untouched default.
 	UpdatedAt time.Time
 
-	// Catalog is set on a built-in the catalog no longer admits. Such an
-	// entry is listed for its decision and never served to agents.
+	// Catalog is set on a built-in the catalog no longer admits. A removed
+	// one, or a live one devices do not scan for, is listed only for its
+	// decision and never served; a documents-off one with signatures is
+	// still served and probed for.
 	Catalog CatalogStatus
 }
 
@@ -244,9 +246,9 @@ func LoadOrganizationList(ctx context.Context, queries *repo.Queries, organizati
 // list_version identifies the built-in targets; organization edits move only
 // the ETag.
 //
-// Entries also lists a removed built-in whose stored decision still applies,
-// as the catalog last listed it, so an admin can see and clear it. It is
-// never served.
+// Entries also lists a built-in that is not a scan target, removed or live
+// with every document off, while its stored decision still applies, so an
+// admin can see and clear it. It is never served.
 func NewOrganizationList(catalog *aivendors.Snapshot, entries []Entry) *OrganizationList {
 	defaults := catalogDefaultsOf(catalog)
 	overlaid := Overlay(defaults.targets, entries)
@@ -262,17 +264,24 @@ func NewOrganizationList(catalog *aivendors.Snapshot, entries []Entry) *Organiza
 		if _, ok := listed[row.ID]; ok || row.Decision.Decision == DecisionUnreviewed {
 			continue
 		}
-		product, removed := catalog.RemovedProduct(row.ID)
-		if !removed {
+		var status CatalogStatus
+		var name string
+		var category Category
+		if product, removed := catalog.RemovedProduct(row.ID); removed {
+			status, name, category = CatalogRemoved, product.DisplayName, Category(product.Category)
+		} else if product, live := catalog.LiveProduct(row.ID); live && catalog.DocumentsDisabled(row.ID) {
+			status, name, category = CatalogDocumentsDisabled, product.DisplayName, Category(product.Category)
+		} else {
 			continue
 		}
+		id := row.ID
 		row.Target = ZeroTarget()
-		row.ID = product.ProductID
-		row.DisplayName = product.DisplayName
-		row.Category = Category(product.Category)
+		row.ID = id
+		row.DisplayName = name
+		row.Category = category
 		row.Source = SourceDefault
 		row.Customized = true
-		row.Catalog = CatalogRemoved
+		row.Catalog = status
 		overlaid = append(overlaid, row)
 	}
 	slices.SortFunc(overlaid, func(a, b Entry) int { return strings.Compare(a.ID, b.ID) })

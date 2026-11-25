@@ -44,12 +44,15 @@ organization's block on the product keeps applying.
 
 Each load also reads, in the same transaction, the soft-deleted documents and
 every document of a soft-deleted product, newest removal first, up to
-`maxRemovedDocuments`. A removed URL that a live document of a live product
+`maxRemovedDocuments`, which is `maxProducts * maxDocumentsPerProduct`: the
+most documents one catalog within the caps can hold, so removing all of one
+such catalog never reaches it. A removed URL that a live document of a live product
 holds now is left out, so it is never credited to its old product, not even by
 the built-in fallback. These documents are read only to keep blocks applying:
 they never admit, never appear in presets, scan lists or device payloads,
 never change attribution, and never count in validation. A malformed removed
-pattern is dropped. The built-in fallback keeps them too, except when nothing
+pattern can never match, so it is dropped and reported like a malformed live
+row: logged once, as a skipped row. The built-in fallback keeps them too, except when nothing
 is removed or the removals would leave no product, where the built-in catalog
 lists every product.
 
@@ -72,14 +75,14 @@ sibling. Then the product id decides.
 The rule for decisions: for a removed product, or a live one no document
 admits (its documents are disabled or removed), a decision can be changed or
 cleared only while one other than unreviewed is on file. Such a product is
-listed in Shadow AI with `catalog_status` set and its block shown as in force.
-A removed product is not probed for and the scan library leaves it out; a
-live one is still probed for. A removed product with no category is sent with
-an empty category and listed under Other. Once cleared it drops out of the
-list (removed) or reads as not enforceable (live), and a new decision is
-refused. The stored decision of a product whose only URL moved to another
-product no longer applies and is not listed; it can still be cleared through
-the API.
+listed in Shadow AI with `catalog_status` set and its block shown as in force,
+including a live one devices do not scan for. Devices still probe for a live
+one with signatures; the scan library leaves out the rest. A product with no
+category is sent with an empty category and listed under Other. Once cleared
+it drops out of the list (removed, or live with nothing to scan for) or reads
+as not enforceable (live and scanned for), and a new decision is refused. The
+stored decision of a product whose only URL moved to another product no
+longer applies and is not listed; it can still be cleared through the API.
 
 The built-in fallback is a degraded mode and keeps its own rules after a cold
 start with an invalid catalog: it does not know a URL moved between live
@@ -96,9 +99,11 @@ WHERE (ai_product_id = '<PRODUCT_ID>' OR id = '<PRODUCT_ID>') AND status = 'bloc
 ```
 
 Those blocks keep applying, and the organizations can see and clear them.
-Blocks stop applying when the removed document passes the cap (a warning is
-logged when a load reaches it), when the row is hard-deleted, or when the URL
-is added back under another product.
+Blocks stop applying when the removed document passes the cap, when the row
+is hard-deleted, or when the URL is added back under another product. A load
+asks for one row past the cap, and only when more than the cap come back does
+it keep the newest ones and log an error, once per change; it never refuses the
+catalog for it.
 
 Every load rejects an empty catalog, a malformed enabled pattern, more
 products, documents per product, client info names or enabled patterns than the

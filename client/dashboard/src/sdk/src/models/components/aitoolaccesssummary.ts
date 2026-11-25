@@ -23,7 +23,7 @@ export const CatalogStatus = {
 export type CatalogStatus = OpenEnum<typeof CatalogStatus>;
 
 /**
- * The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher.
+ * The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher. A tool with catalog_status set reads its stored decision, because that decision still applies.
  */
 export const AIToolAccessSummaryDecision = {
   Unreviewed: "unreviewed",
@@ -31,7 +31,7 @@ export const AIToolAccessSummaryDecision = {
   Blocked: "blocked",
 } as const;
 /**
- * The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher.
+ * The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher. A tool with catalog_status set reads its stored decision, because that decision still applies.
  */
 export type AIToolAccessSummaryDecision = OpenEnum<
   typeof AIToolAccessSummaryDecision
@@ -61,11 +61,11 @@ export type AIToolAccessSummary = {
    */
   catalogStatus?: CatalogStatus | undefined;
   /**
-   * The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher.
+   * The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher. A tool with catalog_status set reads its stored decision, because that decision still applies.
    */
   decision: AIToolAccessSummaryDecision;
   /**
-   * Whether a block on this tool would actually reach the gateway, and so whether a decision about it can be recorded. False when the tool is linked only by a self-reported client name, or by nothing at all: the decision is recorded honestly and enforces nothing. Surfaced so an admin is never told a tool is blocked when it is not. True for a tool with catalog_status set, whose stored decision still applies.
+   * Whether a decision about this tool reaches the gateway, and so whether one can be recorded or changed. False when the tool has no verifiable gateway matcher (it is linked only by a self-reported client name, or by nothing at all) and no stored decision applies through a removed or turned-off sign-in document: no decision can be recorded, and any decision stored earlier enforces nothing and reads as unreviewed. True for a tool with catalog_status set: Speakeasy no longer admits it, but its stored decision still applies and can be changed or cleared. Surfaced so an admin is never told a tool is blocked when it is not.
    */
   enforceable: boolean;
   /**

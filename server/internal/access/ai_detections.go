@@ -233,9 +233,7 @@ func (s *Service) listAIDetectionModels(ctx context.Context, clientCatalog *aive
 		entry, ok := catalog.Entry(row.TargetID)
 		if ok {
 			displayName = entry.DisplayName
-			if entry.Category != "" {
-				category = string(entry.Category)
-			}
+			category = string(entry.Category)
 		}
 		detections = append(detections, &gen.AIDetection{
 			TargetID:    row.TargetID,

@@ -565,3 +565,69 @@ func TestService_SetAIToolDecision_LiveProductWhoseLastDocumentWasRemoved(t *tes
 	require.ErrorAs(t, err, &shareableErr)
 	require.Equal(t, oops.CodeBadRequest, shareableErr.Code)
 }
+
+func TestService_UnscannedProductWithEveryDocumentOffKeepsItsDecision(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
+	// claude is a built-in devices do not scan for, so it is no scan target.
+	seedAIDetection(t, ctx, ti, orgID, "claude", "serial-1", "alex@example.com", "installed", "assistant", "", time.Now().UTC())
+	_, err := agentrepo.New(ti.conn).SetAIScanTargetStatus(ctx, agentrepo.SetAIScanTargetStatusParams{
+		OrganizationID: orgID, ID: "claude", AiProductID: conv.ToPGText("claude"), Status: "blocked", Rationale: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	docs, err := seedrepo.New(ti.conn).ListDocuments(ctx)
+	require.NoError(t, err)
+	for _, d := range docs {
+		if d.AiProductID == "claude" {
+			require.NoError(t, testrepo.New(ti.conn).EditDocumentFixture(ctx, testrepo.EditDocumentFixtureParams{ID: d.ID, Url: d.Url, DisplayName: d.DisplayName, Enabled: false, DeletedAt: pgtype.Timestamptz{}}))
+		}
+	}
+	snapshot, err := aivendors.Load(ctx, ti.conn, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	ti.service.aiCatalog = aivendors.NewStore(snapshot)
+
+	listed, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Detections, 1)
+	require.Equal(t, "blocked", listed.Detections[0].Access.State)
+	require.Equal(t, "documents_disabled", conv.PtrValOr(listed.Detections[0].Access.CatalogStatus, ""))
+	require.Empty(t, listed.Detections[0].Category, "the catalog's own category, which is none")
+
+	_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "claude", Decision: "unreviewed"})
+	require.NoError(t, err, "the block applies at the gateway, so it can be cleared")
+	// Cleared, it is again a client devices do not scan for, which no decision can name.
+	_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "claude", Decision: "blocked"})
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeNotFound, shareableErr.Code)
+}
+
+func TestService_ListAIDetections_UsesTheCatalogCategoryOfARemovedProduct(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
+	_, err := seedrepo.New(ti.conn).InsertProduct(ctx, seedrepo.InsertProductParams{
+		ID: "gone-tool", VendorKey: "gone", DisplayName: "Gone Tool", Category: pgtype.Text{},
+		BundleIds: []string{}, Binaries: []string{}, ConfigDirs: []string{}, ProcessNames: []string{}, ClientInfoNames: []string{},
+	})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(ti.conn).InsertDocumentFixture(ctx, testrepo.InsertDocumentFixtureParams{
+		ID: uuid.New(), AiProductID: "gone-tool", Url: "https://gone.example.com/client.json", DisplayName: "Gone Tool", Enabled: true, IsPattern: false,
+	}))
+	seedAIDetection(t, ctx, ti, orgID, "gone-tool", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
+	_, err = agentrepo.New(ti.conn).SetAIScanTargetStatus(ctx, agentrepo.SetAIScanTargetStatusParams{
+		OrganizationID: orgID, ID: "gone-tool", AiProductID: conv.ToPGText("gone-tool"), Status: "blocked", Rationale: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	removeProduct(t, ctx, ti, "gone-tool", "Gone Tool", true)
+
+	listed, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Detections, 1)
+	require.Equal(t, "Gone Tool", listed.Detections[0].DisplayName)
+	require.Empty(t, listed.Detections[0].Category, "the catalog's category wins over the one stored at detection time")
+	require.Equal(t, "removed", conv.PtrValOr(listed.Detections[0].Access.CatalogStatus, ""))
+}

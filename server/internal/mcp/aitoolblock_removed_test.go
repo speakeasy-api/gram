@@ -42,11 +42,14 @@ func removeDocument(t *testing.T, ctx context.Context, ti *testInstance, url str
 	t.Helper()
 	docs, err := seedrepo.New(ti.conn).ListDocuments(ctx)
 	require.NoError(t, err)
+	edited := false
 	for _, d := range docs {
 		if d.Url == url && !d.Deleted {
 			require.NoError(t, testrepo.New(ti.conn).EditDocumentFixture(ctx, testrepo.EditDocumentFixtureParams{ID: d.ID, Url: d.Url, DisplayName: d.DisplayName, Enabled: enabled, DeletedAt: deleted}))
+			edited = true
 		}
 	}
+	require.True(t, edited, "no live document has URL %s", url)
 }
 
 func TestCheckAIToolGatewayBlock_BlockSurvivesCatalogRemoval(t *testing.T) {

@@ -10971,14 +10971,18 @@ type AIToolAccessSummaryResponseBody struct {
 	// stored one. Absent rows read as unreviewed, so every tool has a value, and a
 	// tool that is not enforceable reads as unreviewed however it was decided —
 	// the stored decision is left untouched and takes effect again if the tool
-	// gains a verifiable gateway matcher.
+	// gains a verifiable gateway matcher. A tool with catalog_status set reads its
+	// stored decision, because that decision still applies.
 	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
-	// Whether a block on this tool would actually reach the gateway, and so
-	// whether a decision about it can be recorded. False when the tool is linked
-	// only by a self-reported client name, or by nothing at all: the decision is
-	// recorded honestly and enforces nothing. Surfaced so an admin is never told a
-	// tool is blocked when it is not. True for a tool with catalog_status set,
-	// whose stored decision still applies.
+	// Whether a decision about this tool reaches the gateway, and so whether one
+	// can be recorded or changed. False when the tool has no verifiable gateway
+	// matcher (it is linked only by a self-reported client name, or by nothing at
+	// all) and no stored decision applies through a removed or turned-off sign-in
+	// document: no decision can be recorded, and any decision stored earlier
+	// enforces nothing and reads as unreviewed. True for a tool with
+	// catalog_status set: Speakeasy no longer admits it, but its stored decision
+	// still applies and can be changed or cleared. Surfaced so an admin is never
+	// told a tool is blocked when it is not.
 	Enforceable *bool `form:"enforceable,omitempty" json:"enforceable,omitempty" xml:"enforceable,omitempty"`
 	// Set only when the Speakeasy catalog no longer admits this tool but a
 	// decision the organization recorded still applies: removed when Speakeasy

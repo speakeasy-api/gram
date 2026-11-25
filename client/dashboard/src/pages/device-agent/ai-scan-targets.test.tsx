@@ -33,6 +33,30 @@ const mocks = vi.hoisted(() => ({
 
 const targets: AiScanTarget[] = [
   {
+    id: "claude",
+    displayName: "Claude",
+    category: "harness",
+    signatures: {
+      bundleIds: [],
+      binaries: [],
+      configDirs: [],
+      processNames: [],
+    },
+    gatewayClient: {
+      cimdVendorKeys: [],
+      oauthClientIds: [],
+      clientInfoNames: [],
+    },
+    origin: "default",
+    customized: true,
+    access: {
+      state: "blocked",
+      decision: "blocked",
+      enforceable: true,
+      catalogStatus: "documents_disabled",
+    },
+  },
+  {
     id: "zed",
     displayName: "Zed",
     category: "harness",
@@ -318,6 +342,10 @@ describe("AiScanTargetsSection", () => {
     expandBuiltin("Harnesses");
 
     expect(screen.queryByTestId("zed")).toBeNull();
+    expect(
+      screen.queryByTestId("claude"),
+      "documents off and nothing to scan for",
+    ).toBeNull();
     expect(screen.getByTestId("goose")).toBeDefined();
   });
 

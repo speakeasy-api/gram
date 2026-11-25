@@ -91070,14 +91070,14 @@ components:
             - documents_disabled
         decision:
           type: string
-          description: The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher.
+          description: The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher. A tool with catalog_status set reads its stored decision, because that decision still applies.
           enum:
             - unreviewed
             - approved
             - blocked
         enforceable:
           type: boolean
-          description: 'Whether a block on this tool would actually reach the gateway, and so whether a decision about it can be recorded. False when the tool is linked only by a self-reported client name, or by nothing at all: the decision is recorded honestly and enforces nothing. Surfaced so an admin is never told a tool is blocked when it is not. True for a tool with catalog_status set, whose stored decision still applies.'
+          description: 'Whether a decision about this tool reaches the gateway, and so whether one can be recorded or changed. False when the tool has no verifiable gateway matcher (it is linked only by a self-reported client name, or by nothing at all) and no stored decision applies through a removed or turned-off sign-in document: no decision can be recorded, and any decision stored earlier enforces nothing and reads as unreviewed. True for a tool with catalog_status set: Speakeasy no longer admits it, but its stored decision still applies and can be changed or cleared. Surfaced so an admin is never told a tool is blocked when it is not.'
         rationale:
           type: string
           description: Why the decision was made, when an admin gave a reason. Who recorded it and when are in the audit log rather than here, so there is one record of that and not two.
@@ -92502,7 +92502,7 @@ components:
           pattern: ^[a-z0-9][a-z0-9-]{0,63}$
         origin:
           type: string
-          description: 'Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for, including a built-in whose sign-in documents are turned off (access.catalog_status documents_disabled), except a built-in removed from Speakeasy''s catalog (access.catalog_status removed), which is listed only while the organization''s decision on it still applies. Otherwise a built-in leaves the list by being removed from Speakeasy''s catalog, an organization target by being deleted.'
+          description: 'Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for, including a built-in whose sign-in documents are turned off (access.catalog_status documents_disabled) and that has signatures, except a built-in removed from Speakeasy''s catalog (access.catalog_status removed) or a documents_disabled one with no signatures, each listed only while the organization''s decision on it still applies. Otherwise a built-in leaves the list by being removed from Speakeasy''s catalog, an organization target by being deleted.'
           enum:
             - default
             - organization

@@ -133,5 +133,27 @@ describe("ShadowAIAccessStep", () => {
     expect(screen.getByText("Other")).toBeTruthy();
     expect(screen.getByText("Gone Tool")).toBeTruthy();
     expect(control("Gone Tool")).toBeTruthy();
+
+    cleanup();
+    renderStep(new Map(), [
+      scanTarget({
+        id: "claude",
+        displayName: "Claude",
+        category: unrecognized(""),
+        access: {
+          state: "blocked",
+          decision: "blocked",
+          enforceable: true,
+          catalogStatus: "documents_disabled",
+        },
+      }),
+    ]);
+    expect(screen.getByText("Other")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Sign-in documents are turned off for this client. This block still applies.",
+      ),
+    ).toBeTruthy();
+    expect(control("Claude")).toBeTruthy();
   });
 });

@@ -1,6 +1,9 @@
 package aivendors_test
 
 import (
+	"bytes"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,14 +172,17 @@ func TestRemovedDocumentsDoNotCountInValidation(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: id, Url: "https://chatgpt.com/*/fixture/client.json", DisplayName: "Overlapping pattern", Enabled: true, DeletedAt: removedAt}))
-	// A malformed removed pattern is dropped, not reported.
+	// A malformed removed pattern is dropped and reported once, like a malformed live row.
 	malformed := uuid.New()
 	require.NoError(t, testrepo.New(db).InsertDocumentFixture(t.Context(), testrepo.InsertDocumentFixtureParams{ID: malformed, AiProductID: "zed", Url: "https://*.example.com/client.json", DisplayName: "Malformed", Enabled: true, IsPattern: true}))
 	require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: malformed, Url: "https://*.example.com/client.json", DisplayName: "Malformed", Enabled: true, DeletedAt: removedAt}))
 
-	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	var logs bytes.Buffer
+	snapshot, err := aivendors.Load(t.Context(), db, slog.New(slog.NewTextHandler(&logs, nil)), aitargets.ValidateCatalog)
 	require.NoError(t, err)
 	require.False(t, snapshot.BuiltIn(), "removed documents never reject the catalog")
+	require.Equal(t, 1, strings.Count(logs.String(), "skip AI catalog row"))
+	require.Contains(t, logs.String(), "https://*.example.com/client.json")
 	last, ok := snapshot.LastKnown("https://chatgpt.com/other/fixture/client.json")
 	require.True(t, ok)
 	require.Equal(t, "zed", last.ProductID)
@@ -321,11 +327,13 @@ func TestRemovedDocumentsStopAtTheCapAndWarn(t *testing.T) {
 	_, ok = snapshot.LastKnown(removedZedURL)
 	require.False(t, ok, "the older removal is past the cap")
 	require.Len(t, skipped, 1)
-	require.ErrorContains(t, skipped[0], "reached the cap of 1")
+	require.ErrorContains(t, skipped[0], "exceed the cap of 1")
 
-	_, skipped, err = aivendors.LoadWithRemovedCap(t.Context(), db, aitargets.ValidateCatalog, 3)
+	snapshot, skipped, err = aivendors.LoadWithRemovedCap(t.Context(), db, aitargets.ValidateCatalog, 2)
 	require.NoError(t, err)
-	require.Empty(t, skipped, "below the cap nothing is reported")
+	require.Empty(t, skipped, "exactly the cap is not truncation")
+	_, ok = snapshot.LastKnown(removedZedURL)
+	require.True(t, ok)
 }
 
 func TestOrganizationListShowsARemovedProductOnlyForItsDecision(t *testing.T) {

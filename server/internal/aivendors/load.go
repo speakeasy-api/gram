@@ -29,12 +29,25 @@ const (
 // errRejected marks a catalog that was read but is empty or invalid.
 var errRejected = errors.New("AI catalog rejected")
 
+// errRemovedTruncated marks a load that dropped removed documents past the cap;
+// blocks on them no longer apply, so it is logged as an error.
+var errRemovedTruncated = errors.New("removed AI catalog documents exceed the cap")
+
+// logSkipped reports one skipped row, at error level when blocks stop applying.
+func logSkipped(ctx context.Context, logger *slog.Logger, row error) {
+	if errors.Is(row, errRemovedTruncated) {
+		logger.ErrorContext(ctx, "skip AI catalog row", attr.SlogError(row))
+		return
+	}
+	logger.WarnContext(ctx, "skip AI catalog row", attr.SlogError(row))
+}
+
 // Load reads the catalog, falling back to the built-in one minus database removals when it is empty or invalid; only a failed read is an error.
 func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate func(*Snapshot) error) (*Snapshot, error) {
 	snapshot, skipped, err := load(ctx, db, validate, maxRemovedDocuments)
 	keys := make([]string, 0, len(skipped))
 	for _, row := range skipped {
-		logger.WarnContext(ctx, "skip AI catalog row", attr.SlogError(row))
+		logSkipped(ctx, logger, row)
 		keys = append(keys, row.Error())
 	}
 	if errors.Is(err, errRejected) {
@@ -77,12 +90,25 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error,
 	if err != nil {
 		return nil, nil, fmt.Errorf("read AI catalog documents: %w", err)
 	}
-	removedRows, err := q.ListRemovedCatalogDocuments(ctx, removedCap)
+	// One row past the cap tells a full index from a truncated one.
+	removedRows, err := q.ListRemovedCatalogDocuments(ctx, removedCap+1)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read removed AI catalog documents: %w", err)
 	}
+	var skipped, malformed []error
+	if int64(len(removedRows)) > removedCap {
+		removedRows = removedRows[:removedCap]
+		skipped = append(skipped, fmt.Errorf("%w of %d; blocks on older removals no longer apply", errRemovedTruncated, removedCap))
+	}
 	removed := make([]removedDocument, 0, len(removedRows))
 	for _, r := range removedRows {
+		if r.IsPattern {
+			// It can never match, so it is dropped and reported like a malformed live row.
+			if err := validatePattern(r.Url); err != nil {
+				skipped = append(skipped, fmt.Errorf("removed document %s of %s: %w", r.Url, r.AiProductID, err))
+				continue
+			}
+		}
 		removed = append(removed, removedDocument{
 			LastKnownProduct: LastKnownProduct{ProductID: r.AiProductID, VendorKey: r.VendorKey, DisplayName: r.ProductDisplayName, Category: Category(r.Category.String), URL: r.Url},
 			Pattern:          r.IsPattern,
@@ -110,10 +136,6 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error,
 			Aliases:         nil,
 			Documents:       nil,
 		})
-	}
-	var skipped, malformed []error
-	if int64(len(removedRows)) >= removedCap {
-		skipped = append(skipped, fmt.Errorf("removed AI catalog documents reached the cap of %d; blocks on older removals no longer apply", removedCap))
 	}
 	for _, d := range docs {
 		// ListCatalogDocuments joins live products in the same transaction, so the product is present.
@@ -195,7 +217,7 @@ func (s *Store) Refresh(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 		for _, row := range skipped {
 			reported[row.Error()] = struct{}{}
 			if _, seen := s.reported[row.Error()]; !seen {
-				logger.WarnContext(ctx, "skip AI catalog row", attr.SlogError(row))
+				logSkipped(ctx, logger, row)
 			}
 		}
 		s.reported = reported

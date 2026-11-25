@@ -390,6 +390,12 @@ func (s *Snapshot) DocumentsDisabled(id string) bool {
 	return len(p.Documents) > 0 || removed
 }
 
+// LiveProduct returns an isolated copy of the live product with id.
+func (s *Snapshot) LiveProduct(id string) (Product, bool) {
+	p := s.product(id)
+	return p.clone(), p.ID != ""
+}
+
 // product returns the live product with id, or the zero product.
 func (s *Snapshot) product(id string) Product {
 	for _, p := range s.products {

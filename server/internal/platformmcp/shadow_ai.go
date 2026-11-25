@@ -181,7 +181,8 @@ type AIScanTargetSummary struct {
 	Category    string `json:"category"`
 	// Origin is default for a target Speakeasy ships or organization for one
 	// this organization added. Everything listed is probed for either way,
-	// except a removed built-in (CatalogStatus removed).
+	// except a built-in listed only for its decision (CatalogStatus set and
+	// no signatures).
 	Origin string `json:"origin"`
 	// Blockable reports whether a gateway block on the target is enforced,
 	// which needs a client ID metadata document. A target with
@@ -194,8 +195,8 @@ type AIScanTargetSummary struct {
 	State string `json:"state"`
 	// CatalogStatus is removed or documents_disabled when the Speakeasy
 	// catalog no longer admits the target but the organization's decision on
-	// it still applies. A removed target is listed only for that decision and
-	// is never probed for.
+	// it still applies. A removed target, or a documents_disabled one with no
+	// signatures, is listed only for that decision and never probed for.
 	CatalogStatus string `json:"catalog_status,omitempty"`
 	// Decision is the organization's effective decision behind state:
 	// unreviewed, approved or blocked.

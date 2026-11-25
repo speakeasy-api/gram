@@ -3579,11 +3579,12 @@ type AiScanTargetResponseBody struct {
 	// Where the target comes from: default (a Speakeasy built-in, whose definition
 	// is read-only) or organization (added by the organization, fully editable).
 	// Every target listed here is probed for, including a built-in whose sign-in
-	// documents are turned off (access.catalog_status documents_disabled), except
-	// a built-in removed from Speakeasy's catalog (access.catalog_status removed),
-	// which is listed only while the organization's decision on it still applies.
-	// Otherwise a built-in leaves the list by being removed from Speakeasy's
-	// catalog, an organization target by being deleted.
+	// documents are turned off (access.catalog_status documents_disabled) and that
+	// has signatures, except a built-in removed from Speakeasy's catalog
+	// (access.catalog_status removed) or a documents_disabled one with no
+	// signatures, each listed only while the organization's decision on it still
+	// applies. Otherwise a built-in leaves the list by being removed from
+	// Speakeasy's catalog, an organization target by being deleted.
 	Origin string `form:"origin" json:"origin" xml:"origin"`
 	// For a built-in, whether the organization has recorded an access decision
 	// about it. Always false for organization targets.
@@ -3592,10 +3593,10 @@ type AiScanTargetResponseBody struct {
 	// rules the AI detections carry: unreviewed when nothing is recorded, and
 	// never enforceable without a verifiable gateway matcher, except a built-in
 	// the catalog no longer admits whose recorded decision still applies (see
-	// catalog_status). A removed one is listed for its decision only and is never
-	// served to device agents; one whose sign-in documents are turned off is still
-	// probed for. Absent only from a server that predates it; read a missing
-	// summary as unreviewed.
+	// catalog_status). A removed one, or a documents_disabled one with no
+	// signatures, is listed for its decision only and is never served to device
+	// agents; a documents_disabled one with signatures is still probed for. Absent
+	// only from a server that predates it; read a missing summary as unreviewed.
 	Access *AIToolAccessSummaryResponseBody `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -3651,14 +3652,18 @@ type AIToolAccessSummaryResponseBody struct {
 	// stored one. Absent rows read as unreviewed, so every tool has a value, and a
 	// tool that is not enforceable reads as unreviewed however it was decided —
 	// the stored decision is left untouched and takes effect again if the tool
-	// gains a verifiable gateway matcher.
+	// gains a verifiable gateway matcher. A tool with catalog_status set reads its
+	// stored decision, because that decision still applies.
 	Decision string `form:"decision" json:"decision" xml:"decision"`
-	// Whether a block on this tool would actually reach the gateway, and so
-	// whether a decision about it can be recorded. False when the tool is linked
-	// only by a self-reported client name, or by nothing at all: the decision is
-	// recorded honestly and enforces nothing. Surfaced so an admin is never told a
-	// tool is blocked when it is not. True for a tool with catalog_status set,
-	// whose stored decision still applies.
+	// Whether a decision about this tool reaches the gateway, and so whether one
+	// can be recorded or changed. False when the tool has no verifiable gateway
+	// matcher (it is linked only by a self-reported client name, or by nothing at
+	// all) and no stored decision applies through a removed or turned-off sign-in
+	// document: no decision can be recorded, and any decision stored earlier
+	// enforces nothing and reads as unreviewed. True for a tool with
+	// catalog_status set: Speakeasy no longer admits it, but its stored decision
+	// still applies and can be changed or cleared. Surfaced so an admin is never
+	// told a tool is blocked when it is not.
 	Enforceable bool `form:"enforceable" json:"enforceable" xml:"enforceable"`
 	// Set only when the Speakeasy catalog no longer admits this tool but a
 	// decision the organization recorded still applies: removed when Speakeasy
