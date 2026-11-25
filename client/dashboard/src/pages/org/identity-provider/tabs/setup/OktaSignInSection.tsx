@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "react-router";
 import { toast } from "sonner";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
@@ -548,6 +549,14 @@ export function OktaSignInSection({
 }): JSX.Element {
   const hint = prerequisiteHint(connection);
   const { agentId, remoteSessionIssuerId } = connection;
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === `#${OKTA_SIGN_IN_SECTION_ID}`) {
+      document
+        .getElementById(OKTA_SIGN_IN_SECTION_ID)
+        ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  }, [location.hash, location.key]);
   return (
     <SettingsSection id={OKTA_SIGN_IN_SECTION_ID}>
       <SettingsSection.Header>

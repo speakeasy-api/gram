@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router";
 import {
   cleanup,
   fireEvent,
@@ -153,14 +154,16 @@ const connection = makeConnection({
   remoteSessionIssuerId: "remote-issuer-id",
 });
 
-function renderSection() {
+function renderSection(route = "/identity") {
   const client = new QueryClient();
   const tree = () => (
-    <QueryClientProvider client={client}>
-      <TooltipProvider>
-        <OktaSignInSection connection={connection} />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <MemoryRouter initialEntries={[route]}>
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <OktaSignInSection connection={connection} />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>
   );
   const result = render(tree());
   return { ...result, rerenderSection: () => result.rerender(tree()) };
@@ -173,6 +176,18 @@ function setUpButton(): HTMLButtonElement {
 }
 
 describe("OktaSignInSection", () => {
+  it("scrolls into view when a link lands on it", () => {
+    const scroll = vi
+      .spyOn(Element.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined);
+    try {
+      renderSection("/identity?view=setup#okta-sign-in");
+      expect(scroll).toHaveBeenCalledOnce();
+    } finally {
+      scroll.mockRestore();
+    }
+  });
+
   it("enables setup once clients and issuers load", () => {
     renderSection();
     expect(setUpButton().disabled).toBe(false);

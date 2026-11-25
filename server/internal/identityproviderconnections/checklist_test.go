@@ -290,3 +290,11 @@ func TestOktaChecklist_FirstResourceConnectionNamesVendorTrustStep(t *testing.T)
 		require.Contains(t, trust, want)
 	}
 }
+
+// The step is listed on the Cross App Access view; Okta sign-in is on the Connection tab.
+func TestOktaChecklist_AgentPublicKeyNamesTheConnectionTab(t *testing.T) {
+	t.Parallel()
+	step := checklist(t, idpc.ChecklistSignal{})[idpc.ChecklistKeyAddAgentPublicKey]
+	require.Contains(t, step.Description, "Okta sign-in section of the Connection tab")
+	require.NotContains(t, itemText(step), "on this page")
+}
