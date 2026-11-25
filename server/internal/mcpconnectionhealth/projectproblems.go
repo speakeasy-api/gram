@@ -5,24 +5,30 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"runtime/debug"
 	"slices"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/singleflight"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/problems"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func (s *Service) ListProjectSuspectedProblems(ctx context.Context, payload *gen.ListProjectSuspectedProblemsPayload) (res *gen.ListProjectSuspectedProblemsResult, err error) {
-	ctx, cancel := context.WithTimeout(ctx, s.problemsDeadline)
+	ctx, cancel := s.problemsContext(ctx)
 	defer cancel()
-	defer func() { err = s.pastDeadline(ctx, err) }()
+	defer func() { err = s.answerProblems(ctx, err) }()
 	c, err := s.beginLogs(ctx)
 	if err != nil {
 		return nil, err
@@ -35,25 +41,57 @@ func (s *Service) ListProjectSuspectedProblems(ctx context.Context, payload *gen
 	if c.ownSubjects != nil {
 		return result, nil
 	}
-	all, err := s.sharedProjectProblems(ctx, c)
+	// The start is when the organization's logs were last turned on, since nothing is recorded while they are off.
+	recordedSince, err := s.logsOnSince(ctx, c.organizationID)
 	if err != nil {
 		return nil, err
 	}
-	result.Problems = all[:min(len(all), conv.PtrValOr(payload.Limit, maxProblems))]
-	result.ProblemsTotal = int64(len(all))
+	read, err := s.sharedProjectProblems(ctx, c, recordedSince)
+	if err != nil {
+		return nil, err
+	}
+	if !read.loggingEnabled {
+		result.LoggingEnabled = false
+		return result, nil
+	}
+	shown := read.problems[:min(len(read.problems), conv.PtrValOr(payload.Limit, maxProblems))]
+	if result.Problems, err = s.linksForCaller(ctx, c, read, shown); err != nil {
+		return nil, err
+	}
+	result.ProblemsTotal = int64(len(read.problems))
 	return result, nil
 }
 
-// sharedProjectProblems runs one read of the project's problems for every concurrent caller, detached from the first caller's cancellation.
-func (s *Service) sharedProjectProblems(ctx context.Context, c caller) ([]*gen.ProjectSuspectedProblem, error) {
-	results := s.projectFlights.DoChan(c.organizationID+"\x00"+c.projectID.String(), func() (any, error) {
+// projectRead is the project's problems as every caller with log:read sees them, before their own permissions.
+type projectRead struct {
+	loggingEnabled bool
+	problems       []*gen.ProjectSuspectedProblem
+
+	// grants are the ids the linked servers' permissions name.
+	grants map[string]uuid.UUID
+}
+
+// sharedProjectProblems runs one read per project and recording start for every concurrent caller, detached from the first caller's cancellation.
+func (s *Service) sharedProjectProblems(ctx context.Context, c caller, recordedSince time.Time) (projectRead, error) {
+	key := c.organizationID + "\x00" + c.projectID.String() + "\x00" + strconv.FormatInt(recordedSince.UnixNano(), 10)
+	results := s.projectFlights.DoChan(key, func() (read any, err error) {
 		flightCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.problemsDeadline)
 		defer cancel()
+		if s.flightDone != nil {
+			defer s.flightDone()
+		}
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				cause := fmt.Errorf("project suspected problems read panicked: %v", recovered)
+				s.logger.ErrorContext(flightCtx, "project suspected problems read panicked", attr.SlogError(cause), attr.SlogErrorStack(string(debug.Stack())))
+				read, err = nil, oops.E(oops.CodeUnexpected, cause, "read project suspected problems")
+			}
+		}()
 		if s.flightStarted != nil {
 			s.flightStarted()
 		}
-		all, err := s.projectProblems(flightCtx, c)
-		return all, s.pastDeadline(flightCtx, err)
+		got, err := s.projectProblems(flightCtx, c, recordedSince)
+		return got, s.answerProblems(flightCtx, err)
 	})
 	if s.flightJoined != nil {
 		s.flightJoined()
@@ -62,29 +100,34 @@ func (s *Service) sharedProjectProblems(ctx context.Context, c caller) ([]*gen.P
 	select {
 	case result = <-results:
 	case <-ctx.Done():
-		return nil, fmt.Errorf("wait for project suspected problems: %w", ctx.Err())
+		// The shared read logs its own failure; a waiter only answers.
+		return projectRead{}, oops.E(oops.CodeUnavailable, ctx.Err(), problemsUnavailable)
 	}
 	if result.Err != nil {
-		return nil, result.Err
+		return projectRead{}, result.Err
 	}
-	all, ok := result.Val.([]*gen.ProjectSuspectedProblem)
+	read, ok := result.Val.(projectRead)
 	if !ok {
-		return nil, s.unexpected(ctx, errors.New("unexpected shared result"), "read project suspected problems")
+		return projectRead{}, s.unexpected(ctx, errors.New("unexpected shared result"), "read project suspected problems")
 	}
-	return all, nil
+	return read, nil
 }
 
-// projectProblems groups the project's failures across its MCP sign-ins, in the MCP sign-in list's order, with what each links to.
-func (s *Service) projectProblems(ctx context.Context, c caller) ([]*gen.ProjectSuspectedProblem, error) {
-	ps, err := s.groupProblems(ctx, problems.ReadScope{
+// projectProblems groups the project's failures across its MCP sign-ins, in the MCP sign-in list's order, with the pages that list each.
+func (s *Service) projectProblems(ctx context.Context, c caller, recordedSince time.Time) (projectRead, error) {
+	out := projectRead{loggingEnabled: true, problems: []*gen.ProjectSuspectedProblem{}, grants: map[string]uuid.UUID{}}
+	g, err := s.groupProblems(ctx, problems.ReadScope{
 		OrganizationID: c.organizationID, ProjectID: c.projectID, WholeOrganization: false,
 		IssuerID: uuid.Nil, IssuerServerIDs: nil,
-	}, s.now())
-	if err != nil {
-		return nil, err
+	}, recordedSince, s.now())
+	switch {
+	case errors.Is(err, mcpconnectionattempts.ErrLogsOff):
+		out.loggingEnabled = false
+		return out, nil
+	case err != nil:
+		return out, err
 	}
-	ps, _ = capProblems(ps, len(ps))
-	out := make([]*gen.ProjectSuspectedProblem, 0, len(ps))
+	ps, _ := capProblems(slices.Clone(g.Problems), len(g.Problems))
 	if len(ps) == 0 {
 		return out, nil
 	}
@@ -94,18 +137,18 @@ func (s *Service) projectProblems(ctx context.Context, c caller) ([]*gen.Project
 	}
 	n, err := s.resolve(ctx, c, ids)
 	if err != nil {
-		return nil, err
+		return out, err
 	}
-	si, err := s.signIns(ctx, c, ps)
+	si, err := s.signIns(ctx, c, g.Episodes())
 	if err != nil {
-		return nil, err
+		return out, err
 	}
+	pages := pageLists{signIns: si, grouped: g, lists: map[uuid.UUID][]problems.Problem{}, listed: map[string]map[string]bool{}}
 	for _, p := range ps {
 		view, _ := problemView(n, p, "")
-		issuer, server := si.links(n, p)
-		out = append(out, &gen.ProjectSuspectedProblem{
-			UserSessionIssuerID: issuer,
-			Server:              server,
+		item := &gen.ProjectSuspectedProblem{
+			UserSessionIssuerID: nil,
+			Server:              nil,
 			ID:                  view.ID,
 			Rule:                view.Rule,
 			Part:                view.Part,
@@ -118,7 +161,63 @@ func (s *Service) projectProblems(ctx context.Context, c caller) ([]*gen.Project
 			Headline:            view.Headline,
 			Fact:                view.Fact,
 			Filters:             view.Filters,
-		})
+		}
+		issuer, server := si.links(p)
+		if issuer != uuid.Nil && pages.onSignIn(issuer, p) {
+			item.UserSessionIssuerID = new(issuer.String())
+			if row, ok := si.servers[server]; ok && row.IssuerID == issuer && row.SessionsTab && pages.onServer(issuer, server, p) {
+				item.Server = &gen.SuspectedProblemServerLink{ID: server, Slug: conv.FromPGText[string](row.Slug), Name: n.serverName(server)}
+				out.grants[server] = row.GrantID
+			}
+		}
+		out.problems = append(out.problems, item)
+	}
+	return out, nil
+}
+
+// linksForCaller keeps the links whose pages the caller may open, copying a problem rather than changing the shared one.
+func (s *Service) linksForCaller(ctx context.Context, c caller, read projectRead, shown []*gen.ProjectSuspectedProblem) ([]*gen.ProjectSuspectedProblem, error) {
+	project := authz.ProjectIDOf(c.projectID)
+	// The MCP sign-in pages and a server's Sessions tab need project:read.
+	readsProject, err := s.authz.Can(ctx, authz.Project(project).Read())
+	if err != nil {
+		return nil, err //nolint:wrapcheck // authz errors carry the code the caller must see
+	}
+	var checks []authz.Check
+	seen := map[uuid.UUID]bool{}
+	for _, p := range shown {
+		if p.Server == nil {
+			continue
+		}
+		if grant := read.grants[p.Server.ID]; !seen[grant] {
+			seen[grant] = true
+			checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(grant), project).Read())
+		}
+	}
+	allowed := map[string]bool{}
+	if readsProject && len(checks) > 0 {
+		ids, err := s.authz.Filter(ctx, checks)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			allowed[id] = true
+		}
+	}
+	out := make([]*gen.ProjectSuspectedProblem, len(shown))
+	for i, p := range shown {
+		keepSignIn := readsProject || p.UserSessionIssuerID == nil
+		keepServer := p.Server == nil || (readsProject && allowed[read.grants[p.Server.ID].String()])
+		if keepSignIn && keepServer {
+			out[i] = p
+			continue
+		}
+		cp := *p
+		if !keepSignIn {
+			cp.UserSessionIssuerID = nil
+		}
+		cp.Server = nil
+		out[i] = &cp
 	}
 	return out, nil
 }
@@ -131,19 +230,17 @@ type signInTable struct {
 	servers map[string]repo.ListServerSignInsRow
 }
 
-// signIns loads the MCP sign-ins of the problems' servers and recorded MCP sign-ins.
-func (s *Service) signIns(ctx context.Context, c caller, ps []problems.Problem) (signInTable, error) {
+// signIns loads the MCP sign-ins of the episodes' servers and recorded MCP sign-ins.
+func (s *Service) signIns(ctx context.Context, c caller, episodes []mcpconnectionattempts.FailingPerson) (signInTable, error) {
 	out := signInTable{owner: map[string]uuid.UUID{}, servers: map[string]repo.ListServerSignInsRow{}}
 	gateway := orggateway.ProjectGatewayID(c.organizationID, c.projectID).String()
 	ids := map[uuid.UUID]struct{}{}
 	onGateway := false
-	for _, p := range ps {
-		for _, e := range p.Episodes {
-			onGateway = onGateway || e.ServerID == gateway
-			for _, id := range append([]string{e.ServerID}, e.Issuers...) {
-				if parsed, err := uuid.Parse(id); err == nil {
-					ids[parsed] = struct{}{}
-				}
+	for _, e := range episodes {
+		onGateway = onGateway || e.ServerID == gateway
+		for _, id := range append([]string{e.ServerID}, e.Issuers...) {
+			if parsed, err := uuid.Parse(id); err == nil {
+				ids[parsed] = struct{}{}
 			}
 		}
 	}
@@ -187,8 +284,14 @@ func (si signInTable) of(e mcpconnectionattempts.FailingPerson) uuid.UUID {
 	}
 }
 
-// links are the MCP sign-in every episode belongs to, and the live MCP server every episode reached directly, each only when there is exactly one.
-func (si signInTable) links(n names, p problems.Problem) (*string, *gen.SuspectedProblemServerLink) {
+// partly reports that some, but not every, failure of the episode belongs to the MCP sign-in.
+func (si signInTable) partly(e mcpconnectionattempts.FailingPerson, issuer uuid.UUID) bool {
+	some := slices.Contains(e.Issuers, issuer.String()) || (e.Unrecorded && si.owner[e.ServerID] == issuer)
+	return some && si.of(e) != issuer
+}
+
+// links are the MCP sign-in every episode belongs to, and the MCP server every episode reached directly, each only when there is exactly one.
+func (si signInTable) links(p problems.Problem) (uuid.UUID, string) {
 	issuer, server := uuid.Nil, ""
 	for i, e := range p.Episodes {
 		id := si.of(e)
@@ -198,19 +301,65 @@ func (si signInTable) links(n names, p problems.Problem) (*string, *gen.Suspecte
 		}
 		switch {
 		case id == uuid.Nil, i > 0 && id != issuer:
-			return nil, nil
+			return uuid.Nil, ""
 		case i == 0:
 			issuer, server = id, direct
 		case direct != server:
 			server = ""
 		}
 	}
-	if issuer == uuid.Nil {
-		return nil, nil
+	return issuer, server
+}
+
+// pageLists rebuilds, from the project's read, the list a linked page reads: the grouping
+// narrowed to one MCP sign-in, with the page's filter and cap. Each MCP sign-in is grouped once.
+type pageLists struct {
+	signIns signInTable
+	grouped problems.Grouped
+	// lists are each MCP sign-in's problems, nil when its read cannot be rebuilt.
+	lists map[uuid.UUID][]problems.Problem
+	// listed are the ids each page list shows, by MCP sign-in and filter.
+	listed map[string]map[string]bool
+}
+
+func (pl pageLists) signIn(issuer uuid.UUID) []problems.Problem {
+	if ps, ok := pl.lists[issuer]; ok {
+		return ps
 	}
-	row, ok := si.servers[server]
-	if !ok || row.IssuerID != issuer {
-		return new(issuer.String()), nil
+	var ps []problems.Problem
+	// A failure the MCP sign-in's read keeps only part of would group differently there.
+	if !slices.ContainsFunc(pl.grouped.Episodes(), func(e mcpconnectionattempts.FailingPerson) bool { return pl.signIns.partly(e, issuer) }) {
+		ps = pl.grouped.Within(func(e mcpconnectionattempts.FailingPerson) bool { return pl.signIns.of(e) == issuer })
 	}
-	return new(issuer.String()), &gen.SuspectedProblemServerLink{ID: server, Slug: conv.FromPGText[string](row.Slug), Name: n.serverName(server)}
+	pl.lists[issuer] = ps
+	return ps
+}
+
+// shows reports whether the MCP sign-in's list, filtered as a page filters it and capped, has the problem.
+func (pl pageLists) shows(issuer uuid.UUID, filter string, keep func(problems.Problem) bool, id string) bool {
+	key := issuer.String() + "\x00" + filter
+	ids, ok := pl.listed[key]
+	if !ok {
+		kept := slices.DeleteFunc(slices.Clone(pl.signIn(issuer)), func(p problems.Problem) bool { return !keep(p) })
+		kept, _ = capProblems(kept, maxProblems)
+		ids = map[string]bool{}
+		for _, p := range kept {
+			ids[p.ID] = true
+		}
+		pl.listed[key] = ids
+	}
+	return ids[id]
+}
+
+// onSignIn checks the MCP sign-in's Overview for a sign-in problem, else its whole list.
+func (pl pageLists) onSignIn(issuer uuid.UUID, p problems.Problem) bool {
+	if partOf(p.Part) == partSpeakeasy {
+		return pl.shows(issuer, string(partSpeakeasy), func(q problems.Problem) bool { return partOf(q.Part) == partSpeakeasy }, p.ID)
+	}
+	return pl.shows(issuer, "", func(problems.Problem) bool { return true }, p.ID)
+}
+
+// onServer checks the server's Sessions tab: the MCP sign-in's problems with people on it.
+func (pl pageLists) onServer(issuer uuid.UUID, server string, p problems.Problem) bool {
+	return pl.shows(issuer, "server:"+server, func(q problems.Problem) bool { return peopleOn(q, server) > 0 }, p.ID)
 }

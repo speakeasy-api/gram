@@ -20,10 +20,8 @@ const (
 	// EpisodeLookback is how far back failures are read, so an episode opens no earlier.
 	EpisodeLookback = 7 * 24 * time.Hour
 
-	// failingReadTimeout and failingReadMemoryBytes cap each ClickHouse read, so a very
-	// large organization fails its own read instead of holding the caller. The timeout
-	// matches the 30 second budget of the requests that wait on it.
-	failingReadTimeout     = 30 * time.Second
+	// failingReadMemoryBytes caps each ClickHouse read, so a very large organization
+	// fails its own read instead of holding the caller.
 	failingReadMemoryBytes = 2 << 30
 
 	// maxEpisodeAttempts caps the attempts one episode read returns: 2,000 people failing
@@ -36,11 +34,12 @@ func failingReadContext(ctx context.Context) context.Context {
 }
 
 func failingReadSettings() clickhouse.Settings {
-	return clickhouse.Settings{
-		"max_execution_time": int(failingReadTimeout / time.Second),
-		"max_memory_usage":   failingReadMemoryBytes,
-	}
+	return clickhouse.Settings{"max_memory_usage": failingReadMemoryBytes}
 }
+
+// failingReadSQL caps each read at the 30 second budget of the requests that wait on it. It is
+// in the query because the driver replaces a context's max_execution_time with its deadline plus five seconds.
+const failingReadSQL = " SETTINGS max_execution_time = 30"
 
 // episodeReadContext also caps the rows the episode read returns.
 func episodeReadContext(ctx context.Context) context.Context {
@@ -205,7 +204,7 @@ SELECT
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
 FROM ` + lastServedTable + `
 WHERE organization_id = ? AND (? OR project_id = ?) AND server_kind IN ? AND server_id IN ? AND subject_urn IN ?
-GROUP BY server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id`
+GROUP BY server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id` + failingReadSQL
 
 // answersQuery reads anyone's latest answer per member on the failing servers and
 // gateways: a server failure ends on anyone's answer. Arguments: organization, every
@@ -216,7 +215,7 @@ SELECT
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
 FROM ` + lastServedTable + `
 WHERE organization_id = ? AND (? OR project_id = ?) AND server_kind IN ? AND server_id IN ?
-GROUP BY server_kind, server_id, member_id`
+GROUP BY server_kind, server_id, member_id` + failingReadSQL
 
 // servedBatch bounds the server and person pairs, and the servers, in one served query.
 const servedBatch = 1000
@@ -331,7 +330,7 @@ SELECT server_kind, server_id, member_id, client_family,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
 FROM ` + lastServedTable + `
 WHERE organization_id = ? AND (? OR project_id = ?) AND server_kind IN ? AND server_id IN ?
-GROUP BY server_kind, server_id, member_id, client_family`
+GROUP BY server_kind, server_id, member_id, client_family` + failingReadSQL
 
 // ReadServedByFamily reads when each client family was last served and answered on the failing people's servers, in one project unless nil.
 func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, projectID uuid.UUID, failing []FailingPerson) ([]ServedByFamily, error) {

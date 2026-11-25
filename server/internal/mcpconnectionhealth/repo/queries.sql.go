@@ -344,7 +344,9 @@ func (q *Queries) ListServerNames(ctx context.Context, arg ListServerNamesParams
 }
 
 const listServerSignIns = `-- name: ListServerSignIns :many
-SELECT server.id, 'mcp'::text AS kind, issuer.id AS issuer_id, server.slug, server.deleted
+SELECT server.id, 'mcp'::text AS kind, issuer.id AS issuer_id, server.slug, server.deleted,
+       (server.unproxied_mcp_server_id IS NULL)::boolean AS sessions_tab,
+       COALESCE(server.toolset_id, server.id) AS grant_id
 FROM mcp_servers AS server
 JOIN user_session_issuers AS issuer
   ON issuer.id = server.user_session_issuer_id
@@ -353,7 +355,7 @@ JOIN user_session_issuers AS issuer
 WHERE server.project_id = $1
   AND server.id = ANY($3::uuid[])
 UNION ALL
-SELECT gateway.id, 'gateway'::text AS kind, issuer.id, NULL::text, gateway.deleted
+SELECT gateway.id, 'gateway'::text AS kind, issuer.id, NULL::text, gateway.deleted, FALSE, gateway.id
 FROM meta_mcp_servers AS gateway
 JOIN user_session_issuers AS issuer
   ON issuer.id = gateway.user_session_issuer_id
@@ -363,7 +365,7 @@ WHERE gateway.project_id = $1
   AND gateway.organization_id = $2::text
   AND gateway.id = ANY($3::uuid[])
 UNION ALL
-SELECT issuer.id, 'authorization_server'::text AS kind, issuer.id, NULL::text, FALSE
+SELECT issuer.id, 'authorization_server'::text AS kind, issuer.id, NULL::text, FALSE, FALSE, issuer.id
 FROM user_session_issuers AS issuer
 WHERE (issuer.project_id = $1 OR (issuer.project_id IS NULL AND issuer.organization_id = $2::text))
   AND issuer.deleted IS FALSE
@@ -377,16 +379,19 @@ type ListServerSignInsParams struct {
 }
 
 type ListServerSignInsRow struct {
-	ID       uuid.UUID
-	Kind     string
-	IssuerID uuid.UUID
-	Slug     pgtype.Text
-	Deleted  bool
+	ID          uuid.UUID
+	Kind        string
+	IssuerID    uuid.UUID
+	Slug        pgtype.Text
+	Deleted     bool
+	SessionsTab bool
+	GrantID     uuid.UUID
 }
 
 // The live MCP sign-in of each server and gateway in the project, deleted servers
 // included as Connection Logs attributes their attempts, and each live MCP sign-in
-// among the ids. Only an MCP server's slug is read.
+// among the ids. Only an MCP server's slug, Sessions tab and grant id are read: it has the
+// tab unless it is unproxied, and its permissions name its toolset when it has one.
 func (q *Queries) ListServerSignIns(ctx context.Context, arg ListServerSignInsParams) ([]ListServerSignInsRow, error) {
 	rows, err := q.db.Query(ctx, listServerSignIns, arg.ProjectID, arg.OrganizationID, arg.Ids)
 	if err != nil {
@@ -402,6 +407,8 @@ func (q *Queries) ListServerSignIns(ctx context.Context, arg ListServerSignInsPa
 			&i.IssuerID,
 			&i.Slug,
 			&i.Deleted,
+			&i.SessionsTab,
+			&i.GrantID,
 		); err != nil {
 			return nil, err
 		}

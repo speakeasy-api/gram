@@ -60,9 +60,10 @@ type Service struct {
 	// projectFlights merges concurrent reads of one project's suspected problems.
 	projectFlights singleflight.Group
 
-	// flightStarted and flightJoined are test seams: a shared read starts, a caller joins one.
+	// flightStarted, flightJoined and flightDone are test seams: a shared read starts, a caller joins one, it ends.
 	flightStarted func()
 	flightJoined  func()
+	flightDone    func()
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -94,6 +95,7 @@ func NewService(
 		projectFlights:   singleflight.Group{},
 		flightStarted:    nil,
 		flightJoined:     nil,
+		flightDone:       nil,
 	}
 }
 

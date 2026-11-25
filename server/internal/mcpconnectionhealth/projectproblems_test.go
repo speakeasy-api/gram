@@ -2,6 +2,7 @@ package mcpconnectionhealth_test
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,15 +14,18 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	problemsrepo "github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/problems/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	unproxiedrepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -320,7 +324,7 @@ func TestListProjectSuspectedProblems_LinksToPagesThatListIt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestService(t)
-			ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+			ctx = withServerRead(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
 			w := tc.make(t, ti)
 
 			res := ti.listProject(t, ctx, nil)
@@ -408,7 +412,7 @@ func TestListProjectSuspectedProblems_SharesOneReadAcrossConcurrentCalls(t *test
 		for range callers {
 			<-joined
 		}
-	}, func() { joined <- struct{}{} })
+	}, func() { joined <- struct{}{} }, nil)
 
 	var wg sync.WaitGroup
 	results := make([]*gen.ListProjectSuspectedProblemsResult, callers)
@@ -423,5 +427,260 @@ func TestListProjectSuspectedProblems_SharesOneReadAcrossConcurrentCalls(t *test
 	for i := range callers {
 		require.NoError(t, errs[i])
 		require.Len(t, results[i].Problems, 1)
+	}
+}
+
+// withServerRead grants scopes on the project and mcp:read on every MCP server.
+func withServerRead(t *testing.T, ctx context.Context, scopes ...authz.Scope) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	grants := []authz.Grant{authz.NewGrant(authz.ScopeMCPRead, authz.WildcardResource)}
+	for _, scope := range scopes {
+		grants = append(grants, authz.NewGrant(scope, authCtx.ProjectID.String()))
+	}
+	return authztest.WithExactGrants(t, ctx, grants...)
+}
+
+// servedOn records another app's served request on a direct MCP server, ago before now.
+func (ti *testInstance) servedOn(t *testing.T, server uuid.UUID, family string, ago time.Duration) {
+	t.Helper()
+	require.NoError(t, mcpconnectionattempts.AppendServed(t.Context(), ti.ch, []mcpconnectionattempts.Served{{
+		OrganizationID: ti.org, ProjectID: ti.project, ServerKind: "mcp", ServerID: server.String(), MemberID: "",
+		SubjectURN: urn.NewUserSubject("user-" + uuid.NewString()).String(), AppKey: mcpconnectionattempts.AppDCR.String(), ClientFamily: family,
+		RemoteSessionClientID: "", ServedAt: ti.now.Add(-ago), AnsweredAt: ti.now.Add(-ago),
+	}}))
+}
+
+// failDirectWith writes a failed request by person on a direct MCP server through a named app, ago before now.
+func (ti *testInstance) failDirectWith(t *testing.T, server uuid.UUID, person urn.SessionSubject, ago time.Duration, family, version string) {
+	t.Helper()
+	at := ti.now.Add(-ago)
+	a := mcpconnectionattempts.AttemptAt(uuid.New(), at, mcpconnectionattempts.ServerScope(ti.org, ti.project, server, mcpconnectionattempts.AppDCR))
+	row, err := mcpconnectionattempts.RowAt(a, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken, true, at, mcpconnectionattempts.Subject(&person))
+	require.NoError(t, err)
+	row.ClientFamily, row.ClientVersion = family, version
+	require.NoError(t, mcpconnectionattempts.AppendRows(t.Context(), ti.ch, []mcpconnectionattempts.Row{row}))
+}
+
+// A problem left over when a larger group wins across MCP sign-ins is not listed on the MCP sign-in alone, so it gets no link.
+func TestListProjectSuspectedProblems_NoLinkWhenAnotherGroupWinsOnTheSignIn(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withServerRead(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	otherIssuer, _ := ti.provider(t, "Notion")
+	mine := ti.mcpServer(t, ti.project, ti.issuer, "linear", "https://linear.example.com/mcp")
+	theirs := ti.mcpServer(t, ti.project, otherIssuer, "notion", "https://notion.example.com/mcp")
+	alice := urn.NewUserSubject("user-" + uuid.NewString())
+	ti.failDirectWith(t, mine, alice, 30*time.Hour, "", "")
+	ti.failDirectWith(t, mine, alice, time.Hour, "", "")
+	ti.failDirectWith(t, mine, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, mcpconnectionattempts.FamilyCursor, "2.0.1")
+	for range 2 {
+		ti.failDirectWith(t, theirs, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, mcpconnectionattempts.FamilyCursor, "2.0.1")
+	}
+	ti.servedOn(t, mine, mcpconnectionattempts.FamilyClaudeCode, 30*time.Minute)
+	ti.servedOn(t, theirs, mcpconnectionattempts.FamilyClaudeCode, 30*time.Minute)
+
+	res := ti.listProject(t, ctx, nil)
+	require.Len(t, res.Problems, 2)
+	var alone *gen.ProjectSuspectedProblem
+	for _, p := range res.Problems {
+		require.Nil(t, p.UserSessionIssuerID, p.Rule)
+		require.Nil(t, p.Server, p.Rule)
+		if p.Rule == "one_person" {
+			alone = p
+		}
+	}
+	require.NotNil(t, alone, "across the project the app version takes three people and leaves one")
+	onSignIn := ti.listFor(t, ctx, ti.issuer)
+	require.Len(t, onSignIn, 1)
+	require.Equal(t, gen.SuspectedProblemRule("same_server"), onSignIn[0].Rule, "on the MCP sign-in alone the server wins")
+	require.NotEqual(t, alone.ID, onSignIn[0].ID)
+}
+
+// A server link needs a Sessions tab, and the caller's permission to open it; the MCP sign-in link needs project:read.
+func TestListProjectSuspectedProblems_ServerLinkNeedsATabAndPermission(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		unproxied bool
+		scopes    []authz.Scope
+		mcpRead   bool
+		signIn    bool
+		server    bool
+	}{
+		{"every permission", false, []authz.Scope{authz.ScopeProjectRead, authz.ScopeLogRead}, true, true, true},
+		{"an unproxied server has no Sessions tab", true, []authz.Scope{authz.ScopeProjectRead, authz.ScopeLogRead}, true, true, false},
+		{"no mcp:read", false, []authz.Scope{authz.ScopeProjectRead, authz.ScopeLogRead}, false, true, false},
+		{"no project:read", false, []authz.Scope{authz.ScopeLogRead}, true, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			server := ti.mcpServer(t, ti.project, ti.issuer, "notion", "https://notion.example.com/mcp")
+			if tc.unproxied {
+				backend, err := unproxiedrepo.New(ti.conn).CreateServer(t.Context(), unproxiedrepo.CreateServerParams{ID: uuid.New(), ProjectID: ti.project, Name: conv.ToPGText("Docs"), Slug: conv.ToPGText("docs"), Url: "https://docs.example.com/mcp", Description: pgtype.Text{}})
+				require.NoError(t, err)
+				created, err := mcpserversrepo.New(ti.conn).CreateMCPServer(t.Context(), mcpserversrepo.CreateMCPServerParams{
+					ID: uuid.New(), ProjectID: ti.project, Name: conv.ToPGText("docs"), Slug: conv.ToPGText("docs"),
+					UserSessionIssuerID: uuid.NullUUID{UUID: ti.issuer, Valid: true}, UnproxiedMcpServerID: uuid.NullUUID{UUID: backend.ID, Valid: true}, Visibility: "private",
+				})
+				require.NoError(t, err)
+				server = created.ID
+			}
+			ti.failDirect(t, ti.project, server, 2*time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+			ti.failDirect(t, ti.project, server, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+
+			caller := withProjectGrants(t, ctx, tc.scopes...)
+			if tc.mcpRead {
+				caller = withServerRead(t, ctx, tc.scopes...)
+			}
+			res := ti.listProject(t, caller, nil)
+			require.Len(t, res.Problems, 1)
+			require.Equal(t, tc.signIn, res.Problems[0].UserSessionIssuerID != nil)
+			require.Equal(t, tc.server, res.Problems[0].Server != nil)
+		})
+	}
+}
+
+// A read held open across logs turning off and on is not shared with a caller counting from the new start.
+func TestListProjectSuspectedProblems_DoesNotShareAReadAcrossALogsToggle(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	ti.failPeople(t, ti.server, 2, 3*time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	var flights atomic.Int32
+	started, release := make(chan struct{}), make(chan struct{})
+	mcpconnectionhealth.SetProjectFlightHooks(ti.service, func() {
+		if flights.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+	}, nil, nil)
+
+	first := make(chan *gen.ListProjectSuspectedProblemsResult, 1)
+	go func() {
+		res, _ := ti.service.ListProjectSuspectedProblems(ctx, &gen.ListProjectSuspectedProblemsPayload{Limit: nil})
+		first <- res
+	}()
+	<-started
+	require.NoError(t, repo.New(ti.conn).TurnLogsOnFixture(t.Context(), repo.TurnLogsOnFixtureParams{OrganizationID: ti.org, CreatedAt: pgtype.Timestamptz{Time: ti.now.Add(-time.Hour), InfinityModifier: pgtype.Finite, Valid: true}}))
+	require.Empty(t, ti.listProject(t, ctx, nil).Problems, "counting from when logs came back on, the failures are older")
+	close(release)
+	held := <-first
+	require.NotNil(t, held)
+	require.Len(t, held.Problems, 1, "the read that started before counts from its own start")
+	require.Equal(t, int32(2), flights.Load())
+}
+
+// A panic in the shared read fails every waiter, and the next read works.
+func TestListProjectSuspectedProblems_APanicFailsTheWaitersOnly(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	ti.failPeople(t, ti.server, 2, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	var flights atomic.Int32
+	joined := make(chan struct{}, 8)
+	mcpconnectionhealth.SetProjectFlightHooks(ti.service, func() {
+		if flights.Add(1) == 1 {
+			<-joined
+			<-joined
+			panic("injected")
+		}
+	}, func() { joined <- struct{}{} }, nil)
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	for i := range errs {
+		wg.Go(func() {
+			_, errs[i] = ti.service.ListProjectSuspectedProblems(ctx, &gen.ListProjectSuspectedProblemsPayload{Limit: nil})
+		})
+	}
+	wg.Wait()
+	for _, err := range errs {
+		requireOopsCode(t, err, oops.CodeUnexpected)
+	}
+	require.Len(t, ti.listProject(t, ctx, nil).Problems, 1)
+}
+
+// levelCounter counts log records by level.
+type levelCounter struct {
+	mu     sync.Mutex
+	counts map[slog.Level]int
+}
+
+func (c *levelCounter) Enabled(context.Context, slog.Level) bool { return true }
+func (c *levelCounter) Handle(_ context.Context, r slog.Record) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.counts[r.Level]++
+	return nil
+}
+func (c *levelCounter) WithAttrs([]slog.Attr) slog.Handler { return c }
+func (c *levelCounter) WithGroup(string) slog.Handler      { return c }
+
+func (c *levelCounter) count(level slog.Level) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.counts[level]
+}
+
+// A stalled shared read logs one warning; the waiter that runs out of time answers unavailable without logging it again.
+func TestListProjectSuspectedProblems_AStalledReadLogsOnce(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	me := urn.NewUserSubject(ti.userID)
+	ti.failOn(t, ti.org, ti.project, ti.server, me, 30*time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	ti.failOn(t, ti.org, ti.project, ti.server, me, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	mcpconnectionhealth.SetProblemsDeadline(ti.service, 2*time.Second)
+	require.Len(t, ti.listProject(t, ctx, nil).Problems, 1, "inside the budget the one-person problem is named")
+
+	logs := &levelCounter{counts: map[slog.Level]int{slog.LevelDebug: 0, slog.LevelInfo: 0, slog.LevelWarn: 0, slog.LevelError: 0}}
+	mcpconnectionhealth.SetLogger(ti.service, slog.New(logs))
+	done := make(chan struct{})
+	mcpconnectionhealth.SetProjectFlightHooks(ti.service, nil, nil, func() { close(done) })
+	// Only the people lookup reads users: hold it until the budget runs out.
+	tx, err := ti.conn.Begin(t.Context()) //nolint:glint // notestingrawsql: the table lock that stalls the name lookup is the behaviour under test.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) }()
+	_, err = tx.Exec(t.Context(), "LOCK TABLE users IN ACCESS EXCLUSIVE MODE") //nolint:glint // notestingrawsql: a table lock has no SQLc form.
+	require.NoError(t, err)
+
+	_, err = ti.service.ListProjectSuspectedProblems(ctx, &gen.ListProjectSuspectedProblemsPayload{Limit: nil})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+	<-done
+	require.Equal(t, 1, logs.count(slog.LevelWarn))
+	require.Zero(t, logs.count(slog.LevelError))
+}
+
+// Logs turned off after the request's first check stop the read before anything is shown, as the read checks again.
+func TestSuspectedProblems_LogsTurnedOffMidRequestShowNothing(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		read func(t *testing.T, ctx context.Context, ti *testInstance) (bool, int)
+	}{
+		{"an MCP sign-in", func(t *testing.T, ctx context.Context, ti *testInstance) (bool, int) {
+			t.Helper()
+			res := ti.listProblems(t, ctx, nil, nil)
+			return res.LoggingEnabled, len(res.Problems)
+		}},
+		{"the project", func(t *testing.T, ctx context.Context, ti *testInstance) (bool, int) {
+			t.Helper()
+			res := ti.listProject(t, ctx, nil)
+			return res.LoggingEnabled, len(res.Problems)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+			ti.failPeople(t, ti.server, 2, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+			ti.logsOffAfter.Store(1)
+			on, shown := tc.read(t, ctx, ti)
+			require.False(t, on)
+			require.Zero(t, shown)
+		})
 	}
 }

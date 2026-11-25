@@ -422,7 +422,7 @@ func TestGetSuspectedProblem_NeverFindsAnotherProjectsOrOrganizationsProblem(t *
 		{OrganizationID: ti.org, ProjectID: otherProject, WholeOrganization: false},
 		{OrganizationID: otherOrg, ProjectID: ti.project, WholeOrganization: false},
 	} {
-		there, err := problems.Read(t.Context(), ti.ch, ti.conn, mcpconnectionattemptstest.LogsOn, scope, time.Time{}, time.Now())
+		there, err := problemsOf(problems.Read(t.Context(), ti.ch, ti.conn, mcpconnectionattemptstest.LogsOn, scope, time.Time{}, time.Now()))
 		require.NoError(t, err)
 		require.Len(t, there, 1)
 		require.False(t, ti.getProblem(t, ctx, there[0].ID).Found)
@@ -659,7 +659,7 @@ func TestSuspectedProblems_AnAppVersionSplitAcrossProvidersIsNotListed(t *testin
 		ti.failWith(t, gateway, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, time.Second, mcpconnectionattempts.CodeInvalidBearerToken, mcpconnectionattempts.FamilyClaudeCode, "2.0.1")
 		ti.answeredFor(t, gateway, mcpconnectionattempts.FamilyCodexCLI, 30*time.Minute)
 	}
-	projectWide, err := problems.Read(t.Context(), ti.ch, ti.conn, mcpconnectionattemptstest.LogsOn, problems.ReadScope{OrganizationID: ti.org, ProjectID: ti.project}, time.Time{}, time.Now())
+	projectWide, err := problemsOf(problems.Read(t.Context(), ti.ch, ti.conn, mcpconnectionattemptstest.LogsOn, problems.ReadScope{OrganizationID: ti.org, ProjectID: ti.project}, time.Time{}, time.Now()))
 	require.NoError(t, err)
 	require.Len(t, projectWide, 1, "across the project the two people are one app version problem")
 	require.Equal(t, problems.RuleSameAppVersion, projectWide[0].Rule)
@@ -678,7 +678,7 @@ func TestSuspectedProblems_AnAppVersionQualifiedElsewhereIsNotListed(t *testing.
 		ti.failWith(t, gateway, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, time.Second, mcpconnectionattempts.CodeInvalidBearerToken, mcpconnectionattempts.FamilyClaudeCode, "2.0.1")
 	}
 	ti.answeredFor(t, otherGateway, mcpconnectionattempts.FamilyCodexCLI, 30*time.Minute)
-	projectWide, err := problems.Read(t.Context(), ti.ch, ti.conn, mcpconnectionattemptstest.LogsOn, problems.ReadScope{OrganizationID: ti.org, ProjectID: ti.project}, time.Time{}, time.Now())
+	projectWide, err := problemsOf(problems.Read(t.Context(), ti.ch, ti.conn, mcpconnectionattemptstest.LogsOn, problems.ReadScope{OrganizationID: ti.org, ProjectID: ti.project}, time.Time{}, time.Now()))
 	require.NoError(t, err)
 	require.Empty(t, projectWide, "an app version takes only the one person on the server where another app worked")
 	require.Empty(t, ti.listFor(t, ctx, ti.issuer), "this provider's two people have no other app working on their servers")
@@ -768,3 +768,5 @@ func TestSuspectedProblems_StartWhenLogsWereLastTurnedOn(t *testing.T) {
 	require.NoError(t, repo.New(ti.conn).TurnLogsOnFixture(t.Context(), repo.TurnLogsOnFixtureParams{OrganizationID: ti.org, CreatedAt: pgtype.Timestamptz{Time: ti.now.Add(-time.Hour), InfinityModifier: pgtype.Finite, Valid: true}}))
 	require.Empty(t, ti.listProblems(t, ctx, nil, nil).Problems, "the failures are from before logs were turned back on")
 }
+
+func problemsOf(g problems.Grouped, err error) ([]problems.Problem, error) { return g.Problems, err }

@@ -399,50 +399,59 @@ func TestWhoFixesOf_NamesEveryParty(t *testing.T) {
 	}
 }
 
-func TestPastDeadline_IsTemporarilyUnavailableButKeepsRefusals(t *testing.T) {
+func TestAnswerProblems_IsTemporarilyUnavailableButKeepsRefusals(t *testing.T) {
 	t.Parallel()
 	s := &Service{logger: testenv.NewLogger(t)}
 	expired, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 	defer cancel()
 	var shareable *oops.ShareableError
-	require.ErrorAs(t, s.pastDeadline(expired, fmt.Errorf("read: %w", context.DeadlineExceeded)), &shareable)
+	require.ErrorAs(t, s.answerProblems(expired, fmt.Errorf("read: %w", context.DeadlineExceeded)), &shareable)
 	require.Equal(t, oops.CodeUnavailable, shareable.Code)
-	require.ErrorAs(t, s.pastDeadline(expired, oops.E(oops.CodeUnexpected, errors.New("boom"), "load names")), &shareable)
+	require.ErrorAs(t, s.answerProblems(expired, oops.E(oops.CodeUnexpected, errors.New("boom"), "load names")), &shareable)
 	require.Equal(t, oops.CodeUnavailable, shareable.Code, "any read past the budget")
-	require.ErrorAs(t, s.pastDeadline(expired, oops.C(oops.CodeForbidden)), &shareable)
+	require.ErrorAs(t, s.answerProblems(expired, oops.C(oops.CodeForbidden)), &shareable)
 	require.Equal(t, oops.CodeForbidden, shareable.Code)
-	require.ErrorAs(t, s.pastDeadline(t.Context(), oops.E(oops.CodeUnexpected, errors.New("boom"), "load names")), &shareable)
+	require.ErrorAs(t, s.answerProblems(t.Context(), oops.E(oops.CodeUnexpected, errors.New("boom"), "load names")), &shareable)
 	require.Equal(t, oops.CodeUnexpected, shareable.Code, "inside the budget nothing changes")
 }
 
-// Running out of time, or a read over its limits, answers unavailable once, and the deadline check keeps that answer.
-func TestUnexpected_AnswersUnavailableOncePastTheBudgetOrLimits(t *testing.T) {
+// Only a suspected problems request answers a timeout or a read over its limits as unavailable; other methods answer as before.
+func TestUnexpected_MapsTimeoutsOnlyInAProblemsRequest(t *testing.T) {
 	t.Parallel()
-	s := &Service{logger: testenv.NewLogger(t)}
 	tooLarge := fmt.Errorf("read: %w", mcpconnectionattempts.ErrReadTooLarge)
 	for _, tc := range []struct {
-		name    string
-		expired bool
-		err     error
-		code    oops.Code
+		name     string
+		problems bool
+		expired  bool
+		err      error
+		code     oops.Code
 	}{
-		{"past the budget", true, errors.New("stalled"), oops.CodeUnavailable},
-		{"over the read's limits", false, tooLarge, oops.CodeUnavailable},
-		{"anything else", false, errors.New("broken"), oops.CodeUnexpected},
+		{"another method past its deadline", false, true, errors.New("stalled"), oops.CodeUnexpected},
+		{"a problems request past its budget", true, true, errors.New("stalled"), oops.CodeUnavailable},
+		{"a problems read over its limits", true, false, tooLarge, oops.CodeUnavailable},
+		{"anything else in a problems request", true, false, errors.New("broken"), oops.CodeUnexpected},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ctx := t.Context()
+			s := &Service{logger: testenv.NewLogger(t), problemsDeadline: time.Minute}
 			if tc.expired {
-				var cancel context.CancelFunc
-				ctx, cancel = context.WithDeadline(ctx, time.Now().Add(-time.Second))
-				t.Cleanup(cancel)
+				s.problemsDeadline = -time.Second
 			}
-			err := s.unexpected(ctx, tc.err, "read")
+			ctx, cancel := context.WithTimeout(t.Context(), s.problemsDeadline)
+			if tc.problems {
+				ctx, cancel = s.problemsContext(t.Context())
+			}
+			t.Cleanup(cancel)
+			err := s.unexpected(ctx, tc.err, "load server names")
+			if tc.problems {
+				err = s.answerProblems(ctx, err)
+			}
 			var shareable *oops.ShareableError
 			require.ErrorAs(t, err, &shareable)
 			require.Equal(t, tc.code, shareable.Code)
-			require.Same(t, err, s.pastDeadline(ctx, err), "not wrapped or logged again")
+			if tc.code == oops.CodeUnexpected {
+				require.Contains(t, shareable.Error(), "load server names")
+			}
 		})
 	}
 }

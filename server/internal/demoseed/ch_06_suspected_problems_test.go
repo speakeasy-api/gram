@@ -92,9 +92,9 @@ func TestSeededProblemsShowRightAfterAFreshSeed(t *testing.T) {
 	for _, id := range s.healthServerIDs() {
 		servers = append(servers, id.String())
 	}
-	got, err := problems.Read(ctx, ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
+	got, err := problemsOf(problems.Read(ctx, ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
 		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false, IssuerID: s.healthIssuer(), IssuerServerIDs: servers,
-	}, since.Time, s.now.Add(time.Minute))
+	}, since.Time, s.now.Add(time.Minute)))
 	require.NoError(t, err)
 	scopes := make([]string, 0, len(got))
 	for _, p := range got {
@@ -139,9 +139,9 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 	for _, id := range s.healthServerIDs() {
 		servers = append(servers, id.String())
 	}
-	got, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
+	got, err := problemsOf(problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
 		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false, IssuerID: s.healthIssuer(), IssuerServerIDs: servers,
-	}, time.Time{}, now)
+	}, time.Time{}, now))
 	require.NoError(t, err)
 	signIn := 0
 	for _, p := range got {
@@ -158,9 +158,9 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 			refusedServers = append(refusedServers, r.ServerID)
 		}
 	}
-	elsewhere, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
+	elsewhere, err := problemsOf(problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
 		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false, IssuerID: uuid.New(), IssuerServerIDs: refusedServers,
-	}, time.Time{}, now)
+	}, time.Time{}, now))
 	require.NoError(t, err)
 	require.Empty(t, elsewhere, "the daily refusals end in answered requests")
 
@@ -219,13 +219,13 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 
 	// The Project Overview lists what the seed's MCP sign-ins list between them: the health
 	// stories, and the failed refreshes of the saved Linear connection, which record its MCP sign-in.
-	linear, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
+	linear, err := problemsOf(problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
 		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false, IssuerID: s.det("issuer-linear"), IssuerServerIDs: []string{s.det("mcpserver-linear").String()},
-	}, time.Time{}, now)
+	}, time.Time{}, now))
 	require.NoError(t, err)
-	projectWide, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
+	projectWide, err := problemsOf(problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
 		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false,
-	}, time.Time{}, now)
+	}, time.Time{}, now))
 	require.NoError(t, err)
 	ids := func(ps []problems.Problem) []string {
 		out := make([]string, len(ps))
@@ -236,3 +236,5 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 	}
 	require.ElementsMatch(t, append(ids(got), ids(linear)...), ids(projectWide))
 }
+
+func problemsOf(g problems.Grouped, err error) ([]problems.Problem, error) { return g.Problems, err }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var Outcome = Type("ConnectionOutcome", String, func() {
@@ -182,6 +183,11 @@ var _ = Service("mcpConnectionHealth", func() {
 
 	Method("listSuspectedProblems", func() {
 		Description("List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.")
+		// The suspected problem reads answer 503 when a read runs out of time or is over its limits.
+		Error(string(oops.CodeUnavailable), func() {
+			Description(oops.CodeUnavailable.UserMessage())
+			Fault()
+		})
 		Payload(func() {
 			Attribute("user_session_issuer_id", String, "The MCP authentication provider.", func() {
 				Format(FormatUUID)
@@ -202,6 +208,9 @@ var _ = Service("mcpConnectionHealth", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+				ContentType("application/json")
+			})
 		})
 		Meta("openapi:operationId", "listMcpSuspectedProblems")
 		Meta("openapi:extension:x-speakeasy-name-override", "listSuspectedProblems")
@@ -210,6 +219,11 @@ var _ = Service("mcpConnectionHealth", func() {
 
 	Method("getSuspectedProblem", func() {
 		Description("Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.")
+		// The suspected problem reads answer 503 when a read runs out of time or is over its limits.
+		Error(string(oops.CodeUnavailable), func() {
+			Description(oops.CodeUnavailable.UserMessage())
+			Fault()
+		})
 		Payload(func() {
 			Attribute("user_session_issuer_id", String, "The MCP authentication provider.", func() {
 				Format(FormatUUID)
@@ -230,6 +244,9 @@ var _ = Service("mcpConnectionHealth", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+				ContentType("application/json")
+			})
 		})
 		Meta("openapi:operationId", "getMcpSuspectedProblem")
 		Meta("openapi:extension:x-speakeasy-name-override", "getSuspectedProblem")
@@ -238,6 +255,11 @@ var _ = Service("mcpConnectionHealth", func() {
 
 	Method("listProjectSuspectedProblems", func() {
 		Description("List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only, in the same order as one MCP sign-in's list. A problem names an MCP sign-in, and an MCP server, only when that page lists the same problem. Empty without log:read.")
+		// The suspected problem reads answer 503 when a read runs out of time or is over its limits.
+		Error(string(oops.CodeUnavailable), func() {
+			Description(oops.CodeUnavailable.UserMessage())
+			Fault()
+		})
 		Payload(func() {
 			Attribute("limit", Int, "Return at most this many problems, default 100.", func() {
 				Minimum(1)
@@ -254,6 +276,9 @@ var _ = Service("mcpConnectionHealth", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+				ContentType("application/json")
+			})
 		})
 		Meta("openapi:operationId", "listMcpProjectSuspectedProblems")
 		Meta("openapi:extension:x-speakeasy-name-override", "listProjectSuspectedProblems")

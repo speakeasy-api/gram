@@ -183,6 +183,7 @@ func (c *Client) ListDeniedClients(ctx context.Context, p *ListDeniedClientsPayl
 // ListSuspectedProblems calls the "listSuspectedProblems" endpoint of the
 // "mcpConnectionHealth" service.
 // ListSuspectedProblems may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -206,6 +207,7 @@ func (c *Client) ListSuspectedProblems(ctx context.Context, p *ListSuspectedProb
 // GetSuspectedProblem calls the "getSuspectedProblem" endpoint of the
 // "mcpConnectionHealth" service.
 // GetSuspectedProblem may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -229,6 +231,7 @@ func (c *Client) GetSuspectedProblem(ctx context.Context, p *GetSuspectedProblem
 // ListProjectSuspectedProblems calls the "listProjectSuspectedProblems"
 // endpoint of the "mcpConnectionHealth" service.
 // ListProjectSuspectedProblems may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
