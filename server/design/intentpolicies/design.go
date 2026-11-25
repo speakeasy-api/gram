@@ -130,13 +130,12 @@ var IntentCondition = Type("IntentCondition", func() {
 	Attribute("join", String, "Links the clause to the previous one; empty on the first clause.", func() {
 		Enum("", "and", "or")
 	})
-	Attribute("label", String, "Label key the clause reads. Empty for a shell command pattern.")
+	Attribute("label", String, "Label key the clause reads.")
 	Attribute("op", String, "How the label compares to values.", func() {
-		Enum("", "is", "is not", "includes", "includes anything other than")
+		Enum("is", "is not", "includes", "includes anything other than")
 	})
 	Attribute("values", ArrayOf(String), "Values compared: \"true\" for a yes/no label, else option keys. Several read as any of.")
-	Attribute("pattern", String, "Regular expression a shell command must match, for a pattern clause.")
-	Required("join", "label", "op", "values", "pattern")
+	Required("join", "label", "op", "values")
 })
 
 var IntentContract = Type("IntentContract", func() {

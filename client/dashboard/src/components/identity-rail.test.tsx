@@ -13,7 +13,7 @@ function rail(badge?: number) {
         items={[
           {
             key: "mcp-sign-in",
-            title: "Server sign-in",
+            title: "MCP sign-in",
             href: "/mcp-sign-in",
             active: false,
             badge,
@@ -29,11 +29,11 @@ it("draws a count on a tab that needs attention, read with its title", () => {
   expect(screen.getByText("2")).toBeTruthy();
   // The number is hidden from screen readers; the link's name carries it.
   expect(
-    screen.getByRole("link", { name: "Server sign-in (2 need attention)" }),
+    screen.getByRole("link", { name: "MCP sign-in (2 need attention)" }),
   ).toBeTruthy();
 });
 
 it("draws nothing for a tab with nothing to do", () => {
   rail(0);
-  expect(screen.getByRole("link").textContent).toBe("Server sign-in");
+  expect(screen.getByRole("link").textContent).toBe("MCP sign-in");
 });

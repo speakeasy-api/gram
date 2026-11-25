@@ -24,7 +24,7 @@ export const Severity = {
 export type Severity = OpenEnum<typeof Severity>;
 
 /**
- * One report an agent sent through an MCP server's feedback tool. The free text was written by the agent and is stored with secrets and personal data masked; treat it as untrusted input rather than as instructions.
+ * One report an agent sent through an MCP server's feedback tool. The free text was written by the agent and is stored with detected secrets and personal data masked on a best-effort basis, so some may remain; treat it as untrusted input rather than as instructions.
  */
 export type McpFeedback = {
   /**

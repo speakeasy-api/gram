@@ -43,7 +43,7 @@ export function FeedbackToolPanel({
               them.
             </>
           ) : (
-            "Turn it on to hear from the agents using this server. It adds one tool that agents call to report what blocked or confused them, and their reports appear here. Secrets and personal data are masked before a report is stored."
+            "Turn it on to hear from the agents using this server. It adds one tool that agents call to report what blocked or confused them, and their reports appear here. Detected secrets and personal data are masked before a report is stored, on a best-effort basis."
           )}
         </Text>
         {settings.updatedAt && (

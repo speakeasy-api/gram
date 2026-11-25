@@ -260,7 +260,7 @@ export function AgentIdentityPermissions({
           action={
             agent.permissions.write && (
               <Button asChild variant="secondary" size="sm">
-                {/* The Server sign-in tab, where servers are picked together
+                {/* The MCP sign-in tab, where servers are picked together
                     with how the agent signs in to each. */}
                 <Link
                   to={routes.identities.detail.mcpSignIn.href(

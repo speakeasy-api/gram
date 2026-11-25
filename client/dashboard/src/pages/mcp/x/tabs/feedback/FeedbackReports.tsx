@@ -157,8 +157,9 @@ export function FeedbackReports({
           <Stack gap={1}>
             <Text variant="subheading">Agent Feedback</Text>
             <Text small muted>
-              Newest first. Secrets and personal data were masked before each
-              report was stored. {sendElsewhere}
+              Newest first. Detected secrets and personal data were masked
+              before each report was stored, on a best-effort basis.{" "}
+              {sendElsewhere}
             </Text>
           </Stack>
           <Page.Toolbar>

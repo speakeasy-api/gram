@@ -767,16 +767,7 @@ function ConditionClause({
   condition: IntentCondition;
   onToggleLabel: (label: string) => void;
 }) {
-  return c.pattern ? (
-    <>
-      <span className="text-sm text-muted-foreground">
-        shell command matches
-      </span>
-      <code className="bg-muted px-1 font-mono text-xs break-all">
-        {c.pattern}
-      </code>
-    </>
-  ) : (
+  return (
     <>
       <button
         type="button"

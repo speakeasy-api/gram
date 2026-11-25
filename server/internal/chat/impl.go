@@ -2977,9 +2977,9 @@ func buildSummarizeTranscript(messages []repo.ChatMessage) string {
 		if msg.Role != "user" && msg.Role != "assistant" {
 			continue
 		}
-		// Strip allowlisted harness envelopes (<message-context>, <notification>)
-		// so the summarizer sees the human turn, not framing boilerplate — same
-		// canonical tags title generation mines.
+		// Strip allowlisted harness envelopes so the summarizer sees the human
+		// turn, not framing boilerplate — same canonical tags title generation
+		// mines.
 		content := StripLeadingEnvelopes(msg.Content)
 		if content == "" {
 			continue

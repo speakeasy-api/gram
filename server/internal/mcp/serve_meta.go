@@ -899,7 +899,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
 		}
 		// Proxied members resolve only their chosen clients. Hosted members
-		// still resolve issuer clients lazily in their own project.
+		// resolve their exact upstream placement on first use.
 		gateProjectTokens = s.newOrganizationGatewayTokens(ctx, r, authentication.endpoint, authentication.subject, skipped)
 		gatePolicy = toolSelection
 		gateAuthentication = authentication

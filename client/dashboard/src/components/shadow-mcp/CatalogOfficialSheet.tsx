@@ -600,7 +600,7 @@ function TurnOnAndLink({
 }) {
   const client = useSdkClient();
   const queryClient = useQueryClient();
-  const update = useUpdateMcpServerMutation();
+  const update = useUpdateMcpServerMutation({ onError: () => {} });
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   // A failed check is unknown, not a definitive open setup step.

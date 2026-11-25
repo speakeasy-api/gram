@@ -481,7 +481,7 @@ Verified with the Custom domain diagnostics check in `verify.md`: two local/demo
 seed runs, both organizations at desktop and narrow widths, DNS records, no
 recheck action for the inactive fixture, and the seed safety suite.
 
-## Agent Server sign-in tab servers
+## Agent MCP sign-in tab servers
 
 Linear (`<org>-linear`, `https://mcp.linear.app/mcp`) and Notion
 (`<org>-notion`, `https://mcp.notion.com/mcp`, scope `default`) each have
@@ -497,7 +497,7 @@ localhost; it caches them in `local/cache/demoseed-linear-client.json` and
 
 No agent is granted these servers by name; an agent with a project-wide
 `mcp:connect` wildcard (such as the identity-bound assistant's) reaches them.
-Add one to any other agent from its Server sign-in tab.
+Add one to any other agent from its MCP sign-in tab.
 
 Gemini compliance: AI Integrations includes a paused Gemini connection with no
 credentials or polling schedule. Agent Sessions includes **Gemini: release

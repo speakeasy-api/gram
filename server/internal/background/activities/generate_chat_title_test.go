@@ -32,6 +32,22 @@ func TestBuildTitleContextStripsLeadingEnvelopeFraming(t *testing.T) {
 	require.Contains(t, got, "travel-planner agent")
 }
 
+// Cowork stacks enough <system-reminder> blocks in front of a prompt to fill
+// a turn's whole budget in the title prompt; the human text must survive.
+func TestBuildTitleContextKeepsPromptAfterLongSystemReminderStack(t *testing.T) {
+	t.Parallel()
+
+	reminder := "<system-reminder>This session can reach the connected device, but no folder is connected yet. You can request access to a folder with device_request_folder_access.</system-reminder>\n"
+	messages := []repo.ChatMessage{{
+		Role:    "user",
+		Content: strings.Repeat(reminder, maxTitleMessageRunes/len(reminder)+1) + "find when the customer went live",
+	}}
+
+	got := buildTitleContext(messages)
+
+	require.Equal(t, "user: find when the customer went live", got)
+}
+
 func TestBuildTitleContextSkipsPureEnvelopeMessages(t *testing.T) {
 	t.Parallel()
 

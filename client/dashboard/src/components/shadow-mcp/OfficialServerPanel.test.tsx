@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   capture: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  handleError: vi.fn(),
   save: vi.fn(),
   canWriteMcp: true,
   autoLinks: true,
@@ -149,6 +150,11 @@ vi.mock("@/components/ui/Select", () => ({
     children: React.ReactNode;
   }) => <option value={value}>{children}</option>,
 }));
+vi.mock("@/lib/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/errors")>()),
+  handleError: mocks.handleError,
+}));
+
 vi.mock("sonner", () => ({
   toast: { success: mocks.toastSuccess, error: mocks.toastError },
 }));
@@ -486,8 +492,11 @@ describe("OfficialServerPanel", () => {
     mocks.save.mockRejectedValueOnce(new Error("nope"));
     options.action.onClick();
     await vi.waitFor(() =>
-      expect(mocks.toastError).toHaveBeenCalledWith(
-        "Could not restore the official server. Try again.",
+      expect(mocks.handleError).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({
+          title: "Couldn't restore the official server",
+        }),
       ),
     );
     expect(mocks.save).toHaveBeenLastCalledWith({

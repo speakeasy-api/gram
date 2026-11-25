@@ -327,7 +327,7 @@ const ThreadScrollToBottom: FC = () => {
   );
 };
 
-const ThreadWelcome: FC = () => {
+export const ThreadWelcome: FC = () => {
   const { config } = useElements();
   const d = useDensity();
   const { logo, title, subtitle } = config.welcome ?? {};

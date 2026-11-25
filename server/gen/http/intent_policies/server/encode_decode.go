@@ -745,10 +745,9 @@ func marshalIntentpoliciesIntentContractToIntentContractResponseBody(v *intentpo
 // *intentpolicies.IntentCondition.
 func marshalIntentpoliciesIntentConditionToIntentConditionResponseBody(v *intentpolicies.IntentCondition) *IntentConditionResponseBody {
 	res := &IntentConditionResponseBody{
-		Join:    v.Join,
-		Label:   v.Label,
-		Op:      v.Op,
-		Pattern: v.Pattern,
+		Join:  v.Join,
+		Label: v.Label,
+		Op:    v.Op,
 	}
 	if v.Values != nil {
 		res.Values = make([]string, len(v.Values))
