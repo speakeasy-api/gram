@@ -614,7 +614,8 @@ func (s *Service) buildMemberDispatch(
 	}
 	if err != nil {
 		switch {
-		case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialUnavailable):
+		case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialUnavailable),
+			errors.Is(err, remotesessions.ErrStoredSignInUnreadable), errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
 			err = metaMemberClientCredentialError(member, err)
 		case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrChosenClientUnbound):
 			err = &metaMemberError{message: fmt.Sprintf("server %q has no usable upstream configuration", member.slug)}

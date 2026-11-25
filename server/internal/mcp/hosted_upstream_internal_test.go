@@ -69,7 +69,11 @@ func TestExactHostedMemberTokensRejectMissingOrRefusedCredential(t *testing.T) {
 		{RemoteSessionClientID: registration, ClientCredentialErr: remotesessions.ErrClientCredentialUnavailable},
 	} {
 		got, err := exactHostedMemberTokens(map[uuid.UUID]remotesessions.UpstreamToken{issuer: token}, registration)
-		require.Error(t, err)
+		want := remotesessions.ErrNoValidToken
+		if token.ClientCredentialErr != nil {
+			want = token.ClientCredentialErr
+		}
+		require.ErrorIs(t, err, want)
 		require.Empty(t, got)
 	}
 }

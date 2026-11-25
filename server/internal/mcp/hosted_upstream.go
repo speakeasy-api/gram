@@ -15,6 +15,7 @@ type hostedAssignment struct {
 	projectID      uuid.UUID
 	registrationID uuid.UUID
 	invalid        bool
+	duplicate      bool
 }
 
 func (s *Service) hostedAssignments(ctx context.Context, org string, serverIDs []uuid.UUID) (map[uuid.UUID]hostedAssignment, error) {
@@ -34,14 +35,15 @@ func indexHostedAssignments(rows []upstreamclientsrepo.ListHostedUpstreamAssignm
 		_, duplicate := assignments[row.ServerID]
 		assignments[row.ServerID] = hostedAssignment{
 			projectID: row.ProjectID, registrationID: row.RegistrationID.UUID,
-			invalid: duplicate || (!row.RegistrationID.Valid && hostedAssignmentRequired(row.RequiresUpstreamAuth, row.UserSessionIssuerID.Valid)),
+			invalid:   !row.RegistrationID.Valid && hostedAssignmentRequired(row.RequiresUpstreamAuth, row.UserSessionIssuerID.Valid),
+			duplicate: duplicate,
 		}
 	}
 	return assignments
 }
 
 func (a hostedAssignment) registration(projectID uuid.UUID) (uuid.UUID, error) {
-	if projectID == uuid.Nil || a.projectID != projectID || a.invalid {
+	if projectID == uuid.Nil || a.projectID != projectID || a.invalid || a.duplicate {
 		return uuid.Nil, fmt.Errorf("%w: hosted server has no unambiguous upstream configuration", remotesessions.ErrRemoteSessionMisconfigured)
 	}
 	return a.registrationID, nil
@@ -53,7 +55,24 @@ func (s *Service) hostedRegistration(ctx context.Context, org string, projectID,
 	if err != nil {
 		return uuid.Nil, err
 	}
-	return assignments[serverID].registration(projectID)
+	assignment := assignments[serverID]
+	if assignment.duplicate && assignment.projectID == projectID {
+		// An association can outlive a soft-deleted registration. The
+		// existing live-association read disambiguates that case; keep
+		// zero or multiple live registrations fail-closed.
+		rows, err := upstreamclientsrepo.New(s.db).ListServerAssociatedClients(ctx, upstreamclientsrepo.ListServerAssociatedClientsParams{
+			OrganizationID: org,
+			McpServerIds:   []uuid.UUID{serverID},
+		})
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("check live hosted upstream assignments: %w", err)
+		}
+		if len(rows) == 1 {
+			assignment.duplicate = false
+			assignment.registrationID = rows[0].RemoteSessionClientID
+		}
+	}
+	return assignment.registration(projectID)
 }
 
 // An explicit no-upstream decision is authoritative. A hosted server with no
