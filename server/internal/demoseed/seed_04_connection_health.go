@@ -143,6 +143,7 @@ func (c healthClock) at(days, hour, minute, second int) time.Time {
 // The story's fixed points.
 func (c healthClock) linearDown() (time.Time, time.Time) { return c.at(0, 9, 42, 0), c.at(0, 11, 6, 0) }
 func (c healthClock) cursorBrokenFrom() time.Time        { return c.at(-2, 10, 14, 0) }
+func (c healthClock) cursorNotionFailure() time.Time     { return c.now.Add(-14 * time.Minute) }
 func (c healthClock) wikiBrokenFrom() time.Time          { return c.at(-1, 16, 0, 0) }
 func (c healthClock) danaFrom() time.Time                { return c.at(-2, 9, 12, 0) }
 

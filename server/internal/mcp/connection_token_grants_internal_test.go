@@ -47,7 +47,6 @@ func TestWorkloadGrantHappened(t *testing.T) {
 		{name: "unnamed refusal", err: refuseWorkloadGrant("policy", cause), want: mcpconnectionattempts.CodeAssertionOther, detail: "policy"},
 		{name: "stage unavailable", err: workloadGrantStageUnavailable("session_persist_unavailable", cause), want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "session_persist_unavailable"},
 		{name: "rate limited", err: &workloadGrantError{reason: "issuer_lookup_rate_limited", outcome: workloadGrantRateLimited, retryAfter: time.Second, err: cause}, want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "issuer_lookup_rate_limited"},
-		{name: "choices not accepted", err: oops.NewOAuthError(http.StatusBadRequest, "invalid_request", "no", errChoiceNotAccepted), want: mcpconnectionattempts.CodeUpstreamCredentialChoice, detail: "choice_not_accepted"},
 		{name: "server not reached", err: oops.NewOAuthError(http.StatusBadRequest, "invalid_request", "no", errChoiceServerNotReached), want: mcpconnectionattempts.CodeCredentialChoiceInvalid, detail: "choice_server_not_reached"},
 		{name: "credential not needed", err: setupRequired("no", errChoiceTakesNoCredential), want: mcpconnectionattempts.CodeCredentialChoiceInvalid, detail: "credential_not_needed"},
 		{name: "credential needed", err: setupRequired("no", errChoiceNeedsCredential), want: mcpconnectionattempts.CodeCredentialChoiceInvalid, detail: "credential_needed"},

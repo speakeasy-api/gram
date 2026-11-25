@@ -29,6 +29,12 @@ import (
 // before the next daily reseed. Each weekday is seeded, since weekends change the baseline's draws.
 func TestSeededConnectionHealthListsTheIntendedProblems(t *testing.T) {
 	t.Parallel()
+	// On this Monday the baseline served a Felix/Notion request after his scripted failure.
+	t.Run("weekday traffic does not heal Cursor's Notion failure", func(t *testing.T) {
+		t.Parallel()
+		seeded := time.Date(2026, 11, 23, 11, 46, 0, 0, time.Local).UTC()
+		seededProblems(t, seeded, seeded.Add(time.Minute))
+	})
 	for daysAgo := 2; daysAgo < 9; daysAgo++ {
 		local := time.Now().AddDate(0, 0, -daysAgo)
 		at := func(hour, minute int) time.Time {

@@ -170,7 +170,6 @@ function renderField(
 ): void {
   const target: AuthTarget = {
     mcpServerId,
-    kind: "standard",
     slug: "server",
     projectId: "project-1",
     permissionResourceId: "toolset-1",

@@ -196,6 +196,8 @@ type consentTemplateData struct {
 	ShowCodeMode bool
 	// ShowDiscoveryMode exposes optional gateway connection settings.
 	ShowDiscoveryMode bool
+	// DashboardInspectGateway uses gateway inventory with fixed Progressive discovery.
+	DashboardInspectGateway bool
 	// PrefillDiscoveryMode is the mode this subject chose on its previous
 	// connection; empty selects the gateway default.
 	PrefillDiscoveryMode metamcp.DiscoveryMode
@@ -1073,7 +1075,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		prefillAttr = consentPrefillAttr(policy.Selection, policy.Catalog)
 	}
 	inventoryDeferred := gateway == nil && consentInventoryDeferred(cards, prefillAttr != "")
-	showDiscoveryMode := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
+	gatewayModeOffered := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
+	dashboardInspectGateway := gatewayModeOffered && challengeState.ClientID == dashboardInspectClientID
+	showDiscoveryMode := gatewayModeOffered && !dashboardInspectGateway
 	var prefillDiscoveryMode metamcp.DiscoveryMode
 	if showDiscoveryMode {
 		prefillDiscoveryMode = s.consentDiscoveryModePrefill(ctx, endpoint, *challengeState.Subject, clientRowID)
@@ -1085,7 +1089,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if codeModeUnavailable {
 		prefillDiscoveryMode = metamcp.DiscoveryModeProgressive
 	}
-	if (endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid) && focusServer == "" {
+	if !dashboardInspectGateway && (endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid) && focusServer == "" {
 		defaultMode, readErr := s.gatewayDefaultDiscoveryMode(ctx, endpoint)
 		// Display only: an unreadable default leaves the page without it.
 		if readErr != nil {
@@ -1138,6 +1142,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ShowToolsIsland:         showToolsIsland,
 		GatewayInventory:        gatewayInventory,
 		ShowDiscoveryMode:       showDiscoveryMode,
+		DashboardInspectGateway: dashboardInspectGateway,
 		PrefillDiscoveryMode:    prefillDiscoveryMode,
 		ShowCodeMode:            codeModeAvailable,
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",

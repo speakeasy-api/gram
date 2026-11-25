@@ -6,14 +6,12 @@ import type { AuthTarget } from "./authTarget";
 
 const {
   attachSheet,
-  remoteIdentitySection,
   useAllRemoteSessionClients,
   useRemoteSessionIssuersByIds,
   useUserSessionIssuer,
   useEffectiveUserSessionIssuers,
 } = vi.hoisted(() => ({
   attachSheet: vi.fn(),
-  remoteIdentitySection: vi.fn(),
   useAllRemoteSessionClients: vi.fn(),
   useRemoteSessionIssuersByIds: vi.fn(),
   useUserSessionIssuer: vi.fn(),
@@ -60,13 +58,6 @@ vi.mock("./AttachRemoteIdentityProviderSheet", () => ({
   AttachRemoteIdentityProviderSheet: (props: { open: boolean }) => {
     attachSheet(props);
     return props.open ? <output>Attach identity provider</output> : null;
-  },
-}));
-
-vi.mock("./RemoteMcpIdentitySection", () => ({
-  RemoteMcpIdentitySectionBody: ({ target }: { target: AuthTarget }) => {
-    remoteIdentitySection(target);
-    return <output>Remote MCP identity</output>;
   },
 }));
 
@@ -200,15 +191,6 @@ afterEach(() => {
 });
 
 describe("AuthenticationSectionBody", () => {
-  it("isolates Remote MCP from the standard attach orchestration", () => {
-    render(<AuthenticationSectionBody target={remoteMcpTarget} />);
-
-    expect(screen.getByText("Remote MCP identity")).toBeDefined();
-    expect(remoteIdentitySection).toHaveBeenCalledWith(remoteMcpTarget);
-    expect(attachSheet).not.toHaveBeenCalled();
-    expect(useUserSessionIssuer).not.toHaveBeenCalled();
-  });
-
   it("includes a target-specific setup action before a session issuer is configured", () => {
     useUserSessionIssuer.mockReturnValue({
       data: null,
@@ -356,7 +338,6 @@ describe("AuthenticationSectionBody", () => {
 });
 
 const standardTargetWithSessionIssuer: AuthTarget = {
-  kind: "standard",
   slug: "standard-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",
@@ -364,12 +345,6 @@ const standardTargetWithSessionIssuer: AuthTarget = {
   supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer",
   invalidate: vi.fn(),
-};
-
-const remoteMcpTarget: AuthTarget = {
-  ...standardTargetWithSessionIssuer,
-  kind: "remote-mcp",
-  remoteMcpServerId: "remote-mcp-server",
 };
 
 const standardTargetWithoutSessionIssuer: AuthTarget = {
