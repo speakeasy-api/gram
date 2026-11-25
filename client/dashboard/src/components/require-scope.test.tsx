@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -140,7 +146,15 @@ describe("RequireScope page level", () => {
       </RequireScope>,
     );
 
-    expect(screen.getByText("You don't have access to this page")).toBeTruthy();
+    const banner = screen.getByRole("alert");
+    expect(
+      within(banner).getByRole("heading", {
+        name: "You don't have access to this page",
+      }),
+    ).toBeTruthy();
+    // The missing permission is named without opening "What access do I
+    // need?".
+    expect(banner.textContent).toContain("It needs org:admin.");
     expect(screen.getAllByTestId("page-header")).toHaveLength(1);
     expect(screen.queryByText("secret")).toBeNull();
   });
@@ -159,7 +173,11 @@ describe("RequireScope page level", () => {
       </Page>,
     );
 
-    expect(screen.getByText("You don't have access to this page")).toBeTruthy();
+    expect(
+      within(screen.getByRole("alert")).getByRole("heading", {
+        name: "You don't have access to this page",
+      }),
+    ).toBeTruthy();
     expect(screen.getAllByTestId("page-header")).toHaveLength(1);
   });
 });

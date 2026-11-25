@@ -426,7 +426,9 @@ describe("MCPServerDetails setup authorization", () => {
     visit("/acme/projects/default/mcp/my-server/setup");
     expect(screen.queryByTestId("setup-page")).toBeNull();
     expect(
-      screen.getByText("You don't have access to this page"),
+      within(screen.getByRole("alert")).getByRole("heading", {
+        name: "You don't have access to this page",
+      }),
     ).toBeDefined();
   });
 });

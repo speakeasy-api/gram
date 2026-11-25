@@ -682,9 +682,33 @@ function Unauthorized({
 
   return (
     <div className="w-full">
-      <Alert title={title} iconName="lock" className="w-full">
+      <Alert
+        // The page's message stays a heading for screen readers, drawn as
+        // the alert's eyebrow.
+        title={<h2 className="font-[inherit] text-[inherit]">{title}</h2>}
+        iconName="lock"
+        className="w-full"
+      >
         <div className="flex flex-col items-start gap-2">
           {description && <span>{description}</span>}
+          {scopes.length > 0 && (
+            <span>
+              {scopes.length === 1
+                ? "It needs "
+                : all
+                  ? "It needs all of: "
+                  : "It needs one of: "}
+              {scopes.map((s, i) => (
+                <React.Fragment key={s}>
+                  {i > 0 && ", "}
+                  <span className="font-medium">
+                    {scopeLabel(catalogue, s)}
+                  </span>
+                </React.Fragment>
+              ))}
+              .
+            </span>
+          )}
           <RequestScopeAccess
             scopes={scopes}
             all={all}
