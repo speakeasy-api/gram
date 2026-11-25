@@ -3,6 +3,7 @@ package gram
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -93,6 +94,29 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	}
 	transcripts := transcriptstore.NewTranscripts(store, projectIDs...)
 	writer.WithTranscripts(transcripts)
+	return transcripts, nil
+}
+
+// configureReadOnlyTranscripts is for a process that reads chat messages but
+// does not configure the shadow store. It knows which projects keep shadows,
+// so a read for one of them is reported (error log and
+// chat.transcript_shadow.plaintext_reads) instead of silently serving
+// plaintext, and fails outright in local development. It returns nil when no
+// project keeps shadows.
+func configureReadOnlyTranscripts(c *cli.Context, logger *slog.Logger, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
+	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
+	if len(values) == 0 {
+		return nil, nil
+	}
+	projectIDs, err := parseTranscriptShadowProjectIDs(values)
+	if err != nil {
+		return nil, err
+	}
+	strict := c.String("environment") == "local"
+	transcripts, err := transcriptstore.NewReadOnlyTranscripts(projectIDs...).WithPlaintextGuard(logger, meterProvider, strict)
+	if err != nil {
+		return nil, fmt.Errorf("configure read-only chat transcripts: %w", err)
+	}
 	return transcripts, nil
 }
 

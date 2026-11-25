@@ -34,7 +34,10 @@ type joinedRow struct {
 // openJoined replaces each row's body with its opened shadow when the project
 // keeps shadows. The rules match Open: no shadow at all keeps plaintext and
 // counts as plaintext_fallback; a stale or unauthentic shadow fails the read.
-func (t *Transcripts) openJoined(ctx context.Context, db plainrepo.DBTX, projectID uuid.UUID, rows []joinedRow) error {
+func (t *Transcripts) openJoined(ctx context.Context, db plainrepo.DBTX, projectID uuid.UUID, reader string, rows []joinedRow) error {
+	if err := t.checkOpenable(ctx, projectID, reader); err != nil {
+		return err
+	}
 	if len(rows) == 0 || !t.Enabled(projectID) {
 		return nil
 	}

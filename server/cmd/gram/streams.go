@@ -360,6 +360,7 @@ func newStreamsCommand() *cli.Command {
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskIngestFlags()...)
+	flags = append(flags, transcriptShadowFlag())
 	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 
@@ -437,6 +438,13 @@ func newStreamsCommand() *cli.Command {
 			}
 			defer db.Close()
 			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+				return err
+			}
+			// Streams reads chat messages for the prompt-injection judge and signal
+			// evaluation without configuring the shadow store, so reads for
+			// projects that keep shadows go through the plaintext guard.
+			readOnlyTranscripts, err := configureReadOnlyTranscripts(c, logger, meterProvider)
+			if err != nil {
 				return err
 			}
 
@@ -622,7 +630,7 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("create sensor classifier: %w", err)
 			}
 
-			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, outcomesPub, sensorClassifier)
+			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db).WithTranscripts(readOnlyTranscripts), productFeatures, readingsPub, outcomesPub, sensorClassifier)
 			if err != nil {
 				return fmt.Errorf("create sensor evaluator: %w", err)
 			}
@@ -649,9 +657,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
 			}
-			// The streams process does not configure transcript shadows, so the
-			// judge's evidence window reads plaintext here for every project.
-			promptInjectionScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db, nil).Classify)
+			promptInjectionScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db, readOnlyTranscripts).Classify)
 			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, findingsPub, riskRecorder)
 			promptInjectionEnforceHandler, err := promptinjection.NewEnforceHandler(
 				logger,
@@ -940,7 +946,7 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
 				if c.Bool("sigint-ack-only") || sigintKey != "" {
-					var handler streams.BatchResultHandler[*conversationv1.MessageEvent] = evaluation.NewConversationHandler(sensorEvaluator, assetStorage, evaluation.NewRepository(db))
+					var handler streams.BatchResultHandler[*conversationv1.MessageEvent] = evaluation.NewConversationHandler(sensorEvaluator, assetStorage, evaluation.NewRepository(db).WithTranscripts(readOnlyTranscripts))
 					if c.Bool("sigint-ack-only") {
 						// A successful batch with no staged failures acknowledges every
 						// message, without entering the evaluation path.

@@ -23,6 +23,10 @@ type Transcripts struct {
 	// organizations caches each listed project's organization, which opening
 	// a shadow needs and most readers do not have at hand.
 	organizations *sync.Map
+
+	// guard reports a read for a listed project that this process cannot
+	// open, because it has no store. See plaintext_guard.go.
+	guard *plaintextGuard
 }
 
 // NewTranscripts serves shadows for the listed projects only. An empty list
@@ -32,7 +36,7 @@ func NewTranscripts(store *Store, projectIDs ...uuid.UUID) *Transcripts {
 	for _, projectID := range projectIDs {
 		projects[projectID] = struct{}{}
 	}
-	return &Transcripts{store: store, projects: projects, organizations: &sync.Map{}}
+	return &Transcripts{store: store, projects: projects, organizations: &sync.Map{}, guard: nil}
 }
 
 // Enabled reports whether the project captures and reads shadows.
@@ -84,6 +88,9 @@ type Body struct {
 // capture began still load. A stale or unopenable shadow fails the whole read:
 // it means capture or the data is broken, and plaintext must not hide that.
 func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID uuid.UUID, bodies []Body) error {
+	if err := t.checkOpenable(ctx, projectID, "Open"); err != nil {
+		return err
+	}
 	if len(bodies) == 0 || !t.Enabled(projectID) {
 		return nil
 	}

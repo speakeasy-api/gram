@@ -46,7 +46,7 @@ func (t *Transcripts) SearchPlatformChatMessages(ctx context.Context, db DBTX, p
 		r := &rows[i]
 		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape}
 	}
-	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, params.ProjectID, "SearchPlatformChatMessages", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -71,7 +71,7 @@ func (t *Transcripts) ReadPlatformChatMessages(ctx context.Context, db DBTX, par
 		r := &rows[i]
 		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape}
 	}
-	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, params.ProjectID, "ReadPlatformChatMessages", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -101,7 +101,7 @@ func (t *Transcripts) ListOwnedChatTranscriptMessagesForRecall(ctx context.Conte
 	if !params.OpenShadows {
 		return rows, nil
 	}
-	if err := t.openJoined(ctx, db, projectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, projectID, "ListOwnedChatTranscriptMessagesForRecall", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
