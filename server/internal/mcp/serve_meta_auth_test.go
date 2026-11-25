@@ -61,8 +61,10 @@ func TestServeOrganizationGateway_HostedAuthenticationEligibility(t *testing.T) 
 					require.NoError(t, err)
 					require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: fx.issuerID}))
 				require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
-					ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
-					McpServerID: server.ID, RemoteSessionClientID: client.ID,
+					ProjectID:             *auth.ProjectID,
+					OrganizationID:        auth.ActiveOrganizationID,
+					McpServerID:           server.ID,
+					RemoteSessionClientID: client.ID,
 				}))
 				}
 			} else {
