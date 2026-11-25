@@ -409,10 +409,8 @@ func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
 		associateClient(t, ctx, ti.conn, orgID, projectID, associated, clientID)
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
-		require.NoError(t, testrepo.New(ti.conn).DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{
-			RemoteSessionClientID: clientID,
-			ProjectID:             conv.ToNullUUID(projectID),
-		}))
+		_, err := repo.New(ti.conn).DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{ID: clientID, ProjectID: conv.ToNullUUID(projectID)})
+		require.NoError(t, err)
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
 		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, associated), "a remaining compatibility link cannot replace a pruned association")
