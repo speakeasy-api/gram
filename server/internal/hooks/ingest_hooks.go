@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -432,18 +433,33 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 			return nil, false, fmt.Errorf("resolve known skill raw hash: %w", err)
 		}
 		contentRequired := !known
-		// A device that located the skill directory reports its tree digest.
-		// Ask for the directory when no stored version holds that tree, so a
-		// changed script or reference produces a new captured version even
-		// though SKILL.md is unchanged.
-		if treeSHA256 := normalizeRawSHA256(conv.PtrValOr(skill.TreeSha256, "")); known && treeSHA256 != "" {
-			treeKnown, err := deviceSkillTreeKnown(writeCtx, s.repo, *authCtx.ProjectID, rawSHA256, treeSHA256)
+		treeSHA256 := normalizeRawSHA256(conv.PtrValOr(skill.TreeSha256, ""))
+		switch {
+		case contentRequired:
+		case treeSHA256 != "":
+			// A device that located the skill directory reports its tree
+			// digest. Ask for the directory when no stored version holds that
+			// tree, so a changed script or reference produces a new captured
+			// version even though SKILL.md is unchanged. The tree is only a
+			// capture hint: a failed lookup asks for the directory rather
+			// than dropping the activation.
+			matched, err := deviceSkillTreeVersion(writeCtx, s.repo, *authCtx.ProjectID, rawSHA256, treeSHA256)
 			if err != nil {
-				return nil, false, fmt.Errorf("resolve known skill tree: %w", err)
+				s.logger.WarnContext(ctx, "resolve known skill tree; requesting skill directory", attr.SlogError(err))
 			}
-			contentRequired = !treeKnown
-		}
-		if !contentRequired && s.piScanner != nil {
+			contentRequired = !matched.Valid
+			// The matched version need not be the one the raw hash alias
+			// points to, so check that version's own scan coverage.
+			if !contentRequired && s.piScanner != nil {
+				contentRequired, err = riskRepo.New(s.db).SkillVersionNeedsPromptInjectionScan(writeCtx, riskRepo.SkillVersionNeedsPromptInjectionScanParams{
+					ProjectID:      *authCtx.ProjectID,
+					SkillVersionID: matched,
+				})
+				if err != nil {
+					return nil, false, fmt.Errorf("check known skill tree scan state: %w", err)
+				}
+			}
+		case s.piScanner != nil:
 			contentRequired, err = s.repo.SkillRawHashNeedsPromptInjectionScan(writeCtx, repo.SkillRawHashNeedsPromptInjectionScanParams{
 				ProjectID: *authCtx.ProjectID,
 				RawSha256: rawSHA256,

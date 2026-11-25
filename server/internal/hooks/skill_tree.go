@@ -28,15 +28,17 @@ const (
 	maxSkillScanDocumentBytes = 1024 * 1024 // 1 MiB
 )
 
-// deviceSkillTreeKnown reports whether a live skill version already holds the
-// skill directory a device reported: SKILL.md bytes hashing to rawSHA256 and
-// supporting files whose tree digest, computed over the raw SKILL.md hash, is
-// treeSHA256. Candidates are the version the raw hash alias resolves to and
-// the versions created from the same SKILL.md bytes.
-func deviceSkillTreeKnown(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, rawSHA256, treeSHA256 string) (bool, error) {
+// deviceSkillTreeVersion returns the live skill version that already holds
+// the skill directory a device reported: SKILL.md bytes hashing to rawSHA256
+// and supporting files whose tree digest, computed over the raw SKILL.md hash,
+// is treeSHA256. Candidates are the version the raw hash alias resolves to and
+// the newest versions created from the same SKILL.md bytes. The result is
+// invalid when no candidate holds the tree.
+func deviceSkillTreeVersion(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, rawSHA256, treeSHA256 string) (uuid.NullUUID, error) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	manifest, err := hex.DecodeString(rawSHA256)
 	if err != nil || len(manifest) != sha256.Size {
-		return false, fmt.Errorf("decode raw skill hash: invalid sha256")
+		return none, fmt.Errorf("decode raw skill hash: invalid sha256")
 	}
 
 	rows, err := queries.ListSkillTreeCandidateFiles(ctx, repo.ListSkillTreeCandidateFilesParams{
@@ -44,7 +46,7 @@ func deviceSkillTreeKnown(ctx context.Context, queries *repo.Queries, projectID 
 		RawSha256: rawSHA256,
 	})
 	if err != nil {
-		return false, fmt.Errorf("list skill tree candidates: %w", err)
+		return none, fmt.Errorf("list skill tree candidates: %w", err)
 	}
 
 	matches := func(entries []skilltree.Entry) bool {
@@ -56,7 +58,7 @@ func deviceSkillTreeKnown(ctx context.Context, queries *repo.Queries, projectID 
 	for i, row := range rows {
 		if i > 0 && row.SkillVersionID != current {
 			if matches(entries) {
-				return true, nil
+				return uuid.NullUUID{UUID: current, Valid: true}, nil
 			}
 			entries = entries[:0]
 		}
@@ -65,7 +67,10 @@ func deviceSkillTreeKnown(ctx context.Context, queries *repo.Queries, projectID 
 			entries = append(entries, skilltree.Entry{Path: row.Path.String, Content: nil, SHA256: row.Sha256.String, Size: 0, ContentType: ""})
 		}
 	}
-	return len(rows) > 0 && matches(entries), nil
+	if len(rows) > 0 && matches(entries) {
+		return uuid.NullUUID{UUID: current, Valid: true}, nil
+	}
+	return none, nil
 }
 
 // uploadedSkillFiles converts uploaded supporting files after checking each
@@ -89,20 +94,23 @@ func uploadedSkillFiles(files []*gen.SkillContentFile) ([]skilltree.File, error)
 // skillScanDocument joins a SKILL.md with its text supporting files, each
 // introduced by its path, so the prompt-injection judge sees instructions an
 // agent reads from references or scripts as well as from the manifest.
-// Binary files and text beyond maxSkillScanDocumentBytes are left out.
+// Files that are not valid UTF-8 and text beyond maxSkillScanDocumentBytes
+// are left out. NUL bytes are replaced rather than excluding the file, so a
+// stray NUL cannot keep a text file's instructions away from the judge.
 func skillScanDocument(content string, files []skilltree.File) string {
 	var doc strings.Builder
 	doc.WriteString(content)
 	for _, file := range files {
-		if !utf8.Valid(file.Content) || bytes.IndexByte(file.Content, 0) >= 0 {
+		if !utf8.Valid(file.Content) {
 			continue
 		}
+		body := bytes.ReplaceAll(file.Content, []byte{0}, []byte(string(utf8.RuneError)))
 		header := "\n\n--- " + file.Path + " ---\n"
-		if doc.Len()+len(header)+len(file.Content) > maxSkillScanDocumentBytes {
+		if doc.Len()+len(header)+len(body) > maxSkillScanDocumentBytes {
 			continue
 		}
 		doc.WriteString(header)
-		doc.Write(file.Content)
+		doc.Write(body)
 	}
 	return doc.String()
 }

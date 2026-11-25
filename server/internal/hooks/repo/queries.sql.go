@@ -787,6 +787,8 @@ WITH alias_versions AS (
   WHERE s.project_id = $1
     AND s.archived_at IS NULL
     AND sv.raw_sha256 = $2
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 20
 ), candidates AS (
   SELECT id FROM alias_versions
   UNION
@@ -798,7 +800,6 @@ LEFT JOIN skill_version_files svf
   ON svf.skill_version_id = c.id
   AND svf.project_id = $1
 ORDER BY c.id, svf.path
-LIMIT 2000
 `
 
 type ListSkillTreeCandidateFilesParams struct {
@@ -818,6 +819,12 @@ type ListSkillTreeCandidateFilesRow struct {
 // bytes. A candidate with no supporting files returns one row with a NULL
 // path. Hook ingest compares each candidate's tree digest with the device's
 // to decide whether to request the skill directory.
+//
+// The candidate set, not the row count, is bounded: the alias version plus the
+// 20 newest versions created from the SKILL.md bytes. Each version holds at
+// most 100 supporting files, so the result stays bounded and every returned
+// tree is complete. A device on a tree older than the 20 newest is asked to
+// upload it again, which is harmless.
 func (q *Queries) ListSkillTreeCandidateFiles(ctx context.Context, arg ListSkillTreeCandidateFilesParams) ([]ListSkillTreeCandidateFilesRow, error) {
 	rows, err := q.db.Query(ctx, listSkillTreeCandidateFiles, arg.ProjectID, arg.RawSha256)
 	if err != nil {
