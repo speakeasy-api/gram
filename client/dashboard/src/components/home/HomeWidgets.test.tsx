@@ -472,20 +472,33 @@ describe("Needs attention connection rows", () => {
     expect(state.connectionCalls).toHaveLength(1);
   });
 
-  it("wraps labels to two lines and overlays the hint only in the tall card", async () => {
+  it("wraps every label to two lines in the tall card and gives problem rows no hint", async () => {
+    state.scopes = ["log:read", "org:admin"];
+    state.signals = [criticalSignal];
+    state.failingTools = [failingTool];
     state.connections.problems = [problem("a")];
     renderWidgets();
     await settled();
-    const label = within(card()).getByTitle(/^Problem a since/);
-    expect(label.className.split(" ")).toEqual(
-      expect.arrayContaining(["line-clamp-2", "break-words"]),
+    for (const title of [
+      /^Problem a since/,
+      "Agent reads secrets",
+      "search is failing",
+    ]) {
+      const label = within(card()).getByTitle(title);
+      expect(label.className.split(" ")).toEqual(
+        expect.arrayContaining(["line-clamp-2", "break-words"]),
+      );
+      expect(label.className).not.toContain("lg:truncate");
+    }
+    const [problemRow, signalRow] = rows();
+    expect(within(problemRow!).queryByText("Open ›")).toBeNull();
+    expect(within(signalRow!).getByText("Open ›").className).toContain(
+      "shrink-0",
     );
-    expect(label.className).not.toContain("lg:truncate");
-    expect(
-      within(rows()[0]!).getByText("Open ›").parentElement!.parentElement!
-        .className,
-    ).toContain("absolute");
-    cleanup();
+    expect(within(card()).getByText("Ask ›").className).toContain("shrink-0");
+  });
+
+  it("keeps main's single-line labels and in-flow hints in the base card", async () => {
     state.flag = "disabled";
     state.failingTools = [failingTool];
     renderWidgets();
@@ -497,9 +510,6 @@ describe("Needs attention connection rows", () => {
         "lg:truncate",
         "max-lg:line-clamp-2",
       ]),
-    );
-    expect(within(card()).getByText("Ask ›").className).not.toContain(
-      "absolute",
     );
     expect(within(card()).getByText("Ask ›").className).toContain("shrink-0");
   });
