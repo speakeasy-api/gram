@@ -2,6 +2,7 @@ import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminAIProduct } from "@gram/admin-client/models/components/adminaiproduct";
 import { GramError } from "@gram/admin-client/models/errors/gramerror";
+import { ServiceError } from "@gram/admin-client/models/errors/serviceerror";
 
 import { routeTree } from "@/routeTree.gen";
 import { renderRouteTree } from "@/test/harness";
@@ -63,7 +64,7 @@ function aProduct(overrides: Partial<AdminAIProduct> = {}): AdminAIProduct {
         enabled: true,
         isPattern: false,
         deleted: false,
-        verificationError: "fetch_failed",
+        verificationError: "jwks_invalid",
         createdAt: new Date("2026-01-15T00:00:00Z"),
         updatedAt: new Date("2026-01-15T00:00:00Z"),
       },
@@ -121,7 +122,7 @@ describe("AIProductList", () => {
       includeDeleted: false,
     });
     expect(screen.getByText("Coding agent")).toBeTruthy();
-    expect(screen.getByText("Sign-in only")).toBeTruthy();
+    expect(screen.getByText("None (sign-in documents only)")).toBeTruthy();
     expect(screen.getByText("Deleted")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Example CLI" }).getAttribute("href"),
@@ -151,6 +152,40 @@ describe("AIProductList", () => {
     ).toBeTruthy();
   });
 
+  it("says when the database holds no products", async () => {
+    mocks.list.mockResolvedValue({ products: [], truncated: false });
+    await renderRouteTree(routeTree, { initialPath: "/ai-clients/products" });
+
+    expect(
+      await screen.findByText(
+        "No products in the database. Servers use the built-in list until the catalog is seeded.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("says when the list is cut short", async () => {
+    mocks.list.mockResolvedValue({
+      products: [
+        {
+          id: "example-cli",
+          displayName: "Example CLI",
+          vendorKey: "example",
+          documentCount: 0,
+          deleted: false,
+          updatedAt: new Date("2026-02-01T00:00:00Z"),
+        },
+      ],
+      truncated: true,
+    });
+    await renderRouteTree(routeTree, { initialPath: "/ai-clients/products" });
+
+    expect(
+      await screen.findByText(
+        "Only the first 1 products are shown. Search to find the rest.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("offers a retry when the list fails", async () => {
     mocks.list.mockRejectedValue(new Error("boom"));
     await renderRouteTree(routeTree, { initialPath: "/ai-clients/products" });
@@ -177,17 +212,60 @@ describe("AIProductDetail", () => {
     expect(screen.getByText("Off")).toBeTruthy();
     expect(screen.getByText("On")).toBeTruthy();
     expect(screen.getByText("Check failed")).toBeTruthy();
-    expect(screen.getByText("Reason: fetch_failed")).toBeTruthy();
+    expect(
+      screen.getByText("Key set is not valid (jwks_invalid)"),
+    ).toBeTruthy();
+    expect(screen.getByText("Organizations blocking it")).toBeTruthy();
+    expect(screen.getAllByText("Added by the built-in list")).toHaveLength(3);
     expect(screen.getByText("Not checked")).toBeTruthy();
+  });
+
+  it("names staff authors and explains blocks on a deleted product", async () => {
+    mocks.get.mockResolvedValue(
+      aProduct({
+        deleted: true,
+        createdBy: "user:staff-a",
+        updatedBy: "user:staff-b",
+      }),
+    );
+    await renderRouteTree(routeTree, {
+      initialPath: "/ai-clients/products/example-cli",
+    });
+
+    expect(
+      await screen.findByText(/Blocks on it no longer apply\./),
+    ).toBeTruthy();
+    expect(screen.getByText("Organizations with a block")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "These blocks do not apply while the product is deleted.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Organizations blocking it")).toBeNull();
+    expect(screen.getByText("Added by Staff ID user:staff-a")).toBeTruthy();
+    expect(screen.getByText("Changed by Staff ID user:staff-b")).toBeTruthy();
   });
 
   it("says when no product has the ID", async () => {
     mocks.get.mockRejectedValue(
-      new GramError("not found", {
-        response: new Response(null, { status: 404 }),
-        request: new Request("https://admin.example.test/"),
-        body: "",
-      }),
+      new ServiceError(
+        {
+          name: "not_found",
+          id: "abc123",
+          message: "product not found",
+          fault: false,
+          temporary: false,
+          timeout: false,
+        },
+        {
+          response: new Response("{}", {
+            status: 404,
+            headers: { "content-type": "application/json" },
+          }),
+          request: new Request("https://admin.example.test/"),
+          body: "{}",
+        },
+      ),
     );
     await renderRouteTree(routeTree, {
       initialPath: "/ai-clients/products/missing",
@@ -195,5 +273,26 @@ describe("AIProductDetail", () => {
 
     expect(await screen.findByText("No product has this ID.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Back to products" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("treats a 404 that is not the server's answer as a failure", async () => {
+    mocks.get.mockRejectedValue(
+      new GramError("Not Found", {
+        response: new Response("<html>Not Found</html>", {
+          status: 404,
+          headers: { "content-type": "text/html" },
+        }),
+        request: new Request("https://admin.example.test/"),
+        body: "<html>Not Found</html>",
+      }),
+    );
+    await renderRouteTree(routeTree, {
+      initialPath: "/ai-clients/products/missing",
+    });
+
+    expect(await screen.findByText(/Could not load this product/)).toBeTruthy();
+    expect(screen.queryByText("No product has this ID.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 });

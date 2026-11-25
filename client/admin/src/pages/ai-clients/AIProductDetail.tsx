@@ -2,7 +2,7 @@ import type { JSX, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import type { AdminAIProduct } from "@gram/admin-client/models/components/adminaiproduct";
-import { GramError } from "@gram/admin-client/models/errors/gramerror";
+import { ServiceError } from "@gram/admin-client/models/errors/serviceerror";
 
 import { DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,12 @@ import { aiProductQuery } from "@/lib/adminQueries";
 import { badgeTone } from "@/lib/badgeTone";
 import { errorMessage } from "@/lib/gramAdminApi";
 
-import { categoryLabel, verificationState } from "./aiProductLabels";
+import {
+  categoryLabel,
+  sourceLabel,
+  staffLabel,
+  verificationState,
+} from "./aiProductLabels";
 
 const DOCUMENT_COLUMNS = 5;
 
@@ -71,21 +76,42 @@ function Overview({ product }: { product: AdminAIProduct }): JSX.Element {
         <Field label="Vendor">
           <code className="text-xs">{product.vendorKey}</code>
         </Field>
-        <Field label="Organizations blocking it">
-          {product.blockedOrganizationCount === 0
-            ? "None"
-            : product.blockedOrganizationCount}
-        </Field>
+        <Blocks product={product} />
         <Field label="Created">
           {product.createdAt.toLocaleString()}
-          {product.createdBy ? ` by ${product.createdBy}` : " by the seed"}
+          <div className="text-muted-foreground">
+            {sourceLabel(product.createdBy)}
+          </div>
         </Field>
         <Field label="Last changed">
           {product.updatedAt.toLocaleString()}
-          {product.updatedBy ? ` by ${product.updatedBy}` : ""}
+          {product.updatedBy && (
+            <div className="text-muted-foreground">
+              Changed by {staffLabel(product.updatedBy)}
+            </div>
+          )}
         </Field>
       </dl>
     </section>
+  );
+}
+
+function Blocks({ product }: { product: AdminAIProduct }): JSX.Element {
+  const count = product.blockedOrganizationCount;
+  if (product.deleted && count > 0) {
+    return (
+      <Field label="Organizations with a block">
+        {count}
+        <div className="text-muted-foreground">
+          These blocks do not apply while the product is deleted.
+        </div>
+      </Field>
+    );
+  }
+  return (
+    <Field label="Organizations blocking it">
+      {count === 0 ? "None" : count}
+    </Field>
   );
 }
 
@@ -148,7 +174,9 @@ function Documents({ product }: { product: AdminAIProduct }): JSX.Element {
         <h2 className="text-base font-semibold">Documents</h2>
         <p className="text-muted-foreground text-sm">
           The sign-in documents this product publishes. A pattern matches many
-          addresses: each * stands for one part of the path.
+          addresses: each * stands for one part of the path. Off documents are
+          kept but no longer let the app sign in. Check shows whether Speakeasy
+          fetched the live document.
         </p>
       </div>
       <div className="overflow-x-auto rounded-lg border">
@@ -224,7 +252,11 @@ function Documents({ product }: { product: AdminAIProduct }): JSX.Element {
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {document.updatedAt.toLocaleString()}
-                      {document.updatedBy && <div>by {document.updatedBy}</div>}
+                      <div>
+                        {document.updatedBy
+                          ? `Changed by ${staffLabel(document.updatedBy)}`
+                          : sourceLabel(document.createdBy)}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -250,8 +282,12 @@ export function AIProductDetail(): JSX.Element {
   }
 
   if (product.error) {
+    // Only the server's own not-found answer means the ID is unknown; a 404
+    // from anything in front of it is an ordinary failure.
     const missing =
-      product.error instanceof GramError && product.error.statusCode === 404;
+      product.error instanceof ServiceError &&
+      product.error.statusCode === 404 &&
+      product.error.data$.name === "not_found";
     return (
       <div role="alert" className="space-y-3 p-6">
         <p className="text-sm">
@@ -295,7 +331,7 @@ export function AIProductDetail(): JSX.Element {
         {data.deleted && (
           <p className="text-muted-foreground text-sm">
             This product is deleted. Shadow AI no longer finds it, and sign-in
-            no longer recognizes it.
+            no longer recognizes it. Blocks on it no longer apply.
           </p>
         )}
       </div>

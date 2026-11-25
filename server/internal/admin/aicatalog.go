@@ -33,18 +33,23 @@ func (s *Service) ListAIProducts(ctx context.Context, p *gen.ListAIProductsPaylo
 		}
 	}
 
+	limit := maxListedAIProducts
+	if s.aiProductListLimit > 0 {
+		limit = s.aiProductListLimit
+	}
+
 	rows, err := repo.New(s.db).AdminListAIProducts(ctx, repo.AdminListAIProductsParams{
 		IncludeDeleted: p.IncludeDeleted,
 		Query:          query,
-		RowLimit:       maxListedAIProducts + 1,
+		RowLimit:       conv.SafeInt32(limit + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list ai products").LogError(ctx, s.logger)
 	}
 
-	truncated := len(rows) > maxListedAIProducts
+	truncated := len(rows) > limit
 	if truncated {
-		rows = rows[:maxListedAIProducts]
+		rows = rows[:limit]
 	}
 
 	products := make([]*gen.AdminAIProductSummary, 0, len(rows))

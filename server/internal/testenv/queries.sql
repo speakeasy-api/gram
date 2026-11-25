@@ -2884,3 +2884,12 @@ UPDATE ai_product_cimd_documents
 SET url = @url, display_name = @display_name, enabled = @enabled,
     deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id;
+
+-- Records a document check result and staff authorship, which no seed writes.
+-- name: SetDocumentCheckFixture :exec
+UPDATE ai_product_cimd_documents
+SET verified_at = sqlc.narg('verified_at'),
+    verification_error = sqlc.narg('verification_error'),
+    created_by = sqlc.narg('created_by'),
+    updated_by = sqlc.narg('updated_by')
+WHERE id = @id;

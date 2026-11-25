@@ -253,3 +253,76 @@ func TestGetAIProduct_NotFound(t *testing.T) {
 	_, err := svc.GetAIProduct(asStaff(ctx), &gen.GetAIProductPayload{ID: "zz-missing"})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
+
+func TestListAIProducts_Truncated(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = asStaff(ctx)
+	svc.aiProductListLimit = 2
+
+	for _, id := range []string{"zz-trunc-a", "zz-trunc-b", "zz-trunc-c"} {
+		seedAIProduct(t, db, id, "Zztrunc "+id)
+	}
+
+	page, err := svc.ListAIProducts(ctx, &gen.ListAIProductsPayload{Query: new("zztrunc"), IncludeDeleted: false})
+	require.NoError(t, err)
+	require.True(t, page.Truncated)
+	require.Len(t, page.Products, 2)
+	require.Equal(t, "zz-trunc-a", page.Products[0].ID)
+	require.Equal(t, "zz-trunc-b", page.Products[1].ID)
+
+	exact, err := svc.ListAIProducts(ctx, &gen.ListAIProductsPayload{Query: new("zz-trunc-c"), IncludeDeleted: false})
+	require.NoError(t, err)
+	require.False(t, exact.Truncated)
+	require.Len(t, exact.Products, 1)
+}
+
+func TestGetAIProduct_CheckResultsAuthorsAndArrayCleanup(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = asStaff(ctx)
+
+	const productID = "zz-checked"
+	seedAIProduct(t, db, productID, "Checked Product")
+	fixtures := testrepo.New(db)
+	require.NoError(t, fixtures.AddNullArrayElementsToProductFixture(ctx, productID))
+	require.NoError(t, fixtures.NestProductBinariesFixture(ctx, productID))
+
+	checkedAt := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	passed := seedAIDocument(t, db, productID, "https://checked.example.test/a.json", true, false)
+	require.NoError(t, fixtures.SetDocumentCheckFixture(ctx, testrepo.SetDocumentCheckFixtureParams{
+		ID:                passed,
+		VerifiedAt:        pgtype.Timestamptz{Time: checkedAt, Valid: true, InfinityModifier: pgtype.Finite},
+		VerificationError: pgtype.Text{String: "", Valid: false},
+		CreatedBy:         conv.ToPGText("user:staff-a"),
+		UpdatedBy:         conv.ToPGText("user:staff-b"),
+	}))
+	failed := seedAIDocument(t, db, productID, "https://checked.example.test/b.json", true, false)
+	require.NoError(t, fixtures.SetDocumentCheckFixture(ctx, testrepo.SetDocumentCheckFixtureParams{
+		ID:                failed,
+		VerifiedAt:        pgtype.Timestamptz{Time: checkedAt, Valid: true, InfinityModifier: pgtype.Finite},
+		VerificationError: conv.ToPGText("jwks_invalid"),
+		CreatedBy:         pgtype.Text{String: "", Valid: false},
+		UpdatedBy:         pgtype.Text{String: "", Valid: false},
+	}))
+
+	product, err := svc.GetAIProduct(ctx, &gen.GetAIProductPayload{ID: productID})
+	require.NoError(t, err)
+	require.Equal(t, []string{"com.example.zz-checked"}, product.BundleIds, "NULL elements are dropped")
+	require.Equal(t, []string{"nested-a", "nested-b"}, product.Binaries, "nested arrays are flattened")
+	require.Equal(t, []string{"~/.zz-checked"}, product.ConfigDirs)
+	require.Equal(t, []string{"zz-checked-proc"}, product.ProcessNames)
+	require.Equal(t, []string{"Checked Product Client"}, product.ClientInfoNames)
+
+	require.Len(t, product.Documents, 2)
+	ok, bad := product.Documents[0], product.Documents[1]
+	require.Equal(t, passed.String(), ok.ID)
+	require.Equal(t, "2026-03-01T12:00:00Z", *ok.VerifiedAt)
+	require.Nil(t, ok.VerificationError)
+	require.Equal(t, "user:staff-a", *ok.CreatedBy)
+	require.Equal(t, "user:staff-b", *ok.UpdatedBy)
+	require.Equal(t, failed.String(), bad.ID)
+	require.Equal(t, "jwks_invalid", *bad.VerificationError)
+	require.Nil(t, bad.CreatedBy)
+	require.Nil(t, bad.UpdatedBy)
+}

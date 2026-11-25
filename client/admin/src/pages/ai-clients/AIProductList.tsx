@@ -1,5 +1,5 @@
 import { useState, type JSX } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { DataTable } from "@/components/data-table";
@@ -48,12 +48,13 @@ export function AIProductList(): JSX.Element {
     });
   };
 
-  const list = useQuery(
-    aiProductsListQuery({
+  const list = useQuery({
+    ...aiProductsListQuery({
       query: search.q,
       includeDeleted: search.deleted ?? false,
     }),
-  );
+    placeholderData: keepPreviousData,
+  });
   const products = list.data?.products;
 
   return (
@@ -61,9 +62,10 @@ export function AIProductList(): JSX.Element {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">AI clients</h1>
         <p className="text-muted-foreground text-sm">
-          Every product Speakeasy knows. Shadow AI uses a product to find it on
-          devices. Sign-in uses its documents to recognize it. This page is
-          read-only.
+          This page shows the catalog as stored in the database. If those rows
+          are missing or invalid, servers use a built-in list instead, so what
+          they serve can differ. Shadow AI finds a product on devices by its
+          signatures. Sign-in recognizes it by its documents.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-4">
@@ -131,7 +133,7 @@ export function AIProductList(): JSX.Element {
               >
                 {search.q
                   ? "No products match your search."
-                  : "The catalog has no products yet."}
+                  : "No products in the database. Servers use the built-in list until the catalog is seeded."}
               </DataTable.NoResultsMessage>
             ) : (
               products?.map((product) => (
