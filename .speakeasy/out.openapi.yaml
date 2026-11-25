@@ -8331,6 +8331,88 @@ paths:
       x-speakeasy-name-override: listPendingAccessRequests
       x-speakeasy-react-hook:
         name: AgentPendingAccessRequests
+  /rpc/agent.listRequestableAccess:
+    get:
+      description: List the permissions the enrolled user can ask for as temporary access from the device agent, and their own pending requests. Only permissions that can be given temporarily are listed, and a permission the user already holds on every resource is left out. Requires a per-user key; the org install key, device-agent tokens and agent identities are refused. Answers not found while access requests are off for the organization.
+      operationId: listAgentRequestableAccess
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRequestableAccessResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: listRequestableAccess agent
+      tags:
+        - agent
+      x-speakeasy-name-override: listRequestableAccess
+      x-speakeasy-react-hook:
+        name: AgentRequestableAccess
   /rpc/agent.listSyncedUsers:
     get:
       description: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.
@@ -8842,6 +8924,95 @@ paths:
       x-speakeasy-name-override: reportState
       x-speakeasy-react-hook:
         name: ReportAgentState
+  /rpc/agent.requestAccess:
+    post:
+      description: File an access request for the enrolled user from the device agent. The request is stored and administrators are notified by email and Slack, the same as a request from the dashboard; decisions are made there, never from the device agent. Only permissions that can be given temporarily are accepted. Asking again while a request for the same access is pending returns that request without notifying anyone again. Requires a per-user key; the org install key, device-agent tokens and agent identities are refused. Answers not found while access requests are off for the organization.
+      operationId: agentRequestAccess
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRequestAccessForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRequestAccessResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: requestAccess agent
+      tags:
+        - agent
+      x-speakeasy-name-override: requestAccess
+      x-speakeasy-react-hook:
+        name: AgentRequestAccess
+        type: mutation
   /rpc/agent.unhideMcpServer:
     post:
       description: Show a hidden MCP server again for the enrolled user. Unhiding a server that is not hidden changes nothing. Authenticates like hideMcpServer.
@@ -91817,6 +91988,22 @@ components:
         - issuer
         - subject
         - agent_id
+    AgentAccessRequestTarget:
+      type: object
+      properties:
+        resource_id:
+          type: string
+          description: The resource the scope applies to.
+        resource_name:
+          type: string
+          description: The resource's display name.
+        scope:
+          type: string
+          description: The scope to request, such as mcp:connect.
+      description: The exact access a device agent asks for with requestAccess.
+      required:
+        - scope
+        - resource_id
     AgentConnectionBlock:
       type: object
       properties:
@@ -92067,6 +92254,39 @@ components:
       required:
         - name
         - url
+    AgentOwnAccessRequest:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          description: When the request lapses without a decision.
+          format: date-time
+        id:
+          type: string
+          description: Access request ID.
+          format: uuid
+        permission_label:
+          type: string
+          description: The scope's name as the role editor shows it.
+        resource_id:
+          type: string
+          description: The resource asked for. Absent when the request covers every resource of its kind.
+        resource_name:
+          type: string
+          description: The resource's name, as it was when the request was made.
+        scope:
+          type: string
+          description: The scope asked for.
+      description: One of the user's own pending access requests.
+      required:
+        - id
+        - scope
+        - permission_label
+        - created_at
+        - expires_at
     AgentOwnerAssignmentForm:
       type: object
       properties:
@@ -92341,6 +92561,87 @@ components:
       required:
         - urn
         - display_name
+    AgentRequestAccessForm:
+      type: object
+      properties:
+        duration:
+          type: string
+          description: How long the user would like the access for, counted from approval. A suggestion the approver still decides on. Cannot be sent with requested_until.
+          enum:
+            - 1h
+            - 2h
+            - 4h
+        message:
+          type: string
+          description: Optional note to the approver.
+          maxLength: 1000
+        requested_until:
+          type: string
+          description: When the user would like the access until, such as the end of their day as their own clock reads it. Must be in the future and at most 24 hours away. Cannot be sent with duration.
+          format: date-time
+        resource_id:
+          type: string
+          description: 'The resource to request the scope on: a project ID from listRequestableAccess, or the resource a no_access server''s request_access names. Absent asks for every resource of the scope''s kind.'
+        scope:
+          type: string
+          description: The scope to request. Must be one that can be given temporarily, as listRequestableAccess lists.
+      required:
+        - scope
+    AgentRequestAccessResult:
+      type: object
+      properties:
+        created:
+          type: boolean
+          description: False when a request for the same access was already pending and was returned instead; nobody was notified again.
+        request:
+          $ref: '#/components/schemas/AgentOwnAccessRequest'
+      required:
+        - request
+        - created
+    AgentRequestablePermission:
+      type: object
+      properties:
+        all_resources:
+          type: boolean
+          description: True when the user can ask for the scope on every resource of its kind. For a scope that applies to a project, projects narrows the choice to one project.
+        description:
+          type: string
+          description: What a holder of the scope can do.
+        label:
+          type: string
+          description: The scope's name as the role editor shows it.
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentRequestableProject'
+          description: For a scope that applies to a project, the projects the user can see but does not hold the scope on, so they can ask for one. Empty for other scopes.
+        resource_type:
+          type: string
+          description: The kind of resource the scope applies to, such as project, mcp or chat.
+        scope:
+          type: string
+          description: The scope to request.
+      description: A permission the user can ask for as temporary access.
+      required:
+        - scope
+        - label
+        - description
+        - resource_type
+        - all_resources
+        - projects
+    AgentRequestableProject:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Project ID, sent as resource_id.
+          format: uuid
+        name:
+          type: string
+          description: Project name.
+      required:
+        - id
+        - name
     AgentServerConnection:
       type: object
       properties:
@@ -92354,6 +92655,8 @@ components:
         id:
           type: string
           description: The server's id, as getPlugins reports it on each plugin server.
+        request_access:
+          $ref: '#/components/schemas/AgentAccessRequestTarget'
         request_access_url:
           type: string
           description: Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.
@@ -108558,6 +108861,22 @@ components:
       description: Result type for listing remote_sessions.
       required:
         - items
+    ListRequestableAccessResult:
+      type: object
+      properties:
+        pending:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentOwnAccessRequest'
+          description: The user's own pending requests, newest first.
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentRequestablePermission'
+          description: Permissions the user can ask for, in the role editor's order.
+      required:
+        - permissions
+        - pending
     ListResourcesResult:
       type: object
       properties:
