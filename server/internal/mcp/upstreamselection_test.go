@@ -238,7 +238,7 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	f.associate(t, ctx, notion.ID, linearClient)
 	before := notionUpstream.requestCount()
 	resp, err = callTool(t, f.ti, notionSlug, notionBearer, "ping")
-	requireAuthClientSetup(t, resp, err)
+	requireReconnect(t, resp, err, notionSlug)
 	require.Equal(t, before, notionUpstream.requestCount())
 
 	// Unbinding the chosen client from the issuer, though it stays associated

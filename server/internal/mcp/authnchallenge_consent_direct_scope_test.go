@@ -127,7 +127,7 @@ func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testi
 	})
 	require.NoError(t, err)
 	// The retained legacy association cannot replace the detached typed
-	// offer, and the client must not be sent through a reconnect loop.
+	// offer. The browser can review a new choice without using that association.
 	serverID := fx.endpoint.McpServerID.UUID
 	fixture := selectionFixture{ti: fx.ti, projectID: fx.projectID, orgID: fx.orgID}
 	fixture.associate(t, ctx, serverID, legacy)
@@ -136,9 +136,9 @@ func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testi
 	_, err = clients.DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: id})
 	require.NoError(t, err)
 	w, err := callTool(t, fx.ti, fx.endpoint.Slug, stale, "ping")
-	requireAuthClientSetup(t, w, err)
-	require.Empty(t, member.drain(), "setup failure must not dial upstream")
-	require.Zero(t, refreshes.Load(), "setup failure must not refresh a legacy grant")
+	requireReconnect(t, w, err, fx.endpoint.Slug)
+	require.Empty(t, member.drain(), "refusing a stale choice must not dial upstream")
+	require.Zero(t, refreshes.Load(), "refusing a stale choice must not refresh a legacy grant")
 	_, err = clients.AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: id})
 	require.NoError(t, err)
 	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})

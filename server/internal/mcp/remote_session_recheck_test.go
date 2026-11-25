@@ -15,17 +15,16 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
-	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -58,8 +57,18 @@ func shapeGrantForKeepalive(t *testing.T, ctx context.Context, ti *testInstance,
 		ID:                   sess.ID,
 		ProjectID:            conv.ToNullUUID(projectID),
 	}))
-	persistTestUserSession(t, ti, issuerID, subject, jti)
+	if jti != "" {
+		persistTestUserSession(t, ti, issuerID, subject, jti)
+	}
 	return sess
+}
+
+func offerRecheckRegistration(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, orgID string, serverID, clientID uuid.UUID) {
+	t.Helper()
+	fixtures := authclientfixtures.New(ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(clientID)})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
 }
 
 // makeKeepaliveShaped shapes the fixture's own grant; see shapeGrantForKeepalive.
@@ -105,34 +114,15 @@ func validationTriggers(t *testing.T, reader *sdkmetric.ManualReader) map[string
 	return counts
 }
 
-// Consent fixtures offer typed clients. Backfill leaves those offers alone, so
-// tests of unenforced rechecks explicitly bind the registration as legacy data.
-func seedLegacyRecheckAssociation(t *testing.T, ctx context.Context, fx validationFixture, serverID, clientID uuid.UUID) {
-	t.Helper()
-	_, err := authclientfixtures.New(fx.ti.conn).SeedAssociationFixture(ctx, authclientfixtures.SeedAssociationFixtureParams{
-		ProjectID:             fx.endpoint.ProjectID,
-		OrganizationID:        fx.endpoint.OrganizationID,
-		McpServerID:           serverID,
-		RemoteSessionClientID: clientID,
-	})
-	require.NoError(t, err)
-}
-
-func seedStandaloneLegacyRecheckFixture(t *testing.T, prefix string) (context.Context, validationFixture) {
-	t.Helper()
-	ctx, fx := seedStandaloneValidationFixture(t, prefix)
-	seedLegacyRecheckAssociation(t, ctx, fx, fx.endpoint.McpServerID.UUID, fx.clientID)
-	return ctx, fx
-}
-
 // A revoked no-expiry grant reads rejected_by_member after the sweep, with nobody opening the consent page; the
 // verdict is the member's own answer, presented through the grant's endpoint with the grant's own credential.
 func TestRemoteSessionRecheck_RevokedNoExpiryGrantReadsRejected(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx := seedStandaloneLegacyRecheckFixture(t, "aim261-standalone")
+	ctx, fx := seedStandaloneValidationFixture(t, "aim261-standalone")
 	bearer := "token-aim261-standalone"
 	makeKeepaliveShaped(t, ctx, fx, "aim261-standalone")
+	require.False(t, storedSession(t, ctx, fx).LastValidatedAt.Valid)
 	require.Contains(t, renderConsent(t, fx), "Not yet verified")
 	require.Empty(t, fx.member.drain(), "rendering alone never probes")
 
@@ -184,13 +174,7 @@ func TestRemoteSessionRecheck_ProbesAnOfferedRegistrationWithoutASignInLink(t *t
 	require.NoError(t, testrepo.New(fx.ti.conn).DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{RemoteSessionClientID: fx.clientID, ProjectID: conv.ToNullUUID(projectID)}))
 
 	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "", nil)
-	fixtures := authclientfixtures.New(fx.ti.conn)
-	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
-	require.NoError(t, err)
-	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: fx.endpoint.McpServerID.UUID, AuthClientID: authClientID, Source: "admin"}))
-	fx.ti.service.SetAuthClientPermitted(true)
-	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-	require.NoError(t, err)
+	offerRecheckRegistration(t, ctx, fx.ti, projectID, orgID, fx.endpoint.McpServerID.UUID, registration)
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, registration, fx.subject, "typed-token", fx.member.url)
 	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, registration, fx.subject, recheckTestInterval+time.Hour, "jti-"+prefix)
 	fx.clientID = registration
@@ -211,10 +195,48 @@ func TestRemoteSessionRecheck_ProbesAnOfferedRegistrationWithoutASignInLink(t *t
 }
 
 // A grant connected inside the interval is the connect auto-verify's; the sweep leaves it alone until it ages.
+func TestRemoteSessionRecheck_ProbesAnAttachedGrantWithoutBrowserSession(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedStandaloneValidationFixture(t, "recheck-attachment")
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID, orgID := consentTestTenant(t, ctx)
+	fx.subject = urn.NewUserSubject(auth.UserID)
+	require.NoError(t, authclientfixtures.New(fx.ti.conn).SoftDeleteServerAuthClientLinksFixture(ctx, fx.endpoint.McpServerID.UUID))
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, fx.clientID, fx.subject, "attached-token", fx.member.url)
+	sess := shapeGrantForKeepalive(t, ctx, fx.ti, projectID, fx.endpoint.UserSessionIssuerID, fx.clientID, fx.subject, recheckTestInterval+time.Hour, "")
+	agent, err := agentrepo.New(fx.ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: orgID, OwnerUserID: auth.UserID, Name: "Probe owner"})
+	require.NoError(t, err)
+	q := remotesessions_repo.New(fx.ti.conn)
+	binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, remotesessions_repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: projectID, OrganizationID: orgID, PrincipalID: agent.ID, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID, RemoteSessionID: sess.ID, SubjectUrn: sess.SubjectUrn.String()})
+	require.NoError(t, err)
+	fixtures := testrepo.New(fx.ti.conn)
+	_, err = fixtures.StampMCPServerUpstreamClientFixture(ctx, testrepo.StampMCPServerUpstreamClientFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: fx.endpoint.McpServerID.UUID, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
+	n, err := fixtures.CountAttachmentHumanSessionsFixture(ctx, sess.SubjectUrn)
+	require.NoError(t, err)
+	require.Zero(t, n)
+
+	fx.member.set(memberAccepts)
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, checked)
+	requireProbe(t, fx.member.drain(), "attached-token", true, true)
+	require.Equal(t, string(remotesessions.ValidationOutcomeValid), storedSession(t, ctx, fx).ValidationStatus.String)
+
+	ageIntoRecheckWindow(t, ctx, fx)
+	_, err = q.DetachPrincipalRemoteSessionBinding(ctx, remotesessions_repo.DetachPrincipalRemoteSessionBindingParams{ProjectID: projectID, OrganizationID: orgID, PrincipalID: agent.ID, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID, ID: binding.ID})
+	require.NoError(t, err)
+	checked, err = fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Zero(t, checked, "the compatibility parent cannot keep a detached grant eligible")
+	require.Empty(t, fx.member.drain())
+}
+
 func TestRemoteSessionRecheck_LeavesFreshGrantsToConnectVerify(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx := seedStandaloneLegacyRecheckFixture(t, "aim261-fresh")
+	ctx, fx := seedStandaloneValidationFixture(t, "aim261-fresh")
 	shapeGrantForKeepalive(t, ctx, fx.ti, fx.endpoint.ProjectID, fx.endpoint.UserSessionIssuerID, fx.clientID, fx.subject, time.Hour, "jti-aim261-fresh")
 
 	fx.member.set(memberRejects)
@@ -231,7 +253,7 @@ func TestRemoteSessionRecheck_LeavesFreshGrantsToConnectVerify(t *testing.T) {
 func TestRemoteSessionRecheck_LeavesRenewableGrantsToTheRefreshSweep(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx := seedStandaloneLegacyRecheckFixture(t, "aim261-renewable")
+	ctx, fx := seedStandaloneValidationFixture(t, "aim261-renewable")
 	makeKeepaliveShaped(t, ctx, fx, "aim261-renewable")
 	sess := storedSession(t, ctx, fx)
 	refreshCiphertext, err := fx.ti.enc.Encrypt([]byte("refresh-aim261"))
@@ -264,7 +286,7 @@ func TestRemoteSessionRecheck_RateLimitedHostDoesNotStopThePass(t *testing.T) {
 	t.Parallel()
 
 	const prefix = "aim261-pace"
-	ctx, fx := seedStandaloneLegacyRecheckFixture(t, prefix)
+	ctx, fx := seedStandaloneValidationFixture(t, prefix)
 	fx.ti.service.SetRemoteSessionRecheckPacing(ratelimit.PerMinute(1), 1)
 	projectID, orgID := fx.endpoint.ProjectID, fx.endpoint.OrganizationID
 	shared := fx.endpoint.UserSessionIssuerID
@@ -275,7 +297,7 @@ func TestRemoteSessionRecheck_RateLimitedHostDoesNotStopThePass(t *testing.T) {
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, fx.clientID, subjectB, "token-"+prefix+"-b", fx.member.url)
 	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, fx.clientID, subjectB, 29*time.Hour, "jti-"+prefix+"-b")
 	otherClient := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-other", "", []uuid.UUID{shared})
-	seedLegacyRecheckAssociation(t, ctx, fx, fx.endpoint.McpServerID.UUID, otherClient)
+	offerRecheckRegistration(t, ctx, fx.ti, projectID, orgID, fx.endpoint.McpServerID.UUID, otherClient)
 	subjectC := urn.NewUserSubject(uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, otherClient, subjectC, "token-"+prefix+"-c", fx.member.url)
 	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, otherClient, subjectC, 28*time.Hour, "jti-"+prefix+"-c")
@@ -318,7 +340,7 @@ func TestRemoteSessionRecheck_UnusableEndpointDoesNotShadowLiveSibling(t *testin
 			t.Parallel()
 
 			prefix := "aim261-shadow-" + visibility
-			ctx, fx := seedStandaloneLegacyRecheckFixture(t, prefix)
+			ctx, fx := seedStandaloneValidationFixture(t, prefix)
 			makeKeepaliveShaped(t, ctx, fx, prefix)
 			projectID := fx.endpoint.ProjectID
 			endpoints := mcpendpoints_repo.New(fx.ti.conn)
@@ -377,7 +399,7 @@ func TestRemoteSessionRecheck_PrivateOnlyEndpointIsProbedPrivately(t *testing.T)
 	t.Parallel()
 
 	const prefix = "aim261-private"
-	ctx, fx := seedStandaloneLegacyRecheckFixture(t, prefix)
+	ctx, fx := seedStandaloneValidationFixture(t, prefix)
 	makeKeepaliveShaped(t, ctx, fx, prefix)
 	servers := mcpservers_repo.New(fx.ti.conn)
 	server, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: fx.endpoint.McpServerID.UUID, ProjectID: fx.endpoint.ProjectID})
@@ -414,15 +436,8 @@ func TestRemoteSessionRecheck_ProbesMetaMemberThroughGateway(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedMetaValidationFixture(t, "aim261-meta")
-	members, err := metamcprepo.New(fx.ti.conn).ListMetaMCPMembers(ctx, metamcprepo.ListMetaMCPMembersParams{
-		MetaMcpServerID: fx.endpoint.MetaMcpServerID.UUID,
-		ProjectID:       fx.endpoint.ProjectID,
-	})
-	require.NoError(t, err)
-	require.Len(t, members, 1)
-	seedLegacyRecheckAssociation(t, ctx, fx, members[0].McpServerID, fx.clientID)
 	makeKeepaliveShaped(t, ctx, fx, "aim261-meta")
-	_, err = mcpendpoints_repo.New(fx.ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+	_, err := mcpendpoints_repo.New(fx.ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID:       fx.endpoint.ProjectID,
 		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -494,6 +509,7 @@ func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string, callerI
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-"+prefix, identifier)
 	// The sweep probes as the subject, who must hold mcp:connect on a private server just as they did to connect.
 	seedMetaMemberConnectGrant(t, ctx, ti.conn, orgID, serverID)
+	offerRecheckRegistration(t, ctx, ti, projectID, orgID, serverID, clientID)
 	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: "", subject: subject, member: nil, clientID: clientID, name: prefix + "-server"}
 	makeKeepaliveShaped(t, ctx, fx, prefix)
 	return ctx, fx, tunnelID
@@ -543,7 +559,7 @@ func TestRemoteSessionRecheck_OfflineTunnelRecordsNothing(t *testing.T) {
 func TestRemoteSessionRecheck_UnroutableGrantDoesNotSpendHostQuota(t *testing.T) {
 	t.Parallel()
 	const prefix = "aim261-unroutable-quota"
-	ctx, fx := seedStandaloneLegacyRecheckFixture(t, prefix)
+	ctx, fx := seedStandaloneValidationFixture(t, prefix)
 	fx.ti.service.SetRemoteSessionRecheckPacing(ratelimit.PerMinute(1), 1)
 	unroutableSubject := urn.NewUserSubject(uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, fx.clientID, unroutableSubject, "token-unroutable", "https://unrelated.example/mcp")
