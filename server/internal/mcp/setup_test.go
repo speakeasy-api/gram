@@ -691,7 +691,6 @@ func buildTestMCPService(
 	require.NoError(t, err)
 	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
 	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator, protectedResources)
-	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
 	efficacySignaler := background.NewThrottledSignaler(
 		&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		background.SkillEfficacySignalCooldown,
@@ -718,12 +717,11 @@ func buildTestMCPService(
 		platformMCPReadActingContext = assistant_platform_mcp_adapter.ActingContext(platformMCPAuthorizer)
 	}
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-		AssistantMemoryTools:          nil,
-		AssistantSkillTools:           assistantSkillTools,
-		AssistantTriggerTools:         nil,
-		ManagedAssistantInsightsTools: managedLogsTools,
-		PlatformMCPReadTools:          platformMCPReadTools,
-		PlatformMCPReadActingContext:  platformMCPReadActingContext,
+		AssistantMemoryTools:         nil,
+		AssistantSkillTools:          assistantSkillTools,
+		AssistantTriggerTools:        nil,
+		PlatformMCPReadTools:         platformMCPReadTools,
+		PlatformMCPReadActingContext: platformMCPReadActingContext,
 	})
 	tunnelRoutes := route.NewRouteTable()
 	toolCallRecords := &toolCallRecorder{}

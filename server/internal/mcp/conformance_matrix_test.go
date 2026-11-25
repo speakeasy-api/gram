@@ -664,7 +664,7 @@ func TestConformanceMatrix_Platform(t *testing.T) {
 
 	runConformanceMatrix(t, conformanceTarget{
 		router:          router,
-		path:            "/platform/mcp/" + platformtools.ManagedAssistantPlatformToolsetSlug,
+		path:            "/platform/mcp/" + platformtools.PlatformMCPReadToolsetSlug,
 		authorization:   "Bearer " + mintAssistantToken(t, ti, authCtx, managedID),
 		supported:       mcpversions.SupportedPlatformToolset(),
 		assignsSessions: false,

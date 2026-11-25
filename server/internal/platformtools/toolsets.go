@@ -11,16 +11,9 @@ import (
 // toolset granted to every assistant runtime.
 const AssistantsPlatformToolsetSlug = "assistants"
 
-// ManagedAssistantPlatformToolsetSlug is the reserved slug for the platform
-// toolset granted only to a project's managed assistant (the one powering the
-// dashboard sidebar). It carries tools that must not be reachable by any
-// other assistant.
-const ManagedAssistantPlatformToolsetSlug = "managed-assistant"
-
 // PlatformMCPReadToolsetSlug is the reserved slug for the platform toolset
 // re-serving the Platform MCP read tools to a project's managed assistant.
-// Granted only when the assistant-platform-mcp rollout flag is on for the
-// organization.
+// No other assistant is granted it.
 const PlatformMCPReadToolsetSlug = "platform"
 
 // SpeakeasySlackPlatformToolsetSlug is the reserved slug for the toolset a
@@ -54,11 +47,10 @@ type Toolset struct {
 // platform toolset registry. Add a field here when a new toolset needs an
 // external service or pre-built tool slice.
 type ToolsetDependencies struct {
-	AssistantMemoryTools          []ExternalTool
-	AssistantSkillTools           []ExternalTool
-	AssistantTriggerTools         []ExternalTool
-	ManagedAssistantInsightsTools []ExternalTool
-	PlatformMCPReadTools          []ExternalTool
+	AssistantMemoryTools  []ExternalTool
+	AssistantSkillTools   []ExternalTool
+	AssistantTriggerTools []ExternalTool
+	PlatformMCPReadTools  []ExternalTool
 
 	// PlatformMCPReadActingContext is the Platform MCP read toolset's
 	// ActingContext.
@@ -75,11 +67,6 @@ var toolsetRegistry = []toolsetBuilder{
 		tools = append(tools, deps.AssistantSkillTools...)
 		tools = append(tools, deps.AssistantTriggerTools...)
 		return NewAssistantsToolset(tools...)
-	},
-	func(deps ToolsetDependencies) Toolset {
-		tools := make([]ExternalTool, 0, len(deps.ManagedAssistantInsightsTools))
-		tools = append(tools, deps.ManagedAssistantInsightsTools...)
-		return NewManagedAssistantToolset(tools...)
 	},
 	func(deps ToolsetDependencies) Toolset {
 		tools := make([]ExternalTool, 0, len(deps.PlatformMCPReadTools))
@@ -125,8 +112,6 @@ func PlatformToolsetName(slug string) string {
 	switch slug {
 	case AssistantsPlatformToolsetSlug:
 		return "Speakeasy assistant tools"
-	case ManagedAssistantPlatformToolsetSlug:
-		return "Speakeasy managed assistant tools"
 	case PlatformMCPReadToolsetSlug:
 		return "Speakeasy Platform MCP"
 	case SpeakeasySlackPlatformToolsetSlug:
@@ -141,13 +126,6 @@ func PlatformToolsetName(slug string) string {
 // goes through BuildToolsets.
 func NewAssistantsToolset(tools ...ExternalTool) Toolset {
 	return Toolset{Slug: AssistantsPlatformToolsetSlug, Tools: tools, ActingContext: nil}
-}
-
-// NewManagedAssistantToolset returns the platform toolset granted only to a
-// project's managed assistant. Exposed for tests and direct callers;
-// production wiring goes through BuildToolsets.
-func NewManagedAssistantToolset(tools ...ExternalTool) Toolset {
-	return Toolset{Slug: ManagedAssistantPlatformToolsetSlug, Tools: tools, ActingContext: nil}
 }
 
 // NewPlatformMCPReadToolset returns the platform toolset re-serving the

@@ -88,13 +88,6 @@ const (
 	// invocation time and fails closed independently of the dashboard workflow.
 	FlagPlatformMCPShadowAccessDecisions Flag = "platform-mcp-shadow-access-decisions"
 
-	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
-	// assistant the Platform MCP read toolset — the "platform" platform
-	// toolset re-serving the Platform MCP read tools over the assistant
-	// runtime channel. Targeted by PostHog organization group (org slug),
-	// like FlagBudgets. Evaluated server-side only; removed once the toolset
-	// is GA.
-	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
 	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
 	// matches the dashboard's page-level flag so one PostHog flag controls
 	// both surfaces; targeted by organization group (org slug), like
@@ -268,32 +261,6 @@ const (
 	// progressive surface when the organization can use Code Mode.
 	VariantPlatformMCPDiscoveryCodeMode Variant = "code_mode"
 )
-
-// Variants of FlagAssistantPlatformMCP. Anything else — no variant, an
-// unrecognized key, an unavailable provider, or an evaluation error — resolves
-// to VariantAssistantToolsLegacy, which is the pre-rollout behaviour, so a
-// PostHog outage can never strip the managed assistant's tools.
-const (
-	// VariantAssistantToolsLegacy serves the managed assistant the
-	// "managed-assistant" platform toolset (logs, chats, users, risk,
-	// deployments, skills, plugins, docs, changelog).
-	VariantAssistantToolsLegacy Variant = "legacy"
-	// VariantAssistantToolsPlatformMCP serves the managed assistant the
-	// "platform" toolset — the Platform MCP read tools — INSTEAD of the
-	// legacy toolset, not in addition to it.
-	VariantAssistantToolsPlatformMCP Variant = "platformmcp"
-)
-
-// AssistantToolsVariant normalizes a resolved variant to one of the two known
-// keys, collapsing everything unrecognized onto the legacy default. Both the
-// attach path (assistants service) and the serve path (mcp service) must agree
-// on this mapping or a toolset would be attached and then 404 at request time.
-func AssistantToolsVariant(variant Variant) Variant {
-	if variant == VariantAssistantToolsPlatformMCP {
-		return VariantAssistantToolsPlatformMCP
-	}
-	return VariantAssistantToolsLegacy
-}
 
 // Variants of FlagRiskLLMAnalyzer, the risk engine mode of an organization.
 // Anything else — no variant, an unrecognized key, an unavailable provider,

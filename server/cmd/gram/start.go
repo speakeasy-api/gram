@@ -140,8 +140,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
-	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
@@ -1208,10 +1206,8 @@ func newStartCommand() *cli.Command {
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
-			// mcpService captures this map by reference now; the remaining
-			// insights tools (chat/orgs/risk/deployments/skills) are merged in once
-			// their backing services exist further down.
-			managedInsightsTools := append([]platformtools.ExternalTool{}, platformtoolsruntime.ManagedAssistantLogsTools(telemSvc)...)
+			// mcpService captures this map by reference now; the toolsets are
+			// built once their backing services exist further down.
 			platformToolsets := map[string]platformtools.Toolset{}
 			// Runner-callable platform tools the runtime must be able to execute
 			// (trigger tools are wired separately via WithTriggerTools).
@@ -2295,31 +2291,13 @@ func newStartCommand() *cli.Command {
 			)
 			telemLogger.AddObserver(spendUsageTrigger)
 
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChatsTools(chatService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantRiskTools(riskService, c.String(usersessions.JWTSigningKeyFlag))...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDeploymentsTools(deploymentsService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantSkillsTools(skillsService, telemetryrepo.New(chReadDB))...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantPluginsTools(pluginsSvc)...)
-			// One-off fetches on a cold cache; a pooled client would only hold
-			// idle connections to the marketing site. Bound the whole request
-			// so a stalled marketing-site response can't hang the fetch; the
-			// client is dedicated to these speakeasy.com tools, which share the
-			// same bound, so a per-client timeout is safe.
-			marketingSiteClient := guardianPolicy.Client()
-			// Take the larger bound so the shared client stays correct if either
-			// tool's timeout is tuned independently later.
-			marketingSiteClient.Timeout = max(platformchangelog.FetchTimeout, platformdocs.FetchTimeout)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChangelogTools(marketingSiteClient)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDocsTools(marketingSiteClient)...)
 			maps.Copy(platformToolsets, platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-				AssistantMemoryTools:          memoryTools,
-				AssistantSkillTools:           skillTools,
-				AssistantTriggerTools:         triggerTools,
-				ManagedAssistantInsightsTools: managedInsightsTools,
-				PlatformMCPReadTools:          assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
-				PlatformMCPReadActingContext:  assistant_platform_mcp_adapter.ActingContext(platformMCPAssistant.Authorizer),
-				SpeakeasySlackTools:           platformtoolsruntime.SpeakeasySlackTools(guardianPolicy.PooledClient(), triggerApp, speakeasySlackDirectory),
+				AssistantMemoryTools:         memoryTools,
+				AssistantSkillTools:          skillTools,
+				AssistantTriggerTools:        triggerTools,
+				PlatformMCPReadTools:         assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
+				PlatformMCPReadActingContext: assistant_platform_mcp_adapter.ActingContext(platformMCPAssistant.Authorizer),
+				SpeakeasySlackTools:          platformtoolsruntime.SpeakeasySlackTools(guardianPolicy.PooledClient(), triggerApp, speakeasySlackDirectory),
 			}))
 
 			// Requests get their own base context so the shutdown deadline can

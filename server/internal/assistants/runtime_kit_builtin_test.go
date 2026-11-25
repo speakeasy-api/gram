@@ -31,7 +31,7 @@ func TestKitBuiltinConnectionsUseSeparateResourceBoundWorkloadTokens(t *testing.
 	base, err := url.Parse("https://api.example")
 	require.NoError(t, err)
 	bootstrap := kitTestWorkloadBootstrap()
-	slugs := []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug}
+	slugs := []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug}
 	connections := kitBuiltinMCPConnections(base, bootstrap.Workload.Identity.ProjectID, slugs)
 	config := KitLocalCompositionConfig{mcpConnections: connections}
 	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
