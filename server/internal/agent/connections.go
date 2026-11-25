@@ -101,10 +101,16 @@ func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnec
 	// The device agent holds no Platform MCP connection, so the principal carries
 	// none and reads no acting surface.
 	principal := platformmcp.Principal{UserID: member.userID, OrganizationID: member.organizationID, ConnectionID: "", Generation: "", ClientID: "", Surface: ""}
+	// Only a per-user key can file the request a no_access server names, and
+	// only while access requests are on.
+	canRequest := s.deviceCanRequestAccess(ctx)
 	for _, row := range serverRows {
 		entry, ok := s.serverConnection(ctx, principal, grants, row, *pluginServerID(row))
 		if !ok {
 			continue
+		}
+		if !canRequest {
+			entry.RequestAccess = nil
 		}
 		if row.McpServerID.Valid && hidden[row.McpServerID.UUID] {
 			entry.Hidden = new(true)
@@ -296,7 +302,7 @@ func allowMemberCall(ctx context.Context, logger *slog.Logger, limiter *ratelimi
 // read or connect is omitted; trouble reading one server reports it as
 // unknown rather than failing the rest.
 func (s *Service) serverConnection(ctx context.Context, principal platformmcp.Principal, grants []authz.Grant, row repo.ListAgentPluginServersRow, id string) (*gen.AgentServerConnection, bool) {
-	entry := &gen.AgentServerConnection{ID: id, State: connectionUnknown, ConnectURL: nil, RequestAccessURL: nil, Hidden: nil}
+	entry := &gen.AgentServerConnection{ID: id, State: connectionUnknown, ConnectURL: nil, RequestAccessURL: nil, Hidden: nil, RequestAccess: nil}
 	// A gateway's members sign in separately; its own connect page covers them.
 	if !row.McpServerID.Valid || s.connectionStatuses == nil {
 		return entry, true
@@ -324,6 +330,13 @@ func (s *Service) serverConnection(ctx context.Context, principal platformmcp.Pr
 		if status.Reason == platformmcp.MCPConnectionReasonPermissionRequired {
 			entry.State = connectionNoAccess
 			entry.RequestAccessURL = conv.PtrEmpty(status.RequestAccessURL)
+			if status.RequiredScope != "" && status.MCPID != "" {
+				entry.RequestAccess = &gen.AgentAccessRequestTarget{
+					Scope:        status.RequiredScope,
+					ResourceID:   status.MCPID,
+					ResourceName: conv.PtrEmpty(status.MCPName),
+				}
+			}
 		}
 	case platformmcp.MCPConnectionStateSetupRequired:
 		entry.State = connectionSetupRequired

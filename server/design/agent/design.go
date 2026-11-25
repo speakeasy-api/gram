@@ -681,6 +681,55 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listPendingAccessRequests")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentPendingAccessRequests"}`)
 	})
+
+	Method("listRequestableAccess", func() {
+		Description("List the permissions the enrolled user can ask for as temporary access from the device agent, and their own pending requests. Only permissions that can be given temporarily are listed, and a permission the user already holds on every resource is left out. Requires a per-user key; the org install key, device-agent tokens and agent identities are refused. Answers not found while access requests are off for the organization.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+		})
+
+		Result(ListRequestableAccessResult)
+
+		HTTP(func() {
+			GET("/rpc/agent.listRequestableAccess")
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAgentRequestableAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "listRequestableAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentRequestableAccess"}`)
+	})
+
+	Method("requestAccess", func() {
+		Description("File an access request for the enrolled user from the device agent. The request is stored and administrators are notified by email and Slack, the same as a request from the dashboard; decisions are made there, never from the device agent. Only permissions that can be given temporarily are accepted. Asking again while a request for the same access is pending returns that request without notifying anyone again. Requires a per-user key; the org install key, device-agent tokens and agent identities are refused. Answers not found while access requests are off for the organization.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Extend(AgentRequestAccessForm)
+		})
+
+		Result(AgentRequestAccessResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.requestAccess")
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "agentRequestAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "requestAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentRequestAccess", "type": "mutation"}`)
+	})
 })
 
 // --- Types ---
@@ -1034,6 +1083,82 @@ var AgentServerConnectionModel = Type("AgentServerConnection", func() {
 		Format(FormatURI)
 	})
 	Attribute("hidden", Boolean, "True when the user hid this server, from the gateway consent page or the device agent. Absent when not hidden.")
+	Attribute("request_access", AgentAccessRequestTargetModel, "What to send to requestAccess to ask for access to this server. Present only when state is no_access and access requests are on for the organization.")
+})
+
+var AgentAccessRequestTargetModel = Type("AgentAccessRequestTarget", func() {
+	Description("The exact access a device agent asks for with requestAccess.")
+	Required("scope", "resource_id")
+	Attribute("scope", String, "The scope to request, such as mcp:connect.")
+	Attribute("resource_id", String, "The resource the scope applies to.")
+	Attribute("resource_name", String, "The resource's display name.")
+})
+
+var ListRequestableAccessResult = Type("ListRequestableAccessResult", func() {
+	Required("permissions", "pending")
+	Attribute("permissions", ArrayOf(AgentRequestablePermissionModel), "Permissions the user can ask for, in the role editor's order.")
+	Attribute("pending", ArrayOf(AgentOwnAccessRequestModel), "The user's own pending requests, newest first.")
+})
+
+var AgentRequestablePermissionModel = Type("AgentRequestablePermission", func() {
+	Description("A permission the user can ask for as temporary access.")
+	Required("scope", "label", "description", "resource_type", "all_resources", "projects")
+	Attribute("scope", String, "The scope to request.")
+	Attribute("label", String, "The scope's name as the role editor shows it.")
+	Attribute("description", String, "What a holder of the scope can do.")
+	Attribute("resource_type", String, "The kind of resource the scope applies to, such as project, mcp or chat.")
+	Attribute("all_resources", Boolean, "True when the user can ask for the scope on every resource of its kind. False when they hold it everywhere they can be given it, and only the projects below remain.")
+	Attribute("projects", ArrayOf(AgentRequestableProjectModel), "For a scope that applies to a project, the projects the user can see but does not hold the scope on, so they can ask for one. Empty for other scopes.")
+})
+
+var AgentRequestableProjectModel = Type("AgentRequestableProject", func() {
+	Required("id", "name")
+	Attribute("id", String, "Project ID, sent as resource_id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Project name.")
+})
+
+var AgentOwnAccessRequestModel = Type("AgentOwnAccessRequest", func() {
+	Description("One of the user's own pending access requests.")
+	Required("id", "scope", "permission_label", "created_at", "expires_at")
+	Attribute("id", String, "Access request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("scope", String, "The scope asked for.")
+	Attribute("permission_label", String, "The scope's name as the role editor shows it.")
+	Attribute("resource_id", String, "The resource asked for. Absent when the request covers every resource of its kind.")
+	Attribute("resource_name", String, "The resource's name, as it was when the request was made.")
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("expires_at", String, "When the request lapses without a decision.", func() {
+		Format(FormatDateTime)
+	})
+})
+
+var AgentRequestAccessForm = Type("AgentRequestAccessForm", func() {
+	Required("scope")
+	Attribute("scope", String, "The scope to request. Must be one that can be given temporarily, as listRequestableAccess lists.")
+	Attribute("resource_id", String, "The resource to request the scope on: a project ID from listRequestableAccess, or the resource a no_access server's request_access names. Absent asks for every resource of the scope's kind.")
+	Attribute("message", String, func() {
+		Description("Optional note to the approver.")
+		MaxLength(1000)
+	})
+	Attribute("duration", String, func() {
+		Description("How long the user would like the access for, counted from approval. A suggestion the approver still decides on. Cannot be sent with requested_until.")
+		Enum("1h", "2h", "4h")
+	})
+	Attribute("requested_until", String, func() {
+		Description("When the user would like the access until, such as the end of their day as their own clock reads it. Must be in the future and at most 24 hours away. Cannot be sent with duration.")
+		Format(FormatDateTime)
+	})
+})
+
+var AgentRequestAccessResult = Type("AgentRequestAccessResult", func() {
+	Required("request", "created")
+	Attribute("request", AgentOwnAccessRequestModel, "The stored request.")
+	Attribute("created", Boolean, "False when a request for the same access was already pending and was returned instead; nobody was notified again.")
 })
 
 var ListPendingAccessRequestsResult = Type("ListPendingAccessRequestsResult", func() {
