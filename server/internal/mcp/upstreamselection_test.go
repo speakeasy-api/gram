@@ -334,7 +334,9 @@ func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testin
 	})
 	fx.ti.service.manual = true
 	own := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-own", "", []uuid.UUID{fx.shared})
-	createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-sibling", "", []uuid.UUID{fx.shared})
+	sibling := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-sibling", "", []uuid.UUID{fx.shared})
+	siblingServer, _ := createRemoteMcpEndpoint(t, ctx, fx.ti.conn, fx.projectID, "https://sibling-client.example.com/mcp", "sel-sibling-"+uuid.NewString()[:8], "public", fx.shared)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, siblingServer.ID, sibling, "remote_session")
 
 	n, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
 		OrganizationID:        fx.orgID,
@@ -345,7 +347,9 @@ func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testin
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
-	// With one client left to offer, consent goes straight to it.
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, serverID, own, "remote_session")
+	seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, fx.orgID, serverID)
+	// With one typed offer, consent goes straight to it.
 	code, html, location := render(t, fx)
 	require.Equal(t, http.StatusSeeOther, code, html)
 	require.NotNil(t, location)
