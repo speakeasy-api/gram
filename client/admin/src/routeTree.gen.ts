@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AiClientsRouteImport } from './routes/ai-clients'
 import { Route as AssistantsRouteImport } from './routes/assistants'
 import { Route as CustomDomainsRouteImport } from './routes/custom-domains'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
@@ -32,6 +33,8 @@ import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator
 import { Route as TailscaleOauthMigrationRouteImport } from './routes/tailscale-oauth-migration'
 import { Route as UpstreamOauthMigrationRouteImport } from './routes/upstream-oauth-migration'
 import { Route as UsersRouteImport } from './routes/users'
+import { Route as AiClientsIndexRouteImport } from './routes/ai-clients.index'
+import { Route as AiClientsProductsRouteImport } from './routes/ai-clients.products'
 import { Route as OrganizationsIndexRouteImport } from './routes/organizations.index'
 import { Route as OrganizationsIdOrSlugRouteImport } from './routes/organizations.$idOrSlug'
 import { Route as PlatformCredentialsIndexRouteImport } from './routes/platform-credentials.index'
@@ -44,6 +47,8 @@ import { Route as RegistryNewRouteImport } from './routes/registry.new'
 import { Route as RemoteSessionIssuersIndexRouteImport } from './routes/remote-session-issuers.index'
 import { Route as RemoteSessionIssuersIssuerIdRouteImport } from './routes/remote-session-issuers.$issuerId'
 import { Route as UsersIndexRouteImport } from './routes/users.index'
+import { Route as AiClientsProductsIndexRouteImport } from './routes/ai-clients.products.index'
+import { Route as AiClientsProductsProductIdRouteImport } from './routes/ai-clients.products.$productId'
 import { Route as OrganizationsIdOrSlugIndexRouteImport } from './routes/organizations.$idOrSlug.index'
 import { Route as OrganizationsIdOrSlugActivityRouteImport } from './routes/organizations.$idOrSlug.activity'
 import { Route as OrganizationsIdOrSlugAssistantsRouteImport } from './routes/organizations.$idOrSlug.assistants'
@@ -67,6 +72,11 @@ import { Route as OrganizationsIdOrSlugProjectsProjectIdOrSlugRouteImport } from
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AiClientsRoute = AiClientsRouteImport.update({
+  id: '/ai-clients',
+  path: '/ai-clients',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AssistantsRoute = AssistantsRouteImport.update({
@@ -179,6 +189,16 @@ const UsersRoute = UsersRouteImport.update({
   path: '/users',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AiClientsIndexRoute = AiClientsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AiClientsRoute,
+} as any)
+const AiClientsProductsRoute = AiClientsProductsRouteImport.update({
+  id: '/products',
+  path: '/products',
+  getParentRoute: () => AiClientsRoute,
+} as any)
 const OrganizationsIndexRoute = OrganizationsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -243,6 +263,17 @@ const UsersIndexRoute = UsersIndexRouteImport.update({
   path: '/',
   getParentRoute: () => UsersRoute,
 } as any)
+const AiClientsProductsIndexRoute = AiClientsProductsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AiClientsProductsRoute,
+} as any)
+const AiClientsProductsProductIdRoute =
+  AiClientsProductsProductIdRouteImport.update({
+    id: '/$productId',
+    path: '/$productId',
+    getParentRoute: () => AiClientsProductsRoute,
+  } as any)
 const OrganizationsIdOrSlugIndexRoute =
   OrganizationsIdOrSlugIndexRouteImport.update({
     id: '/',
@@ -360,6 +391,7 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ai-clients': typeof AiClientsRouteWithChildren
   '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
@@ -382,18 +414,21 @@ export interface FileRoutesByFullPath {
   '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
+  '/ai-clients/products': typeof AiClientsProductsRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/platform-credentials/$credentialId': typeof PlatformCredentialsCredentialIdRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/registry/$entryId': typeof RegistryEntryIdRoute
   '/registry/new': typeof RegistryNewRoute
   '/remote-session-issuers/$issuerId': typeof RemoteSessionIssuersIssuerIdRouteWithChildren
+  '/ai-clients/': typeof AiClientsIndexRoute
   '/organizations/': typeof OrganizationsIndexRoute
   '/platform-credentials/': typeof PlatformCredentialsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/registry/': typeof RegistryIndexRoute
   '/remote-session-issuers/': typeof RemoteSessionIssuersIndexRoute
   '/users/': typeof UsersIndexRoute
+  '/ai-clients/products/$productId': typeof AiClientsProductsProductIdRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/assistants': typeof OrganizationsIdOrSlugAssistantsRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
@@ -407,6 +442,7 @@ export interface FileRoutesByFullPath {
   '/organizations/$idOrSlug/onboarding': typeof OrganizationsIdOrSlugOnboardingRoute
   '/remote-session-issuers/$issuerId/convergence': typeof RemoteSessionIssuersIssuerIdConvergenceRoute
   '/remote-session-issuers/$issuerId/settings': typeof RemoteSessionIssuersIssuerIdSettingsRoute
+  '/ai-clients/products/': typeof AiClientsProductsIndexRoute
   '/organizations/$idOrSlug/': typeof OrganizationsIdOrSlugIndexRoute
   '/remote-session-issuers/$issuerId/': typeof RemoteSessionIssuersIssuerIdIndexRoute
   '/organizations/$idOrSlug/mcp-servers/$serverId': typeof OrganizationsIdOrSlugMcpServersServerIdRoute
@@ -436,12 +472,14 @@ export interface FileRoutesByTo {
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/registry/$entryId': typeof RegistryEntryIdRoute
   '/registry/new': typeof RegistryNewRoute
+  '/ai-clients': typeof AiClientsIndexRoute
   '/organizations': typeof OrganizationsIndexRoute
   '/platform-credentials': typeof PlatformCredentialsIndexRoute
   '/projects': typeof ProjectsIndexRoute
   '/registry': typeof RegistryIndexRoute
   '/remote-session-issuers': typeof RemoteSessionIssuersIndexRoute
   '/users': typeof UsersIndexRoute
+  '/ai-clients/products/$productId': typeof AiClientsProductsProductIdRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/assistants': typeof OrganizationsIdOrSlugAssistantsRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
@@ -454,6 +492,7 @@ export interface FileRoutesByTo {
   '/organizations/$idOrSlug/onboarding': typeof OrganizationsIdOrSlugOnboardingRoute
   '/remote-session-issuers/$issuerId/convergence': typeof RemoteSessionIssuersIssuerIdConvergenceRoute
   '/remote-session-issuers/$issuerId/settings': typeof RemoteSessionIssuersIssuerIdSettingsRoute
+  '/ai-clients/products': typeof AiClientsProductsIndexRoute
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugIndexRoute
   '/remote-session-issuers/$issuerId': typeof RemoteSessionIssuersIssuerIdIndexRoute
   '/organizations/$idOrSlug/mcp-servers/$serverId': typeof OrganizationsIdOrSlugMcpServersServerIdRoute
@@ -464,6 +503,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ai-clients': typeof AiClientsRouteWithChildren
   '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
@@ -486,18 +526,21 @@ export interface FileRoutesById {
   '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
+  '/ai-clients/products': typeof AiClientsProductsRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/platform-credentials/$credentialId': typeof PlatformCredentialsCredentialIdRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/registry/$entryId': typeof RegistryEntryIdRoute
   '/registry/new': typeof RegistryNewRoute
   '/remote-session-issuers/$issuerId': typeof RemoteSessionIssuersIssuerIdRouteWithChildren
+  '/ai-clients/': typeof AiClientsIndexRoute
   '/organizations/': typeof OrganizationsIndexRoute
   '/platform-credentials/': typeof PlatformCredentialsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/registry/': typeof RegistryIndexRoute
   '/remote-session-issuers/': typeof RemoteSessionIssuersIndexRoute
   '/users/': typeof UsersIndexRoute
+  '/ai-clients/products/$productId': typeof AiClientsProductsProductIdRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/assistants': typeof OrganizationsIdOrSlugAssistantsRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
@@ -511,6 +554,7 @@ export interface FileRoutesById {
   '/organizations/$idOrSlug/onboarding': typeof OrganizationsIdOrSlugOnboardingRoute
   '/remote-session-issuers/$issuerId/convergence': typeof RemoteSessionIssuersIssuerIdConvergenceRoute
   '/remote-session-issuers/$issuerId/settings': typeof RemoteSessionIssuersIssuerIdSettingsRoute
+  '/ai-clients/products/': typeof AiClientsProductsIndexRoute
   '/organizations/$idOrSlug/': typeof OrganizationsIdOrSlugIndexRoute
   '/remote-session-issuers/$issuerId/': typeof RemoteSessionIssuersIssuerIdIndexRoute
   '/organizations/$idOrSlug/mcp-servers/$serverId': typeof OrganizationsIdOrSlugMcpServersServerIdRoute
@@ -522,6 +566,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/ai-clients'
     | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
@@ -544,18 +589,21 @@ export interface FileRouteTypes {
     | '/tailscale-oauth-migration'
     | '/upstream-oauth-migration'
     | '/users'
+    | '/ai-clients/products'
     | '/organizations/$idOrSlug'
     | '/platform-credentials/$credentialId'
     | '/projects/$idOrSlug'
     | '/registry/$entryId'
     | '/registry/new'
     | '/remote-session-issuers/$issuerId'
+    | '/ai-clients/'
     | '/organizations/'
     | '/platform-credentials/'
     | '/projects/'
     | '/registry/'
     | '/remote-session-issuers/'
     | '/users/'
+    | '/ai-clients/products/$productId'
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/assistants'
     | '/organizations/$idOrSlug/billing'
@@ -569,6 +617,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/onboarding'
     | '/remote-session-issuers/$issuerId/convergence'
     | '/remote-session-issuers/$issuerId/settings'
+    | '/ai-clients/products/'
     | '/organizations/$idOrSlug/'
     | '/remote-session-issuers/$issuerId/'
     | '/organizations/$idOrSlug/mcp-servers/$serverId'
@@ -598,12 +647,14 @@ export interface FileRouteTypes {
     | '/projects/$idOrSlug'
     | '/registry/$entryId'
     | '/registry/new'
+    | '/ai-clients'
     | '/organizations'
     | '/platform-credentials'
     | '/projects'
     | '/registry'
     | '/remote-session-issuers'
     | '/users'
+    | '/ai-clients/products/$productId'
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/assistants'
     | '/organizations/$idOrSlug/billing'
@@ -616,6 +667,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/onboarding'
     | '/remote-session-issuers/$issuerId/convergence'
     | '/remote-session-issuers/$issuerId/settings'
+    | '/ai-clients/products'
     | '/organizations/$idOrSlug'
     | '/remote-session-issuers/$issuerId'
     | '/organizations/$idOrSlug/mcp-servers/$serverId'
@@ -625,6 +677,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/ai-clients'
     | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
@@ -647,18 +700,21 @@ export interface FileRouteTypes {
     | '/tailscale-oauth-migration'
     | '/upstream-oauth-migration'
     | '/users'
+    | '/ai-clients/products'
     | '/organizations/$idOrSlug'
     | '/platform-credentials/$credentialId'
     | '/projects/$idOrSlug'
     | '/registry/$entryId'
     | '/registry/new'
     | '/remote-session-issuers/$issuerId'
+    | '/ai-clients/'
     | '/organizations/'
     | '/platform-credentials/'
     | '/projects/'
     | '/registry/'
     | '/remote-session-issuers/'
     | '/users/'
+    | '/ai-clients/products/$productId'
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/assistants'
     | '/organizations/$idOrSlug/billing'
@@ -672,6 +728,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/onboarding'
     | '/remote-session-issuers/$issuerId/convergence'
     | '/remote-session-issuers/$issuerId/settings'
+    | '/ai-clients/products/'
     | '/organizations/$idOrSlug/'
     | '/remote-session-issuers/$issuerId/'
     | '/organizations/$idOrSlug/mcp-servers/$serverId'
@@ -682,6 +739,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AiClientsRoute: typeof AiClientsRouteWithChildren
   AssistantsRoute: typeof AssistantsRoute
   CustomDomainsRoute: typeof CustomDomainsRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
@@ -713,6 +771,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ai-clients': {
+      id: '/ai-clients'
+      path: '/ai-clients'
+      fullPath: '/ai-clients'
+      preLoaderRoute: typeof AiClientsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/assistants': {
@@ -869,6 +934,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UsersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ai-clients/': {
+      id: '/ai-clients/'
+      path: '/'
+      fullPath: '/ai-clients/'
+      preLoaderRoute: typeof AiClientsIndexRouteImport
+      parentRoute: typeof AiClientsRoute
+    }
+    '/ai-clients/products': {
+      id: '/ai-clients/products'
+      path: '/products'
+      fullPath: '/ai-clients/products'
+      preLoaderRoute: typeof AiClientsProductsRouteImport
+      parentRoute: typeof AiClientsRoute
+    }
     '/organizations/': {
       id: '/organizations/'
       path: '/'
@@ -952,6 +1031,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/users/'
       preLoaderRoute: typeof UsersIndexRouteImport
       parentRoute: typeof UsersRoute
+    }
+    '/ai-clients/products/': {
+      id: '/ai-clients/products/'
+      path: '/'
+      fullPath: '/ai-clients/products/'
+      preLoaderRoute: typeof AiClientsProductsIndexRouteImport
+      parentRoute: typeof AiClientsProductsRoute
+    }
+    '/ai-clients/products/$productId': {
+      id: '/ai-clients/products/$productId'
+      path: '/$productId'
+      fullPath: '/ai-clients/products/$productId'
+      preLoaderRoute: typeof AiClientsProductsProductIdRouteImport
+      parentRoute: typeof AiClientsProductsRoute
     }
     '/organizations/$idOrSlug/': {
       id: '/organizations/$idOrSlug/'
@@ -1088,6 +1181,33 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AiClientsProductsRouteChildren {
+  AiClientsProductsProductIdRoute: typeof AiClientsProductsProductIdRoute
+  AiClientsProductsIndexRoute: typeof AiClientsProductsIndexRoute
+}
+
+const AiClientsProductsRouteChildren: AiClientsProductsRouteChildren = {
+  AiClientsProductsProductIdRoute: AiClientsProductsProductIdRoute,
+  AiClientsProductsIndexRoute: AiClientsProductsIndexRoute,
+}
+
+const AiClientsProductsRouteWithChildren =
+  AiClientsProductsRoute._addFileChildren(AiClientsProductsRouteChildren)
+
+interface AiClientsRouteChildren {
+  AiClientsProductsRoute: typeof AiClientsProductsRouteWithChildren
+  AiClientsIndexRoute: typeof AiClientsIndexRoute
+}
+
+const AiClientsRouteChildren: AiClientsRouteChildren = {
+  AiClientsProductsRoute: AiClientsProductsRouteWithChildren,
+  AiClientsIndexRoute: AiClientsIndexRoute,
+}
+
+const AiClientsRouteWithChildren = AiClientsRoute._addFileChildren(
+  AiClientsRouteChildren,
+)
 
 interface OrganizationsIdOrSlugMcpServersRouteChildren {
   OrganizationsIdOrSlugMcpServersServerIdRoute: typeof OrganizationsIdOrSlugMcpServersServerIdRoute
@@ -1254,6 +1374,7 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AiClientsRoute: AiClientsRouteWithChildren,
   AssistantsRoute: AssistantsRoute,
   CustomDomainsRoute: CustomDomainsRoute,
   CustomerUsageRoute: CustomerUsageRoute,

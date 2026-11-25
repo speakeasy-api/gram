@@ -223,6 +223,7 @@ describe("AppSidebar", () => {
         label: "Platform Management",
         links: [
           { label: "MCP Registry", href: "/registry" },
+          { label: "AI clients", href: "/ai-clients/products" },
           { label: "Support matrix", href: "/integration-coverage" },
           { label: "Signup offers", href: "/signup-offers" },
           { label: "Steps", href: "/onboarding-steps" },

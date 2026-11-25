@@ -431,6 +431,91 @@ func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64
 	return result.RowsAffected(), nil
 }
 
+const adminGetAIProduct = `-- name: AdminGetAIProduct :one
+SELECT
+  p.id,
+  p.vendor_key,
+  p.display_name,
+  p.category,
+  ARRAY(SELECT e FROM unnest(p.bundle_ids) AS e WHERE e IS NOT NULL)::text[] AS bundle_ids,
+  ARRAY(SELECT e FROM unnest(p.binaries) AS e WHERE e IS NOT NULL)::text[] AS binaries,
+  ARRAY(SELECT e FROM unnest(p.config_dirs) AS e WHERE e IS NOT NULL)::text[] AS config_dirs,
+  ARRAY(SELECT e FROM unnest(p.process_names) AS e WHERE e IS NOT NULL)::text[] AS process_names,
+  p.version_plist_key,
+  ARRAY(SELECT e FROM unnest(p.client_info_names) AS e WHERE e IS NOT NULL)::text[] AS client_info_names,
+  p.created_by,
+  p.updated_by,
+  p.created_at,
+  p.updated_at,
+  p.deleted,
+  (
+    SELECT count(DISTINCT t.organization_id)
+    FROM ai_scan_targets t
+    WHERE t.status = 'blocked'
+      AND (
+        t.ai_product_id = p.id
+        OR (
+          t.id = p.id AND t.ai_product_id IS NULL
+          AND t.display_name IS NULL AND t.category IS NULL AND t.version_plist_key IS NULL
+          AND cardinality(t.bundle_ids) = 0 AND cardinality(t.binaries) = 0
+          AND cardinality(t.config_dirs) = 0 AND cardinality(t.process_names) = 0
+          AND cardinality(t.cimd_vendor_keys) = 0 AND cardinality(t.oauth_client_ids) = 0
+          AND cardinality(t.client_info_names) = 0
+        )
+      )
+  )::bigint AS blocked_organization_count
+FROM ai_products p
+WHERE p.id = $1
+`
+
+type AdminGetAIProductRow struct {
+	ID                       string
+	VendorKey                string
+	DisplayName              string
+	Category                 pgtype.Text
+	BundleIds                []string
+	Binaries                 []string
+	ConfigDirs               []string
+	ProcessNames             []string
+	VersionPlistKey          pgtype.Text
+	ClientInfoNames          []string
+	CreatedBy                pgtype.Text
+	UpdatedBy                pgtype.Text
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+	Deleted                  bool
+	BlockedOrganizationCount int64
+}
+
+// NULL array elements are dropped and nested arrays flattened so one bad row
+// cannot fail the read. The block count counts organizations, not rows. A row
+// matches by its catalog link, or by id only when it is a legacy unlinked
+// decision-only row, so an organization's own target that reuses the id is
+// not counted.
+func (q *Queries) AdminGetAIProduct(ctx context.Context, id string) (AdminGetAIProductRow, error) {
+	row := q.db.QueryRow(ctx, adminGetAIProduct, id)
+	var i AdminGetAIProductRow
+	err := row.Scan(
+		&i.ID,
+		&i.VendorKey,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.ClientInfoNames,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Deleted,
+		&i.BlockedOrganizationCount,
+	)
+	return i, err
+}
+
 const adminGetConnectGrantExpiryFixture = `-- name: AdminGetConnectGrantExpiryFixture :one
 SELECT expires_at
 FROM principal_grants
@@ -1088,6 +1173,144 @@ func (q *Queries) AdminInsertPrincipalGrantFixture(ctx context.Context, arg Admi
 		arg.CreatedAt,
 	)
 	return err
+}
+
+const adminListAIProductDocuments = `-- name: AdminListAIProductDocuments :many
+SELECT
+  id,
+  url,
+  display_name,
+  enabled,
+  is_pattern,
+  verified_at,
+  verification_error,
+  created_by,
+  updated_by,
+  deleted,
+  created_at,
+  updated_at
+FROM ai_product_cimd_documents
+WHERE ai_product_id = $1
+ORDER BY deleted, url COLLATE "C", id
+`
+
+type AdminListAIProductDocumentsRow struct {
+	ID                uuid.UUID
+	Url               string
+	DisplayName       string
+	Enabled           bool
+	IsPattern         bool
+	VerifiedAt        pgtype.Timestamptz
+	VerificationError pgtype.Text
+	CreatedBy         pgtype.Text
+	UpdatedBy         pgtype.Text
+	Deleted           bool
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListAIProductDocuments(ctx context.Context, aiProductID string) ([]AdminListAIProductDocumentsRow, error) {
+	rows, err := q.db.Query(ctx, adminListAIProductDocuments, aiProductID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListAIProductDocumentsRow
+	for rows.Next() {
+		var i AdminListAIProductDocumentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Url,
+			&i.DisplayName,
+			&i.Enabled,
+			&i.IsPattern,
+			&i.VerifiedAt,
+			&i.VerificationError,
+			&i.CreatedBy,
+			&i.UpdatedBy,
+			&i.Deleted,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListAIProducts = `-- name: AdminListAIProducts :many
+
+SELECT
+  p.id,
+  p.display_name,
+  p.category,
+  p.vendor_key,
+  p.deleted,
+  p.updated_at,
+  (
+    SELECT count(*)
+    FROM ai_product_cimd_documents d
+    WHERE d.ai_product_id = p.id AND d.deleted IS FALSE
+  )::bigint AS document_count
+FROM ai_products p
+WHERE ($1::boolean OR p.deleted IS FALSE)
+  AND (
+    $2::text IS NULL
+    OR strpos(lower(p.id), lower($2::text)) > 0
+    OR strpos(lower(p.display_name), lower($2::text)) > 0
+  )
+ORDER BY p.deleted, lower(p.display_name), p.id COLLATE "C"
+LIMIT $3
+`
+
+type AdminListAIProductsParams struct {
+	IncludeDeleted bool
+	Query          pgtype.Text
+	RowLimit       int32
+}
+
+type AdminListAIProductsRow struct {
+	ID            string
+	DisplayName   string
+	Category      pgtype.Text
+	VendorKey     string
+	Deleted       bool
+	UpdatedAt     pgtype.Timestamptz
+	DocumentCount int64
+}
+
+// The AI client catalog is global reference data, not tenant-owned, so these
+// reads have no organization or project scope. Read-only.
+func (q *Queries) AdminListAIProducts(ctx context.Context, arg AdminListAIProductsParams) ([]AdminListAIProductsRow, error) {
+	rows, err := q.db.Query(ctx, adminListAIProducts, arg.IncludeDeleted, arg.Query, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListAIProductsRow
+	for rows.Next() {
+		var i AdminListAIProductsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.Category,
+			&i.VendorKey,
+			&i.Deleted,
+			&i.UpdatedAt,
+			&i.DocumentCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const adminListAssistantAgentNames = `-- name: AdminListAssistantAgentNames :many

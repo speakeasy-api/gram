@@ -18339,6 +18339,475 @@ func DecodeSetRegistryEntryPublishedResponse(decoder func(*http.Response) goahtt
 	}
 }
 
+// BuildListAIProductsRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "listAIProducts" endpoint
+func (c *Client) BuildListAIProductsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAIProductsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listAIProducts", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListAIProductsRequest returns an encoder for requests sent to the
+// admin listAIProducts server.
+func EncodeListAIProductsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListAIProductsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listAIProducts", "*admin.ListAIProductsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		if p.Query != nil {
+			values.Add("query", *p.Query)
+		}
+		values.Add("include_deleted", fmt.Sprintf("%v", p.IncludeDeleted))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListAIProductsResponse returns a decoder for responses returned by the
+// admin listAIProducts endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeListAIProductsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListAIProductsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListAIProductsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listAIProducts", err)
+			}
+			err = ValidateListAIProductsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listAIProducts", err)
+			}
+			res := NewListAIProductsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListAIProductsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listAIProducts", err)
+			}
+			err = ValidateListAIProductsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listAIProducts", err)
+			}
+			return nil, NewListAIProductsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListAIProductsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listAIProducts", err)
+			}
+			err = ValidateListAIProductsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listAIProducts", err)
+			}
+			return nil, NewListAIProductsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListAIProductsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listAIProducts", err)
+			}
+			err = ValidateListAIProductsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listAIProducts", err)
+			}
+			return nil, NewListAIProductsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListAIProductsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listAIProducts", err)
+			}
+			err = ValidateListAIProductsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listAIProducts", err)
+			}
+			return nil, NewListAIProductsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListAIProductsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listAIProducts", err)
+			}
+			err = ValidateListAIProductsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listAIProducts", err)
+			}
+			return nil, NewListAIProductsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListAIProductsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listAIProducts", err)
+			}
+			err = ValidateListAIProductsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listAIProducts", err)
+			}
+			return nil, NewListAIProductsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListAIProductsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listAIProducts", err)
+			}
+			err = ValidateListAIProductsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listAIProducts", err)
+			}
+			return nil, NewListAIProductsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListAIProductsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listAIProducts", err)
+				}
+				err = ValidateListAIProductsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listAIProducts", err)
+				}
+				return nil, NewListAIProductsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListAIProductsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listAIProducts", err)
+				}
+				err = ValidateListAIProductsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listAIProducts", err)
+				}
+				return nil, NewListAIProductsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listAIProducts", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListAIProductsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listAIProducts", err)
+			}
+			err = ValidateListAIProductsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listAIProducts", err)
+			}
+			return nil, NewListAIProductsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listAIProducts", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetAIProductRequest instantiates a HTTP request object with method and
+// path set to call the "admin" service "getAIProduct" endpoint
+func (c *Client) BuildGetAIProductRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetAIProductAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getAIProduct", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetAIProductRequest returns an encoder for requests sent to the admin
+// getAIProduct server.
+func EncodeGetAIProductRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetAIProductPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getAIProduct", "*admin.GetAIProductPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetAIProductResponse returns a decoder for responses returned by the
+// admin getAIProduct endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetAIProductResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetAIProductResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetAIProductResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getAIProduct", err)
+			}
+			err = ValidateGetAIProductResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getAIProduct", err)
+			}
+			res := NewGetAIProductAdminAIProductOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetAIProductUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getAIProduct", err)
+			}
+			err = ValidateGetAIProductUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getAIProduct", err)
+			}
+			return nil, NewGetAIProductUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetAIProductForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getAIProduct", err)
+			}
+			err = ValidateGetAIProductForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getAIProduct", err)
+			}
+			return nil, NewGetAIProductForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetAIProductBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getAIProduct", err)
+			}
+			err = ValidateGetAIProductBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getAIProduct", err)
+			}
+			return nil, NewGetAIProductBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetAIProductNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getAIProduct", err)
+			}
+			err = ValidateGetAIProductNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getAIProduct", err)
+			}
+			return nil, NewGetAIProductNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetAIProductConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getAIProduct", err)
+			}
+			err = ValidateGetAIProductConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getAIProduct", err)
+			}
+			return nil, NewGetAIProductConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetAIProductUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getAIProduct", err)
+			}
+			err = ValidateGetAIProductUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getAIProduct", err)
+			}
+			return nil, NewGetAIProductUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetAIProductInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getAIProduct", err)
+			}
+			err = ValidateGetAIProductInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getAIProduct", err)
+			}
+			return nil, NewGetAIProductInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetAIProductInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getAIProduct", err)
+				}
+				err = ValidateGetAIProductInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getAIProduct", err)
+				}
+				return nil, NewGetAIProductInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetAIProductUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getAIProduct", err)
+				}
+				err = ValidateGetAIProductUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getAIProduct", err)
+				}
+				return nil, NewGetAIProductUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getAIProduct", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetAIProductGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getAIProduct", err)
+			}
+			err = ValidateGetAIProductGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getAIProduct", err)
+			}
+			return nil, NewGetAIProductGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getAIProduct", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListOnboardingStepsRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "listOnboardingSteps"
 // endpoint
@@ -34128,6 +34597,45 @@ func unmarshalAdminRegistryIssueResponseBodyToAdminAdminRegistryIssue(v *AdminRe
 	res := &admin.AdminRegistryIssue{
 		Path:    *v.Path,
 		Message: *v.Message,
+	}
+
+	return res
+}
+
+// unmarshalAdminAIProductSummaryResponseBodyToAdminAdminAIProductSummary
+// builds a value of type *admin.AdminAIProductSummary from a value of type
+// *AdminAIProductSummaryResponseBody.
+func unmarshalAdminAIProductSummaryResponseBodyToAdminAdminAIProductSummary(v *AdminAIProductSummaryResponseBody) *admin.AdminAIProductSummary {
+	res := &admin.AdminAIProductSummary{
+		ID:            *v.ID,
+		DisplayName:   *v.DisplayName,
+		Category:      v.Category,
+		VendorKey:     *v.VendorKey,
+		DocumentCount: *v.DocumentCount,
+		Deleted:       *v.Deleted,
+		UpdatedAt:     *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalAdminAIProductDocumentResponseBodyToAdminAdminAIProductDocument
+// builds a value of type *admin.AdminAIProductDocument from a value of type
+// *AdminAIProductDocumentResponseBody.
+func unmarshalAdminAIProductDocumentResponseBodyToAdminAdminAIProductDocument(v *AdminAIProductDocumentResponseBody) *admin.AdminAIProductDocument {
+	res := &admin.AdminAIProductDocument{
+		ID:                *v.ID,
+		URL:               *v.URL,
+		DisplayName:       *v.DisplayName,
+		Enabled:           *v.Enabled,
+		IsPattern:         *v.IsPattern,
+		VerifiedAt:        v.VerifiedAt,
+		VerificationError: v.VerificationError,
+		CreatedBy:         v.CreatedBy,
+		UpdatedBy:         v.UpdatedBy,
+		Deleted:           *v.Deleted,
+		CreatedAt:         *v.CreatedAt,
+		UpdatedAt:         *v.UpdatedAt,
 	}
 
 	return res

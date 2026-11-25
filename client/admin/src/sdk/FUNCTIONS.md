@@ -20,7 +20,7 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/admin-client/core.js";
-import { adminServeImage } from "@gram/admin-client/funcs/adminServeImage.js";
+import { adminGetAIProduct } from "@gram/admin-client/funcs/adminGetAIProduct.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -29,14 +29,14 @@ const gram = new GramCore({
 });
 
 async function run() {
-  const res = await adminServeImage(gram, {
+  const res = await adminGetAIProduct(gram, {
     id: "<id>",
   });
   if (res.ok) {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("adminServeImage failed:", res.error);
+    console.log("adminGetAIProduct failed:", res.error);
   }
 }
 

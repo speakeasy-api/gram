@@ -7457,6 +7457,35 @@ func (q *Queries) SetDirectoryUserWorkOSDeletedFixture(ctx context.Context, work
 	return err
 }
 
+const setDocumentCheckFixture = `-- name: SetDocumentCheckFixture :exec
+UPDATE ai_product_cimd_documents
+SET verified_at = $1,
+    verification_error = $2,
+    created_by = $3,
+    updated_by = $4
+WHERE id = $5
+`
+
+type SetDocumentCheckFixtureParams struct {
+	VerifiedAt        pgtype.Timestamptz
+	VerificationError pgtype.Text
+	CreatedBy         pgtype.Text
+	UpdatedBy         pgtype.Text
+	ID                uuid.UUID
+}
+
+// Records a document check result and staff authorship, which no seed writes.
+func (q *Queries) SetDocumentCheckFixture(ctx context.Context, arg SetDocumentCheckFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDocumentCheckFixture,
+		arg.VerifiedAt,
+		arg.VerificationError,
+		arg.CreatedBy,
+		arg.UpdatedBy,
+		arg.ID,
+	)
+	return err
+}
+
 const setFunctionToolVariables = `-- name: SetFunctionToolVariables :exec
 UPDATE function_tool_definitions
 SET variables = $1

@@ -320,6 +320,14 @@ type Client struct {
 	// the setRegistryEntryPublished endpoint.
 	SetRegistryEntryPublishedDoer goahttp.Doer
 
+	// ListAIProducts Doer is the HTTP client used to make requests to the
+	// listAIProducts endpoint.
+	ListAIProductsDoer goahttp.Doer
+
+	// GetAIProduct Doer is the HTTP client used to make requests to the
+	// getAIProduct endpoint.
+	GetAIProductDoer goahttp.Doer
+
 	// ListOnboardingSteps Doer is the HTTP client used to make requests to the
 	// listOnboardingSteps endpoint.
 	ListOnboardingStepsDoer goahttp.Doer
@@ -656,6 +664,8 @@ func NewClient(
 		CreateRegistryEntryDoer:                     doer,
 		SaveRegistryEntryDoer:                       doer,
 		SetRegistryEntryPublishedDoer:               doer,
+		ListAIProductsDoer:                          doer,
+		GetAIProductDoer:                            doer,
 		ListOnboardingStepsDoer:                     doer,
 		GetOnboardingStackOptionsDoer:               doer,
 		GetOrganizationOnboardingStackDoer:          doer,
@@ -2548,6 +2558,54 @@ func (c *Client) SetRegistryEntryPublished() goa.Endpoint {
 		resp, err := c.SetRegistryEntryPublishedDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "setRegistryEntryPublished", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAIProducts returns an endpoint that makes HTTP requests to the admin
+// service listAIProducts server.
+func (c *Client) ListAIProducts() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAIProductsRequest(c.encoder)
+		decodeResponse = DecodeListAIProductsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAIProductsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAIProductsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listAIProducts", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetAIProduct returns an endpoint that makes HTTP requests to the admin
+// service getAIProduct server.
+func (c *Client) GetAIProduct() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetAIProductRequest(c.encoder)
+		decodeResponse = DecodeGetAIProductResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetAIProductRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetAIProductDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getAIProduct", err)
 		}
 		return decodeResponse(resp)
 	}

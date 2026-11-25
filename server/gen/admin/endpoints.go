@@ -93,6 +93,8 @@ type Endpoints struct {
 	CreateRegistryEntry                     goa.Endpoint
 	SaveRegistryEntry                       goa.Endpoint
 	SetRegistryEntryPublished               goa.Endpoint
+	ListAIProducts                          goa.Endpoint
+	GetAIProduct                            goa.Endpoint
 	ListOnboardingSteps                     goa.Endpoint
 	GetOnboardingStackOptions               goa.Endpoint
 	GetOrganizationOnboardingStack          goa.Endpoint
@@ -254,6 +256,8 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateRegistryEntry:                     NewCreateRegistryEntryEndpoint(s, a.APIKeyAuth),
 		SaveRegistryEntry:                       NewSaveRegistryEntryEndpoint(s, a.APIKeyAuth),
 		SetRegistryEntryPublished:               NewSetRegistryEntryPublishedEndpoint(s, a.APIKeyAuth),
+		ListAIProducts:                          NewListAIProductsEndpoint(s, a.APIKeyAuth),
+		GetAIProduct:                            NewGetAIProductEndpoint(s, a.APIKeyAuth),
 		ListOnboardingSteps:                     NewListOnboardingStepsEndpoint(s, a.APIKeyAuth),
 		GetOnboardingStackOptions:               NewGetOnboardingStackOptionsEndpoint(s, a.APIKeyAuth),
 		GetOrganizationOnboardingStack:          NewGetOrganizationOnboardingStackEndpoint(s, a.APIKeyAuth),
@@ -395,6 +399,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRegistryEntry = m(e.CreateRegistryEntry)
 	e.SaveRegistryEntry = m(e.SaveRegistryEntry)
 	e.SetRegistryEntryPublished = m(e.SetRegistryEntryPublished)
+	e.ListAIProducts = m(e.ListAIProducts)
+	e.GetAIProduct = m(e.GetAIProduct)
 	e.ListOnboardingSteps = m(e.ListOnboardingSteps)
 	e.GetOnboardingStackOptions = m(e.GetOnboardingStackOptions)
 	e.GetOrganizationOnboardingStack = m(e.GetOrganizationOnboardingStack)
@@ -2163,6 +2169,52 @@ func NewSetRegistryEntryPublishedEndpoint(s Service, authAPIKeyFn security.AuthA
 			return nil, err
 		}
 		return s.SetRegistryEntryPublished(ctx, p)
+	}
+}
+
+// NewListAIProductsEndpoint returns an endpoint function that calls the method
+// "listAIProducts" of service "admin".
+func NewListAIProductsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAIProductsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAIProducts(ctx, p)
+	}
+}
+
+// NewGetAIProductEndpoint returns an endpoint function that calls the method
+// "getAIProduct" of service "admin".
+func NewGetAIProductEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetAIProductPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetAIProduct(ctx, p)
 	}
 }
 

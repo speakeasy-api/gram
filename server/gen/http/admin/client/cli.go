@@ -2837,6 +2837,72 @@ func BuildSetRegistryEntryPublishedPayload(adminSetRegistryEntryPublishedBody st
 	return v, nil
 }
 
+// BuildListAIProductsPayload builds the payload for the admin listAIProducts
+// endpoint from CLI flags.
+func BuildListAIProductsPayload(adminListAIProductsQuery string, adminListAIProductsIncludeDeleted string, adminListAIProductsAdminSessionToken string) (*admin.ListAIProductsPayload, error) {
+	var err error
+	var query *string
+	{
+		if adminListAIProductsQuery != "" {
+			query = &adminListAIProductsQuery
+			if utf8.RuneCountInString(*query) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 256, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var includeDeleted bool
+	{
+		if adminListAIProductsIncludeDeleted != "" {
+			includeDeleted, err = strconv.ParseBool(adminListAIProductsIncludeDeleted)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeDeleted, must be BOOL")
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListAIProductsAdminSessionToken != "" {
+			adminSessionToken = &adminListAIProductsAdminSessionToken
+		}
+	}
+	v := &admin.ListAIProductsPayload{}
+	v.Query = query
+	v.IncludeDeleted = includeDeleted
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetAIProductPayload builds the payload for the admin getAIProduct
+// endpoint from CLI flags.
+func BuildGetAIProductPayload(adminGetAIProductID string, adminGetAIProductAdminSessionToken string) (*admin.GetAIProductPayload, error) {
+	var err error
+	var id string
+	{
+		id = adminGetAIProductID
+		if utf8.RuneCountInString(id) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("id", id, utf8.RuneCountInString(id), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetAIProductAdminSessionToken != "" {
+			adminSessionToken = &adminGetAIProductAdminSessionToken
+		}
+	}
+	v := &admin.GetAIProductPayload{}
+	v.ID = id
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOnboardingStepsPayload builds the payload for the admin
 // listOnboardingSteps endpoint from CLI flags.
 func BuildListOnboardingStepsPayload(adminListOnboardingStepsAdminSessionToken string) (*admin.ListOnboardingStepsPayload, error) {

@@ -387,6 +387,16 @@ func SetRegistryEntryPublishedAdminPath() string {
 	return "/admin/registry.setPublished"
 }
 
+// ListAIProductsAdminPath returns the URL path to the admin service listAIProducts HTTP endpoint.
+func ListAIProductsAdminPath() string {
+	return "/admin/aiProducts.list"
+}
+
+// GetAIProductAdminPath returns the URL path to the admin service getAIProduct HTTP endpoint.
+func GetAIProductAdminPath() string {
+	return "/admin/aiProducts.get"
+}
+
 // ListOnboardingStepsAdminPath returns the URL path to the admin service listOnboardingSteps HTTP endpoint.
 func ListOnboardingStepsAdminPath() string {
 	return "/admin/onboarding.steps"

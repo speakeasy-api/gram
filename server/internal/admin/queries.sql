@@ -1554,3 +1554,88 @@ LEFT JOIN organization_encryption_transitions t
   AND t.use_case = @use_case
 GROUP BY 1
 ORDER BY 1;
+
+-- The AI client catalog is global reference data, not tenant-owned, so these
+-- reads have no organization or project scope. Read-only.
+
+-- name: AdminListAIProducts :many
+SELECT
+  p.id,
+  p.display_name,
+  p.category,
+  p.vendor_key,
+  p.deleted,
+  p.updated_at,
+  (
+    SELECT count(*)
+    FROM ai_product_cimd_documents d
+    WHERE d.ai_product_id = p.id AND d.deleted IS FALSE
+  )::bigint AS document_count
+FROM ai_products p
+WHERE (@include_deleted::boolean OR p.deleted IS FALSE)
+  AND (
+    sqlc.narg('query')::text IS NULL
+    OR strpos(lower(p.id), lower(sqlc.narg('query')::text)) > 0
+    OR strpos(lower(p.display_name), lower(sqlc.narg('query')::text)) > 0
+  )
+ORDER BY p.deleted, lower(p.display_name), p.id COLLATE "C"
+LIMIT @row_limit;
+
+-- NULL array elements are dropped and nested arrays flattened so one bad row
+-- cannot fail the read. The block count counts organizations, not rows. A row
+-- matches by its catalog link, or by id only when it is a legacy unlinked
+-- decision-only row, so an organization's own target that reuses the id is
+-- not counted.
+-- name: AdminGetAIProduct :one
+SELECT
+  p.id,
+  p.vendor_key,
+  p.display_name,
+  p.category,
+  ARRAY(SELECT e FROM unnest(p.bundle_ids) AS e WHERE e IS NOT NULL)::text[] AS bundle_ids,
+  ARRAY(SELECT e FROM unnest(p.binaries) AS e WHERE e IS NOT NULL)::text[] AS binaries,
+  ARRAY(SELECT e FROM unnest(p.config_dirs) AS e WHERE e IS NOT NULL)::text[] AS config_dirs,
+  ARRAY(SELECT e FROM unnest(p.process_names) AS e WHERE e IS NOT NULL)::text[] AS process_names,
+  p.version_plist_key,
+  ARRAY(SELECT e FROM unnest(p.client_info_names) AS e WHERE e IS NOT NULL)::text[] AS client_info_names,
+  p.created_by,
+  p.updated_by,
+  p.created_at,
+  p.updated_at,
+  p.deleted,
+  (
+    SELECT count(DISTINCT t.organization_id)
+    FROM ai_scan_targets t
+    WHERE t.status = 'blocked'
+      AND (
+        t.ai_product_id = p.id
+        OR (
+          t.id = p.id AND t.ai_product_id IS NULL
+          AND t.display_name IS NULL AND t.category IS NULL AND t.version_plist_key IS NULL
+          AND cardinality(t.bundle_ids) = 0 AND cardinality(t.binaries) = 0
+          AND cardinality(t.config_dirs) = 0 AND cardinality(t.process_names) = 0
+          AND cardinality(t.cimd_vendor_keys) = 0 AND cardinality(t.oauth_client_ids) = 0
+          AND cardinality(t.client_info_names) = 0
+        )
+      )
+  )::bigint AS blocked_organization_count
+FROM ai_products p
+WHERE p.id = @id;
+
+-- name: AdminListAIProductDocuments :many
+SELECT
+  id,
+  url,
+  display_name,
+  enabled,
+  is_pattern,
+  verified_at,
+  verification_error,
+  created_by,
+  updated_by,
+  deleted,
+  created_at,
+  updated_at
+FROM ai_product_cimd_documents
+WHERE ai_product_id = @ai_product_id
+ORDER BY deleted, url COLLATE "C", id;
