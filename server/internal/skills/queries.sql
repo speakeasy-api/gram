@@ -1195,6 +1195,15 @@ WHERE project_id = @project_id
   AND skill_version_id = @skill_version_id
 ORDER BY path;
 
+-- name: ListSkillVersionFilesForVersions :many
+-- Lists the supporting files of several versions with their content, so a
+-- page of suggestions loads its base files in one query.
+SELECT skill_version_id, path, content, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_version_id = ANY(@skill_version_ids::uuid[])
+ORDER BY skill_version_id, path;
+
 -- name: GetSkillVersionFile :one
 SELECT path, content, sha256, size_bytes, content_type
 FROM skill_version_files

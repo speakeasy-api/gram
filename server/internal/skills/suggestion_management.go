@@ -102,18 +102,25 @@ func (s *Service) ListSuggestions(ctx context.Context, payload *gen.ListSuggesti
 	}
 
 	// Only suggestions that edit a supporting file need their base files to
-	// show whether those edits still apply.
-	baseFiles := make(map[uuid.UUID][]skilltree.File)
+	// show whether those edits still apply. The page's base versions are read
+	// in one query.
+	var baseVersionIDs []uuid.UUID
 	for i := range rows {
 		suggestion := rows[i].SkillEditSuggestion
-		if _, loaded := baseFiles[suggestion.ID]; loaded || !editsSupportingFile(changes, suggestion.ID) {
-			continue
+		if editsSupportingFile(changes, suggestion.ID) && !slices.Contains(baseVersionIDs, suggestion.BaseVersionID) {
+			baseVersionIDs = append(baseVersionIDs, suggestion.BaseVersionID)
 		}
-		files, loadErr := LoadSkillVersionFiles(ctx, queries, *authCtx.ProjectID, suggestion.SkillID, suggestion.BaseVersionID)
-		if loadErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, loadErr, "load skill suggestion base files").LogError(ctx, logger)
+	}
+	versionFiles, err := LoadSkillVersionFilesForVersions(ctx, queries, *authCtx.ProjectID, baseVersionIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load skill suggestion base files").LogError(ctx, logger)
+	}
+	baseFiles := make(map[uuid.UUID][]skilltree.File, len(baseVersionIDs))
+	for i := range rows {
+		suggestion := rows[i].SkillEditSuggestion
+		if files, ok := versionFiles[suggestion.BaseVersionID]; ok && editsSupportingFile(changes, suggestion.ID) {
+			baseFiles[suggestion.ID] = files
 		}
-		baseFiles[suggestion.ID] = files
 	}
 
 	return &gen.ListSkillSuggestionsResult{

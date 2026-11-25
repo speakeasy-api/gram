@@ -5136,6 +5136,53 @@ func (q *Queries) ListSkillVersionFiles(ctx context.Context, arg ListSkillVersio
 	return items, nil
 }
 
+const listSkillVersionFilesForVersions = `-- name: ListSkillVersionFilesForVersions :many
+SELECT skill_version_id, path, content, content_type
+FROM skill_version_files
+WHERE project_id = $1
+  AND skill_version_id = ANY($2::uuid[])
+ORDER BY skill_version_id, path
+`
+
+type ListSkillVersionFilesForVersionsParams struct {
+	ProjectID       uuid.UUID
+	SkillVersionIds []uuid.UUID
+}
+
+type ListSkillVersionFilesForVersionsRow struct {
+	SkillVersionID uuid.UUID
+	Path           string
+	Content        []byte
+	ContentType    string
+}
+
+// Lists the supporting files of several versions with their content, so a
+// page of suggestions loads its base files in one query.
+func (q *Queries) ListSkillVersionFilesForVersions(ctx context.Context, arg ListSkillVersionFilesForVersionsParams) ([]ListSkillVersionFilesForVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listSkillVersionFilesForVersions, arg.ProjectID, arg.SkillVersionIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillVersionFilesForVersionsRow
+	for rows.Next() {
+		var i ListSkillVersionFilesForVersionsRow
+		if err := rows.Scan(
+			&i.SkillVersionID,
+			&i.Path,
+			&i.Content,
+			&i.ContentType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSkillVersionPromptInjectionFindings = `-- name: ListSkillVersionPromptInjectionFindings :many
 SELECT DISTINCT
   COALESCE(rr.rule_id, 'prompt_injection')::text AS rule_id,

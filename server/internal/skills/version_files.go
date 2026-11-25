@@ -30,6 +30,29 @@ func LoadSkillVersionFiles(ctx context.Context, queries *repo.Queries, projectID
 	return files, nil
 }
 
+// LoadSkillVersionFilesForVersions returns the supporting files of several
+// versions with their content, keyed by version and sorted by path, in one
+// query. A version with no supporting files has no key.
+func LoadSkillVersionFilesForVersions(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, versionIDs []uuid.UUID) (map[uuid.UUID][]skilltree.File, error) {
+	files := make(map[uuid.UUID][]skilltree.File, len(versionIDs))
+	if len(versionIDs) == 0 {
+		return files, nil
+	}
+
+	rows, err := queries.ListSkillVersionFilesForVersions(ctx, repo.ListSkillVersionFilesForVersionsParams{
+		ProjectID:       projectID,
+		SkillVersionIds: versionIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list skill version files for versions: %w", err)
+	}
+
+	for _, row := range rows {
+		files[row.SkillVersionID] = append(files[row.SkillVersionID], skilltree.File{Path: row.Path, Content: row.Content, ContentType: row.ContentType})
+	}
+	return files, nil
+}
+
 // LoadSuggestionTree returns the content a suggestion against versionID edits:
 // manifest, which the caller already holds, plus the version's supporting
 // files.
