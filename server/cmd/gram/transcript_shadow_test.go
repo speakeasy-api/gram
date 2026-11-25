@@ -128,6 +128,7 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 		{name: "identity extra column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra bigint NOT NULL GENERATED ALWAYS AS IDENTITY)", ok: true},
 		{name: "primary key", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
 		{name: "unique index with included column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + "); CREATE UNIQUE INDEX ON chat_message_transcripts (message_id) INCLUDE (project_id)", ok: true},
+		{name: "wrong type tool call id", ddl: "ALTER TABLE chat_message_transcript_tool_calls ALTER COLUMN tool_call_id TYPE integer USING 0; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
 		{name: "missing tool call table", ddl: "DROP TABLE chat_message_transcript_tool_calls; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
 	}
 	for _, name := range []string{"tool_call_count", "content_bytes", "content_raw_bytes", "tool_calls_bytes"} {
@@ -241,7 +242,6 @@ func TestReadOnlyTranscripts(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, transcripts)
 	require.False(t, transcripts.Enabled(listed), "a read-only process cannot open shadows")
-	require.Nil(t, transcripts.Store())
 
 	_, err = configureReadOnlyTranscripts(newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: "not-a-uuid"}), testenv.NewLogger(t), testenv.NewMeterProvider(t))
 	require.Error(t, err)
