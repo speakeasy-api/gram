@@ -2956,14 +2956,14 @@ WITH scoped_live_credentials AS MATERIALIZED (
     FROM user_sessions AS session
     JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
     LEFT JOIN projects AS project ON project.id = issuer.project_id
-    WHERE $5::uuid IS NOT NULL
-      AND issuer.id = $5::uuid
+    WHERE $4::uuid IS NOT NULL
+      AND issuer.id = $4::uuid
       AND issuer.deleted IS FALSE
       AND (
-        (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
-        OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+        (issuer.project_id IS NULL AND issuer.organization_id = $1::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $1::text AND project.deleted IS FALSE)
       )
-      AND (session.organization_id IS NULL OR session.organization_id = $2::text)
+      AND (session.organization_id IS NULL OR session.organization_id = $1::text)
       AND session.deleted IS FALSE
       AND session.refresh_expires_at > clock_timestamp()
 )
@@ -3020,18 +3020,13 @@ SELECT sel.id,
          JOIN remote_session_issuers AS rsi
            ON rsi.id = c.remote_session_issuer_id
           AND rsi.deleted IS FALSE
-         JOIN projects AS project ON project.id = sel.project_id
-           AND project.organization_id = sel.organization_id AND NOT project.deleted
          WHERE c.id = sel.remote_session_client_id
-           AND (c.project_id = project.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = project.organization_id)))
-           AND (rsi.project_id = project.id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = project.organization_id)))
            AND c.deleted IS FALSE
        )::boolean AS registration_live,
        ARRAY(
          SELECT link.user_session_issuer_id
          FROM remote_session_client_user_session_issuers AS link
-         WHERE NOT $1::boolean
-           AND link.remote_session_client_id = sel.remote_session_client_id
+         WHERE link.remote_session_client_id = sel.remote_session_client_id
          ORDER BY link.user_session_issuer_id
        )::uuid[] AS registration_issuer_ids,
        ARRAY(
@@ -3040,11 +3035,8 @@ SELECT sel.id,
          JOIN mcp_server_auth_clients AS l
            ON l.auth_client_id = ac.id
           AND l.mcp_server_id = sel.mcp_server_id
-          AND l.project_id = sel.project_id
-          AND l.organization_id = sel.organization_id
           AND l.deleted IS FALSE
          WHERE ac.organization_id = sel.organization_id
-           AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
            AND ac.deleted IS FALSE
            AND ac.enabled
            AND (
@@ -3248,13 +3240,13 @@ SELECT sel.id,
            )
        )::uuid[] AS ema_gateway_issuer_ids
 FROM upstream_client_selections AS sel
-WHERE sel.organization_id = $2::text
+WHERE sel.organization_id = $1::text
   AND sel.credential_kind = 'user_session'
   AND sel.deleted IS FALSE
-  AND ($3::uuid[] IS NULL
-       OR sel.mcp_server_id = ANY($3::uuid[]))
-  AND (NOT $4::boolean OR sel.auth_client_id IS NULL)
-  AND ($5::uuid IS NULL
+  AND ($2::uuid[] IS NULL
+       OR sel.mcp_server_id = ANY($2::uuid[]))
+  AND (NOT $3::boolean OR sel.auth_client_id IS NULL)
+  AND ($4::uuid IS NULL
        OR sel.credential_id IN (SELECT credential_id FROM scoped_live_credentials))
   -- A choice for a deleted server is kept as history but is never served
   -- again, so it is not live coverage.
@@ -3264,14 +3256,13 @@ WHERE sel.organization_id = $2::text
     WHERE live_server.id = sel.mcp_server_id
       AND live_server.deleted IS FALSE
   )
-  AND sel.id > $6::uuid
-  AND ($7::uuid IS NULL OR sel.id = $7::uuid)
+  AND sel.id > $5::uuid
+  AND ($6::uuid IS NULL OR sel.id = $6::uuid)
 ORDER BY sel.id
-LIMIT $8::int
+LIMIT $7::int
 `
 
 type ListSelectionMappingsParams struct {
-	TypedOfferRepair         bool
 	OrganizationID           string
 	ScopeMcpServerIds        []uuid.UUID
 	OnlyUnmapped             bool
@@ -3328,7 +3319,6 @@ type ListSelectionMappingsRow struct {
 // is canonical; legacy sessions may omit their denormalized organization.
 func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMappingsParams) ([]ListSelectionMappingsRow, error) {
 	rows, err := q.db.Query(ctx, listSelectionMappings,
-		arg.TypedOfferRepair,
 		arg.OrganizationID,
 		arg.ScopeMcpServerIds,
 		arg.OnlyUnmapped,
@@ -4373,7 +4363,6 @@ WHERE sel.id = ANY($1::uuid[])
   AND sel.remote_session_client_id IS NOT DISTINCT FROM $5::uuid
   AND ac.id = $6::uuid
   AND ac.organization_id = sel.organization_id
-  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
   AND ac.deleted IS FALSE
   AND ac.enabled
   AND EXISTS (
@@ -4381,8 +4370,6 @@ WHERE sel.id = ANY($1::uuid[])
     FROM mcp_server_auth_clients AS l
     WHERE l.auth_client_id = ac.id
       AND l.mcp_server_id = sel.mcp_server_id
-      AND l.project_id = sel.project_id
-      AND l.organization_id = sel.organization_id
       AND l.deleted IS FALSE
   )
 `
@@ -4430,7 +4417,6 @@ WHERE sel.id = $1::uuid
   AND sel.remote_session_client_id IS NOT DISTINCT FROM $4::uuid
   AND ac.id = $5::uuid
   AND ac.organization_id = sel.organization_id
-  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
   AND ac.deleted IS FALSE
   AND ac.enabled
   AND EXISTS (
@@ -4438,8 +4424,6 @@ WHERE sel.id = $1::uuid
     FROM mcp_server_auth_clients AS l
     WHERE l.auth_client_id = ac.id
       AND l.mcp_server_id = sel.mcp_server_id
-      AND l.project_id = sel.project_id
-      AND l.organization_id = sel.organization_id
       AND l.deleted IS FALSE
   )
 `

@@ -23,7 +23,7 @@ func batchSelectionParams(issuerID uuid.UUID, ids []uuid.UUID) usersessionsrepo.
 	return usersessionsrepo.RecordUpstreamClientSelectionsForCredentialsParams{
 		UserSessionIssuerID: issuerID, CredentialKind: upstreamclients.CredentialKindUserSession,
 		CredentialIds: ids, Source: upstreamclients.SelectionSourceBackfill,
-		TypedOfferRepair: false, TypedOnly: false, ScopeMcpServerIds: nil, PickedMcpServerIds: []uuid.UUID{}, PickedClientIds: []uuid.UUID{}, PickedAuthClientIds: nil,
+		ScopeMcpServerIds: nil, PickedMcpServerIds: []uuid.UUID{}, PickedClientIds: []uuid.UUID{}, PickedAuthClientIds: nil,
 	}
 }
 

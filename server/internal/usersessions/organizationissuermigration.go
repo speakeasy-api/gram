@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
@@ -178,7 +179,7 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayl
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	// Whether the organization has one organization-level issuer decides
 	// whether its organization gateway fronts every server, so this change
-	// may change EMA offer reach in every project. Their writer scope precedes
+	// re-decides associations in every project. Their writer scope precedes
 	// every row lock.
 	reconcileScope, err := upstreamclients.LockOrganizationScope(ctx, dbtx, authCtx.ActiveOrganizationID)
 	if err != nil {
@@ -278,17 +279,11 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayl
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read moved user session issuer").LogError(ctx, logger)
 	}
-	servers, err := q.ListIssuerRetierServers(ctx, repo.ListIssuerRetierServersParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectIds: reconcileScope})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list servers affected by issuer move").LogError(ctx, logger)
-	}
-	if err := authclientbackfill.SyncEMAServers(ctx, dbtx, authCtx.ActiveOrganizationID, servers); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "reconcile issuer move EMA offers").LogError(ctx, logger)
-	}
-	for _, projectID := range reconcileScope {
-		if err := remotesessions.ResyncMCPServerRemoteSessionIssuersForConsolidation(ctx, dbtx, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{issuerID}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "resync moved issuer's servers").LogError(ctx, logger)
+	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
+		if errors.Is(err, upstreamclients.ErrScopeChanged) {
+			return nil, err //nolint:wrapcheck // oops errors pass through.
 		}
+		return nil, oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
@@ -433,7 +428,7 @@ func userSessionMigrationPreflightView(run issuerMigrationRun) *orggen.Organizat
 		Warnings: preflight.warnings, WarningsFingerprint: run.fingerprint, CanMigrate: run.canMigrate(),
 		ImpactPreviewed:           run.ran,
 		ServerImpacts:             serverImpactViews(run.impacts),
-		DroppedClientLinks:        []*orggen.UserSessionIssuerMigrationClient{},
+		DroppedClientLinks:        migrationClientViews(run.dropped),
 		UnscopedSessionCount:      int(run.reach.UnscopedSessionCount),
 		NewlyReachableServerCount: int(run.reach.TargetServerCount),
 	}
@@ -554,10 +549,16 @@ type issuerMigrationScope struct {
 	// consolidation reconciles exactly these, so it never takes a writer
 	// scope after its first write.
 	projects []uuid.UUID
+
+	// issuerIDs are the user session issuers whose servers are in serverIDs
+	// by issuer: the source, the target, and the organization's only
+	// organization-level issuer when its servers share a client with them.
+	issuerIDs []uuid.UUID
 }
 
-// lockIssuerMigrationAuth locks the affected projects and offered registrations
-// before changing issuer reach.
+// lockIssuerMigrationAuth prepares the complete credential reach before any
+// issuer mutation. The shared preflight combines server registrations with
+// issuer bindings that sole-consumer capture can associate later.
 func lockIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID string, source, target repo.UserSessionIssuer) (issuerMigrationScope, error) {
 	q := repo.New(dbtx)
 	issuerIDs := []uuid.UUID{source.ID, target.ID}
@@ -569,12 +570,35 @@ func lockIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID st
 	}
 	// Non-nil is intentional: empty means no maintenance, while nil would
 	// widen existing target credentials to their full issuer reach downstream.
-	scope := issuerMigrationScope{serverIDs: nil, syncServers: make([]uuid.UUID, 0), projects: nil}
+	scope := issuerMigrationScope{serverIDs: nil, syncServers: make([]uuid.UUID, 0), projects: nil, issuerIDs: []uuid.UUID{source.ID, target.ID}}
 	for _, server := range servers {
 		scope.projects = append(scope.projects, server.ProjectID)
 		scope.serverIDs = append(scope.serverIDs, server.ID)
 		if server.NeedsSync {
 			scope.syncServers = append(scope.syncServers, server.ID)
+		}
+	}
+	// Servers on the organization's only organization-level issuer can lose a
+	// client they share with either issuer once a consolidated server is
+	// associated with it, so they are previewed and reconciled too.
+	claiming, err := q.ListMCPServersOnClaimingOrganizationIssuerForMigration(ctx, repo.ListMCPServersOnClaimingOrganizationIssuerForMigrationParams{
+		OrganizationID: organizationID, SourceIssuerID: source.ID, TargetIssuerID: target.ID,
+	})
+	if err != nil {
+		return issuerMigrationScope{}, fmt.Errorf("discover servers on the organization issuer: %w", err)
+	}
+	for _, server := range claiming {
+		if !slices.Contains(scope.serverIDs, server.ID) {
+			scope.serverIDs = append(scope.serverIDs, server.ID)
+			scope.projects = append(scope.projects, server.ProjectID)
+		}
+		// A client it newly loses can leave its typed offers and credential
+		// choices stale, so it is maintained like the moved servers.
+		if !slices.Contains(scope.syncServers, server.ID) {
+			scope.syncServers = append(scope.syncServers, server.ID)
+		}
+		if !slices.Contains(scope.issuerIDs, server.UserSessionIssuerID) {
+			scope.issuerIDs = append(scope.issuerIDs, server.UserSessionIssuerID)
 		}
 	}
 	for _, issuer := range []repo.UserSessionIssuer{source, target} {
@@ -587,15 +611,11 @@ func lockIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID st
 	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, organizationID, scope.projects); err != nil {
 		return issuerMigrationScope{}, fmt.Errorf("lock issuer migration writer scope: %w", err)
 	}
-	offers, err := q.ListIssuerMigrationOAuthOffers(ctx, repo.ListIssuerMigrationOAuthOffersParams{
-		ServerIds: scope.serverIDs, OrganizationID: organizationID,
+	registrations, err := q.ListBoundOAuthRegistrationsForUserSessionIssuerMigration(ctx, repo.ListBoundOAuthRegistrationsForUserSessionIssuerMigrationParams{
+		IssuerIds: issuerIDs, OrganizationID: organizationID,
 	})
 	if err != nil {
 		return issuerMigrationScope{}, fmt.Errorf("discover issuer migration registration scope: %w", err)
-	}
-	registrations := make([]uuid.UUID, 0, len(offers))
-	for _, offer := range offers {
-		registrations = append(registrations, offer.RemoteSessionClientID)
 	}
 	if err := authclientbackfill.PreflightServerAssociationsWithRegistrations(ctx, dbtx, organizationID, scope.serverIDs, registrations); err != nil {
 		return issuerMigrationScope{}, fmt.Errorf("preflight issuer migration auth clients: %w", err)
@@ -606,20 +626,27 @@ func lockIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID st
 // reconcileIssuerMigrationAuth preserves typed state and credential choices in
 // the consolidation transaction, independent of the enforcement feature flag.
 func reconcileIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, movedCredentialIDs []uuid.UUID) (int64, error) {
-	skipped, err := selectionbackfill.ReconcileTypedIssuerScopeInLockedTransaction(ctx, dbtx, organizationID, issuerID, serverIDs, movedCredentialIDs)
+	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, serverIDs...); err != nil {
+		return 0, fmt.Errorf("sync issuer auth clients: %w", err)
+	}
+	skipped, err := selectionbackfill.ReconcileIssuerScopeInLockedTransaction(ctx, dbtx, organizationID, issuerID, serverIDs, movedCredentialIDs)
 	if err != nil {
 		return 0, fmt.Errorf("reconcile issuer credential choices: %w", err)
 	}
 	return skipped, nil
 }
 
-// recordIssuerMigrationChoices records the choices supported by typed offers
-// before the source credentials move and can reach different servers.
+// recordIssuerMigrationChoices records what each live credential uses today,
+// before the source's bindings join the target's. A server both issuers bound a
+// registration for has one eligible client per credential until then and two
+// afterwards, which would leave every credential without a choice to reconnect.
+// Source lineages record their whole reach: they move, and what they reach on
+// the target is decided after the move.
 func recordIssuerMigrationChoices(ctx context.Context, dbtx pgx.Tx, organizationID string, sourceID, targetID uuid.UUID, serverIDs []uuid.UUID) error {
-	if err := selectionbackfill.RecordTypedIssuerScopeInLockedTransaction(ctx, dbtx, organizationID, sourceID, nil, nil); err != nil {
+	if err := selectionbackfill.RecordIssuerScopeInLockedTransaction(ctx, dbtx, organizationID, sourceID, nil, nil); err != nil {
 		return fmt.Errorf("record source credential choices: %w", err)
 	}
-	if err := selectionbackfill.RecordTypedIssuerScopeInLockedTransaction(ctx, dbtx, organizationID, targetID, serverIDs, nil); err != nil {
+	if err := selectionbackfill.RecordIssuerScopeInLockedTransaction(ctx, dbtx, organizationID, targetID, serverIDs, nil); err != nil {
 		return fmt.Errorf("record target credential choices: %w", err)
 	}
 	return nil
@@ -646,10 +673,17 @@ type issuerMigrationRun struct {
 	// before any write.
 	reach repo.GetUserSessionIssuerMigrationSignInReachRow
 
-	// impacts compare the typed upstream offers before and after the move.
+	// pins are the associations written before the move.
+	pins []associationbackfill.Pin
+
+	// impacts are the servers whose clients changed or that were pinned.
 	impacts []serverImpact
 
-	// fingerprint covers the setting differences and impacts.
+	// dropped are the source's bindings not carried to the target, ordered
+	// by client id.
+	dropped []migrationClient
+
+	// fingerprint covers the setting differences, impacts and dropped links.
 	fingerprint string
 
 	// deletedSource is the source as soft-deleted.
@@ -672,8 +706,17 @@ func (r issuerMigrationRun) canMigrate() bool {
 // the caller commits or rolls back. When the preflight it reads under lock
 // reports a hard blocker it stops before any write and returns with ran false.
 //
-// Lock the writer scopes, record choices, and move the actual issuer data.
-// After retiring the source, resync the stamp and reconcile typed choices.
+// The order matters:
+//
+//  1. Every lock, including the writer scope of every project it reconciles,
+//     is taken before the first write.
+//  2. Each affected server's clients are read, then the associations its
+//     configuration proves are pinned, before any binding moves.
+//  3. Only the source bindings something still signs in through are copied.
+//  4. The source is retired before the affected projects are reconciled, so
+//     the reconcile sees the organization's issuers as they will be after the
+//     commit, and the reconcile skips the gateway capture.
+//  5. Each affected server's clients are read again and compared.
 func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, logger *slog.Logger, sourceID, targetID uuid.UUID) (issuerMigrationRun, error) {
 	var run issuerMigrationRun
 	organizationID := authCtx.ActiveOrganizationID
@@ -738,7 +781,7 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 		return run, oops.E(oops.CodeUnexpected, err, "build user session issuer migrate preflight").LogError(ctx, logger)
 	}
 	run.source, run.target, run.preflight = source, target, preflight
-	run.fingerprint = userSessionMigrationFingerprint(source.ID, target.ID, preflight.warnings, nil)
+	run.fingerprint = userSessionMigrationFingerprint(source.ID, target.ID, preflight.warnings, nil, nil)
 	if !preflight.canMigrate() {
 		return run, nil
 	}
@@ -753,6 +796,23 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	before, err := snapshotServerClients(ctx, dbtx, organizationID, scope.serverIDs)
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "read MCP server upstream clients before migration").LogError(ctx, logger)
+	}
+
+	// Record the clients each server on either issuer provably uses while
+	// its own issuer still says so; after the move the merged bindings no
+	// longer prove which server a client was meant for.
+	run.pins, err = associationbackfill.PinServers(ctx, dbtx, organizationID, before.serversOn(source.ID, target.ID), scope.issuerIDs, []uuid.UUID{source.ID})
+	if err != nil {
+		return run, oops.E(oops.CodeUnexpected, err, "pin MCP server upstream clients").LogError(ctx, logger)
+	}
+	if len(run.pins) > 0 {
+		pinnedServers := make([]uuid.UUID, 0, len(run.pins))
+		for _, pin := range run.pins {
+			pinnedServers = append(pinnedServers, pin.MCPServerID)
+		}
+		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, pinnedServers...); err != nil {
+			return run, oops.E(oops.CodeUnexpected, err, "record auth clients of pinned MCP server upstream clients").LogError(ctx, logger)
+		}
 	}
 
 	if err := recordIssuerMigrationChoices(ctx, dbtx, organizationID, source.ID, target.ID, scope.syncServers); err != nil {
@@ -789,6 +849,29 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate CIMD clients").LogError(ctx, logger)
 	}
+	// Carry only the bindings something still signs in through. The rest
+	// leave with the source; users' grants for them still move below, so
+	// binding such a client to the target later makes them usable again. A
+	// deleted client's binding is never carried and changes nothing, so it is
+	// not reported either.
+	links, err := q.ListSourceClientLinksForUserSessionIssuerMigration(ctx, repo.ListSourceClientLinksForUserSessionIssuerMigrationParams{
+		SourceIssuerID: source.ID, TargetIssuerID: target.ID, RequiredClientIds: before.clientsOfServersOn(source.ID), OrganizationID: organizationID,
+	})
+	if err != nil {
+		return run, oops.E(oops.CodeUnexpected, err, "classify source remote-session client links").LogError(ctx, logger)
+	}
+	carried := make([]uuid.UUID, 0, len(links))
+	for _, link := range links {
+		switch {
+		case link.Needed:
+			carried = append(carried, link.RemoteSessionClientID)
+		case !link.AlreadyOnTarget && !link.ClientDeleted:
+			run.dropped = append(run.dropped, migrationClient{
+				id: link.RemoteSessionClientID, clientID: link.ClientID,
+				providerID: link.ProviderID.UUID, providerIssuer: link.ProviderIssuer.String,
+			})
+		}
+	}
 	run.remoteSessionsMigrated, err = q.UpdateRemoteSessionsToUserSessionIssuer(ctx, repo.UpdateRemoteSessionsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID})
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate remote-session provenance").LogError(ctx, logger)
@@ -809,6 +892,12 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 		if _, err := q.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx, repo.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID, BindingIds: bindingIDs}); err != nil {
 			return run, oops.E(oops.CodeUnexpected, err, "migrate agent connection attachments").LogError(ctx, logger)
 		}
+	}
+	if _, err := q.InsertTargetRemoteSessionClientIssuerLinks(ctx, repo.InsertTargetRemoteSessionClientIssuerLinksParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, RemoteSessionClientIds: carried, OrganizationID: organizationID}); err != nil {
+		return run, oops.E(oops.CodeUnexpected, err, "create target remote-session client links").LogError(ctx, logger)
+	}
+	if _, err := q.DeleteSourceRemoteSessionClientIssuerLinks(ctx, repo.DeleteSourceRemoteSessionClientIssuerLinksParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: organizationID}); err != nil {
+		return run, oops.E(oops.CodeUnexpected, err, "remove source remote-session client links").LogError(ctx, logger)
 	}
 	if _, err := q.UpdateRemoteSessionEMABindingsToUserSessionIssuer(ctx, repo.UpdateRemoteSessionEMABindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID}); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate EMA bindings").LogError(ctx, logger)
@@ -839,18 +928,19 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 			return run, oops.E(oops.CodeUnexpected, err, "migrate user session issuer %s", operation.name).LogError(ctx, logger)
 		}
 	}
-	// Retire the source without deleting compatibility FK parents.
+	// A downstream sign-in move does not configure new upstream offers. In
+	// particular, target links can exist solely as attachment FK parents.
+	// Retire the source before reconciling: prune and the organization
+	// gateway decide from how many organization-level issuers are live, which
+	// the commit changes when the source is one of them.
 	run.deletedSource, err = q.SoftDeleteMigratedUserSessionIssuer(ctx, repo.SoftDeleteMigratedUserSessionIssuerParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: organizationID})
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "soft-delete migrated user session issuer").LogError(ctx, logger)
 	}
-	if err := q.RevokeRemainingAttachmentsForRetiredIssuer(ctx, repo.RevokeRemainingAttachmentsForRetiredIssuerParams{OrganizationID: organizationID, SourceIssuerID: source.ID}); err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "retire remaining source issuer attachments").LogError(ctx, logger)
-	}
-	if err := authclientbackfill.SyncEMAServers(ctx, dbtx, organizationID, scope.syncServers); err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "reconcile issuer EMA offers").LogError(ctx, logger)
-	}
-	// Derive the stamp after updating the offers and moving server ownership.
+	// Reconcile every project whose writer scope is held, not only those with
+	// a server on either issuer: a gateway member's project, and every
+	// project when an organization-level issuer is involved, can change too.
+	// Each project holding a server on either issuer is among them.
 	for _, projectID := range scope.projects {
 		if err := remotesessions.ResyncMCPServerRemoteSessionIssuersForConsolidation(ctx, dbtx, organizationID, projectID, []uuid.UUID{source.ID, target.ID}); err != nil {
 			return run, oops.E(oops.CodeUnexpected, err, "resync MCP server remote session issuers").LogError(ctx, logger)
@@ -865,11 +955,11 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "read MCP server upstream clients after migration").LogError(ctx, logger)
 	}
-	run.impacts, err = classifyServerImpacts(ctx, dbtx, organizationID, before, after)
+	run.impacts, err = classifyServerImpacts(ctx, dbtx, organizationID, before, after, run.pins)
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "classify MCP server upstream client changes").LogError(ctx, logger)
 	}
-	run.fingerprint = userSessionMigrationFingerprint(source.ID, target.ID, preflight.warnings, run.impacts)
+	run.fingerprint = userSessionMigrationFingerprint(source.ID, target.ID, preflight.warnings, run.impacts, run.dropped)
 	return run, nil
 }
 
@@ -902,6 +992,10 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	}
 
 	source, target := run.source, run.target
+	dropped := make([]uuid.UUID, 0, len(run.dropped))
+	for _, client := range run.dropped {
+		dropped = append(dropped, client.id)
+	}
 	targetView := UserSessionIssuerView(target)
 	if err := s.audit.LogUserSessionIssuerMigrate(ctx, dbtx, audit.LogUserSessionIssuerMigrateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectIDValue(run.deletedSource.ProjectID),
@@ -909,7 +1003,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		SourceUserSessionIssuerURN: urn.NewUserSessionIssuer(source.ID), SourceSlug: source.Slug,
 		TargetUserSessionIssuerURN: urn.NewUserSessionIssuer(target.ID), TargetSlug: target.Slug,
 		ClientsMigrated: run.clientsMigrated, SessionsMigrated: run.sessionsMigrated, ConsentsMigrated: run.consentsMigrated, CimdClientsMigrated: run.cimdClientsMigrated, RemoteSessionsMigrated: run.remoteSessionsMigrated,
-		PinnedAssociations: nil, DroppedClientLinks: nil, MergedClientIDs: run.preflight.mergedClientIDs, ServerImpacts: auditServerImpacts(run.impacts),
+		PinnedAssociations: auditPins(run.pins), DroppedClientLinks: dropped, MergedClientIDs: run.preflight.mergedClientIDs, ServerImpacts: auditServerImpacts(run.impacts),
 		UserSessionIssuerSnapshotBefore: UserSessionIssuerView(source), UserSessionIssuerSnapshotAfter: targetView,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer migration").LogError(ctx, logger)
@@ -927,7 +1021,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	}
 	return &orggen.MigrateOrganizationUserSessionIssuerResult{
 		Issuer: s.organizationIssuerView(ctx, surviving.UserSessionIssuer, surviving.ProjectName), ClientsMigrated: int(run.clientsMigrated), SessionsMigrated: int(run.sessionsMigrated), ConsentsMigrated: int(run.consentsMigrated), CimdClientsMigrated: int(run.cimdClientsMigrated), RemoteSessionsMigrated: int(run.remoteSessionsMigrated), SourceDeleted: true,
-		ServerImpacts: serverImpactViews(run.impacts), DroppedClientLinks: []*orggen.UserSessionIssuerMigrationClient{},
+		ServerImpacts: serverImpactViews(run.impacts), DroppedClientLinks: migrationClientViews(run.dropped),
 	}, nil
 }
 

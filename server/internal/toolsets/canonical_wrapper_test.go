@@ -22,7 +22,6 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -376,10 +375,10 @@ func TestHostedServerIssuerResyncsRemoteIssuer(t *testing.T) {
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	typed := authclientbackfill.New(ti.conn)
-	authClient, err := typed.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client.ID)})
-	require.NoError(t, err)
-	require.NoError(t, typed.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpServerID: uuid.MustParse(toolset.ID), AuthClientID: authClient, Source: "admin"}))
+	require.NoError(t, remote.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID,
+		UserSessionIssuerID:   issuer.ID,
+	}))
 
 	server, err := ti.service.UpdateHostedServer(ctx, hostedUpdate(toolset, "public", func(u *mcpservers.HostedServerUpdate) {
 		u.UserSessionIssuerID = uuid.NullUUID{UUID: issuer.ID, Valid: true}

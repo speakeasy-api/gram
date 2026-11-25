@@ -221,7 +221,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 				}
 			}
 			if opts.Apply {
-				written, err := recordCredentialSelections(ctx, sessions, credential.UserSessionIssuerID, []uuid.UUID{credential.CredentialID}, nil, typedOnly, false)
+				written, err := recordCredentialSelections(ctx, sessions, credential.UserSessionIssuerID, []uuid.UUID{credential.CredentialID}, nil, typedOnly)
 				if err != nil {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)
 				}
@@ -281,47 +281,21 @@ func ReconcileIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, org
 	return skipped, nil
 }
 
-// ReconcileTypedIssuerScopeInLockedTransaction is the live issuer-move path;
-// compatibility parent rows are never input to choice repair.
-func ReconcileTypedIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, movedCredentialIDs []uuid.UUID) (int64, error) {
-	if err := RecordTypedIssuerScopeInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs, movedCredentialIDs); err != nil {
-		return 0, err
-	}
-	skipped, err := authclientbackfill.ReconcileTypedUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs)
-	if err != nil {
-		return skipped, fmt.Errorf("map typed issuer credential choices: %w", err)
-	}
-	return skipped, nil
-}
-
-// RecordTypedIssuerScopeInLockedTransaction uses only deliberate typed offers.
-func RecordTypedIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, movedCredentialIDs []uuid.UUID) error {
-	return recordIssuerScope(ctx, tx, organizationID, issuerID, serverIDs, movedCredentialIDs, true)
-}
-
 // RecordIssuerScopeInLockedTransaction records the missing choices of one
 // issuer's live credential lineages and maps nothing, with the scoping
 // ReconcileIssuerScopeInLockedTransaction describes. A caller about to change
 // what the issuer binds records first: each credential is then decided by the
 // bindings it was served through, and a recorded choice is never replaced.
 func RecordIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, fullReachCredentialIDs []uuid.UUID) error {
-	return recordIssuerScope(ctx, tx, organizationID, issuerID, serverIDs, fullReachCredentialIDs, false)
-}
-
-func recordIssuerScope(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, fullReachCredentialIDs []uuid.UUID, forceTyped bool) error {
 	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
 		return errors.New("reconcile issuer credentials: no transaction or tenant scope")
 	}
 	if serverIDs != nil && len(serverIDs) == 0 && len(fullReachCredentialIDs) == 0 {
 		return nil
 	}
-	typedOnly := forceTyped
-	if !typedOnly {
-		var err error
-		typedOnly, err = authenforcement.ReadEnforced(ctx, tx, organizationID)
-		if err != nil {
-			return fmt.Errorf("read enforcement for issuer selection recording: %w", err)
-		}
+	typedOnly, err := authenforcement.ReadEnforced(ctx, tx, organizationID)
+	if err != nil {
+		return fmt.Errorf("read enforcement for issuer selection recording: %w", err)
 	}
 	fullReach := make(map[uuid.UUID]bool, len(fullReachCredentialIDs))
 	for _, id := range fullReachCredentialIDs {
@@ -345,10 +319,10 @@ func recordIssuerScope(ctx context.Context, tx pgx.Tx, organizationID string, is
 			}
 			cursor = credential.CredentialID
 		}
-		if _, err := recordCredentialSelections(ctx, sessions, issuerID, existingIDs, serverIDs, typedOnly, forceTyped); err != nil {
+		if _, err := recordCredentialSelections(ctx, sessions, issuerID, existingIDs, serverIDs, typedOnly); err != nil {
 			return fmt.Errorf("record existing issuer credential choices: %w", err)
 		}
-		if _, err := recordCredentialSelections(ctx, sessions, issuerID, movedIDs, nil, typedOnly, forceTyped); err != nil {
+		if _, err := recordCredentialSelections(ctx, sessions, issuerID, movedIDs, nil, typedOnly); err != nil {
 			return fmt.Errorf("record moved issuer credential choices: %w", err)
 		}
 		if len(credentials) < defaultPageSize {
@@ -357,7 +331,7 @@ func recordIssuerScope(ctx context.Context, tx pgx.Tx, organizationID string, is
 	}
 }
 
-func recordCredentialSelections(ctx context.Context, q *usersessionsrepo.Queries, issuerID uuid.UUID, credentialIDs, serverIDs []uuid.UUID, typedOnly, typedOfferRepair bool) (int64, error) {
+func recordCredentialSelections(ctx context.Context, q *usersessionsrepo.Queries, issuerID uuid.UUID, credentialIDs, serverIDs []uuid.UUID, typedOnly bool) (int64, error) {
 	if len(credentialIDs) == 0 || (serverIDs != nil && len(serverIDs) == 0) {
 		return 0, nil
 	}
@@ -369,7 +343,7 @@ func recordCredentialSelections(ctx context.Context, q *usersessionsrepo.Queries
 		// administrator choices; consolidation uses the same backfill source.
 		Source:             upstreamclients.SelectionSourceBackfill,
 		PickedMcpServerIds: []uuid.UUID{}, PickedClientIds: []uuid.UUID{},
-		PickedAuthClientIds: nil, ScopeMcpServerIds: serverIDs, TypedOnly: typedOnly, TypedOfferRepair: typedOfferRepair,
+		PickedAuthClientIds: nil, ScopeMcpServerIds: serverIDs, TypedOnly: typedOnly,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("record credential selections: %w", err)
