@@ -24,6 +24,17 @@ import React, { useState } from "react";
  */
 export default function RequestAccess(): React.JSX.Element {
   const [searchParams] = useSearchParams();
+  // A link to different access starts the page afresh: its dialog opens
+  // again and nothing about the previous request carries over.
+  return (
+    <RequestAccessPage
+      key={`${searchParams.get("scope") ?? ""}|${searchParams.get("resource_id") ?? ""}`}
+    />
+  );
+}
+
+function RequestAccessPage(): React.JSX.Element {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const scope = searchParams.get("scope");
@@ -146,6 +157,7 @@ export default function RequestAccess(): React.JSX.Element {
 
             {askInDialog && (
               <RequestAccessDialog
+                key={`${scope ?? ""}|${resourceId ?? ""}`}
                 open={dialogOpen && requestState !== "sent"}
                 onOpenChange={setDialogOpen}
                 permissions={[scopeLabel(catalogue, scope ?? "")]}

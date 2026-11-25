@@ -263,6 +263,35 @@ describe("RequestScopeAccess", () => {
     });
   });
 
+  it("starts the dialog afresh each time it opens", async () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read"]);
+    render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    fireEvent.change(await screen.findByLabelText(/Why do you need it/), {
+      target: { value: "first attempt" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+
+    const note = (await screen.findByLabelText(
+      /Why do you need it/,
+    )) as HTMLTextAreaElement;
+    expect(note.value).toBe("");
+  });
+
+  it("lists only the permission an any-of gate asks for", async () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read", "chat:read"]);
+    render(<RequestScopeAccess scopes={["log:read", "chat:read"]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("log:read");
+    expect(dialog.textContent).not.toContain("chat:read");
+  });
+
   it("asks straight away, without a dialog, while requests only send email", async () => {
     render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
 

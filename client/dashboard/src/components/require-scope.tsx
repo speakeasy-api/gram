@@ -487,13 +487,19 @@ function RequestScopeAccessButton({
       </p>
     );
   }
+  // An "any scope suffices" gate only needs the first requestable scope; an
+  // all-scopes gate must request every missing scope or granting one still
+  // leaves the user blocked. The dialog shows exactly these.
+  const requestedScopes = all
+    ? requestableScopes
+    : requestableScopes.slice(0, 1);
   const handleRequestAccess = async (draft?: AccessRequestDraft) => {
     setRequestState("sending");
     // An "any scope suffices" gate only needs the first requestable scope; an
     // all-scopes gate must request every missing scope or granting one still
     // leaves the user blocked. Judge on settled results so one failed request
     // doesn't report failure when another admin notification went out.
-    const scopesToRequest = all ? requestableScopes : [requestableScopes[0]!];
+    const scopesToRequest = requestedScopes;
     const results = await Promise.allSettled(
       scopesToRequest.map((scopeToRequest) =>
         requestAccessMutation.mutateAsync({
@@ -579,9 +585,10 @@ function RequestScopeAccessButton({
           </Button>
           {accessRequestsOn && (
             <RequestAccessDialog
+              key={`${requestedScopes.join(",")}|${resourceId ?? ""}`}
               open={dialogOpen}
               onOpenChange={setDialogOpen}
-              permissions={requestableScopes.map(
+              permissions={requestedScopes.map(
                 (scope) => catalogue.get(scope)?.label ?? scope,
               )}
               resourceName={
